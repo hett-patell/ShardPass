@@ -1,5 +1,6 @@
 import { TOTP, URI } from "otpauth";
 import type { Account } from "@/types";
+import { warn } from "@/lib/log";
 
 export function normalizeSecret(raw: string): string {
   return raw.replace(/[\s-]/g, "").toUpperCase();
@@ -33,6 +34,7 @@ export function progress(period: number, timestamp: number = Date.now()): number
 
 function coerceAlgorithm(a: string): "SHA1" | "SHA256" | "SHA512" {
   if (a === "SHA256" || a === "SHA512") return a;
+  if (a && a !== "SHA1") warn("totp", `unknown algorithm "${a}", falling back to SHA1`);
   return "SHA1";
 }
 

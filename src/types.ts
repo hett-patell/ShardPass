@@ -31,6 +31,6 @@ export interface Settings {
 }
 
 export const DEFAULT_SETTINGS: Settings = {
-  autoLockMinutes: 0,
+  autoLockMinutes: 15,
   lockOnScreenLock: true,
 };

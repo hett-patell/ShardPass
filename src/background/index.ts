@@ -1,5 +1,6 @@
 import type { Account, Vault, EncryptedVault } from "@/types";
 import {
+  base64ToBytes,
   bytesToBase64,
   decryptJSON,
   deriveKey,
@@ -80,16 +81,10 @@ function ensureUnlocked(): void {
   }
 }
 
-function base64ToBytesLocal(b64: string): Uint8Array {
-  const bin = atob(b64);
-  const out = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
-  return out;
-}
-
 function findMatchesForDomain(vault: Vault, domain: string): Account[] {
   const { full, root } = getDomainParts(domain);
-  const tokens = new Set<string>([full, root, ...root.split(".")]);
+  const labels = root.split(".").filter((l) => l.length >= 4);
+  const tokens = new Set<string>([full, root, ...labels]);
   const norm = (s: string) => (s || "").toLowerCase().replace(/[^a-z0-9.]/g, "");
   return vault.accounts.filter((acc) => {
     const issuer = norm(acc.issuer);
@@ -97,7 +92,7 @@ function findMatchesForDomain(vault: Vault, domain: string): Account[] {
     const tags = (acc.tags || []).map(norm);
     for (const t of tokens) {
       const tn = norm(t);
-      if (!tn) continue;
+      if (!tn || tn.length < 4) continue;
       if (
         issuer.includes(tn) ||
         label.includes(tn) ||
@@ -131,10 +126,10 @@ async function handle(msg: Message): Promise<Response> {
     }
 
     case "setup": {
-      if (!msg.password || msg.password.length < 8) {
+      if (!msg.password || msg.password.length < 12) {
         return {
           ok: false,
-          error: "Password must be at least 8 characters",
+          error: "Password must be at least 12 characters",
         };
       }
       const existing = await getEncryptedVault();
@@ -309,7 +304,7 @@ async function handle(msg: Message): Promise<Response> {
         if (parsed.type !== "shardpass-export" && parsed.type !== "chrome-authenticator-export") {
           return { ok: false, error: "Unrecognized export file" };
         }
-        const salt = base64ToBytesLocal(String(parsed.salt));
+        const salt = base64ToBytes(String(parsed.salt));
         const key = await deriveKey(
           msg.password,
           salt,

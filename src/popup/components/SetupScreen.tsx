@@ -14,8 +14,8 @@ export function SetupScreen({ onSetupDone }: { onSetupDone: () => void }) {
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
-    if (password.length < 8) {
-      setError("Use at least 8 characters.");
+    if (password.length < 12) {
+      setError("Use at least 12 characters.");
       return;
     }
     if (password !== confirm) {

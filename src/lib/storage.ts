@@ -2,6 +2,7 @@ import type { EncryptedVault, Settings, Vault } from "@/types";
 import { DEFAULT_SETTINGS } from "@/types";
 import {
   CRYPTO_PARAMS,
+  base64ToBytes,
   bytesToBase64,
   decryptJSON,
   deriveKey,
@@ -11,13 +12,6 @@ import {
 
 const KEY_VAULT = "vault";
 const KEY_SETTINGS = "settings";
-
-function base64ToBytesLocal(b64: string): Uint8Array {
-  const bin = atob(b64);
-  const out = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
-  return out;
-}
 
 export async function getEncryptedVault(): Promise<EncryptedVault | null> {
   const out = await chrome.storage.local.get(KEY_VAULT);
@@ -62,7 +56,7 @@ export async function unlockVault(
 ): Promise<{ vault: Vault; key: CryptoKey; encrypted: EncryptedVault } | null> {
   const encrypted = await getEncryptedVault();
   if (!encrypted) return null;
-  const salt = base64ToBytesLocal(encrypted.salt);
+  const salt = base64ToBytes(encrypted.salt);
   const key = await deriveKey(password, salt, encrypted.iterations);
   try {
     const vault = await decryptJSON<Vault>(encrypted.iv, encrypted.ciphertext, key);
