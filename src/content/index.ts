@@ -1,5 +1,6 @@
 import { findOtpInputs, isLikelyOtpInput } from "@/lib/detect";
 import { send, type AccountWithCode } from "@/lib/messages";
+import { log } from "@/lib/log";
 import { mountChip, unmountChip, updateChip, isInsideChip } from "./inline-popup";
 
 interface State {
@@ -31,14 +32,29 @@ async function refreshMatches(force = false): Promise<void> {
   }
 }
 
+function describeInput(input: HTMLInputElement): string {
+  return JSON.stringify({
+    name: input.name || undefined,
+    id: input.id || undefined,
+    type: input.type,
+    autocomplete: input.getAttribute("autocomplete") || undefined,
+    inputmode: input.getAttribute("inputmode") || undefined,
+    maxLength: input.maxLength > 0 ? input.maxLength : undefined,
+    placeholder: input.getAttribute("placeholder") || undefined,
+    ariaLabel: input.getAttribute("aria-label") || undefined,
+  });
+}
+
 function attachInput(input: HTMLInputElement): void {
   state.activeInput = input;
+  log("content", `attach on ${location.hostname}:`, describeInput(input));
   void refreshMatches();
 }
 
 function detachInput(input: HTMLInputElement): void {
   if (state.activeInput === input) {
     state.activeInput = null;
+    log("content", `detach on ${location.hostname}`);
     unmountChip();
   }
 }
@@ -136,7 +152,10 @@ window.addEventListener(
 );
 
 window.setInterval(() => {
-  if (state.activeInput) void refreshMatches(true);
+  if (!state.activeInput) return;
+  if (state.locked) return;
+  if (state.matches.length === 0) return;
+  void refreshMatches(true);
 }, 1000);
 
 void findOtpInputs();
