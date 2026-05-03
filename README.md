@@ -82,4 +82,4 @@ src/
 
 ## License
 
-MIT
+[MIT](LICENSE) © Het Patel
