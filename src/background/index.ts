@@ -369,6 +369,87 @@ async function handle(msg: Message): Promise<Response> {
       return { ok: true, data: next };
     }
 
+    case "getIntegrationStatus": {
+      const configured = !!session.vault?.integrations?.duckduckgo?.token;
+      return { ok: true, data: { duckduckgoConfigured: configured } };
+    }
+
+    case "setDuckToken": {
+      ensureUnlocked();
+      const token = msg.token.trim();
+      if (!token) return { ok: false, error: "Token cannot be empty" };
+      const v = session.vault!;
+      if (!v.integrations) v.integrations = {};
+      v.integrations.duckduckgo = { token };
+      await saveVault(v, session.key!);
+      log("bg:ddg", `token set (length=${token.length})`);
+      return { ok: true, data: { duckduckgoConfigured: true } };
+    }
+
+    case "clearDuckToken": {
+      ensureUnlocked();
+      const v = session.vault!;
+      if (v.integrations?.duckduckgo) {
+        delete v.integrations.duckduckgo;
+        await saveVault(v, session.key!);
+        log("bg:ddg", `token cleared`);
+      }
+      return { ok: true, data: { duckduckgoConfigured: false } };
+    }
+
+    case "generateDuckAlias": {
+      ensureUnlocked();
+      const token = session.vault!.integrations?.duckduckgo?.token;
+      if (!token) {
+        return {
+          ok: false,
+          error: "DuckDuckGo not configured — add a token in Settings.",
+        };
+      }
+      try {
+        log("bg:ddg", "generating alias…");
+        const res = await fetch(
+          "https://quack.duckduckgo.com/api/email/addresses",
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+          },
+        );
+        if (res.status === 401 || res.status === 403) {
+          return {
+            ok: false,
+            error: "DuckDuckGo token is invalid or expired.",
+          };
+        }
+        if (res.status === 429) {
+          return {
+            ok: false,
+            error: "DuckDuckGo rate-limited the request. Wait a moment.",
+          };
+        }
+        if (!res.ok) {
+          return {
+            ok: false,
+            error: `DuckDuckGo error: ${res.status} ${res.statusText}`,
+          };
+        }
+        const json = (await res.json()) as { address?: string };
+        if (!json.address) {
+          return { ok: false, error: "Unexpected response from DuckDuckGo." };
+        }
+        const alias = `${json.address}@duck.com`;
+        log("bg:ddg", `alias generated`);
+        return { ok: true, data: { alias } };
+      } catch (e) {
+        const errMsg = e instanceof Error ? e.message : "Network error";
+        logError("bg:ddg", `generateDuckAlias failed:`, errMsg);
+        return { ok: false, error: errMsg };
+      }
+    }
+
     default:
       return { ok: false, error: "Unknown message" };
   }

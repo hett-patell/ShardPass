@@ -6,6 +6,7 @@ A minimal, local-first **TOTP authenticator** for Chrome (MV3) with **inline aut
 - 🧠 Master password is **never stored** — the derived key lives only in the service worker until lock
 - 📥 Import from QR images, `otpauth://` text dumps, encrypted backups, or paste
 - 🪄 Multi-account aware — 5 GitHub accounts? The chip lists all 5 with live codes
+- 🦆 Optional [DuckDuckGo Email Protection](https://duckduckgo.com/email/) integration — generate `@duck.com` aliases when adding accounts (token stored inside the encrypted vault, never in plain settings)
 - 🌑 Built with React + shadcn/ui in a tight, minimal dark UI
 
 ## Install (load unpacked)
@@ -38,6 +39,19 @@ OTP inputs are detected via:
 Domain matching tokenizes the hostname + eTLD+1 against each account's `issuer` / `label` / `tags`, so `github.com` surfaces every account whose issuer contains `github`.
 
 When multiple accounts match, the chip renders as a list — each row shows initial · issuer/label · live code · circular countdown. Click a row to fill.
+
+## DuckDuckGo Email Protection
+
+Optional. Generate fresh `@duck.com` aliases without leaving the popup.
+
+1. Sign up for [DuckDuckGo Email Protection](https://duckduckgo.com/email/), then visit [duckduckgo.com/email/settings/autofill](https://duckduckgo.com/email/settings/autofill).
+2. Open DevTools → **Network** tab → click **Generate Private Duck Address**.
+3. In the `addresses` request, copy the value of `Authorization: Bearer <token>` (≈ 62 chars).
+4. In ShardPass: **Settings → DuckDuckGo Email Protection → Connect**, paste the token, save.
+
+Now an "Duck alias" affordance appears next to the **Account** field in *Add account*, and a "Generate alias" button lives in Settings (alias is filled and copied to clipboard).
+
+The token is encrypted and lives **inside the vault**, not in `chrome.storage.local`'s plain settings — so aliases can only be generated while the vault is unlocked. The popup never reads the token back after saving; it only knows whether it's configured. Disconnecting deletes it from the vault.
 
 ## Security model
 

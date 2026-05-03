@@ -32,7 +32,15 @@ export type Message =
   | { kind: "importVault"; data: string; password: string }
   | { kind: "bulkAddAccounts"; accounts: Omit<Account, "id" | "createdAt">[] }
   | { kind: "getSettings" }
-  | { kind: "updateSettings"; autoLockMinutes?: number; lockOnScreenLock?: boolean };
+  | { kind: "updateSettings"; autoLockMinutes?: number; lockOnScreenLock?: boolean }
+  | { kind: "getIntegrationStatus" }
+  | { kind: "setDuckToken"; token: string }
+  | { kind: "clearDuckToken" }
+  | { kind: "generateDuckAlias" };
+
+export interface IntegrationStatus {
+  duckduckgoConfigured: boolean;
+}
 
 export type Response<T = unknown> =
   | { ok: true; data: T }

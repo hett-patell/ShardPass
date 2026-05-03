@@ -1,6 +1,7 @@
-import { useRef, useState, type FormEvent } from "react";
-import { Image as ImageIcon } from "lucide-react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
+import { Image as ImageIcon, Sparkles } from "lucide-react";
 import { send } from "@/lib/messages";
+import type { IntegrationStatus } from "@/lib/messages";
 import { isValidBase32, parseOtpAuthURI } from "@/lib/totp";
 import { decodeQRFromFile } from "@/lib/qr";
 import {
@@ -42,7 +43,38 @@ export function AddAccountDialog({
   const [algorithm, setAlgorithm] = useState<"SHA1" | "SHA256" | "SHA512">("SHA1");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [duckConfigured, setDuckConfigured] = useState(false);
+  const [aliasBusy, setAliasBusy] = useState(false);
+  const [aliasNote, setAliasNote] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    void send<IntegrationStatus>({ kind: "getIntegrationStatus" }).then(
+      (res) => {
+        if (res.ok) setDuckConfigured(res.data.duckduckgoConfigured);
+      },
+    );
+  }, [open]);
+
+  async function generateAlias() {
+    setAliasBusy(true);
+    setAliasNote(null);
+    setError(null);
+    const res = await send<{ alias: string }>({ kind: "generateDuckAlias" });
+    setAliasBusy(false);
+    if (!res.ok) {
+      setError(res.error);
+      return;
+    }
+    setLabel(res.data.alias);
+    try {
+      await navigator.clipboard.writeText(res.data.alias);
+      setAliasNote(`${res.data.alias} — copied`);
+    } catch {
+      setAliasNote(res.data.alias);
+    }
+  }
 
   function reset() {
     setMode("manual");
@@ -55,6 +87,8 @@ export function AddAccountDialog({
     setAlgorithm("SHA1");
     setError(null);
     setBusy(false);
+    setAliasNote(null);
+    setAliasBusy(false);
   }
 
   async function onSubmit(e: FormEvent) {
@@ -139,12 +173,31 @@ export function AddAccountDialog({
           <TabsContent value="manual">
             <form className="space-y-2.5" onSubmit={onSubmit}>
               <Field label="Issuer" value={issuer} onChange={setIssuer} placeholder="GitHub" />
-              <Field
-                label="Account"
-                value={label}
-                onChange={setLabel}
-                placeholder="you@example.com"
-              />
+              <div className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <Label>Account</Label>
+                  {duckConfigured && (
+                    <button
+                      type="button"
+                      onClick={() => void generateAlias()}
+                      disabled={aliasBusy}
+                      className="flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50"
+                      title="Generate a duck.com alias and fill this field"
+                    >
+                      <Sparkles className="size-2.5" />
+                      {aliasBusy ? "Generating…" : "Duck alias"}
+                    </button>
+                  )}
+                </div>
+                <Input
+                  value={label}
+                  onChange={(e) => setLabel(e.target.value)}
+                  placeholder="you@example.com"
+                />
+                {aliasNote && (
+                  <p className="text-[10px] text-emerald-300">{aliasNote}</p>
+                )}
+              </div>
               <Field
                 label="Secret"
                 value={secret}

@@ -10,9 +10,14 @@ export interface Account {
   createdAt: number;
 }
 
+export interface VaultIntegrations {
+  duckduckgo?: { token: string };
+}
+
 export interface Vault {
   version: 1;
   accounts: Account[];
+  integrations?: VaultIntegrations;
 }
 
 export interface EncryptedVault {
