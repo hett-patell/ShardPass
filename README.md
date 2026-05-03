@@ -1,4 +1,9 @@
 # ShardPass
+<p align="center">
+    <picture>
+        <img src="https://github.com/user-attachments/assets/ad08c8a6-8418-4240-8153-4b34eec64efc" alt="ShardPass" width="500">
+    </picture>
+</p>
 
 A minimal, local-first **TOTP authenticator** for Chrome (MV3) with **inline autofill**. Focus a 2FA input on any site — a floating chip appears with the matching code(s). Click to fill.
 
