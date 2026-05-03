@@ -9,9 +9,12 @@ import {
   CRYPTO_PARAMS,
 } from "@/lib/crypto";
 import {
+  clearSessionKey,
   createVault,
   getEncryptedVault,
   getSettings,
+  loadSessionKey,
+  persistSessionKey,
   saveVault,
   setEncryptedVault,
   setSettings,
@@ -53,18 +56,48 @@ async function scheduleAutoLock(): Promise<void> {
   }
 }
 
-function lock(): void {
+async function lock(reason: string): Promise<void> {
+  log("bg:lock", `lock(): ${reason}`);
   session.key = null;
   session.vault = null;
   session.unlockedAt = 0;
-  void chrome.alarms.clear(AUTO_LOCK_ALARM);
+  await chrome.alarms.clear(AUTO_LOCK_ALARM);
+  await clearSessionKey();
 }
 
+async function tryRestoreSession(): Promise<void> {
+  if (session.key && session.vault) return;
+  try {
+    const key = await loadSessionKey();
+    if (!key) {
+      log("bg:restore", "no persisted session key");
+      return;
+    }
+    const enc = await getEncryptedVault();
+    if (!enc) {
+      log("bg:restore", "no encrypted vault — clearing stale session key");
+      await clearSessionKey();
+      return;
+    }
+    const vault = await decryptJSON<Vault>(enc.iv, enc.ciphertext, key);
+    session.key = key;
+    session.vault = vault;
+    session.unlockedAt = Date.now();
+    log("bg:restore", `restored session (${vault.accounts.length} accounts)`);
+  } catch (e) {
+    logError("bg:restore", "failed, clearing session key:", e);
+    await clearSessionKey();
+  }
+}
+
+void tryRestoreSession();
+
 chrome.idle.onStateChanged.addListener(async (newState) => {
+  log("bg:idle", `state -> ${newState}`);
   if (newState === "locked" && session.key) {
     const settings = await getSettings();
     if (settings.lockOnScreenLock) {
-      lock();
+      await lock("screen lock");
     }
   }
 });
@@ -118,6 +151,7 @@ function makeAccountWithCode(acc: Account): AccountWithCode {
 }
 
 async function handle(msg: Message): Promise<Response> {
+  await tryRestoreSession();
   switch (msg.kind) {
     case "getState": {
       const state = await getLockState();
@@ -138,6 +172,7 @@ async function handle(msg: Message): Promise<Response> {
       session.key = key;
       session.vault = vault;
       session.unlockedAt = Date.now();
+      await persistSessionKey(key);
       await scheduleAutoLock();
       return { ok: true, data: { state: "unlocked" as LockState } };
     }
@@ -148,12 +183,13 @@ async function handle(msg: Message): Promise<Response> {
       session.key = result.key;
       session.vault = result.vault;
       session.unlockedAt = Date.now();
+      await persistSessionKey(result.key);
       await scheduleAutoLock();
       return { ok: true, data: { state: "unlocked" as LockState } };
     }
 
     case "lock": {
-      lock();
+      await lock("user");
       return { ok: true, data: null };
     }
 
@@ -342,6 +378,7 @@ async function handle(msg: Message): Promise<Response> {
         session.key = newKey;
         session.vault = vault;
         session.unlockedAt = Date.now();
+        await persistSessionKey(newKey);
         await scheduleAutoLock();
         return {
           ok: true,
@@ -480,5 +517,5 @@ chrome.runtime.onMessage.addListener((msg: Message, sender, sendResponse) => {
 });
 
 chrome.alarms.onAlarm.addListener((alarm) => {
-  if (alarm.name === AUTO_LOCK_ALARM) lock();
+  if (alarm.name === AUTO_LOCK_ALARM) void lock("auto-lock alarm");
 });

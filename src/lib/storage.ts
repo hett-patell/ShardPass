@@ -7,11 +7,14 @@ import {
   decryptJSON,
   deriveKey,
   encryptJSON,
+  exportKeyRaw,
+  importKeyRaw,
   randomBytes,
 } from "@/lib/crypto";
 
 const KEY_VAULT = "vault";
 const KEY_SETTINGS = "settings";
+const SESSION_KEY = "session_key";
 
 export async function getEncryptedVault(): Promise<EncryptedVault | null> {
   const out = await chrome.storage.local.get(KEY_VAULT);
@@ -89,4 +92,20 @@ export async function setSettings(s: Partial<Settings>): Promise<Settings> {
   const merged = { ...(await getSettings()), ...s };
   await chrome.storage.local.set({ [KEY_SETTINGS]: merged });
   return merged;
+}
+
+export async function persistSessionKey(key: CryptoKey): Promise<void> {
+  const raw = await exportKeyRaw(key);
+  await chrome.storage.session.set({ [SESSION_KEY]: bytesToBase64(raw) });
+}
+
+export async function loadSessionKey(): Promise<CryptoKey | null> {
+  const out = await chrome.storage.session.get(SESSION_KEY);
+  const b64 = out[SESSION_KEY] as string | undefined;
+  if (!b64) return null;
+  return importKeyRaw(base64ToBytes(b64));
+}
+
+export async function clearSessionKey(): Promise<void> {
+  await chrome.storage.session.remove(SESSION_KEY);
 }
