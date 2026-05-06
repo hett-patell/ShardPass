@@ -7,6 +7,7 @@ import { SetupScreen } from "./components/SetupScreen";
 import { UnlockScreen } from "./components/UnlockScreen";
 import { AccountList } from "./components/AccountList";
 import { ImportExportDialog } from "./components/ImportExportDialog";
+import { DetachedQRImport } from "./components/DetachedQRImport";
 
 export function App() {
   const [state, setState] = useState<LockState | "loading">("loading");
@@ -34,6 +35,7 @@ export function App() {
   if (state === "locked") return <UnlockScreen onUnlocked={refresh} />;
 
   if (detached === "io") return <DetachedImportExport />;
+  if (detached === "qr") return <DetachedQRImport />;
 
   return <AccountList onLocked={refresh} />;
 }

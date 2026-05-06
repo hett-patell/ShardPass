@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
-import { Image as ImageIcon, Sparkles } from "lucide-react";
+import { useEffect, useState, type FormEvent } from "react";
+import { Clipboard, Image as ImageIcon, Sparkles } from "lucide-react";
 import { send } from "@/lib/messages";
 import type { IntegrationStatus } from "@/lib/messages";
 import { isValidBase32, parseOtpAuthURI } from "@/lib/totp";
 import { decodeQRFromFile } from "@/lib/qr";
+import { openQRImportWindow } from "@/lib/detached";
 import {
   Dialog,
   DialogContent,
@@ -46,7 +47,7 @@ export function AddAccountDialog({
   const [duckConfigured, setDuckConfigured] = useState(false);
   const [aliasBusy, setAliasBusy] = useState(false);
   const [aliasNote, setAliasNote] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [qrPasteBusy, setQrPasteBusy] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -124,28 +125,64 @@ export function AddAccountDialog({
     onAdded();
   }
 
-  async function onPickFile(file: File | null) {
+  async function onChooseQRImage() {
     setError(null);
-    if (!file) return;
-    setBusy(true);
-    const data = await decodeQRFromFile(file);
-    setBusy(false);
-    if (!data) {
-      setError("Could not read a QR code from that image.");
+    const ok = await openQRImportWindow();
+    if (ok) {
+      onOpenChange(false);
+      window.close();
       return;
     }
-    const parsed = parseOtpAuthURI(data);
-    if (!parsed) {
-      setError("QR code is not a valid otpauth:// TOTP URI.");
+    setError("Could not open the import window.");
+  }
+
+  async function onPasteQRImage() {
+    setError(null);
+    if (!navigator.clipboard?.read) {
+      setError("Clipboard image paste isn't available in this browser.");
       return;
     }
-    setIssuer(parsed.issuer);
-    setLabel(parsed.label);
-    setSecret(parsed.secret);
-    setDigits(parsed.digits);
-    setPeriod(parsed.period);
-    setAlgorithm(parsed.algorithm);
-    setMode("manual");
+    setQrPasteBusy(true);
+    try {
+      const items = await navigator.clipboard.read();
+      let blob: Blob | null = null;
+      for (const item of items) {
+        const type = item.types.find((t) => t.startsWith("image/"));
+        if (type) {
+          blob = await item.getType(type);
+          break;
+        }
+      }
+      if (!blob) {
+        setError("No image found on the clipboard. Copy the QR first.");
+        return;
+      }
+      const file = new File([blob], "clipboard.png", { type: blob.type });
+      const data = await decodeQRFromFile(file);
+      if (!data) {
+        setError("Could not read a QR code from the clipboard image.");
+        return;
+      }
+      const parsed = parseOtpAuthURI(data);
+      if (!parsed) {
+        setError("QR code is not a valid otpauth:// TOTP URI.");
+        return;
+      }
+      setIssuer(parsed.issuer);
+      setLabel(parsed.label);
+      setSecret(parsed.secret);
+      setDigits(parsed.digits);
+      setPeriod(parsed.period);
+      setAlgorithm(parsed.algorithm);
+      setMode("manual");
+    } catch (e) {
+      setError(
+        "Clipboard read blocked. " +
+          (e instanceof Error ? e.message : String(e)),
+      );
+    } finally {
+      setQrPasteBusy(false);
+    }
   }
 
   return (
@@ -259,24 +296,30 @@ export function AddAccountDialog({
           <TabsContent value="qr">
             <div className="space-y-3">
               <p className="text-[11px] leading-relaxed text-muted-foreground">
-                Upload a QR screenshot. Decoded locally — never uploaded.
+                Decoded locally — never uploaded. Paste an image you've copied
+                (screenshot tool), or pick a file (opens a small window because
+                Chrome closes the toolbar popup the moment a file dialog opens).
               </p>
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={busy}
-                className="flex w-full flex-col items-center gap-2 rounded-md border border-dashed border-border bg-card/30 py-6 text-[11.5px] text-muted-foreground transition-colors hover:border-border/80 hover:bg-card/60 disabled:opacity-50"
-              >
-                <ImageIcon className="size-5" strokeWidth={1.5} />
-                {busy ? "Decoding…" : "Choose QR image"}
-              </button>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={(e) => void onPickFile(e.target.files?.[0] ?? null)}
-              />
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => void onPasteQRImage()}
+                  disabled={qrPasteBusy || busy}
+                  className="flex flex-col items-center justify-center gap-1.5 rounded-md border border-dashed border-border bg-card/30 py-5 text-[11px] text-muted-foreground transition-colors hover:border-border/80 hover:bg-card/60 disabled:opacity-50"
+                >
+                  <Clipboard className="size-4" strokeWidth={1.5} />
+                  {qrPasteBusy ? "Reading…" : "Paste image"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void onChooseQRImage()}
+                  disabled={busy}
+                  className="flex flex-col items-center justify-center gap-1.5 rounded-md border border-dashed border-border bg-card/30 py-5 text-[11px] text-muted-foreground transition-colors hover:border-border/80 hover:bg-card/60 disabled:opacity-50"
+                >
+                  <ImageIcon className="size-4" strokeWidth={1.5} />
+                  Choose file
+                </button>
+              </div>
               {error && <Alert variant="destructive">{error}</Alert>}
               <div className="flex justify-end">
                 <Button
