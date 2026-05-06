@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { send } from "@/lib/messages";
 import { log } from "@/lib/log";
+import { openImportExportWindow } from "@/lib/detached";
 import type { AccountWithCode } from "@/lib/messages";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -71,6 +72,15 @@ export function AccountList({ onLocked }: { onLocked: () => void }) {
     window.setTimeout(() => setToast(null), 4000);
   }
 
+  async function openIO() {
+    const ok = await openImportExportWindow();
+    if (ok) {
+      window.close();
+      return;
+    }
+    setDialog("io");
+  }
+
   return (
     <div className="relative flex h-full flex-col">
       <header className="flex items-center justify-between px-4 pb-2 pt-3.5">
@@ -98,7 +108,7 @@ export function AccountList({ onLocked }: { onLocked: () => void }) {
             variant="ghost"
             size="icon-sm"
             title="Import / Export"
-            onClick={() => setDialog("io")}
+            onClick={() => void openIO()}
           >
             <ArrowUpFromLine />
           </Button>
