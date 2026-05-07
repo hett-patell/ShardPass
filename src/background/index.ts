@@ -1,4 +1,5 @@
-import type { Account, Vault, EncryptedVault, EnteIntegration } from "@/types";
+import "./sw-shims";
+import type { Account, Vault, EncryptedVault, EnteIntegration, EntePendingChange } from "@/types";
 import {
   base64ToBytes,
   bytesToBase64,
@@ -29,15 +30,18 @@ import {
 import { getDomainParts } from "@/lib/detect";
 import type { AccountWithCode, EnteStatus, LockState, Message, Response } from "@/lib/messages";
 import { log, error as logError } from "@/lib/log";
-import {
-  fetchSrpAttributes,
-  loginWithPassword,
-  completeTwoFactor,
-  type LoginContinuation,
-  type SignedInSession,
-} from "@/lib/ente/auth";
-import { normalizeServerUrl } from "@/lib/ente/api";
-import { syncEnte, enqueuePending } from "@/lib/ente/sync";
+
+/*
+ * Ente modules (auth, api, sync) depend on libsodium-wrappers-sumo and
+ * fast-srp-hap which pull in Node-only globals (crypto, assert).  Vite
+ * externalises those to empty stubs, so a top-level import crashes the
+ * service worker before it can register any listeners.  We therefore
+ * use dynamic import() — the heavy modules are only loaded on the first
+ * Ente-related message, well after the SW is alive.
+ */
+const enteAuth  = () => import("@/lib/ente/auth");
+const enteApi   = () => import("@/lib/ente/api");
+const enteSync  = () => import("@/lib/ente/sync");
 
 log("bg", "service worker booted at", new Date().toISOString());
 
@@ -56,8 +60,17 @@ const session: SessionState = {
 const AUTO_LOCK_ALARM = "auth-auto-lock";
 const ENTE_SYNC_ALARM = "ente-auto-sync";
 
-/** Temporarily held login continuation for 2FA flows. */
-let entePending2FA: LoginContinuation | null = null;
+/**
+ * Temporarily held login continuation for 2FA flows.
+ * Typed as `unknown` at rest to avoid importing the concrete type at
+ * the top level; narrowed via dynamic import when actually used.
+ */
+let entePending2FA: {
+  email: string;
+  serverUrl: string;
+  twoFactorSessionID: string;
+  derivedKEK: string;
+} | null = null;
 
 async function scheduleAutoLock(): Promise<void> {
   const settings = await getSettings();
@@ -113,6 +126,7 @@ async function doEnteSync(): Promise<string | null> {
   if (!ente) return "Ente not connected";
   try {
     log("bg:ente", "sync starting…");
+    const { syncEnte } = await enteSync();
     const result = await syncEnte(session.vault);
     log("bg:ente", "sync result", result);
     await saveVault(session.vault, session.key);
@@ -127,7 +141,13 @@ async function doEnteSync(): Promise<string | null> {
   }
 }
 
-async function finishEnteLogin(signed: SignedInSession): Promise<Response> {
+async function finishEnteLogin(signed: {
+  status: "connected";
+  email: string;
+  serverUrl: string;
+  authToken: string;
+  masterKey: string;
+}): Promise<Response> {
   ensureUnlocked();
   const v = session.vault!;
   if (!v.integrations) v.integrations = {};
@@ -146,11 +166,30 @@ async function finishEnteLogin(signed: SignedInSession): Promise<Response> {
   return { ok: true, data: { status: getEnteStatus(), syncError: syncErr } };
 }
 
-/** Enqueue an Ente push if the integration is active. */
-function enteEnqueue(op: "create" | "update" | "delete", accountId: string): void {
+/**
+ * Enqueue an Ente push if the integration is active.
+ * Inlined to avoid importing the heavy ente/sync module at the top level.
+ */
+function enteEnqueue(op: EntePendingChange["op"], accountId: string): void {
   const ente = session.vault?.integrations?.ente;
   if (!ente || ente.needsReauth) return;
-  enqueuePending(ente, op, accountId);
+  if (!ente.pending) ente.pending = [];
+  const filtered = ente.pending.filter((c) => c.accountId !== accountId);
+  let enteId: string | undefined;
+  if (op === "delete") {
+    for (const [id, accId] of Object.entries(ente.entityMap)) {
+      if (accId === accountId) { enteId = id; break; }
+    }
+  }
+  const hadPendingCreate = ente.pending.some(
+    (c) => c.accountId === accountId && c.op === "create",
+  );
+  if (op === "delete" && hadPendingCreate && !enteId) {
+    ente.pending = filtered;
+    return;
+  }
+  filtered.push({ op, accountId, enteId, enqueuedAt: Date.now(), attempts: 0 });
+  ente.pending = filtered;
 }
 
 async function tryRestoreSession(): Promise<void> {
@@ -531,6 +570,8 @@ async function handle(msg: Message): Promise<Response> {
       ensureUnlocked();
       entePending2FA = null;
       try {
+        const { normalizeServerUrl } = await enteApi();
+        const { fetchSrpAttributes, loginWithPassword } = await enteAuth();
         const serverUrl = normalizeServerUrl(msg.serverUrl);
         const attrs = await fetchSrpAttributes(serverUrl, msg.email);
         if (!attrs) {
@@ -563,6 +604,7 @@ async function handle(msg: Message): Promise<Response> {
         return { ok: false, error: "No pending 2FA session." };
       }
       try {
+        const { completeTwoFactor } = await enteAuth();
         const signed = await completeTwoFactor({
           serverUrl: entePending2FA.serverUrl,
           email: entePending2FA.email,
