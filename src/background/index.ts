@@ -1,4 +1,4 @@
-import type { Account, Vault, EncryptedVault } from "@/types";
+import type { Account, Vault, EncryptedVault, EnteIntegration } from "@/types";
 import {
   base64ToBytes,
   bytesToBase64,
@@ -27,8 +27,17 @@ import {
   isValidBase32,
 } from "@/lib/totp";
 import { getDomainParts } from "@/lib/detect";
-import type { AccountWithCode, LockState, Message, Response } from "@/lib/messages";
+import type { AccountWithCode, EnteStatus, LockState, Message, Response } from "@/lib/messages";
 import { log, error as logError } from "@/lib/log";
+import {
+  fetchSrpAttributes,
+  loginWithPassword,
+  completeTwoFactor,
+  type LoginContinuation,
+  type SignedInSession,
+} from "@/lib/ente/auth";
+import { normalizeServerUrl } from "@/lib/ente/api";
+import { syncEnte, enqueuePending } from "@/lib/ente/sync";
 
 log("bg", "service worker booted at", new Date().toISOString());
 
@@ -45,6 +54,10 @@ const session: SessionState = {
 };
 
 const AUTO_LOCK_ALARM = "auth-auto-lock";
+const ENTE_SYNC_ALARM = "ente-auto-sync";
+
+/** Temporarily held login continuation for 2FA flows. */
+let entePending2FA: LoginContinuation | null = null;
 
 async function scheduleAutoLock(): Promise<void> {
   const settings = await getSettings();
@@ -61,8 +74,83 @@ async function lock(reason: string): Promise<void> {
   session.key = null;
   session.vault = null;
   session.unlockedAt = 0;
+  entePending2FA = null;
   await chrome.alarms.clear(AUTO_LOCK_ALARM);
   await clearSessionKey();
+}
+
+/* ── Ente helpers ──────────────────────────────────────────── */
+
+function getEnteStatus(): EnteStatus {
+  const ente = session.vault?.integrations?.ente;
+  if (entePending2FA) {
+    return { connected: false, pending2FA: true, email: entePending2FA.email };
+  }
+  if (!ente) return { connected: false };
+  return {
+    connected: true,
+    email: ente.email,
+    serverUrl: ente.serverUrl,
+    lastSync: ente.lastSync,
+    lastError: ente.lastError,
+    needsReauth: ente.needsReauth,
+    accountCount: session.vault!.accounts.length,
+  };
+}
+
+async function scheduleEnteSync(): Promise<void> {
+  const ente = session.vault?.integrations?.ente;
+  await chrome.alarms.clear(ENTE_SYNC_ALARM);
+  if (ente && !ente.needsReauth) {
+    await chrome.alarms.create(ENTE_SYNC_ALARM, { periodInMinutes: 15 });
+    log("bg:ente", "scheduled auto-sync every 15 min");
+  }
+}
+
+async function doEnteSync(): Promise<string | null> {
+  if (!session.vault || !session.key) return "Vault is locked";
+  const ente = session.vault.integrations?.ente;
+  if (!ente) return "Ente not connected";
+  try {
+    log("bg:ente", "sync starting…");
+    const result = await syncEnte(session.vault);
+    log("bg:ente", "sync result", result);
+    await saveVault(session.vault, session.key);
+    if (result.needsReauth) return "Session expired — please reconnect.";
+    return null;
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    logError("bg:ente", "sync failed:", msg);
+    ente.lastError = msg;
+    await saveVault(session.vault, session.key);
+    return msg;
+  }
+}
+
+async function finishEnteLogin(signed: SignedInSession): Promise<Response> {
+  ensureUnlocked();
+  const v = session.vault!;
+  if (!v.integrations) v.integrations = {};
+  const integration: EnteIntegration = {
+    email: signed.email,
+    serverUrl: signed.serverUrl,
+    authToken: signed.authToken,
+    masterKey: signed.masterKey,
+    entityMap: {},
+  };
+  v.integrations.ente = integration;
+  await saveVault(v, session.key!);
+  // Trigger initial sync
+  const syncErr = await doEnteSync();
+  await scheduleEnteSync();
+  return { ok: true, data: { status: getEnteStatus(), syncError: syncErr } };
+}
+
+/** Enqueue an Ente push if the integration is active. */
+function enteEnqueue(op: "create" | "update" | "delete", accountId: string): void {
+  const ente = session.vault?.integrations?.ente;
+  if (!ente || ente.needsReauth) return;
+  enqueuePending(ente, op, accountId);
 }
 
 async function tryRestoreSession(): Promise<void> {
@@ -213,6 +301,7 @@ async function handle(msg: Message): Promise<Response> {
       };
       session.vault!.accounts.push(newAcc);
       await saveVault(session.vault!, session.key!);
+      enteEnqueue("create", newAcc.id);
       await scheduleAutoLock();
       return { ok: true, data: makeAccountWithCode(newAcc) };
     }
@@ -285,6 +374,7 @@ async function handle(msg: Message): Promise<Response> {
 
     case "deleteAccount": {
       ensureUnlocked();
+      enteEnqueue("delete", msg.id);
       session.vault!.accounts = session.vault!.accounts.filter((a) => a.id !== msg.id);
       await saveVault(session.vault!, session.key!);
       await scheduleAutoLock();
@@ -302,6 +392,7 @@ async function handle(msg: Message): Promise<Response> {
       if (msg.patch.secret) merged.secret = normalizeSecret(msg.patch.secret);
       session.vault!.accounts[idx] = merged;
       await saveVault(session.vault!, session.key!);
+      enteEnqueue("update", msg.id);
       await scheduleAutoLock();
       return { ok: true, data: makeAccountWithCode(merged) };
     }
@@ -408,7 +499,7 @@ async function handle(msg: Message): Promise<Response> {
 
     case "getIntegrationStatus": {
       const configured = !!session.vault?.integrations?.duckduckgo?.token;
-      return { ok: true, data: { duckduckgoConfigured: configured } };
+      return { ok: true, data: { duckduckgoConfigured: configured, ente: getEnteStatus() } };
     }
 
     case "setDuckToken": {
@@ -432,6 +523,81 @@ async function handle(msg: Message): Promise<Response> {
         log("bg:ddg", `token cleared`);
       }
       return { ok: true, data: { duckduckgoConfigured: false } };
+    }
+
+    /* ── Ente Auth handlers ─────────────────────────────────── */
+
+    case "enteLogin": {
+      ensureUnlocked();
+      entePending2FA = null;
+      try {
+        const serverUrl = normalizeServerUrl(msg.serverUrl);
+        const attrs = await fetchSrpAttributes(serverUrl, msg.email);
+        if (!attrs) {
+          return { ok: false, error: "No SRP attributes found for this email. Check the email or server URL." };
+        }
+        const outcome = await loginWithPassword({
+          serverUrl,
+          email: msg.email,
+          password: msg.password,
+          attrs,
+        });
+        if (outcome.status === "passkey-only") {
+          return { ok: false, error: outcome.message };
+        }
+        if (outcome.status === "twofa") {
+          entePending2FA = outcome;
+          return { ok: true, data: { status: getEnteStatus() } };
+        }
+        return await finishEnteLogin(outcome);
+      } catch (e) {
+        const msg2 = e instanceof Error ? e.message : String(e);
+        logError("bg:ente", "login failed:", msg2);
+        return { ok: false, error: msg2 };
+      }
+    }
+
+    case "enteSubmit2FA": {
+      ensureUnlocked();
+      if (!entePending2FA) {
+        return { ok: false, error: "No pending 2FA session." };
+      }
+      try {
+        const signed = await completeTwoFactor({
+          serverUrl: entePending2FA.serverUrl,
+          email: entePending2FA.email,
+          twoFactorSessionID: entePending2FA.twoFactorSessionID,
+          code: msg.code,
+          derivedKEK: entePending2FA.derivedKEK,
+        });
+        entePending2FA = null;
+        return await finishEnteLogin(signed);
+      } catch (e) {
+        const msg2 = e instanceof Error ? e.message : String(e);
+        logError("bg:ente", "2FA failed:", msg2);
+        return { ok: false, error: msg2 };
+      }
+    }
+
+    case "enteDisconnect": {
+      ensureUnlocked();
+      entePending2FA = null;
+      const v = session.vault!;
+      if (v.integrations?.ente) {
+        delete v.integrations.ente;
+        await saveVault(v, session.key!);
+        await chrome.alarms.clear(ENTE_SYNC_ALARM);
+        log("bg:ente", "disconnected");
+      }
+      return { ok: true, data: { status: getEnteStatus() } };
+    }
+
+    case "enteSyncNow": {
+      ensureUnlocked();
+      const err = await doEnteSync();
+      return err
+        ? { ok: false, error: err }
+        : { ok: true, data: { status: getEnteStatus() } };
     }
 
     case "generateDuckAlias": {
@@ -518,4 +684,8 @@ chrome.runtime.onMessage.addListener((msg: Message, sender, sendResponse) => {
 
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === AUTO_LOCK_ALARM) void lock("auto-lock alarm");
+  if (alarm.name === ENTE_SYNC_ALARM) {
+    log("bg:ente", "auto-sync alarm fired");
+    void doEnteSync();
+  }
 });

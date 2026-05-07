@@ -36,10 +36,26 @@ export type Message =
   | { kind: "getIntegrationStatus" }
   | { kind: "setDuckToken"; token: string }
   | { kind: "clearDuckToken" }
-  | { kind: "generateDuckAlias" };
+  | { kind: "generateDuckAlias" }
+  | { kind: "enteLogin"; email: string; password: string; serverUrl?: string }
+  | { kind: "enteSubmit2FA"; code: string }
+  | { kind: "enteDisconnect" }
+  | { kind: "enteSyncNow" };
+
+export interface EnteStatus {
+  connected: boolean;
+  email?: string;
+  serverUrl?: string;
+  lastSync?: number;
+  lastError?: string;
+  needsReauth?: boolean;
+  pending2FA?: boolean;
+  accountCount?: number;
+}
 
 export interface IntegrationStatus {
   duckduckgoConfigured: boolean;
+  ente: EnteStatus;
 }
 
 export type Response<T = unknown> =

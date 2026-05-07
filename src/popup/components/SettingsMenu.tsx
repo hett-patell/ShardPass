@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import { Check, Sparkles, Trash2 } from "lucide-react";
+import { Check, Sparkles, Trash2, RefreshCw, LogOut, Shield } from "lucide-react";
 import { send } from "@/lib/messages";
-import type { IntegrationStatus } from "@/lib/messages";
+import type { EnteStatus, IntegrationStatus } from "@/lib/messages";
 import type { Settings } from "@/types";
 import {
   Dialog,
@@ -269,11 +269,275 @@ export function SettingsMenu({
 
           <Separator />
 
+          {/* ── Ente Auth Sync ──────────────────────────── */}
+          <EnteAuthSection />
+
+          <Separator />
+
           <p className="text-[10px] text-muted-foreground/80">
             AES-256-GCM · PBKDF2 · 250k iterations · SHA-256
           </p>
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/* ────────────────────────────────────────────────────────────────
+   Ente Auth Sync — self-contained sub-component
+   ──────────────────────────────────────────────────────────────── */
+
+function EnteAuthSection() {
+  const [status, setStatus] = useState<EnteStatus | null>(null);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [serverUrl, setServerUrl] = useState("");
+  const [twofaCode, setTwofaCode] = useState("");
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
+  const [syncing, setSyncing] = useState(false);
+
+  useEffect(() => {
+    void send<IntegrationStatus>({ kind: "getIntegrationStatus" }).then((res) => {
+      if (res.ok) setStatus(res.data.ente);
+    });
+  }, []);
+
+  function resetForm() {
+    setEmail("");
+    setPassword("");
+    setServerUrl("");
+    setTwofaCode("");
+    setShowAdvanced(false);
+    setMessage(null);
+  }
+
+  async function doLogin() {
+    if (!email.trim() || !password) {
+      setMessage({ kind: "err", text: "Email and password are required." });
+      return;
+    }
+    setBusy(true);
+    setMessage(null);
+    const res = await send<{ status: EnteStatus; syncError?: string | null }>({
+      kind: "enteLogin",
+      email: email.trim(),
+      password,
+      serverUrl: serverUrl.trim() || undefined,
+    });
+    setBusy(false);
+    if (!res.ok) {
+      setMessage({ kind: "err", text: res.error });
+      return;
+    }
+    setStatus(res.data.status);
+    if (res.data.status.pending2FA) {
+      setMessage({ kind: "ok", text: "2FA required — enter code below." });
+      return;
+    }
+    resetForm();
+    if (res.data.syncError) {
+      setMessage({ kind: "err", text: `Connected but sync failed: ${res.data.syncError}` });
+    } else {
+      setMessage({ kind: "ok", text: "Connected & synced!" });
+    }
+  }
+
+  async function doSubmit2FA() {
+    if (!twofaCode.trim()) {
+      setMessage({ kind: "err", text: "Enter your 2FA code." });
+      return;
+    }
+    setBusy(true);
+    setMessage(null);
+    const res = await send<{ status: EnteStatus; syncError?: string | null }>({
+      kind: "enteSubmit2FA",
+      code: twofaCode.trim(),
+    });
+    setBusy(false);
+    if (!res.ok) {
+      setMessage({ kind: "err", text: res.error });
+      return;
+    }
+    setStatus(res.data.status);
+    resetForm();
+    if (res.data.syncError) {
+      setMessage({ kind: "err", text: `Connected but sync failed: ${res.data.syncError}` });
+    } else {
+      setMessage({ kind: "ok", text: "Connected & synced!" });
+    }
+  }
+
+  async function doSync() {
+    setSyncing(true);
+    setMessage(null);
+    const res = await send<{ status: EnteStatus }>({ kind: "enteSyncNow" });
+    setSyncing(false);
+    if (!res.ok) {
+      setMessage({ kind: "err", text: res.error });
+      return;
+    }
+    setStatus(res.data.status);
+    setMessage({ kind: "ok", text: "Sync complete." });
+  }
+
+  async function doDisconnect() {
+    setBusy(true);
+    setMessage(null);
+    const res = await send<{ status: EnteStatus }>({ kind: "enteDisconnect" });
+    setBusy(false);
+    if (!res.ok) {
+      setMessage({ kind: "err", text: res.error });
+      return;
+    }
+    setStatus(res.data.status);
+    resetForm();
+    setMessage({ kind: "ok", text: "Disconnected." });
+  }
+
+  if (!status) return null;
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <Label className="m-0 flex items-center gap-1.5">
+          <Shield className="size-3.5 text-muted-foreground" strokeWidth={1.75} />
+          Ente Auth Sync
+        </Label>
+        {status.connected && (
+          <span className="flex items-center gap-1 rounded-md bg-emerald-500/10 px-1.5 py-0.5 text-[9.5px] font-medium uppercase tracking-wider text-emerald-300">
+            <Check className="size-2.5" /> synced
+          </span>
+        )}
+      </div>
+      <p className="text-[10.5px] leading-relaxed text-muted-foreground">
+        Two-way sync your TOTP accounts with{" "}
+        <a
+          href="https://ente.io/auth"
+          target="_blank"
+          rel="noreferrer"
+          className="text-foreground/85 underline-offset-2 hover:underline"
+        >
+          Ente Auth
+        </a>
+        . Credentials are stored inside the encrypted vault.
+      </p>
+
+      {status.connected ? (
+        <div className="space-y-2">
+          <div className="rounded-md border border-border bg-secondary/40 px-3 py-2 space-y-1">
+            <p className="text-[11px] text-foreground/85 font-medium truncate">
+              {status.email}
+            </p>
+            {status.lastSync && (
+              <p className="text-[10px] text-muted-foreground">
+                Last sync: {new Date(status.lastSync).toLocaleString()}
+              </p>
+            )}
+            {status.needsReauth && (
+              <p className="text-[10px] text-amber-400">
+                Session expired — disconnect and reconnect.
+              </p>
+            )}
+          </div>
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              className="flex-1"
+              disabled={syncing || !!status.needsReauth}
+              onClick={() => void doSync()}
+            >
+              <RefreshCw className={syncing ? "animate-spin" : ""} />
+              {syncing ? "Syncing…" : "Sync now"}
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              disabled={busy}
+              onClick={() => void doDisconnect()}
+              title="Disconnect"
+            >
+              <LogOut />
+            </Button>
+          </div>
+        </div>
+      ) : status.pending2FA ? (
+        <div className="space-y-2">
+          <p className="text-[10.5px] text-muted-foreground">
+            Enter the 2FA code for <span className="font-medium text-foreground/85">{status.email}</span>
+          </p>
+          <Input
+            autoComplete="off"
+            placeholder="6-digit code"
+            value={twofaCode}
+            onChange={(e) => setTwofaCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+            className="font-mono text-[11px] text-center tracking-[0.25em]"
+            maxLength={6}
+          />
+          <Button
+            type="button"
+            size="sm"
+            className="w-full"
+            disabled={busy || twofaCode.length < 6}
+            onClick={() => void doSubmit2FA()}
+          >
+            {busy ? "Verifying…" : "Verify"}
+          </Button>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <Input
+            autoComplete="off"
+            placeholder="Ente account email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className="text-[11px]"
+          />
+          <Input
+            type="password"
+            autoComplete="off"
+            placeholder="Password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="text-[11px]"
+          />
+          <button
+            type="button"
+            className="text-[10px] text-muted-foreground transition-colors hover:text-foreground"
+            onClick={() => setShowAdvanced((v) => !v)}
+          >
+            {showAdvanced ? "Hide" : "Show"} advanced
+          </button>
+          {showAdvanced && (
+            <Input
+              autoComplete="off"
+              placeholder="Server URL (default: api.ente.io)"
+              value={serverUrl}
+              onChange={(e) => setServerUrl(e.target.value)}
+              className="font-mono text-[10px]"
+            />
+          )}
+          <Button
+            type="button"
+            size="sm"
+            className="w-full"
+            disabled={busy || !email.trim() || !password}
+            onClick={() => void doLogin()}
+          >
+            {busy ? "Connecting…" : "Connect"}
+          </Button>
+        </div>
+      )}
+
+      {message && (
+        <Alert variant={message.kind === "ok" ? "success" : "destructive"}>
+          {message.text}
+        </Alert>
+      )}
+    </div>
   );
 }
