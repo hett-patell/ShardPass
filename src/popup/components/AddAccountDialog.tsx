@@ -171,7 +171,7 @@ export function AddAccountDialog({
       setIssuer(parsed.issuer);
       setLabel(parsed.label);
       setSecret(parsed.secret);
-      setDigits(parsed.digits);
+      setDigits(parsed.digits as 6 | 7 | 8);
       setPeriod(parsed.period);
       setAlgorithm(parsed.algorithm);
       setMode("manual");

@@ -36,4 +36,7 @@ export default defineManifest({
   ],
   permissions: ["storage", "activeTab", "alarms", "idle", "clipboardRead", "clipboardWrite"],
   host_permissions: ["<all_urls>"],
+  content_security_policy: {
+    extension_pages: "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'",
+  },
 });
