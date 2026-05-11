@@ -30,11 +30,21 @@ import {
 import { getDomainParts } from "@/lib/detect";
 import type { AccountWithCode, EnteStatus, LockState, Message, Response } from "@/lib/messages";
 import { log, error as logError } from "@/lib/log";
-// Push-queue is pure logic with no libsodium dependency, so we statically
-// import it. The heavy ente auth/sync/api modules (which pull in libsodium,
-// fast-srp-hap, buffer, asn1) are dynamic-imported on first use to keep
-// them out of the SW boot chunk.
 import { enqueuePending } from "@/lib/ente/queue";
+// MV3 service workers disallow runtime `import()` (see
+// https://github.com/w3c/ServiceWorker/issues/1356), so the heavy Ente
+// modules have to be statically imported here. The SW boot chunk grows
+// accordingly; if we ever want to cut that cost, splitting into multiple
+// SWs (not currently allowed in MV3) or pruning libsodium are the only
+// paths. See also: queue.ts which is the *only* part safe to load eagerly
+// because it has no libsodium dependency.
+import {
+  fetchSrpAttributes,
+  loginWithPassword,
+  completeTwoFactor,
+} from "@/lib/ente/auth";
+import { normalizeServerUrl } from "@/lib/ente/api";
+import { syncEnte } from "@/lib/ente/sync";
 
 log("bg", "service worker booted at", new Date().toISOString());
 
@@ -119,7 +129,6 @@ async function doEnteSync(): Promise<string | null> {
   if (!ente) return "Ente not connected";
   try {
     log("bg:ente", "sync starting…");
-    const { syncEnte } = await import("@/lib/ente/sync");
     const result = await syncEnte(session.vault);
     log("bg:ente", "sync result", result);
     await saveVault(session.vault, session.key);
@@ -549,11 +558,6 @@ async function handle(msg: Message): Promise<Response> {
       ensureUnlocked();
       entePending2FA = null;
       try {
-        const [{ normalizeServerUrl }, { fetchSrpAttributes, loginWithPassword }] =
-          await Promise.all([
-            import("@/lib/ente/api"),
-            import("@/lib/ente/auth"),
-          ]);
         const serverUrl = normalizeServerUrl(msg.serverUrl);
         const attrs = await fetchSrpAttributes(serverUrl, msg.email);
         if (!attrs) {
@@ -586,7 +590,6 @@ async function handle(msg: Message): Promise<Response> {
         return { ok: false, error: "No pending 2FA session." };
       }
       try {
-        const { completeTwoFactor } = await import("@/lib/ente/auth");
         const signed = await completeTwoFactor({
           serverUrl: entePending2FA.serverUrl,
           email: entePending2FA.email,
