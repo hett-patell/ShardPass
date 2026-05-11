@@ -374,48 +374,4 @@ export async function syncEnte(
   return result;
 }
 
-export function enqueuePending(
-  ente: EnteIntegration,
-  op: EntePendingChange["op"],
-  accountId: string,
-  enteId?: string,
-): void {
-  if (!ente.pending) ente.pending = [];
-  // De-duplicate by accountId + op: collapse repeated edits, supersede creates with deletes, etc.
-  const filtered = ente.pending.filter((c) => c.accountId !== accountId);
-  if (op === "delete" && !enteId) {
-    // No remote ID known — locating by accountId via entityMap on flush.
-    for (const [id, accId] of Object.entries(ente.entityMap)) {
-      if (accId === accountId) {
-        enteId = id;
-        break;
-      }
-    }
-  }
-  // If deleting an account that was only ever a local-pending create, just drop both.
-  const hadPendingCreate = ente.pending.some(
-    (c) => c.accountId === accountId && c.op === "create",
-  );
-  if (op === "delete" && hadPendingCreate && !enteId) {
-    ente.pending = filtered;
-    return;
-  }
-  filtered.push({
-    op,
-    accountId,
-    enteId,
-    enqueuedAt: Date.now(),
-    attempts: 0,
-  });
-  ente.pending = filtered;
-}
-
-export function findEnteIdForAccount(
-  ente: EnteIntegration,
-  accountId: string,
-): string | undefined {
-  for (const [enteId, accId] of Object.entries(ente.entityMap)) {
-    if (accId === accountId) return enteId;
-  }
-  return undefined;
-}
+export { enqueuePending, findEnteIdForAccount } from "./queue";

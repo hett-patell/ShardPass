@@ -30,13 +30,11 @@ import {
 import { getDomainParts } from "@/lib/detect";
 import type { AccountWithCode, EnteStatus, LockState, Message, Response } from "@/lib/messages";
 import { log, error as logError } from "@/lib/log";
-import {
-  fetchSrpAttributes,
-  loginWithPassword,
-  completeTwoFactor,
-} from "@/lib/ente/auth";
-import { normalizeServerUrl } from "@/lib/ente/api";
-import { syncEnte } from "@/lib/ente/sync";
+// Push-queue is pure logic with no libsodium dependency, so we statically
+// import it. The heavy ente auth/sync/api modules (which pull in libsodium,
+// fast-srp-hap, buffer, asn1) are dynamic-imported on first use to keep
+// them out of the SW boot chunk.
+import { enqueuePending } from "@/lib/ente/queue";
 
 log("bg", "service worker booted at", new Date().toISOString());
 
@@ -121,6 +119,7 @@ async function doEnteSync(): Promise<string | null> {
   if (!ente) return "Ente not connected";
   try {
     log("bg:ente", "sync starting…");
+    const { syncEnte } = await import("@/lib/ente/sync");
     const result = await syncEnte(session.vault);
     log("bg:ente", "sync result", result);
     await saveVault(session.vault, session.key);
@@ -161,30 +160,13 @@ async function finishEnteLogin(signed: {
   return { ok: true, data: { status: getEnteStatus(), syncError: syncErr } };
 }
 
-/**
- * Enqueue an Ente push if the integration is active.
- * Inlined to avoid importing the heavy ente/sync module at the top level.
- */
+/** Thin wrapper around the shared `enqueuePending` that resolves the active
+ * integration from `session.vault` and skips work when no Ente sync is set
+ * up. Kept synchronous so message handlers can enqueue before persisting. */
 function enteEnqueue(op: EntePendingChange["op"], accountId: string): void {
   const ente = session.vault?.integrations?.ente;
   if (!ente || ente.needsReauth) return;
-  if (!ente.pending) ente.pending = [];
-  const filtered = ente.pending.filter((c) => c.accountId !== accountId);
-  let enteId: string | undefined;
-  if (op === "delete") {
-    for (const [id, accId] of Object.entries(ente.entityMap)) {
-      if (accId === accountId) { enteId = id; break; }
-    }
-  }
-  const hadPendingCreate = ente.pending.some(
-    (c) => c.accountId === accountId && c.op === "create",
-  );
-  if (op === "delete" && hadPendingCreate && !enteId) {
-    ente.pending = filtered;
-    return;
-  }
-  filtered.push({ op, accountId, enteId, enqueuedAt: Date.now(), attempts: 0 });
-  ente.pending = filtered;
+  enqueuePending(ente, op, accountId);
 }
 
 async function tryRestoreSession(): Promise<void> {
@@ -334,8 +316,9 @@ async function handle(msg: Message): Promise<Response> {
         secret: normalizeSecret(account.secret),
       };
       session.vault!.accounts.push(newAcc);
-      await saveVault(session.vault!, session.key!);
+      // Enqueue BEFORE persisting so the pending push survives an SW restart.
       enteEnqueue("create", newAcc.id);
+      await saveVault(session.vault!, session.key!);
       await scheduleAutoLock();
       return { ok: true, data: makeAccountWithCode(newAcc) };
     }
@@ -425,8 +408,9 @@ async function handle(msg: Message): Promise<Response> {
       }
       if (msg.patch.secret) merged.secret = normalizeSecret(msg.patch.secret);
       session.vault!.accounts[idx] = merged;
-      await saveVault(session.vault!, session.key!);
+      // Enqueue BEFORE persisting so the pending push survives an SW restart.
       enteEnqueue("update", msg.id);
+      await saveVault(session.vault!, session.key!);
       await scheduleAutoLock();
       return { ok: true, data: makeAccountWithCode(merged) };
     }
@@ -565,6 +549,11 @@ async function handle(msg: Message): Promise<Response> {
       ensureUnlocked();
       entePending2FA = null;
       try {
+        const [{ normalizeServerUrl }, { fetchSrpAttributes, loginWithPassword }] =
+          await Promise.all([
+            import("@/lib/ente/api"),
+            import("@/lib/ente/auth"),
+          ]);
         const serverUrl = normalizeServerUrl(msg.serverUrl);
         const attrs = await fetchSrpAttributes(serverUrl, msg.email);
         if (!attrs) {
@@ -597,6 +586,7 @@ async function handle(msg: Message): Promise<Response> {
         return { ok: false, error: "No pending 2FA session." };
       }
       try {
+        const { completeTwoFactor } = await import("@/lib/ente/auth");
         const signed = await completeTwoFactor({
           serverUrl: entePending2FA.serverUrl,
           email: entePending2FA.email,
