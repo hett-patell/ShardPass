@@ -1,5 +1,10 @@
 # ShardPass
 
+[![Release](https://img.shields.io/github/v/release/hett-patell/ShardPass?color=blue)](https://github.com/hett-patell/ShardPass/releases)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![TypeScript](https://img.shields.io/badge/TypeScript-strict-blue.svg)](https://www.typescriptlang.org/)
+[![Chrome Web Store](https://img.shields.io/badge/Chrome-Web%20Store-pending-lightgrey.svg)](#)
+
 <p align="center">
   <picture>
     <img src="https://github.com/user-attachments/assets/ad08c8a6-8418-4240-8153-4b34eec64efc" alt="ShardPass — a very serious TOTP extension" width="500">
@@ -262,3 +267,16 @@ src/
 [MIT](LICENSE) © Het Patel
 
 If you fork this: keep the crypto boring, the UI quiet, and the jokes optional. The vault prefers stability over your clever refactor at 2 a.m.
+
+---
+
+## The Shard ecosystem
+
+| Repo | What it does |
+|---|---|
+| [ShardLure](https://github.com/hett-patell/ShardLure) | SSH honeypot + threat-intel dashboard |
+| [ShardC2](https://github.com/hett-patell/ShardC2) | Red-team C2 framework in Go |
+| [ShardFlow](https://github.com/hett-patell/ShardFlow) | Layer-2 LAN workbench (ARP, drop, throttle) |
+| [ShardShell](https://github.com/hett-patell/ShardShell) | PHP post-exploitation shell |
+| [ShardPass](https://github.com/hett-patell/ShardPass) | Minimal TOTP authenticator (Chrome MV3) |
+| [ShardPet](https://github.com/hett-patell/ShardPet) | Pixel-Pokémon browser extension |
