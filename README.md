@@ -3,265 +3,179 @@
 [![Release](https://img.shields.io/github/v/release/hett-patell/ShardPass?color=blue)](https://github.com/hett-patell/ShardPass/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-blue.svg)](https://www.typescriptlang.org/)
-[![Chrome Web Store](https://img.shields.io/badge/Chrome-Web%20Store-pending-lightgrey.svg)](#)
 
 <p align="center">
   <picture>
-    <img src="https://github.com/user-attachments/assets/ad08c8a6-8418-4240-8153-4b34eec64efc" alt="ShardPass — a very serious TOTP extension" width="500">
+    <img src="https://github.com/user-attachments/assets/ad08c8a6-8418-4240-8153-4b34eec64efc" alt="ShardPass" width="500">
   </picture>
 </p>
 
-<p align="center">
-  <strong>Your codes. Your machine. Your problem when you forget the master password.</strong>
-</p>
+ShardPass is a **local-first TOTP authenticator** browser extension for Chromium (Manifest V3). It detects OTP fields on web pages and surfaces matching codes via an inline floating chip — no phone needed, no cloud dependency.
 
-ShardPass is a **local-first TOTP authenticator** for Chromium (MV3). Focus a 2FA field on any site and a floating chip shows up with the right code(s). Click. Paste. Feel briefly superior to people still thumb-typing six digits.
-
-No cloud vault. No “trust us bro” server. Just you, a service worker with commitment issues, and secrets encrypted well enough that your past self would nod approvingly.
+All secrets are encrypted at rest with AES-256-GCM, with the key derived from a master password using PBKDF2-HMAC-SHA256. The master password is never stored or transmitted.
 
 ---
 
-## Why exist?
+## Features
 
-Because authenticator apps shouldn’t require a pilgrimage to your phone, and browser extensions shouldn’t phone home with your TOTP seeds. ShardPass lives in the toolbar, matches accounts to the site you’re on, and fills the code when you ask — like a helpful gremlin that actually read the security docs.
-
----
-
-## Features (the honest list)
-
-| Thing | What it does |
-|-------|----------------|
-| 🔒 **Encrypted vault** | AES-256-GCM at rest; key from PBKDF2 (250k iter, SHA-256). Master password is **never** stored. |
-| ⚡ **Inline autofill** | Content script spots OTP inputs; chip lists matching accounts with live codes + countdown. |
-| 📥 **Import everything** | Manual secret, QR image, `otpauth://` dumps, encrypted JSON backup — or paste, because Chrome hates file pickers in popups. |
-| 🪟 **Detached import window** | File picker opens a small centered window so Chromium doesn’t murder the popup mid-import. (Yes, this was a whole saga.) |
-| 🪄 **Multi-account** | Five GitHub logins? The chip shows all five. Pick your poison. |
-| 🦆 **DuckDuckGo aliases** | Optional `@duck.com` generation when adding accounts; token lives **inside** the encrypted vault. |
-| 🔄 **Ente Auth sync** | Optional E2EE two-way multi-device sync with [Ente Auth](https://ente.io) — SRP login, libsodium crypto, pull/push diffs, your server or theirs. Changes sync across all your Ente devices. |
-| 🔐 **HOTP support** | Counter-based OTP for accounts that refuse to move past RFC 4226. |
-| 🌑 **Dark UI** | React + shadcn/ui. Minimal. No confetti. We have standards (they are low, but they exist). |
+- End-to-end encrypted vault (AES-256-GCM, PBKDF2 250k rounds, SHA-256)
+- Inline autofill chip matches accounts to the current domain and fills OTP codes on click
+- TOTP (RFC 6238) and HOTP (RFC 4226) support
+- Import from manual secret, QR image, `otpauth://` URI dump, or encrypted JSON backup
+- Export encrypted vault backups
+- Detached window for file-based import/export (survives Chromium popup dismissal)
+- Optional E2EE two-way sync with [Ente Auth](https://ente.io) via SRP + libsodium
+- Optional DuckDuckGo Email Protection alias generation
+- Auto-lock on idle or OS screen lock
 
 ---
 
-## Install (unpacked, like a civilized developer)
+## Install
 
 ```bash
 bun install
 bun run build
 ```
 
-1. Open `chrome://extensions` (or `brave://extensions`, `edge://extensions` — we don’t judge).
-2. Enable **Developer mode**.
-3. **Load unpacked** → select the **`dist/`** folder.
-4. Reload after every build. Chrome extensions are a pet that only listens after you shake the food bag.
+1. Navigate to `chrome://extensions`
+2. Enable **Developer mode**
+3. Click **Load unpacked** and select the `dist/` directory
 
 ---
 
 ## First run
 
-1. Click the toolbar icon → set a **master password** (≥ **12** characters; “password123” is not a personality).
-2. Add accounts:
-   - **Manual** — paste base32 secret, pretend you’re a hacker in a movie.
-   - **QR image** — paste from clipboard (stays in popup) or choose file (opens detached window; see saga above).
-   - **Import / Export** — `.json` encrypted backup or `.txt` of `otpauth://` URIs.
-3. Visit a site’s 2FA page, focus the OTP field, click the chip. Done. Go touch grass.
+1. Click the toolbar icon and set a **master password** (minimum 12 characters)
+2. Add accounts via manual entry, QR paste, or import
+3. Visit a site's 2FA page, focus the OTP field, and click the chip to autofill
 
 ---
 
-## Inline autofill (how the gremlin finds you)
+## Inline autofill
 
-OTP inputs are detected via:
+OTP inputs are detected by scanning the page for:
 
-- `autocomplete="one-time-code"` (the spec actually helping for once)
-- Heuristics on `name` / `id` / `placeholder` / `aria-label` / `data-testid` (`otp`, `2fa`, `totp`, `verification`, etc.)
+- `autocomplete="one-time-code"`
+- Heuristic matching on `name`, `id`, `placeholder`, `aria-label`, and `data-testid`
 - `inputmode="numeric"` with `maxlength` between 4 and 8
 
-**Domain matching** tokenizes hostname + eTLD+1 and compares against each account’s `issuer`, `label`, and `tags`. `github.com` surfaces every account whose issuer smells like GitHub — including that alt account you swore you’d delete.
-
-Multiple matches → list UI with issuer, label, live code, circular countdown. One match → still a list (we’re consistent, not clever).
-
----
-
-## Import / export (and the popup that kept dying)
-
-Chromium **closes the toolbar popup the moment it loses focus**. Opening the OS file picker counts as losing focus. So “choose `auth.txt` from Downloads” used to mean: popup gone, React tree dead, import never ran, user sad.
-
-**Fix:** Import/Export and QR file-pick open a **detached `chrome.windows` popup** (centered, ~360px wide) that survives the file dialog. Paste and clipboard paths still work inside the main popup if you’re feeling efficient.
-
----
-
-## DuckDuckGo Email Protection (optional)
-
-Generate `@duck.com` aliases without leaving ShardPass.
-
-1. [Sign up](https://duckduckgo.com/email/) → [autofill settings](https://duckduckgo.com/email/settings/autofill).
-2. DevTools → **Network** → **Generate Private Duck Address** → copy `Authorization: Bearer …`.
-3. **Settings → DuckDuckGo** → Connect.
-
-Token is stored **inside the encrypted vault**, not in plain `chrome.storage.local`. Disconnect removes it. The popup never reads the token back after save — it only knows “configured: yes/no,” like a good vault should.
-
----
-
-## Ente Auth sync (optional, for the sync enjoyers)
-
-Two-way sync with Ente’s authenticator backend, end-to-end encrypted the way Ente intends:
-
-- **Login:** SRP-6a (`fast-srp-hap`) + libsodium KEK derivation; 2FA supported; passkey-only accounts get a polite “not yet” message.
-- **Sync:** Pull remote diffs, decrypt with your authenticator key, adopt local accounts by fingerprint; push local creates/updates/deletes via a deduped pending queue (survives SW restarts — we learned that the hard way).
-- **Server:** Defaults to `https://api.ente.io`; self-hosted URL supported in advanced settings.
-
-Ente credentials (`authToken`, `masterKey`, entity map, pending queue) live in the vault blob, encrypted with your ShardPass master password. Sync runs in the service worker; WASM CSP (`wasm-unsafe-eval`) is enabled for libsodium. Yes, the SW bundle is chunky. No, we can’t `import()` lazy-load in MV3 — the HTML spec said no and Chrome meant it.
+Domain matching tokenizes the hostname and eTLD+1, then compares against each account's `issuer`, `label`, and `tags`. Multiple matching accounts are shown in a scrollable list; a single match is shown directly.
 
 ---
 
 ## Security architecture
 
-High-level: **one encrypted vault**, **one derived key in memory (and briefly in session storage)**, **three extension surfaces** that talk over `chrome.runtime` messages — never raw secrets in the DOM.
-
-```mermaid
-flowchart TB
-  subgraph User["You (trusted, allegedly)"]
-    MP[Master password]
-    UI[Popup / detached import window]
-  end
-
-  subgraph Ext["ShardPass extension"]
-    subgraph Popup["Popup (extension_pages)"]
-      React[React UI — Setup / Unlock / Accounts / Settings]
-    end
-
-    subgraph SW["Service worker (background)"]
-      Session[Session: CryptoKey + decrypted Vault]
-      Crypto[Web Crypto: PBKDF2 → AES-256-GCM]
-      Ente[Ente: SRP + libsodium sync — optional]
-      Lock[Auto-lock + idle lock + alarms]
-    end
-
-    subgraph CS["Content script (per tab, &lt;all_urls&gt;)"]
-      Detect[OTP input detection]
-      Chip[Shadow DOM chip — codes only, no secrets]
-    end
-
-    subgraph Store["Chrome storage"]
-      Local["storage.local — encrypted vault JSON"]
-      Sess["storage.session — exported AES key bytes while unlocked"]
-    end
-  end
-
-  subgraph Remote["Optional remote (HTTPS only)"]
-    DDG[DuckDuckGo quack API]
-    EnteAPI[Ente API — user-chosen base URL]
-  end
-
-  MP --> React
-  React -->|messages: unlock, list, add, import…| SW
-  UI --> React
-  SW --> Crypto
-  Crypto --> Local
-  Session --> Sess
-  Session --> Crypto
-  SW --> Ente
-  Ente --> EnteAPI
-  SW --> DDG
-  Detect -->|findForDomain — no secrets| SW
-  SW -->|AccountWithCode — codes + metadata| CS
-  Chip --> Detect
-```
-
-### Local vault (ShardPass-native)
+### Local vault
 
 | Layer | Mechanism |
 |-------|-----------|
-| **At rest** | Entire `Vault` JSON (accounts, Duck token, Ente integration state) encrypted as one AES-256-GCM blob in `chrome.storage.local`. |
-| **Key derivation** | PBKDF2-HMAC-SHA256, **250,000** iterations, 16-byte random salt per vault. |
-| **In memory** | `CryptoKey` + plaintext vault only in the service worker while unlocked. |
-| **Session persistence** | Raw AES key bytes in `chrome.storage.session` so the SW can survive restarts without re-prompting until lock — cleared on lock, auto-lock, or screen lock. |
-| **Master password** | Never written to disk. Wrong password → decrypt fails → unlock rejected. |
-| **Export** | JSON backup contains ciphertext + salt + IV (re-import needs the **export** password). |
+| At rest | Entire vault (accounts, Duck token, Ente state) encrypted as one AES-256-GCM blob in `chrome.storage.local` |
+| Key derivation | PBKDF2-HMAC-SHA256, 250,000 iterations, 16-byte random salt |
+| In memory | `CryptoKey` + plaintext vault held in the service worker while unlocked |
+| Session persistence | Raw AES key bytes in `chrome.storage.session` for SW restart resilience; cleared on lock |
+| Master password | Never written to disk; incorrect password causes decrypt failure |
+| Export | JSON backup contains ciphertext + salt + IV; re-import requires the export password |
 
-### Runtime surfaces & trust boundaries
+### Trust boundaries
 
-| Surface | Sees secrets? | Notes |
-|---------|---------------|--------|
-| **Popup** | No (only after unlock via messages) | No `otpauth` secrets in DOM long-term; codes fetched on demand. |
-| **Content script** | No | Receives `{ id, issuer, label, code, remainingSeconds }` — enough to fill, not enough to clone your life. |
-| **Service worker** | Yes (when unlocked) | Sole place that decrypts vault, generates TOTP, talks to Ente/Duck APIs. |
-| **Detached import window** | Same as popup | Same origin, `?view=io` / `?view=qr`; exists only to survive file-picker blur. |
+| Extension surface | Access to secrets |
+|---|---|
+| Popup | No — receives codes on demand, never stores secrets |
+| Content script | No — receives only metadata and generated codes |
+| Service worker | Yes (when unlocked) — sole surface that decrypts the vault, generates TOTP, and talks to remote APIs |
+| Detached import window | Same as popup |
 
-### Auto-lock & idle behavior
+### Auto-lock
 
-- Configurable timer (`chrome.alarms`) — 0 = off.
-- Optional **lock on OS screen lock** via `chrome.idle`.
-- Lock wipes in-memory vault + session key; content script gets `locked: true` and stops showing codes.
+- Configurable timer via `chrome.alarms` (0 = disabled)
+- Optional lock on OS screen lock via `chrome.idle`
+- Lock clears the in-memory vault and session key; content scripts stop displaying codes
 
-### Permissions (why we ask)
+### Permissions
 
-| Permission | Why |
-|------------|-----|
-| `storage` | Encrypted vault + settings. |
-| `activeTab` | Extension context on the current tab. |
-| `alarms` | Auto-lock + Ente periodic sync. |
-| `idle` | Lock when the OS locks. |
-| `clipboardRead` / `clipboardWrite` | Paste imports / QR / copy codes & aliases. |
-| `<all_urls>` | Content script must run on login pages for the chip — we don’t exfiltrate; we match hostname locally. |
+| Permission | Purpose |
+|---|---|
+| `storage` | Encrypted vault and settings |
+| `activeTab` | Context on current tab |
+| `alarms` | Auto-lock and periodic Ente sync |
+| `idle` | Lock on OS screen lock |
+| `clipboardRead` / `clipboardWrite` | Paste imports and QR, copy codes and aliases |
+| `<all_urls>` | Content script on login pages for the chip; domain matching happens locally |
 
-### Ente integration (additional crypto)
+### What ShardPass does not do
 
-When connected, the SW also holds Ente’s `authToken` and `masterKey` (for authenticator entity crypto) inside the **same encrypted vault blob**. Sync uses libsodium (Argon2id KEK, secretbox, secretstream, box seal) per Ente’s design. Network calls go to the configured API base only.
-
-### What we don’t do (on purpose)
-
-- No analytics phone-home.
-- No plaintext secrets in `localStorage` / sync storage.
-- No remote code execution — extension pages are `'self'` + WASM for libsodium only.
-- No “recover your master password” — we’re an authenticator, not a therapist.
+- No analytics or telemetry
+- No plaintext secrets in storage
+- No remote code execution
+- No master password recovery — it is not stored
 
 ---
 
-## Develop
+## Ente Auth sync (optional)
+
+Two-way E2EE sync with Ente's authenticator backend:
+
+- **Login**: SRP-6a (`fast-srp-hap`) + libsodium KEK derivation
+- **Sync**: Pulls remote diffs, decrypts with the authenticator key, and merges accounts by fingerprint; pushes local changes via a deduplicated pending queue
+- **Server**: Defaults to `https://api.ente.io`; self-hosted URL configurable in settings
+
+Ente credentials are stored inside the encrypted vault blob. Sync runs in the service worker with `wasm-unsafe-eval` CSP enabled for libsodium.
+
+---
+
+## DuckDuckGo Email Protection (optional)
+
+Generate `@duck.com` aliases from within the extension:
+
+1. Sign up at [DuckDuckGo Email Protection](https://duckduckgo.com/email/)
+2. Visit [autofill settings](https://duckduckgo.com/email/settings/autofill)
+3. Open DevTools → Network → Generate Private Duck Address → copy the `Authorization: Bearer …` token
+4. Settings → DuckDuckGo → Connect
+
+The token is stored inside the encrypted vault and is never read back in plaintext.
+
+---
+
+## Development
 
 ```bash
-bun run dev      # Vite watch → dist/
+bun run dev      # Watch mode → dist/
 bun run build    # tsc --noEmit && vite build
-bun run zip      # dist/ → shardpass.zip
+bun run zip      # Package dist/ → shardpass.zip
 ```
 
-[CRXJS](https://crxjs.dev/) powers the build. HMR in the popup works until you open a file picker and Chrome does its thing anyway.
-
-### Layout
+### Project layout
 
 ```
 src/
-├── background/     # MV3 SW — vault session, TOTP/HOTP, Ente/Duck, auto-lock, sync
-├── content/        # OTP detection + Shadow DOM chip
+├── background/     # MV3 service worker — vault session, TOTP/HOTP, Ente, Duck, auto-lock
+├── content/        # OTP detection + Shadow DOM inline chip
 ├── lib/
-│   ├── crypto.ts   # PBKDF2 + AES-GCM vault
-│   ├── ente/       # Ente API, SRP, libsodium sync, pending queue
-│   ├── totp.ts     # otpauth TOTP + HOTP code generation
-│   ├── format.ts   # Dependency-free code formatter (shared by content script + popup)
+│   ├── crypto.ts   # PBKDF2 + AES-GCM vault encryption
+│   ├── ente/       # Ente API client, SRP, libsodium sync, pending queue
+│   ├── totp.ts     # TOTP and HOTP code generation
+│   ├── format.ts   # Dependency-free code formatter
 │   └── …
-├── components/ui/  # shadcn primitives
-└── popup/          # React app + detached import views
+├── components/ui/  # shadcn/ui primitives
+└── popup/          # React application and detached import views
 ```
 
----
+### Stack
 
-## Stack
-
-- Chrome **MV3** (service worker + content script + popup)
-- **React 18** + **TypeScript 5.7** + **Tailwind v4** + **shadcn/ui**
-- **otpauth** · **jsqr** · **libsodium-wrappers-sumo** · **fast-srp-hap** (Ente)
-- **Vite 6** · **Bun** · **CRXJS**
+- Chrome Manifest V3 (service worker + content script + popup)
+- React 18 + TypeScript 5.7 + Tailwind v4 + shadcn/ui
+- otpauth · jsqr · libsodium-wrappers-sumo · fast-srp-hap
+- Vite 6 · Bun · CRXJS
 
 ---
 
 ## Releases
 
 | Tag | Notes |
-|-----|--------|
-| **v3** | Multi-device Ente sync, SW restart resilience, HOTP support, change-password, input validation. |
-| **v2** | Ente Auth E2EE sync + settings UI. |
-| **v1** | Detached-window import fix (file picker vs. popup homicide). |
+|---|---|
+| v3 | Multi-device Ente sync, SW restart resilience, HOTP, change-password, input validation |
+| v2 | Ente Auth E2EE sync and settings UI |
+| v1 | Detached-window import fix |
 
 ---
 
@@ -269,17 +183,15 @@ src/
 
 [MIT](LICENSE) © Het Patel
 
-If you fork this: keep the crypto boring, the UI quiet, and the jokes optional. The vault prefers stability over your clever refactor at 2 a.m.
-
 ---
 
-## The Shard ecosystem
+## Shard ecosystem
 
-| Repo | What it does |
+| Project | Description |
 |---|---|
-| [ShardLure](https://github.com/hett-patell/ShardLure) | SSH honeypot + threat-intel dashboard |
+| [ShardLure](https://github.com/hett-patell/ShardLure) | SSH honeypot and threat-intel dashboard |
 | [ShardC2](https://github.com/hett-patell/ShardC2) | Red-team C2 framework in Go |
 | [ShardFlow](https://github.com/hett-patell/ShardFlow) | Layer-2 LAN workbench (ARP, drop, throttle) |
 | [ShardShell](https://github.com/hett-patell/ShardShell) | PHP post-exploitation shell |
-| [ShardPass](https://github.com/hett-patell/ShardPass) | Minimal TOTP authenticator (Chrome MV3) |
+| [ShardPass](https://github.com/hett-patell/ShardPass) | Local-first TOTP authenticator for Chromium |
 | [ShardPet](https://github.com/hett-patell/ShardPet) | Pixel-Pokémon browser extension |
