@@ -28,9 +28,9 @@ export function App() {
   if (state === "loading") {
     return (
       <div className="flex h-full items-center justify-center">
-        <div className="flex items-center gap-2 text-[12px] text-muted-foreground/70">
-          <span className="grid size-1.5 animate-pulse place-items-center rounded-full bg-primary" />
-          <span className="tracking-[0.02em]">Loading vault</span>
+        <div className="flex items-center gap-2 code-mono text-[10.5px] text-muted-foreground">
+          <span className="size-1.5 animate-pulse bg-primary rounded-full" />
+          <span className="uppercase tracking-[0.16em]">Loading vault</span>
         </div>
       </div>
     );
@@ -60,11 +60,13 @@ function DetachedImportExport() {
   if (done) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-2 px-6 text-center animate-fade-in">
-        <div className="grid size-9 place-items-center rounded-full bg-emerald-500/15">
-          <Check className="size-4 text-emerald-300" strokeWidth={2.25} />
+        <div className="grid size-9 place-items-center rounded-sm border border-success/30 bg-success/10">
+          <Check className="size-4 text-success" strokeWidth={2.25} />
         </div>
-        <p className="text-[12.5px] font-medium text-foreground">{done}</p>
-        <p className="text-[11px] text-muted-foreground">Closing…</p>
+        <p className="text-[12.5px] font-medium tracking-[-0.01em] text-foreground">
+          {done}
+        </p>
+        <p className="code-mono text-[10px] text-muted-foreground">Closing…</p>
       </div>
     );
   }

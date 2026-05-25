@@ -3,22 +3,22 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
 const badgeVariants = cva(
-  "inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10.5px] font-semibold uppercase tracking-[0.04em] leading-none [&_svg]:size-2.5",
+  "inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-[0.08em] leading-none font-mono [&_svg]:size-2.5",
   {
     variants: {
       variant: {
         default:
-          "bg-[oklch(1_0_0/6%)] text-foreground/85 border border-white/[0.06]",
+          "bg-card text-muted-foreground border border-border",
         primary:
-          "bg-primary/15 text-[oklch(0.82_0.12_285)] border border-primary/25",
+          "bg-primary/10 text-primary border border-primary/30",
         success:
-          "bg-[oklch(0.65_0.14_158/12%)] text-[oklch(0.78_0.14_158)] border border-[oklch(0.65_0.14_158/22%)]",
+          "bg-success/10 text-success border border-success/30",
         warning:
-          "bg-[oklch(0.75_0.14_80/12%)] text-[oklch(0.84_0.14_80)] border border-[oklch(0.75_0.14_80/22%)]",
+          "bg-warning/10 text-warning border border-warning/30",
         destructive:
-          "bg-[oklch(0.62_0.18_22/12%)] text-[oklch(0.78_0.16_22)] border border-[oklch(0.62_0.18_22/24%)]",
+          "bg-destructive/10 text-destructive border border-destructive/30",
         outline:
-          "bg-transparent text-muted-foreground border border-white/[0.1]",
+          "bg-transparent text-muted-foreground border border-border",
       },
     },
     defaultVariants: { variant: "default" },

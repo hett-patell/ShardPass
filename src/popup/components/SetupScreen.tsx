@@ -1,9 +1,9 @@
 import { useState, type FormEvent } from "react";
-import { ShieldCheck, Lock } from "lucide-react";
 import { send } from "@/lib/messages";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Alert } from "@/components/ui/alert";
+import { Label } from "@/components/ui/label";
 
 const MIN_LEN = 12;
 
@@ -35,64 +35,79 @@ export function SetupScreen({ onSetupDone }: { onSetupDone: () => void }) {
   }
 
   return (
-    <div className="flex h-full flex-col px-6 py-6 animate-fade-in">
-      {/* Hero */}
-      <div className="mb-6 mt-3 flex flex-col items-center text-center">
+    <div className="flex h-full flex-col animate-fade-in">
+      {/* Header */}
+      <header className="flex shrink-0 items-center gap-2 border-b border-border-soft px-4 pt-4 pb-3">
         <div
-          className="mb-4 grid size-12 place-items-center rounded-xl"
-          style={{
-            backgroundImage:
-              "linear-gradient(135deg, oklch(0.68 0.14 285), oklch(0.50 0.18 295))",
-            boxShadow:
-              "inset 0 1px 0 oklch(1 0 0 / 18%), 0 4px 16px oklch(0.50 0.18 295 / 30%)",
-          }}
+          className="grid size-6 place-items-center rounded-[2px] bg-primary text-primary-foreground"
+          aria-hidden
         >
-          <ShieldCheck className="size-6 text-white" strokeWidth={1.75} />
+          <span className="text-[13px] font-bold leading-none tracking-[-0.04em]">
+            S
+          </span>
         </div>
-        <h1 className="text-[17px] font-semibold tracking-tight text-foreground">
-          Welcome to ShardPass
-        </h1>
-        <p className="mt-1 max-w-[260px] text-[12.5px] leading-relaxed text-muted-foreground">
-          Create a master password to encrypt your vault. It never leaves this
-          device.
-        </p>
-      </div>
-
-      <form className="space-y-2.5" onSubmit={onSubmit}>
-        <div className="space-y-1.5">
-          <label className="label-caps">Master password</label>
-          <Input
-            type="password"
-            autoComplete="new-password"
-            autoFocus
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder={`At least ${MIN_LEN} characters`}
-          />
-        </div>
-        <div className="space-y-1.5">
-          <label className="label-caps">Confirm</label>
-          <Input
-            type="password"
-            autoComplete="new-password"
-            value={confirm}
-            onChange={(e) => setConfirm(e.target.value)}
-            placeholder="Re-enter password"
-          />
-        </div>
-
-        {error && <Alert variant="destructive">{error}</Alert>}
-
-        <Button type="submit" disabled={busy} className="mt-1 w-full" size="lg">
-          {busy ? "Setting up…" : "Create vault"}
-        </Button>
-      </form>
-
-      <div className="mt-auto flex items-center justify-center gap-1.5 pt-4 text-[10.5px] font-medium text-muted-foreground/55">
-        <Lock className="size-3" strokeWidth={1.75} />
-        <span className="tracking-[0.04em]">
-          AES-256-GCM · PBKDF2 250k · SHA-256
+        <span className="text-[14.5px] font-semibold leading-none tracking-[-0.02em] text-foreground">
+          ShardPass
         </span>
+        <span className="ml-auto code-mono text-[10px] text-muted-foreground/70">
+          Setup
+        </span>
+      </header>
+
+      <div className="flex-1 flex flex-col px-6 pt-6 pb-5 overflow-y-auto scrollbar-thin">
+        {/* Title */}
+        <div className="mb-5">
+          <h1 className="text-[18px] font-semibold tracking-[-0.02em] text-foreground">
+            Create your vault
+          </h1>
+          <p className="mt-1.5 text-[12.5px] leading-relaxed text-muted-foreground">
+            Choose a master password to encrypt your accounts. It never leaves
+            this device.
+          </p>
+        </div>
+
+        {/* Form */}
+        <form className="space-y-3" onSubmit={onSubmit}>
+          <div className="space-y-1.5">
+            <Label>Master password</Label>
+            <Input
+              type="password"
+              autoComplete="new-password"
+              autoFocus
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder={`At least ${MIN_LEN} characters`}
+              className="h-9"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Confirm</Label>
+            <Input
+              type="password"
+              autoComplete="new-password"
+              value={confirm}
+              onChange={(e) => setConfirm(e.target.value)}
+              placeholder="Re-enter password"
+              className="h-9"
+            />
+          </div>
+
+          {error && <Alert variant="destructive">{error}</Alert>}
+
+          <Button
+            type="submit"
+            disabled={busy}
+            className="mt-1 w-full"
+            size="lg"
+          >
+            {busy ? "Setting up…" : "Create vault"}
+          </Button>
+        </form>
+
+        {/* Footer info */}
+        <div className="mt-auto pt-6 code-mono text-[10px] text-muted-foreground/70 leading-relaxed">
+          AES-256-GCM · PBKDF2 250,000 · SHA-256
+        </div>
       </div>
     </div>
   );

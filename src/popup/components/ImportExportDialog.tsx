@@ -333,7 +333,7 @@ export function ImportExportDialog({
                   type="button"
                   onClick={onChooseFileClick}
                   disabled={busy}
-                  className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-white/[0.09] bg-[oklch(1_0_0/2%)] py-5 text-[12px] font-medium text-muted-foreground transition-[border-color,background,color] duration-150 hover:border-primary/40 hover:bg-[oklch(1_0_0/4%)] hover:text-foreground disabled:opacity-50"
+                  className="flex flex-col items-center justify-center gap-2 rounded-sm border border-dashed border-border bg-card/50 py-5 text-[12px] font-medium text-muted-foreground transition-[border-color,background,color] duration-100 hover:border-primary hover:bg-card hover:text-foreground disabled:opacity-50 outline-none focus-visible:border-primary focus-visible:ring-1 focus-visible:ring-primary"
                 >
                   <Upload className="size-4" strokeWidth={1.75} />
                   Choose file
@@ -342,7 +342,7 @@ export function ImportExportDialog({
                   type="button"
                   onClick={() => void onPasteFromClipboard()}
                   disabled={busy}
-                  className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-white/[0.09] bg-[oklch(1_0_0/2%)] py-5 text-[12px] font-medium text-muted-foreground transition-[border-color,background,color] duration-150 hover:border-primary/40 hover:bg-[oklch(1_0_0/4%)] hover:text-foreground disabled:opacity-50"
+                  className="flex flex-col items-center justify-center gap-2 rounded-sm border border-dashed border-border bg-card/50 py-5 text-[12px] font-medium text-muted-foreground transition-[border-color,background,color] duration-100 hover:border-primary hover:bg-card hover:text-foreground disabled:opacity-50 outline-none focus-visible:border-primary focus-visible:ring-1 focus-visible:ring-primary"
                 >
                   <Clipboard className="size-4" strokeWidth={1.75} />
                   Paste clipboard
@@ -363,22 +363,22 @@ export function ImportExportDialog({
                   onChange={(e) => onPasteAreaChange(e.target.value)}
                   placeholder="…or paste otpauth:// URIs / encrypted backup JSON here"
                   rows={4}
-                  className={`w-full resize-none rounded-lg border bg-[oklch(1_0_0/3%)] px-3 py-2.5 text-[12.5px] font-mono leading-relaxed text-foreground outline-none transition-[border-color,background] duration-150 placeholder:text-muted-foreground/55 placeholder:font-sans focus-visible:bg-[oklch(1_0_0/5%)] focus-visible:ring-2 focus-visible:ring-primary/15 ${
+                  className={`w-full resize-none rounded-sm border bg-card px-2.5 py-2 text-[12px] code-mono leading-relaxed text-foreground outline-none transition-[border-color,background] duration-100 placeholder:text-muted-foreground placeholder:font-sans focus-visible:bg-elevated focus-visible:border-primary ${
                     dragOver
-                      ? "border-primary/45 bg-[oklch(1_0_0/5%)]"
-                      : "border-white/[0.07]"
+                      ? "border-primary bg-elevated"
+                      : "border-border"
                   }`}
                 />
                 {dragOver && (
-                  <div className="pointer-events-none absolute inset-0 grid place-items-center rounded-lg bg-background/70 text-[12.5px] font-medium text-foreground">
+                  <div className="pointer-events-none absolute inset-0 grid place-items-center rounded-sm bg-background/80 text-[12px] font-medium tracking-[-0.01em] text-foreground">
                     Drop file here
                   </div>
                 )}
               </div>
 
               {importData && (
-                <div className="flex items-center justify-between rounded-md border border-white/[0.07] bg-[oklch(1_0_0/3%)] px-2.5 py-1.5">
-                  <span className="flex items-center gap-2 text-[12px] text-foreground/85">
+                <div className="flex items-center justify-between border-l-2 border-l-primary bg-card px-2.5 py-1.5">
+                  <span className="flex items-center gap-2 text-[12px] text-foreground/90">
                     {importKind === "json-backup" && (
                       <>
                         <FileJson className="size-3.5 text-muted-foreground" />
@@ -400,7 +400,7 @@ export function ImportExportDialog({
                   </span>
                   <button
                     type="button"
-                    className="text-[12px] text-muted-foreground transition-colors hover:text-foreground"
+                    className="code-mono text-[10px] uppercase tracking-[0.1em] text-muted-foreground transition-colors hover:text-foreground outline-none focus-visible:text-foreground"
                     onClick={reset}
                   >
                     Clear

@@ -9,21 +9,22 @@ export const Switch = React.forwardRef<
   <SwitchPrimitive.Root
     ref={ref}
     className={cn(
-      "peer inline-flex h-[22px] w-[38px] shrink-0 cursor-pointer items-center rounded-full transition-colors duration-200 outline-none",
-      "focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-1 focus-visible:ring-offset-background",
+      "peer inline-flex h-[18px] w-[32px] shrink-0 cursor-pointer items-center rounded-sm transition-colors duration-150 outline-none",
+      "border border-border",
+      "focus-visible:ring-1 focus-visible:ring-primary focus-visible:ring-offset-1 focus-visible:ring-offset-background",
       "disabled:cursor-not-allowed disabled:opacity-40",
-      "data-[state=checked]:bg-primary data-[state=unchecked]:bg-[oklch(1_0_0/10%)]",
-      "border border-white/[0.04] data-[state=checked]:border-transparent",
+      "data-[state=checked]:bg-primary data-[state=checked]:border-primary",
+      "data-[state=unchecked]:bg-card",
       className,
     )}
     {...props}
   >
     <SwitchPrimitive.Thumb
       className={cn(
-        "pointer-events-none block size-[16px] rounded-full bg-white",
-        "shadow-[0_1px_2px_oklch(0_0_0/35%),0_0_0_0.5px_oklch(0_0_0/15%)]",
-        "transition-transform duration-200",
-        "data-[state=checked]:translate-x-[18px] data-[state=unchecked]:translate-x-[3px]",
+        "pointer-events-none block size-[12px] rounded-sm bg-foreground",
+        "transition-transform duration-150",
+        "data-[state=checked]:translate-x-[16px] data-[state=checked]:bg-background",
+        "data-[state=unchecked]:translate-x-[2px]",
       )}
     />
   </SwitchPrimitive.Root>

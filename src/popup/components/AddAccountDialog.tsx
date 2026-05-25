@@ -229,7 +229,7 @@ export function AddAccountDialog({
                       type="button"
                       onClick={() => void generateAlias()}
                       disabled={aliasBusy}
-                      className="flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10.5px] font-medium text-muted-foreground transition-colors hover:bg-[oklch(1_0_0/6%)] hover:text-foreground disabled:opacity-50"
+                      className="flex items-center gap-1 rounded-sm px-1.5 py-0.5 code-mono text-[10px] uppercase tracking-[0.08em] text-muted-foreground transition-colors hover:bg-card hover:text-foreground disabled:opacity-50 outline-none focus-visible:ring-1 focus-visible:ring-primary"
                       title="Generate a duck.com alias and fill this field"
                     >
                       <Sparkles className="size-2.5" />
@@ -243,7 +243,7 @@ export function AddAccountDialog({
                   placeholder="you@example.com"
                 />
                 {aliasNote && (
-                  <p className="text-[11px] text-[oklch(0.78_0.14_158)]">
+                  <p className="code-mono text-[10.5px] text-success">
                     {aliasNote}
                   </p>
                 )}
@@ -424,11 +424,11 @@ function DropTile({
       onClick={onClick}
       disabled={disabled}
       className={cn(
-        "flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-white/[0.09] bg-[oklch(1_0_0/2%)] py-5 text-[12px] font-medium text-muted-foreground",
-        "transition-[border-color,background,color] duration-150",
-        "hover:border-primary/40 hover:bg-[oklch(1_0_0/4%)] hover:text-foreground",
-        "disabled:opacity-50 disabled:hover:border-white/[0.09] disabled:hover:bg-[oklch(1_0_0/2%)] disabled:hover:text-muted-foreground",
-        "[&_svg]:transition-transform hover:[&_svg]:scale-110",
+        "flex flex-col items-center justify-center gap-2 rounded-sm border border-dashed border-border bg-card/50 py-5 text-[12px] font-medium text-muted-foreground",
+        "transition-[border-color,background,color] duration-100",
+        "hover:border-primary hover:bg-card hover:text-foreground",
+        "disabled:opacity-50 disabled:hover:border-border disabled:hover:bg-card/50 disabled:hover:text-muted-foreground",
+        "outline-none focus-visible:border-primary focus-visible:ring-1 focus-visible:ring-primary",
       )}
     >
       {icon}

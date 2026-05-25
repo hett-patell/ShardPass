@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Check, Image as ImageIcon, ShieldCheck } from "lucide-react";
+import { Check, Image as ImageIcon } from "lucide-react";
 import { send } from "@/lib/messages";
 import { decodeQRFromFile } from "@/lib/qr";
 import { parseOtpAuthURI } from "@/lib/totp";
@@ -52,64 +52,68 @@ export function DetachedQRImport() {
   if (done) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-2 px-6 text-center animate-fade-in">
-        <div className="grid size-10 place-items-center rounded-full bg-[oklch(0.65_0.14_158/15%)] border border-[oklch(0.65_0.14_158/25%)]">
-          <Check className="size-4 text-[oklch(0.78_0.14_158)]" strokeWidth={2.5} />
+        <div className="grid size-10 place-items-center rounded-sm border border-success/30 bg-success/10">
+          <Check className="size-4 text-success" strokeWidth={2.5} />
         </div>
-        <p className="text-[13.5px] font-semibold text-foreground">{done}</p>
-        <p className="text-[11px] text-muted-foreground">Closing…</p>
+        <p className="text-[13px] font-semibold tracking-[-0.015em] text-foreground">
+          {done}
+        </p>
+        <p className="code-mono text-[10px] text-muted-foreground">Closing…</p>
       </div>
     );
   }
 
   return (
-    <div className="flex h-full flex-col px-4 py-4 animate-fade-in">
-      <div className="mb-3 flex items-center gap-2">
+    <div className="flex h-full flex-col animate-fade-in">
+      {/* Header */}
+      <header className="flex shrink-0 items-center gap-2 border-b border-border-soft px-4 pt-4 pb-3">
         <div
-          className="grid size-6 place-items-center rounded-md"
-          style={{
-            backgroundImage:
-              "linear-gradient(135deg, oklch(0.68 0.14 285), oklch(0.50 0.18 295))",
-            boxShadow: "inset 0 1px 0 oklch(1 0 0 / 14%)",
-          }}
+          className="grid size-6 place-items-center rounded-[2px] bg-primary text-primary-foreground"
+          aria-hidden
         >
-          <ShieldCheck className="size-3.5 text-white" strokeWidth={2} />
+          <span className="text-[13px] font-bold leading-none tracking-[-0.04em]">
+            S
+          </span>
         </div>
-        <span className="text-[13px] font-semibold tracking-tight">
-          Import from QR image
+        <span className="text-[13px] font-semibold leading-none tracking-[-0.02em] text-foreground">
+          Import from QR
         </span>
-      </div>
-      <p className="mb-3 text-[12px] leading-relaxed text-muted-foreground">
-        Pick a QR screenshot. Decoded locally — never uploaded.
-      </p>
+      </header>
 
-      <button
-        type="button"
-        onClick={() => fileRef.current?.click()}
-        disabled={busy}
-        className="flex w-full flex-col items-center gap-2 rounded-lg border border-dashed border-white/[0.09] bg-[oklch(1_0_0/2%)] py-10 text-[13px] font-medium text-muted-foreground transition-[border-color,background,color] duration-150 hover:border-primary/40 hover:bg-[oklch(1_0_0/4%)] hover:text-foreground disabled:opacity-50"
-      >
-        <ImageIcon className="size-5" strokeWidth={1.75} />
-        {busy ? "Decoding…" : "Choose QR image"}
-      </button>
+      <div className="flex-1 flex flex-col px-4 py-4">
+        <p className="mb-3 text-[12px] leading-relaxed text-muted-foreground">
+          Pick a QR screenshot. Decoded locally — never uploaded.
+        </p>
 
-      <input
-        ref={fileRef}
-        type="file"
-        accept="image/*"
-        className="hidden"
-        onChange={(e) => void onPick(e.target.files?.[0] ?? null)}
-      />
+        <button
+          type="button"
+          onClick={() => fileRef.current?.click()}
+          disabled={busy}
+          className="flex w-full flex-col items-center gap-2 rounded-sm border border-dashed border-border bg-card/50 py-10 text-[13px] font-medium text-muted-foreground transition-[border-color,background,color] duration-100 hover:border-primary hover:bg-card hover:text-foreground disabled:opacity-50 outline-none focus-visible:border-primary focus-visible:ring-1 focus-visible:ring-primary"
+        >
+          <ImageIcon className="size-5" strokeWidth={1.75} />
+          {busy ? "Decoding…" : "Choose QR image"}
+        </button>
 
-      {error && (
-        <div className="mt-3">
-          <Alert variant="destructive">{error}</Alert>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={(e) => void onPick(e.target.files?.[0] ?? null)}
+        />
+
+        {error && (
+          <div className="mt-3">
+            <Alert variant="destructive">{error}</Alert>
+          </div>
+        )}
+
+        <div className="mt-auto flex justify-end pt-3">
+          <Button type="button" variant="ghost" onClick={() => window.close()}>
+            Close
+          </Button>
         </div>
-      )}
-
-      <div className="mt-auto flex justify-end pt-3">
-        <Button type="button" variant="ghost" onClick={() => window.close()}>
-          Close
-        </Button>
       </div>
     </div>
   );

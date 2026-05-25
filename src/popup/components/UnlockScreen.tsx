@@ -1,9 +1,9 @@
 import { useState, type FormEvent } from "react";
-import { Lock, ShieldCheck } from "lucide-react";
 import { send } from "@/lib/messages";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Alert } from "@/components/ui/alert";
+import { Label } from "@/components/ui/label";
 
 export function UnlockScreen({ onUnlocked }: { onUnlocked: () => void }) {
   const [password, setPassword] = useState("");
@@ -25,56 +25,69 @@ export function UnlockScreen({ onUnlocked }: { onUnlocked: () => void }) {
   }
 
   return (
-    <div className="flex h-full flex-col px-6 py-6 animate-fade-in">
-      {/* Hero */}
-      <div className="mb-6 mt-6 flex flex-col items-center text-center">
+    <div className="flex h-full flex-col animate-fade-in">
+      {/* Header */}
+      <header className="flex shrink-0 items-center gap-2 border-b border-border-soft px-4 pt-4 pb-3">
         <div
-          className="mb-4 grid size-12 place-items-center rounded-xl"
-          style={{
-            backgroundImage:
-              "linear-gradient(135deg, oklch(0.68 0.14 285), oklch(0.50 0.18 295))",
-            boxShadow:
-              "inset 0 1px 0 oklch(1 0 0 / 18%), 0 4px 16px oklch(0.50 0.18 295 / 30%)",
-          }}
+          className="grid size-6 place-items-center rounded-[2px] bg-primary text-primary-foreground"
+          aria-hidden
         >
-          <Lock className="size-5 text-white" strokeWidth={2} />
+          <span className="text-[13px] font-bold leading-none tracking-[-0.04em]">
+            S
+          </span>
         </div>
-        <h1 className="text-[17px] font-semibold tracking-tight text-foreground">
-          ShardPass is locked
-        </h1>
-        <p className="mt-1 text-[12.5px] leading-relaxed text-muted-foreground">
-          Enter your master password to continue.
-        </p>
-      </div>
+        <span className="text-[14.5px] font-semibold leading-none tracking-[-0.02em] text-foreground">
+          ShardPass
+        </span>
+        <span className="ml-auto code-mono text-[10px] text-warning flex items-center gap-1.5">
+          <span className="size-1.5 rounded-full bg-warning" aria-hidden />
+          Locked
+        </span>
+      </header>
 
-      <form className="space-y-2.5" onSubmit={onSubmit}>
-        <div className="space-y-1.5">
-          <label className="label-caps">Master password</label>
-          <Input
-            autoFocus
-            type="password"
-            autoComplete="off"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="Enter your password"
-          />
+      <div className="flex-1 flex flex-col px-6 pt-10 pb-6">
+        {/* Title */}
+        <div className="mb-6">
+          <h1 className="text-[18px] font-semibold tracking-[-0.02em] text-foreground">
+            Vault locked
+          </h1>
+          <p className="mt-1.5 text-[12.5px] leading-relaxed text-muted-foreground">
+            Enter your master password to continue.
+          </p>
         </div>
 
-        {error && <Alert variant="destructive">{error}</Alert>}
+        {/* Form */}
+        <form className="space-y-3" onSubmit={onSubmit}>
+          <div className="space-y-1.5">
+            <Label>Master password</Label>
+            <Input
+              autoFocus
+              type="password"
+              autoComplete="off"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Enter your password"
+              className="h-9"
+            />
+          </div>
 
-        <Button
-          type="submit"
-          disabled={busy || !password}
-          className="mt-1 w-full"
-          size="lg"
-        >
-          {busy ? "Unlocking…" : "Unlock"}
-        </Button>
-      </form>
+          {error && <Alert variant="destructive">{error}</Alert>}
 
-      <div className="mt-auto flex items-center justify-center gap-1.5 pt-4 text-[10.5px] font-medium text-muted-foreground/55">
-        <ShieldCheck className="size-3" strokeWidth={1.75} />
-        <span className="tracking-[0.04em]">Encrypted locally on this device</span>
+          <Button
+            type="submit"
+            disabled={busy || !password}
+            className="mt-1 w-full"
+            size="lg"
+          >
+            {busy ? "Unlocking…" : "Unlock vault"}
+          </Button>
+        </form>
+
+        {/* Footer info */}
+        <div className="mt-auto pt-6 code-mono text-[10px] text-muted-foreground/70 flex items-center gap-1.5">
+          <span className="size-1.5 rounded-full bg-success" aria-hidden />
+          Encrypted locally on this device
+        </div>
       </div>
     </div>
   );

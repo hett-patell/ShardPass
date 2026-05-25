@@ -14,9 +14,10 @@ export const SelectTrigger = React.forwardRef<
   <SelectPrimitive.Trigger
     ref={ref}
     className={cn(
-      "flex h-9 w-full items-center justify-between gap-2 rounded-lg border border-white/[0.07] bg-[oklch(1_0_0/3%)] px-3 text-[13.5px] text-foreground outline-none transition-[border-color,background] duration-150",
-      "focus-visible:border-primary/45 focus-visible:bg-[oklch(1_0_0/5%)] focus-visible:ring-2 focus-visible:ring-primary/15",
-      "hover:border-white/[0.11]",
+      "flex h-8 w-full items-center justify-between gap-2 rounded-sm border border-border bg-card px-2.5",
+      "text-[12.5px] text-foreground outline-none transition-[border-color,background] duration-100",
+      "hover:border-border-strong",
+      "focus-visible:border-primary focus-visible:bg-elevated",
       "disabled:cursor-not-allowed disabled:opacity-50",
       "[&>span]:line-clamp-1",
       className,
@@ -25,7 +26,7 @@ export const SelectTrigger = React.forwardRef<
   >
     {children}
     <SelectPrimitive.Icon asChild>
-      <ChevronDown className="size-3.5 opacity-55" />
+      <ChevronDown className="size-3 opacity-55" />
     </SelectPrimitive.Icon>
   </SelectPrimitive.Trigger>
 ));
@@ -40,9 +41,9 @@ export const SelectContent = React.forwardRef<
       ref={ref}
       position={position}
       className={cn(
-        "relative z-50 max-h-72 min-w-[8rem] overflow-hidden rounded-lg border border-white/[0.08] bg-popover text-popover-foreground",
-        "shadow-[0_8px_24px_oklch(0_0_0/45%)]",
-        "data-[state=open]:animate-[fade-in_150ms_ease-out]",
+        "relative z-50 max-h-72 min-w-[8rem] overflow-hidden rounded-sm border border-border bg-popover text-popover-foreground",
+        "shadow-[0_8px_24px_rgba(0,0,0,0.5)]",
+        "data-[state=open]:animate-[fade-in_140ms_ease-out]",
         position === "popper" &&
           "data-[side=bottom]:translate-y-1 data-[side=top]:-translate-y-1",
         className,
@@ -69,8 +70,8 @@ export const SelectItem = React.forwardRef<
   <SelectPrimitive.Item
     ref={ref}
     className={cn(
-      "relative flex w-full cursor-default select-none items-center rounded-md py-1.5 pl-7 pr-2.5 text-[13px] outline-none",
-      "focus:bg-[oklch(1_0_0/6%)] focus:text-foreground",
+      "relative flex w-full cursor-default select-none items-center rounded-sm py-1.5 pl-7 pr-2.5 text-[12.5px] outline-none",
+      "focus:bg-card focus:text-foreground",
       "data-[state=checked]:text-foreground",
       "data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
       className,
@@ -79,7 +80,7 @@ export const SelectItem = React.forwardRef<
   >
     <span className="absolute left-2 flex size-3.5 items-center justify-center">
       <SelectPrimitive.ItemIndicator>
-        <Check className="size-3.5 text-primary" />
+        <Check className="size-3 text-primary" />
       </SelectPrimitive.ItemIndicator>
     </span>
     <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>

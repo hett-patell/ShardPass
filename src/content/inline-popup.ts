@@ -18,159 +18,154 @@ let lastProps: ChipProps | null = null;
 const STYLE = `
   :host {
     all: initial;
-    --sp-bg: oklch(0.165 0.008 282);
-    --sp-bg-hover: oklch(0.21 0.012 283);
-    --sp-border: oklch(1 0 0 / 8%);
-    --sp-fg: oklch(0.96 0 0);
-    --sp-muted: oklch(0.62 0.012 285);
-    --sp-muted-dim: oklch(0.50 0.012 285);
-    --sp-accent: oklch(0.72 0.14 285);
-    --sp-accent-dim: oklch(0.55 0.12 285);
-    --sp-danger: oklch(0.7 0.18 25);
-    --sp-warning: oklch(0.78 0.12 80);
+    --sp-bg: #131316;
+    --sp-bg-hover: #1c1c20;
+    --sp-border: #26262b;
+    --sp-border-soft: #1d1d21;
+    --sp-fg: #f4f4f5;
+    --sp-muted: #a1a1aa;
+    --sp-muted-dim: #71717a;
+    --sp-accent: #ff4d2e;
+    --sp-success: #4ade80;
+    --sp-warning: #f59e0b;
   }
   .chip {
     position: fixed;
     z-index: 2147483647;
     font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    letter-spacing: -0.005em;
     color: var(--sp-fg);
     background: var(--sp-bg);
     border: 1px solid var(--sp-border);
-    border-radius: 10px;
-    padding: 3px;
-    box-shadow:
-      0 12px 32px rgba(0,0,0,0.55),
-      0 1px 0 0 oklch(1 0 0 / 6%) inset,
-      0 0 0 1px oklch(0 0 0 / 30%);
-    backdrop-filter: blur(10px) saturate(140%);
+    border-radius: 2px;
+    padding: 0;
+    box-shadow: 0 12px 32px rgba(0,0,0,0.55);
     min-width: 248px;
     max-width: 340px;
     animation: in 160ms cubic-bezier(0.16, 1, 0.3, 1);
     -webkit-font-smoothing: antialiased;
-    font-feature-settings: "cv11", "ss01";
   }
   @keyframes in {
-    from { opacity: 0; transform: translateY(-4px) scale(0.97); }
-    to   { opacity: 1; transform: translateY(0) scale(1); }
+    from { opacity: 0; transform: translateY(-2px); }
+    to   { opacity: 1; transform: translateY(0); }
   }
   .header {
     display: flex; align-items: center; gap: 8px;
-    padding: 7px 8px 6px 8px;
+    padding: 8px 10px 7px 10px;
+    border-bottom: 1px solid var(--sp-border-soft);
   }
   .badge {
-    width: 20px; height: 20px;
-    border-radius: 5px;
-    background: linear-gradient(135deg, var(--sp-accent), oklch(0.50 0.18 295));
+    width: 18px; height: 18px;
+    border-radius: 2px;
+    background: var(--sp-accent);
+    color: #fff;
     display: grid; place-items: center;
-    font-size: 10.5px; font-weight: 700; color: #fff;
+    font-size: 11px; font-weight: 700; line-height: 1;
+    letter-spacing: -0.04em;
     flex-shrink: 0;
-    box-shadow: inset 0 1px 0 oklch(1 0 0 / 14%), 0 1px 2px oklch(0 0 0 / 30%);
   }
   .header-title {
-    font-size: 11.5px; font-weight: 600; color: var(--sp-fg);
-    letter-spacing: -0.005em;
+    font-size: 12px; font-weight: 600; color: var(--sp-fg);
+    letter-spacing: -0.015em;
     flex: 1; min-width: 0;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
   .count {
-    font-size: 9.5px; font-weight: 600; letter-spacing: 0.04em;
+    font-family: "IBM Plex Mono", "SF Mono", ui-monospace, monospace;
+    font-size: 9.5px; font-weight: 500;
+    letter-spacing: 0.12em;
     text-transform: uppercase;
     color: var(--sp-muted);
-    background: oklch(1 0 0 / 5%);
-    border: 1px solid oklch(1 0 0 / 6%);
-    padding: 1px 5px; border-radius: 4px;
   }
   .closebtn {
     appearance: none; border: 0; background: transparent; cursor: pointer;
     color: var(--sp-muted-dim);
-    width: 20px; height: 20px;
+    width: 18px; height: 18px;
     display: grid; place-items: center;
     font-size: 14px; line-height: 1;
-    border-radius: 4px;
-    transition: background 120ms ease, color 120ms ease;
+    border-radius: 2px;
+    transition: background 100ms ease, color 100ms ease;
   }
-  .closebtn:hover { color: var(--sp-fg); background: oklch(1 0 0 / 8%); }
+  .closebtn:hover { color: var(--sp-fg); background: var(--sp-bg-hover); }
 
   .row {
     appearance: none; border: 0; background: transparent; cursor: pointer;
     width: 100%;
-    display: flex; align-items: center; gap: 9px;
-    padding: 7px 8px;
-    border-radius: 6px;
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 10px;
     color: inherit;
     text-align: left;
-    transition: background 120ms ease;
+    transition: background 100ms ease;
     font-family: inherit;
-  }
-  .row:hover { background: var(--sp-bg-hover); }
-  .row:focus-visible {
-    outline: 2px solid var(--sp-accent);
-    outline-offset: -2px;
-    background: var(--sp-bg-hover);
-  }
-
-  .row-icon {
-    width: 24px; height: 24px;
-    border-radius: 5px;
-    background: linear-gradient(135deg, var(--sp-accent), var(--sp-accent-dim));
-    display: grid; place-items: center;
-    font-size: 11px; font-weight: 600; color: #fff;
-    flex-shrink: 0;
-    box-shadow: inset 0 1px 0 oklch(1 0 0 / 12%), 0 1px 2px oklch(0 0 0 / 25%);
-  }
-  .row-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
-  .row-title {
-    font-size: 11.5px; font-weight: 600; color: var(--sp-fg);
     letter-spacing: -0.005em;
+    border-bottom: 1px solid var(--sp-border-soft);
+    position: relative;
+  }
+  .row:last-child { border-bottom: 0; }
+  .row:hover { background: var(--sp-bg-hover); }
+  .row:hover::before, .row:focus-visible::before {
+    content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 2px;
+    background: var(--sp-accent);
+  }
+  .row:focus-visible { outline: none; background: var(--sp-bg-hover); }
+
+  .row-dot {
+    width: 8px; height: 8px;
+    border-radius: 1px;
+    flex-shrink: 0;
+    background: #e4e4e7;
+  }
+  .row-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .row-title {
+    font-size: 12.5px; font-weight: 600; color: var(--sp-fg);
+    letter-spacing: -0.015em;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
   .row-sub {
+    font-family: "IBM Plex Mono", "SF Mono", ui-monospace, monospace;
     font-size: 10px; color: var(--sp-muted);
+    letter-spacing: 0;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
   .row-code {
-    font-family: "SF Mono", "JetBrains Mono", "Cascadia Code", ui-monospace, monospace;
+    font-family: "IBM Plex Mono", "SF Mono", ui-monospace, monospace;
     font-size: 13px; font-weight: 500;
-    letter-spacing: 0.05em;
+    letter-spacing: 0.04em;
     color: var(--sp-fg);
     font-variant-numeric: tabular-nums;
     flex-shrink: 0;
   }
-  .row-code.urgent { color: var(--sp-danger); }
+  .row-code.urgent { color: var(--sp-accent); }
   .row-timer {
-    width: 14px; height: 14px;
+    width: 10px; height: 10px;
     flex-shrink: 0;
-    transform: rotate(-90deg);
+    border-radius: 50%;
+    position: relative;
   }
-  .row-timer circle.bg { fill: none; stroke: oklch(1 0 0 / 8%); stroke-width: 2; }
-  .row-timer circle.fg {
-    fill: none;
-    stroke: var(--sp-accent);
-    stroke-width: 2;
-    stroke-linecap: round;
-    transition: stroke-dashoffset 1s linear, stroke 200ms ease;
+  .row-timer::after {
+    content: ""; position: absolute; inset: 2px;
+    background: var(--sp-bg);
+    border-radius: 50%;
   }
-  .row-timer circle.fg.urgent { stroke: var(--sp-danger); }
 
-  .single-row { padding: 9px 10px; }
-  .single-row .row-code { font-size: 15px; font-weight: 500; letter-spacing: 0.08em; }
+  .single-row { padding: 10px 12px; border-bottom: 0; }
+  .single-row .row-code { font-size: 15px; }
 
-  .divider { height: 1px; background: oklch(1 0 0 / 5%); margin: 1px 8px; }
-
-  .list { max-height: 260px; overflow-y: auto; padding: 1px 1px 2px 1px; }
+  .list { max-height: 260px; overflow-y: auto; }
   .list::-webkit-scrollbar { width: 4px; }
-  .list::-webkit-scrollbar-thumb { background: oklch(1 0 0 / 8%); border-radius: 99px; }
+  .list::-webkit-scrollbar-thumb { background: var(--sp-border); border-radius: 0; }
   .list::-webkit-scrollbar-track { background: transparent; }
 
   .locked-state {
-    padding: 8px 10px 10px;
-    font-size: 11px;
+    padding: 10px 12px;
+    font-size: 11.5px;
     line-height: 1.5;
     color: var(--sp-warning);
+    border-left: 2px solid var(--sp-warning);
   }
   .empty {
-    padding: 8px 10px 10px;
-    font-size: 11px;
+    padding: 10px 12px;
+    font-size: 11.5px;
     line-height: 1.5;
     color: var(--sp-muted);
   }
@@ -234,29 +229,31 @@ function rootDomain(host: string): string {
   return labels.length >= 2 ? labels.slice(-2).join(".") : host;
 }
 
-function makeTimer(account: AccountWithCode, urgent: boolean): SVGSVGElement {
+const DOT_PALETTE = [
+  "#ff4d2e",
+  "#f59e0b",
+  "#4ade80",
+  "#22d3ee",
+  "#a78bfa",
+  "#f472b6",
+  "#facc15",
+  "#94a3b8",
+];
+
+function hashIndex(key: string, mod: number): number {
+  let h = 0;
+  for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) | 0;
+  return Math.abs(h) % mod;
+}
+
+function makeTimer(account: AccountWithCode, urgent: boolean): HTMLDivElement {
   const ratio = Math.max(0, account.remainingSeconds) / account.period;
-  const ns = "http://www.w3.org/2000/svg";
-  const svg = document.createElementNS(ns, "svg");
-  svg.setAttribute("class", "row-timer");
-  svg.setAttribute("viewBox", "0 0 14 14");
-  const bg = document.createElementNS(ns, "circle");
-  bg.setAttribute("class", "bg");
-  bg.setAttribute("cx", "7");
-  bg.setAttribute("cy", "7");
-  bg.setAttribute("r", "5");
-  const fg = document.createElementNS(ns, "circle");
-  fg.setAttribute("class", urgent ? "fg urgent" : "fg");
-  fg.setAttribute("cx", "7");
-  fg.setAttribute("cy", "7");
-  fg.setAttribute("r", "5");
-  const circ = 2 * Math.PI * 5;
-  fg.setAttribute("stroke-dasharray", String(circ));
-  fg.setAttribute("stroke-dashoffset", String(circ * (1 - ratio)));
-  fg.setAttribute("stroke-linecap", "round");
-  svg.appendChild(bg);
-  svg.appendChild(fg);
-  return svg;
+  const pct = Math.round(ratio * 100);
+  const color = urgent ? "var(--sp-accent)" : "var(--sp-fg)";
+  const div = document.createElement("div");
+  div.className = "row-timer";
+  div.style.background = `conic-gradient(${color} ${pct}%, var(--sp-border) ${pct}%)`;
+  return div;
 }
 
 function makeAccountRow(
@@ -271,10 +268,11 @@ function makeAccountRow(
   row.className = large ? "row single-row" : "row";
   row.title = `Fill code for ${account.issuer || account.label || domain}`;
 
-  const icon = document.createElement("div");
-  icon.className = "row-icon";
-  icon.textContent = (account.issuer || account.label || "?")[0].toUpperCase();
-  row.appendChild(icon);
+  const dot = document.createElement("div");
+  dot.className = "row-dot";
+  const dotKey = account.issuer || account.label || account.id || "?";
+  dot.style.background = DOT_PALETTE[hashIndex(dotKey, DOT_PALETTE.length)];
+  row.appendChild(dot);
 
   const meta = document.createElement("div");
   meta.className = "row-meta";

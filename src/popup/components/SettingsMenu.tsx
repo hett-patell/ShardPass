@@ -11,7 +11,6 @@ import {
   Mail,
   RefreshCw,
   Shield,
-  ShieldCheck,
   Sparkles,
   Trash2,
 } from "lucide-react";
@@ -114,39 +113,36 @@ export function SettingsMenu({
         <DialogOverlay />
         <DialogPrimitive.Content
           className={cn(
-            "absolute bottom-0 left-0 right-0 z-50 max-h-[90%] overflow-hidden",
-            "rounded-t-2xl bg-popover",
-            "shadow-[0_-8px_32px_oklch(0_0_0/55%),0_-1px_0_0_oklch(1_0_0/6%)]",
-            "data-[state=open]:animate-[content-in_240ms_cubic-bezier(0.16,1,0.3,1)]",
+            "absolute bottom-0 left-0 right-0 z-50 max-h-[92%] overflow-hidden",
+            "border-t border-border bg-popover",
+            "shadow-[0_-12px_32px_rgba(0,0,0,0.6)]",
+            "data-[state=open]:animate-[content-in_220ms_cubic-bezier(0.16,1,0.3,1)]",
             "data-[state=closed]:animate-[content-out_140ms_ease-in]",
             "outline-none flex flex-col",
           )}
         >
           {/* Header */}
-          <div className="relative flex shrink-0 items-center gap-2 border-b border-white/[0.05] px-4 py-3">
+          <div className="relative flex shrink-0 items-center gap-2 border-b border-border-soft px-4 py-3">
             {view !== "root" ? (
               <button
                 type="button"
                 onClick={() => setView("root")}
-                className="grid size-7 place-items-center rounded-md text-muted-foreground/80 transition-colors hover:bg-[oklch(1_0_0/6%)] hover:text-foreground"
+                className="grid size-6 place-items-center rounded-sm text-muted-foreground transition-colors hover:bg-card hover:text-foreground outline-none focus-visible:ring-1 focus-visible:ring-primary"
                 aria-label="Back"
               >
                 <ArrowLeft className="size-3.5" />
               </button>
             ) : (
-              <div className="size-7" />
+              <div className="size-6" />
             )}
             <DialogPrimitive.Title
-              className={cn(
-                "absolute left-1/2 -translate-x-1/2 text-[13.5px] font-semibold tracking-tight",
-                "transition-all duration-200",
-              )}
+              className="absolute left-1/2 -translate-x-1/2 text-[13px] font-semibold tracking-[-0.015em]"
             >
               {title}
             </DialogPrimitive.Title>
             <div className="ml-auto">
               <DialogPrimitive.Close
-                className="grid size-7 place-items-center rounded-md text-muted-foreground/80 transition-colors hover:bg-[oklch(1_0_0/6%)] hover:text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="grid size-6 place-items-center rounded-sm text-muted-foreground transition-colors hover:bg-card hover:text-foreground outline-none focus-visible:ring-1 focus-visible:ring-primary"
                 aria-label="Close"
               >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="size-3.5">
@@ -309,8 +305,8 @@ function Section({
 }) {
   return (
     <div>
-      <h3 className="label-caps mb-1.5 px-1">{title}</h3>
-      <div className="overflow-hidden rounded-lg border border-white/[0.06] bg-[oklch(1_0_0/2%)] divide-y divide-white/[0.04]">
+      <h3 className="label-caps mb-2 px-0.5">{title}</h3>
+      <div className="border border-border bg-card divide-y divide-border-soft">
         {children}
       </div>
     </div>
@@ -331,16 +327,16 @@ function SettingRow({
   return (
     <div className="flex items-center gap-3 px-3 py-2.5">
       {icon && (
-        <div className="grid size-7 shrink-0 place-items-center rounded-md bg-[oklch(1_0_0/4%)] text-muted-foreground">
+        <div className="grid size-6 shrink-0 place-items-center text-muted-foreground">
           {icon}
         </div>
       )}
       <div className="min-w-0 flex-1">
-        <div className="text-[12.5px] font-medium leading-tight text-foreground">
+        <div className="text-[12.5px] font-medium leading-tight text-foreground tracking-[-0.01em]">
           {title}
         </div>
         {description && (
-          <div className="mt-0.5 text-[11px] leading-tight text-muted-foreground/75">
+          <div className="mt-0.5 text-[11px] leading-tight text-muted-foreground">
             {description}
           </div>
         )}
@@ -368,28 +364,30 @@ function NavRow({
       type="button"
       onClick={onClick}
       className={cn(
-        "group flex w-full items-center gap-3 px-3 py-2.5 text-left outline-none",
-        "transition-colors hover:bg-[oklch(1_0_0/3%)]",
-        "focus-visible:bg-[oklch(1_0_0/4%)]",
+        "group relative flex w-full items-center gap-3 px-3 py-2.5 text-left outline-none",
+        "transition-colors hover:bg-elevated",
+        "focus-visible:bg-elevated",
       )}
     >
+      {/* Hover rail */}
+      <span className="pointer-events-none absolute left-0 top-2 bottom-2 w-[2px] bg-primary opacity-0 group-hover:opacity-100 transition-opacity" />
       {icon && (
-        <div className="grid size-7 shrink-0 place-items-center rounded-md bg-[oklch(1_0_0/4%)] text-muted-foreground group-hover:text-foreground transition-colors">
+        <div className="grid size-6 shrink-0 place-items-center text-muted-foreground group-hover:text-foreground transition-colors">
           {icon}
         </div>
       )}
       <div className="min-w-0 flex-1">
-        <div className="text-[12.5px] font-medium leading-tight text-foreground">
+        <div className="text-[12.5px] font-medium leading-tight text-foreground tracking-[-0.01em]">
           {title}
         </div>
         {description && (
-          <div className="mt-0.5 truncate text-[11px] leading-tight text-muted-foreground/75">
+          <div className="mt-0.5 truncate text-[11px] leading-tight text-muted-foreground">
             {description}
           </div>
         )}
       </div>
       {trailing && <div className="shrink-0">{trailing}</div>}
-      <ChevronRight className="size-3.5 shrink-0 text-muted-foreground/45 group-hover:text-muted-foreground/80 transition-colors" />
+      <ChevronRight className="size-3 shrink-0 text-muted-foreground/45 group-hover:text-foreground transition-colors" />
     </button>
   );
 }
@@ -816,11 +814,11 @@ function EnteView({ onChange }: { onChange: () => void }) {
 
       {status.connected ? (
         <div className="space-y-3">
-          <div className="rounded-lg border border-white/[0.06] bg-[oklch(1_0_0/2%)] px-3 py-2.5 space-y-1">
-            <div className="text-[11px] font-medium uppercase tracking-[0.04em] text-muted-foreground/70">
+          <div className="border-l-2 border-l-primary bg-card px-3 py-2.5 space-y-1">
+            <div className="label-caps">
               Account
             </div>
-            <p className="truncate text-[13px] font-medium text-foreground">
+            <p className="truncate text-[12.5px] font-medium text-foreground tracking-[-0.01em]">
               {status.email}
             </p>
             {status.lastSync && (
@@ -950,21 +948,18 @@ function EnteView({ onChange }: { onChange: () => void }) {
 function AboutView() {
   return (
     <div className="animate-slide-in-right p-4 space-y-5">
-      <div className="flex flex-col items-center text-center pt-4">
+      <div className="flex flex-col items-center text-center pt-3">
         <div
-          className="mb-3 grid size-12 place-items-center rounded-xl"
-          style={{
-            backgroundImage:
-              "linear-gradient(135deg, oklch(0.68 0.14 285), oklch(0.50 0.18 295))",
-            boxShadow:
-              "inset 0 1px 0 oklch(1 0 0 / 18%), 0 4px 16px oklch(0.50 0.18 295 / 30%)",
-          }}
+          className="mb-3 grid size-10 place-items-center rounded-sm bg-primary text-primary-foreground"
+          aria-hidden
         >
-          <ShieldCheck className="size-6 text-white" strokeWidth={1.75} />
+          <span className="text-[20px] font-bold leading-none tracking-[-0.04em]">
+            S
+          </span>
         </div>
-        <h2 className="text-[16px] font-semibold tracking-tight">ShardPass</h2>
-        <p className="mt-0.5 text-[11.5px] text-muted-foreground/70 tracking-[0.02em]">
-          Minimal TOTP authenticator
+        <h2 className="text-[16px] font-semibold tracking-[-0.02em]">ShardPass</h2>
+        <p className="mt-1 code-mono text-[10.5px] text-muted-foreground/85">
+          Minimal TOTP authenticator · v1.1.0
         </p>
       </div>
 

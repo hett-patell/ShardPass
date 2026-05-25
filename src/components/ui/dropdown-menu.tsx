@@ -13,14 +13,14 @@ export const DropdownMenuRadioGroup = DropdownMenuPrimitive.RadioGroup;
 export const DropdownMenuContent = React.forwardRef<
   React.ElementRef<typeof DropdownMenuPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Content>
->(({ className, sideOffset = 6, ...props }, ref) => (
+>(({ className, sideOffset = 4, ...props }, ref) => (
   <DropdownMenuPrimitive.Portal>
     <DropdownMenuPrimitive.Content
       ref={ref}
       sideOffset={sideOffset}
       className={cn(
-        "z-50 min-w-[170px] overflow-hidden rounded-lg border border-white/[0.08] bg-popover p-1 text-popover-foreground",
-        "shadow-[0_8px_24px_oklch(0_0_0/50%),inset_0_1px_0_oklch(1_0_0/5%)]",
+        "z-50 min-w-[160px] overflow-hidden rounded-sm border border-border bg-popover p-1 text-popover-foreground",
+        "shadow-[0_8px_24px_rgba(0,0,0,0.5)]",
         "data-[state=open]:animate-[fade-in_140ms_ease-out]",
         "data-[state=closed]:opacity-0",
         className,
@@ -41,13 +41,13 @@ export const DropdownMenuItem = React.forwardRef<
   <DropdownMenuPrimitive.Item
     ref={ref}
     className={cn(
-      "relative flex cursor-default select-none items-center gap-2 rounded-md px-2 py-1.5 text-[13px] outline-none transition-colors",
-      "focus:bg-[oklch(1_0_0/6%)] focus:text-foreground",
+      "relative flex cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-[12.5px] outline-none transition-colors",
+      "focus:bg-card focus:text-foreground",
       "data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
-      "[&_svg]:size-3.5 [&_svg]:shrink-0 [&_svg]:opacity-70",
-      variant === "default" && "text-foreground/90",
+      "[&_svg]:size-3 [&_svg]:shrink-0 [&_svg]:opacity-70",
+      variant === "default" && "text-foreground/85",
       variant === "destructive" &&
-        "text-[oklch(0.78_0.16_22)] focus:bg-[oklch(0.62_0.18_22/12%)] focus:text-[oklch(0.85_0.16_22)] [&_svg]:opacity-90",
+        "text-destructive focus:bg-destructive/10 focus:text-destructive [&_svg]:opacity-90",
       inset && "pl-7",
       className,
     )}
@@ -64,8 +64,8 @@ export const DropdownMenuCheckboxItem = React.forwardRef<
     ref={ref}
     checked={checked}
     className={cn(
-      "relative flex cursor-default select-none items-center gap-2 rounded-md py-1.5 pl-7 pr-2 text-[13px] outline-none transition-colors",
-      "focus:bg-[oklch(1_0_0/6%)] focus:text-foreground",
+      "relative flex cursor-default select-none items-center gap-2 rounded-sm py-1.5 pl-7 pr-2 text-[12.5px] outline-none transition-colors",
+      "focus:bg-card focus:text-foreground",
       "data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
       className,
     )}
@@ -73,7 +73,7 @@ export const DropdownMenuCheckboxItem = React.forwardRef<
   >
     <span className="absolute left-2 flex size-3.5 items-center justify-center">
       <DropdownMenuPrimitive.ItemIndicator>
-        <Check className="size-3.5 text-primary" />
+        <Check className="size-3 text-primary" />
       </DropdownMenuPrimitive.ItemIndicator>
     </span>
     {children}
@@ -88,10 +88,7 @@ export const DropdownMenuLabel = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <DropdownMenuPrimitive.Label
     ref={ref}
-    className={cn(
-      "px-2 pt-1.5 pb-1 text-[10.5px] font-semibold uppercase tracking-[0.06em] text-muted-foreground/85",
-      className,
-    )}
+    className={cn("label-caps px-2 pt-1.5 pb-1", className)}
     {...props}
   />
 ));
@@ -103,7 +100,7 @@ export const DropdownMenuSeparator = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <DropdownMenuPrimitive.Separator
     ref={ref}
-    className={cn("-mx-1 my-1 h-px bg-white/[0.06]", className)}
+    className={cn("-mx-1 my-1 h-px bg-border-soft", className)}
     {...props}
   />
 ));
@@ -116,7 +113,7 @@ export const DropdownMenuShortcut = ({
 }: React.HTMLAttributes<HTMLSpanElement>) => (
   <span
     className={cn(
-      "ml-auto text-[11px] tracking-wider text-muted-foreground/70",
+      "ml-auto code-mono text-[10.5px] text-muted-foreground/70",
       className,
     )}
     {...props}

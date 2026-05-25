@@ -1,11 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Plus,
-  Search,
   Settings,
   Lock,
   ArrowUpFromLine,
-  ShieldCheck,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -33,15 +31,22 @@ function IconBtn({
   label,
   children,
   onClick,
+  primary = false,
 }: {
   label: string;
   children: React.ReactNode;
   onClick: () => void;
+  primary?: boolean;
 }) {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <Button variant="ghost" size="icon-sm" onClick={onClick} aria-label={label}>
+        <Button
+          variant={primary ? "default" : "secondary"}
+          size="icon-sm"
+          onClick={onClick}
+          aria-label={label}
+        >
           {children}
         </Button>
       </TooltipTrigger>
@@ -116,14 +121,11 @@ export function AccountList({ onLocked }: { onLocked: () => void }) {
   }
 
   function requestEdit(account: AccountWithCode) {
-    // Fetch the full account; AccountWithCode strips secret/algorithm/tags.
-    // We only have the id, issuer, label, digits, period — but to edit we
-    // need the full Account. For now we open the dialog and it will fetch.
     setEditTarget({
       id: account.id,
       issuer: account.issuer,
       label: account.label,
-      secret: "", // dialog will not expose this for now
+      secret: "",
       algorithm: "SHA1",
       digits: account.digits,
       period: account.period,
@@ -145,109 +147,132 @@ export function AccountList({ onLocked }: { onLocked: () => void }) {
   return (
     <div className="relative flex h-full flex-col">
       {/* ── Header ───────────────────────────────────── */}
-      <header className="flex shrink-0 items-center justify-between px-4 pb-3 pt-4">
-        <div className="flex items-center gap-2">
+      <header className="flex shrink-0 items-center gap-2 border-b border-border-soft px-4 pt-4 pb-3">
+        <div className="flex items-center gap-2 flex-1 min-w-0">
           <div
-            className="grid size-7 place-items-center rounded-md"
-            style={{
-              backgroundImage:
-                "linear-gradient(135deg, oklch(0.68 0.14 285), oklch(0.50 0.18 295))",
-              boxShadow:
-                "inset 0 1px 0 oklch(1 0 0 / 14%), 0 1px 2px oklch(0 0 0 / 30%)",
-            }}
+            className="grid size-6 place-items-center rounded-[2px] bg-primary text-primary-foreground"
+            aria-hidden
           >
-            <ShieldCheck className="size-3.5 text-white" strokeWidth={2} />
+            <span className="text-[13px] font-bold leading-none tracking-[-0.04em]">
+              S
+            </span>
           </div>
-          <span className="text-[14px] font-semibold tracking-tight text-foreground">
+          <span className="text-[14.5px] font-semibold leading-none tracking-[-0.02em] text-foreground">
             ShardPass
           </span>
         </div>
-        <div className="flex items-center gap-0.5">
-          <IconBtn label="Add account" onClick={() => setDialog("add")}>
-            <Plus />
-          </IconBtn>
-          <IconBtn label="Import / Export" onClick={() => void openIO()}>
-            <ArrowUpFromLine />
-          </IconBtn>
-          <IconBtn label="Settings" onClick={() => setDialog("settings")}>
-            <Settings />
-          </IconBtn>
-          <IconBtn label="Lock vault" onClick={() => void onLock()}>
-            <Lock />
-          </IconBtn>
-        </div>
+        <span className="code-mono text-[10.5px] text-muted-foreground">
+          <span className="text-foreground font-medium">
+            {accounts.length}
+          </span>
+          {" / "}
+          {accounts.length}
+        </span>
       </header>
 
+      {/* ── Action bar ──────────────────────────────── */}
+      <div className="shrink-0 border-b border-border-soft px-4 py-3 flex gap-1.5">
+        <Button
+          variant="default"
+          size="sm"
+          className="flex-1"
+          onClick={() => setDialog("add")}
+        >
+          <Plus /> New
+        </Button>
+        <IconBtn label="Import / Export" onClick={() => void openIO()}>
+          <ArrowUpFromLine />
+        </IconBtn>
+        <IconBtn label="Settings" onClick={() => setDialog("settings")}>
+          <Settings />
+        </IconBtn>
+        <IconBtn label="Lock vault" onClick={() => void onLock()}>
+          <Lock />
+        </IconBtn>
+      </div>
+
       {/* ── Search ──────────────────────────────────── */}
-      <div className="shrink-0 px-4 pb-2">
+      <div className="shrink-0 px-4 pt-3 pb-2">
         <div className="relative">
-          <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground/45" />
+          <span
+            className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 size-1.5 rounded-full bg-primary"
+            aria-hidden
+          />
           <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search"
-            className="h-8 pl-8 pr-8 text-[13px]"
+            placeholder="Search accounts"
+            className="h-8 pl-6 pr-7 text-[12.5px]"
           />
-          {query && (
+          {query ? (
             <button
               type="button"
               onClick={() => setQuery("")}
-              className="absolute right-2 top-1/2 grid size-5 -translate-y-1/2 place-items-center rounded text-muted-foreground/55 hover:bg-[oklch(1_0_0/6%)] hover:text-foreground"
+              className="absolute right-2 top-1/2 grid size-4 -translate-y-1/2 place-items-center rounded-sm text-muted-foreground/55 hover:bg-card hover:text-foreground outline-none focus-visible:ring-1 focus-visible:ring-primary"
               aria-label="Clear search"
             >
               <X className="size-3" />
             </button>
+          ) : (
+            <span className="absolute right-2 top-1/2 -translate-y-1/2 code-mono text-[9.5px] text-muted-foreground/55 border border-border-soft px-1 py-px rounded-[2px]">
+              ⌘K
+            </span>
           )}
         </div>
       </div>
 
+      {/* ── Section header ──────────────────────────── */}
+      <div className="shrink-0 px-4 pt-3 pb-1 flex items-baseline justify-between">
+        <span className="label-caps">Accounts</span>
+        <span className="code-mono text-[10px] text-muted-foreground/85 flex items-center gap-1.5">
+          <span className="size-1.5 rounded-full bg-success" aria-hidden />
+          Unlocked
+        </span>
+      </div>
+
       {/* ── List body ───────────────────────────────── */}
-      <main className="scrollbar-thin flex-1 overflow-y-auto px-3 pb-4 pt-1 mask-fade-b">
+      <main className="scrollbar-thin flex-1 overflow-y-auto px-3 pb-2 mask-fade-b">
         {filtered.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center px-6 text-center">
             {accounts.length === 0 ? (
               <div className="animate-fade-in-scale">
                 <div
-                  className="mx-auto mb-4 grid size-12 place-items-center rounded-xl"
-                  style={{
-                    backgroundImage:
-                      "linear-gradient(135deg, oklch(0.22 0.025 285), oklch(0.17 0.012 282))",
-                    boxShadow: "inset 0 1px 0 oklch(1 0 0 / 6%)",
-                  }}
+                  className="mx-auto mb-3 grid size-10 place-items-center rounded-sm border border-border bg-card"
+                  aria-hidden
                 >
-                  <ShieldCheck
-                    className="size-6 text-foreground/35"
-                    strokeWidth={1.6}
+                  <Lock
+                    className="size-4 text-muted-foreground"
+                    strokeWidth={1.5}
                   />
                 </div>
-                <p className="text-[14px] font-semibold text-foreground/85">
+                <p className="text-[13px] font-semibold tracking-[-0.015em] text-foreground">
                   No accounts yet
                 </p>
-                <p className="mt-1 text-[12px] leading-relaxed text-muted-foreground/70">
+                <p className="mt-1 text-[11.5px] leading-relaxed text-muted-foreground">
                   Add your first TOTP account to get started.
                 </p>
                 <Button
                   size="sm"
-                  className="mt-4"
+                  className="mt-3"
                   onClick={() => setDialog("add")}
                 >
-                  <Plus className="size-3.5" />
-                  Add account
+                  <Plus />
+                  New account
                 </Button>
               </div>
             ) : (
               <div className="animate-fade-in">
-                <p className="text-[13px] text-muted-foreground/80">
+                <p className="text-[12.5px] text-muted-foreground">
                   No results
                 </p>
-                <p className="mt-0.5 text-[11.5px] text-muted-foreground/55">
-                  No accounts matching &ldquo;{query}&rdquo;
+                <p className="mt-0.5 code-mono text-[10.5px] text-muted-foreground/70">
+                  No accounts matching "{query}"
                 </p>
               </div>
             )}
           </div>
         ) : (
-          <div className="flex flex-col gap-1.5 animate-fade-in">
+          <div className="animate-fade-in">
             {filtered.map((acc) => (
               <AccountItem
                 key={acc.id}
@@ -260,16 +285,18 @@ export function AccountList({ onLocked }: { onLocked: () => void }) {
         )}
       </main>
 
-      {/* ── Footer count ────────────────────────────── */}
-      {accounts.length > 0 && (
-        <div className="shrink-0 border-t border-white/[0.04] px-4 py-2 text-center">
-          <span className="text-[10.5px] font-medium uppercase tracking-[0.06em] text-muted-foreground/55">
-            {filtered.length === accounts.length
-              ? `${accounts.length} account${accounts.length === 1 ? "" : "s"}`
-              : `${filtered.length} of ${accounts.length}`}
-          </span>
-        </div>
-      )}
+      {/* ── Footer ──────────────────────────────────── */}
+      <div className="shrink-0 flex items-center justify-between border-t border-border-soft px-4 py-2 code-mono text-[10px] text-muted-foreground/70">
+        <span className="flex items-center gap-1.5">
+          <span className="size-1.5 rounded-full bg-success" aria-hidden />
+          AES-256-GCM
+        </span>
+        <span>
+          {filtered.length === accounts.length
+            ? `${accounts.length} account${accounts.length === 1 ? "" : "s"}`
+            : `${filtered.length} of ${accounts.length}`}
+        </span>
+      </div>
 
       {/* ── Dialogs ─────────────────────────────────── */}
       <AddAccountDialog
