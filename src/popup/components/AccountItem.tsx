@@ -173,12 +173,10 @@ export function AccountItem({
       <div className="flex items-center justify-between pb-3.5 pl-4">
         <div
           className={cn(
-            "code-mono font-medium transition-colors duration-200",
+            "code-mono font-medium transition-colors duration-200 text-[26px]",
             urgent ? "text-destructive" : "text-foreground/95",
             copied ? "tracking-[0.12em]" : "tracking-[0.06em]",
-            // subtle size shift when copied for tactile feel
           )}
-          style={{ fontSize: 26 }}
         >
           {formatCode(account.code)}
         </div>

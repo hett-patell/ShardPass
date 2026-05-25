@@ -27,13 +27,7 @@ export function UnlockScreen({ onUnlocked }: { onUnlocked: () => void }) {
   return (
     <div className="flex h-full flex-col items-center justify-center px-8 py-10">
       <div className="mb-8 w-full text-center">
-        <div
-          className="mx-auto mb-6 grid size-16 place-items-center rounded-2xl"
-          style={{
-            backgroundImage:
-              "linear-gradient(135deg, oklch(0.22 0.03 270), oklch(0.18 0.02 250))",
-          }}
-        >
+        <div className="mx-auto mb-6 grid size-16 place-items-center rounded-2xl bg-gradient-to-br from-[oklch(0.22_0.03_270)] to-[oklch(0.18_0.02_250)]">
           <Lock className="size-8 text-foreground/40" strokeWidth={1.5} />
         </div>
         <h1 className="text-[20px] font-bold tracking-tight text-foreground/90">
