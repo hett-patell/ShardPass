@@ -15,6 +15,11 @@ ShardPass is a **local-first TOTP authenticator** browser extension for Chromium
 All secrets are encrypted at rest with AES-256-GCM, with the key derived from a master password using PBKDF2-HMAC-SHA256. The master password is never stored or transmitted.
 
 ---
+<p align="center">
+  <picture>
+    <img src="https://github.com/user-attachments/assets/b779f606-9af6-4deb-81b0-f34d53f9bf54" alt="ShardPass" width="250  ">
+  </picture>
+</p>
 
 ## Features
 
