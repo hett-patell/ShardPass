@@ -20,13 +20,13 @@ const STYLE = `
   .chip {
     position: fixed;
     z-index: 2147483647;
-    font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     color: #fafafa;
-    background: oklch(0.18 0 0);
+    background: oklch(0.16 0.01 280);
     border: 1px solid oklch(1 0 0 / 8%);
     border-radius: 10px;
     padding: 4px;
-    box-shadow: 0 12px 32px rgba(0,0,0,0.55), 0 0 0 1px oklch(1 0 0 / 4%) inset;
+    box-shadow: 0 12px 32px rgba(0,0,0,0.55), 0 0 0 1px oklch(1 0 0 / 4%) inset, 0 0 24px oklch(0.65 0.18 290 / 12%);
     backdrop-filter: blur(8px);
     min-width: 240px;
     max-width: 340px;
@@ -63,7 +63,7 @@ const STYLE = `
     color: oklch(0.55 0 0); padding: 2px 4px; font-size: 14px; line-height: 1;
     border-radius: 4px;
   }
-  .closebtn:hover { color: oklch(0.95 0 0); background: oklch(0.22 0 0); }
+  .closebtn:hover { color: oklch(0.95 0 0); background: oklch(0.28 0.015 290); }
 
   .row {
     appearance: none; border: 0; background: transparent; cursor: pointer;
@@ -98,7 +98,7 @@ const STYLE = `
   .row-code {
     font-family: "SF Mono", "JetBrains Mono", ui-monospace, monospace;
     font-size: 13px; letter-spacing: 0.06em;
-    color: oklch(0.95 0 0); font-variant-numeric: tabular-nums;
+    color: oklch(0.7 0.15 290); font-variant-numeric: tabular-nums;
     flex-shrink: 0;
   }
   .row-code.urgent { color: oklch(0.7 0.18 25); }
@@ -108,7 +108,7 @@ const STYLE = `
     transform: rotate(-90deg);
   }
   .row-timer circle.bg { fill: none; stroke: oklch(0.28 0 0); stroke-width: 2.5; }
-  .row-timer circle.fg { fill: none; stroke: oklch(0.78 0 0); stroke-width: 2.5; transition: stroke-dashoffset 1s linear; }
+  .row-timer circle.fg { fill: none; stroke: oklch(0.7 0.15 290); stroke-width: 2.5; transition: stroke-dashoffset 1s linear; }
   .row-timer circle.fg.urgent { stroke: oklch(0.7 0.18 25); }
 
   .single-row .row-code { font-size: 16px; font-weight: 300; }

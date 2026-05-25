@@ -65,10 +65,10 @@ export function AccountItem({
       className={cn(
         "group relative w-full overflow-hidden pr-4 text-left transition-all duration-200 active:scale-[0.985]",
         "rounded-2xl",
-        "bg-[oklch(0.18_0.015_265)]",
+        "bg-card",
         "ring-1 ring-white/[0.04] ring-inset",
-        "hover:ring-white/[0.08] hover:bg-[oklch(0.195_0.016_265)]",
-        "hover:shadow-[0_4px_20px_oklch(0_0_0/35%)] hover:shadow-primary/5",
+        "hover:ring-white/[0.08] hover:bg-[oklch(0.175_0.012_280)]",
+        "hover:shadow-[0_4px_20px_oklch(0_0_0/35%)] hover:shadow-primary/15",
       )}
     >
       {/* Left accent bar — drains as time passes */}

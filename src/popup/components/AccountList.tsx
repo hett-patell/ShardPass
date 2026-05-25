@@ -111,7 +111,7 @@ export function AccountList({ onLocked }: { onLocked: () => void }) {
       {/* ── Header ───────────────────────────────────── */}
       <header className="flex items-center justify-between px-5 pb-4 pt-5">
         <div className="flex items-center gap-3">
-          <div className="grid size-8 place-items-center rounded-xl bg-gradient-to-br from-[oklch(0.55_0.24_260)] to-[oklch(0.42_0.20_280)]">
+          <div className="grid size-8 place-items-center rounded-xl bg-gradient-to-br from-[oklch(0.65_0.18_290)] to-[oklch(0.50_0.18_300)]">
             <ShieldCheck className="size-4 text-white" strokeWidth={1.75} />
           </div>
           <span className="text-[16px] font-bold tracking-tight text-foreground/90">
@@ -153,7 +153,7 @@ export function AccountList({ onLocked }: { onLocked: () => void }) {
           <div className="flex h-full flex-col items-center justify-center px-6 text-center">
             {accounts.length === 0 ? (
               <div className="animate-fade-in-scale">
-                <div className="mx-auto mb-5 grid size-14 place-items-center rounded-2xl bg-gradient-to-br from-[oklch(0.25_0.02_265)] to-[oklch(0.22_0.01_260)]">
+                <div className="mx-auto mb-5 grid size-14 place-items-center rounded-2xl bg-gradient-to-br from-[oklch(0.23_0.015_285)] to-[oklch(0.19_0.01_280)]">
                   <ShieldCheck className="size-7 text-foreground/30" strokeWidth={1.5} />
                 </div>
                 <p className="text-[16px] font-semibold text-foreground/70">
