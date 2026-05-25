@@ -28,7 +28,10 @@ export function App() {
   if (state === "loading") {
     return (
       <div className="flex h-full items-center justify-center">
-        <div className="text-[14px] text-muted-foreground">Loading…</div>
+        <div className="flex items-center gap-2 text-[12px] text-muted-foreground/70">
+          <span className="grid size-1.5 animate-pulse place-items-center rounded-full bg-primary" />
+          <span className="tracking-[0.02em]">Loading vault</span>
+        </div>
       </div>
     );
   }

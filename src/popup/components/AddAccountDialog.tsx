@@ -1,10 +1,16 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { Clipboard, Image as ImageIcon, Sparkles } from "lucide-react";
+import {
+  Clipboard,
+  Image as ImageIcon,
+  Sparkles,
+  ChevronDown,
+} from "lucide-react";
 import { send } from "@/lib/messages";
 import type { IntegrationStatus } from "@/lib/messages";
 import { isValidBase32, parseOtpAuthURI } from "@/lib/totp";
 import { decodeQRFromFile } from "@/lib/qr";
 import { openQRImportWindow } from "@/lib/detached";
+import { cn } from "@/lib/utils";
 import {
   Dialog,
   DialogContent,
@@ -207,10 +213,15 @@ export function AddAccountDialog({
             <TabsTrigger value="qr">QR image</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="manual">
-            <form className="space-y-2.5" onSubmit={onSubmit}>
-              <Field label="Issuer" value={issuer} onChange={setIssuer} placeholder="GitHub" />
-              <div className="space-y-1">
+          <TabsContent value="manual" className="mt-3">
+            <form className="space-y-3" onSubmit={onSubmit}>
+              <Field
+                label="Issuer"
+                value={issuer}
+                onChange={setIssuer}
+                placeholder="GitHub"
+              />
+              <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
                   <Label>Account</Label>
                   {duckConfigured && (
@@ -218,7 +229,7 @@ export function AddAccountDialog({
                       type="button"
                       onClick={() => void generateAlias()}
                       disabled={aliasBusy}
-                      className="flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50"
+                      className="flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10.5px] font-medium text-muted-foreground transition-colors hover:bg-[oklch(1_0_0/6%)] hover:text-foreground disabled:opacity-50"
                       title="Generate a duck.com alias and fill this field"
                     >
                       <Sparkles className="size-2.5" />
@@ -232,7 +243,9 @@ export function AddAccountDialog({
                   placeholder="you@example.com"
                 />
                 {aliasNote && (
-                  <p className="text-[11px] text-emerald-300">{aliasNote}</p>
+                  <p className="text-[11px] text-[oklch(0.78_0.14_158)]">
+                    {aliasNote}
+                  </p>
                 )}
               </div>
               <Field
@@ -245,14 +258,20 @@ export function AddAccountDialog({
 
               <button
                 type="button"
-                className="text-[12px] text-muted-foreground transition-colors hover:text-foreground"
+                className="flex items-center gap-1 text-[11.5px] font-medium text-muted-foreground transition-colors hover:text-foreground"
                 onClick={() => setAdvanced((v) => !v)}
               >
-                {advanced ? "Hide" : "Show"} advanced
+                <ChevronDown
+                  className={cn(
+                    "size-3 transition-transform",
+                    advanced && "rotate-180",
+                  )}
+                />
+                Advanced options
               </button>
 
               {advanced && (
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-3 gap-2 animate-fade-in">
                   <SmallSelect
                     label="Digits"
                     value={String(digits)}
@@ -293,32 +312,26 @@ export function AddAccountDialog({
             </form>
           </TabsContent>
 
-          <TabsContent value="qr">
+          <TabsContent value="qr" className="mt-3">
             <div className="space-y-3">
-              <p className="text-[13px] leading-relaxed text-muted-foreground">
-                Decoded locally — never uploaded. Paste an image you've copied
-                (screenshot tool), or pick a file (opens a small window because
-                Chrome closes the toolbar popup the moment a file dialog opens).
+              <p className="text-[12px] leading-relaxed text-muted-foreground">
+                Decoded locally — never uploaded. Paste an image (from a
+                screenshot), or pick a file (opens a small window because
+                Chrome closes the toolbar popup when a file dialog opens).
               </p>
               <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
+                <DropTile
+                  icon={<Clipboard className="size-4" />}
+                  label={qrPasteBusy ? "Reading…" : "Paste image"}
                   onClick={() => void onPasteQRImage()}
                   disabled={qrPasteBusy || busy}
-                  className="flex flex-col items-center justify-center gap-1.5 rounded-xl border border-dashed border-white/[0.06] bg-white/[0.02] py-6 text-[13px] text-muted-foreground transition-all hover:border-white/[0.12] hover:bg-white/[0.04] disabled:opacity-50"
-                >
-                  <Clipboard className="size-4" strokeWidth={1.5} />
-                  {qrPasteBusy ? "Reading…" : "Paste image"}
-                </button>
-                <button
-                  type="button"
+                />
+                <DropTile
+                  icon={<ImageIcon className="size-4" />}
+                  label="Choose file"
                   onClick={() => void onChooseQRImage()}
                   disabled={busy}
-                  className="flex flex-col items-center justify-center gap-1.5 rounded-xl border border-dashed border-white/[0.06] bg-white/[0.02] py-6 text-[13px] text-muted-foreground transition-all hover:border-white/[0.12] hover:bg-white/[0.04] disabled:opacity-50"
-                >
-                  <ImageIcon className="size-4" strokeWidth={1.5} />
-                  Choose file
-                </button>
+                />
               </div>
               {error && <Alert variant="destructive">{error}</Alert>}
               <div className="flex justify-end">
@@ -352,7 +365,7 @@ function Field({
   mono?: boolean;
 }) {
   return (
-    <div className="space-y-1">
+    <div className="space-y-1.5">
       <Label>{label}</Label>
       <Input
         value={value}
@@ -376,10 +389,10 @@ function SmallSelect({
   options: string[];
 }) {
   return (
-    <div className="space-y-1">
-      <Label className="text-[11px]">{label}</Label>
+    <div className="space-y-1.5">
+      <Label>{label}</Label>
       <Select value={value} onValueChange={onChange}>
-        <SelectTrigger className="h-10 text-[13px]">
+        <SelectTrigger>
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -391,5 +404,35 @@ function SmallSelect({
         </SelectContent>
       </Select>
     </div>
+  );
+}
+
+function DropTile({
+  icon,
+  label,
+  onClick,
+  disabled,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className={cn(
+        "flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-white/[0.09] bg-[oklch(1_0_0/2%)] py-5 text-[12px] font-medium text-muted-foreground",
+        "transition-[border-color,background,color] duration-150",
+        "hover:border-primary/40 hover:bg-[oklch(1_0_0/4%)] hover:text-foreground",
+        "disabled:opacity-50 disabled:hover:border-white/[0.09] disabled:hover:bg-[oklch(1_0_0/2%)] disabled:hover:text-muted-foreground",
+        "[&_svg]:transition-transform hover:[&_svg]:scale-110",
+      )}
+    >
+      {icon}
+      {label}
+    </button>
   );
 }

@@ -333,18 +333,18 @@ export function ImportExportDialog({
                   type="button"
                   onClick={onChooseFileClick}
                   disabled={busy}
-                  className="flex flex-col items-center justify-center gap-1.5 rounded-xl border border-dashed border-white/[0.06] bg-white/[0.02] py-5 text-[13px] text-muted-foreground transition-all hover:border-white/[0.12] hover:bg-white/[0.04] disabled:opacity-50"
+                  className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-white/[0.09] bg-[oklch(1_0_0/2%)] py-5 text-[12px] font-medium text-muted-foreground transition-[border-color,background,color] duration-150 hover:border-primary/40 hover:bg-[oklch(1_0_0/4%)] hover:text-foreground disabled:opacity-50"
                 >
-                  <Upload className="size-4" strokeWidth={1.5} />
+                  <Upload className="size-4" strokeWidth={1.75} />
                   Choose file
                 </button>
                 <button
                   type="button"
                   onClick={() => void onPasteFromClipboard()}
                   disabled={busy}
-                  className="flex flex-col items-center justify-center gap-1.5 rounded-xl border border-dashed border-white/[0.06] bg-white/[0.02] py-5 text-[13px] text-muted-foreground transition-all hover:border-white/[0.12] hover:bg-white/[0.04] disabled:opacity-50"
+                  className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-white/[0.09] bg-[oklch(1_0_0/2%)] py-5 text-[12px] font-medium text-muted-foreground transition-[border-color,background,color] duration-150 hover:border-primary/40 hover:bg-[oklch(1_0_0/4%)] hover:text-foreground disabled:opacity-50"
                 >
-                  <Clipboard className="size-4" strokeWidth={1.5} />
+                  <Clipboard className="size-4" strokeWidth={1.75} />
                   Paste clipboard
                 </button>
               </div>
@@ -363,20 +363,22 @@ export function ImportExportDialog({
                   onChange={(e) => onPasteAreaChange(e.target.value)}
                   placeholder="…or paste otpauth:// URIs / encrypted backup JSON here"
                   rows={4}
-                  className={`w-full resize-none rounded-xl border-white/[0.06] bg-white/[0.03] px-4 py-3 text-[13px] font-mono leading-relaxed text-foreground outline-none transition-all placeholder:text-muted-foreground/50 placeholder:font-sans focus:bg-white/[0.05] focus:ring-2 focus:ring-primary/10 ${
-                    dragOver ? "border-foreground/40 bg-input/60" : "border-border"
+                  className={`w-full resize-none rounded-lg border bg-[oklch(1_0_0/3%)] px-3 py-2.5 text-[12.5px] font-mono leading-relaxed text-foreground outline-none transition-[border-color,background] duration-150 placeholder:text-muted-foreground/55 placeholder:font-sans focus-visible:bg-[oklch(1_0_0/5%)] focus-visible:ring-2 focus-visible:ring-primary/15 ${
+                    dragOver
+                      ? "border-primary/45 bg-[oklch(1_0_0/5%)]"
+                      : "border-white/[0.07]"
                   }`}
                 />
                 {dragOver && (
-                  <div className="pointer-events-none absolute inset-0 grid place-items-center rounded-xl bg-background/70 text-[13px] font-medium text-foreground">
+                  <div className="pointer-events-none absolute inset-0 grid place-items-center rounded-lg bg-background/70 text-[12.5px] font-medium text-foreground">
                     Drop file here
                   </div>
                 )}
               </div>
 
               {importData && (
-                <div className="flex items-center justify-between rounded-md border border-border bg-secondary/40 px-3 py-2">
-                  <span className="flex items-center gap-2 text-[13px] text-foreground/85">
+                <div className="flex items-center justify-between rounded-md border border-white/[0.07] bg-[oklch(1_0_0/3%)] px-2.5 py-1.5">
+                  <span className="flex items-center gap-2 text-[12px] text-foreground/85">
                     {importKind === "json-backup" && (
                       <>
                         <FileJson className="size-3.5 text-muted-foreground" />

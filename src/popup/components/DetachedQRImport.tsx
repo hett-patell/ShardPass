@@ -52,26 +52,33 @@ export function DetachedQRImport() {
   if (done) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-2 px-6 text-center animate-fade-in">
-        <div className="grid size-9 place-items-center rounded-full bg-emerald-500/15">
-          <Check className="size-4 text-emerald-300" strokeWidth={2.25} />
+        <div className="grid size-10 place-items-center rounded-full bg-[oklch(0.65_0.14_158/15%)] border border-[oklch(0.65_0.14_158/25%)]">
+          <Check className="size-4 text-[oklch(0.78_0.14_158)]" strokeWidth={2.5} />
         </div>
-        <p className="text-[14px] font-medium text-foreground">{done}</p>
+        <p className="text-[13.5px] font-semibold text-foreground">{done}</p>
         <p className="text-[11px] text-muted-foreground">Closing…</p>
       </div>
     );
   }
 
   return (
-    <div className="flex h-full flex-col px-4 py-4">
+    <div className="flex h-full flex-col px-4 py-4 animate-fade-in">
       <div className="mb-3 flex items-center gap-2">
-        <div className="grid size-6 place-items-center rounded-md bg-secondary">
-          <ShieldCheck className="size-3.5 text-foreground/85" strokeWidth={1.75} />
+        <div
+          className="grid size-6 place-items-center rounded-md"
+          style={{
+            backgroundImage:
+              "linear-gradient(135deg, oklch(0.68 0.14 285), oklch(0.50 0.18 295))",
+            boxShadow: "inset 0 1px 0 oklch(1 0 0 / 14%)",
+          }}
+        >
+          <ShieldCheck className="size-3.5 text-white" strokeWidth={2} />
         </div>
         <span className="text-[13px] font-semibold tracking-tight">
           Import from QR image
         </span>
       </div>
-      <p className="mb-3 text-[13px] leading-relaxed text-muted-foreground">
+      <p className="mb-3 text-[12px] leading-relaxed text-muted-foreground">
         Pick a QR screenshot. Decoded locally — never uploaded.
       </p>
 
@@ -79,9 +86,9 @@ export function DetachedQRImport() {
         type="button"
         onClick={() => fileRef.current?.click()}
         disabled={busy}
-        className="flex w-full flex-col items-center gap-2 rounded-xl border border-dashed border-white/[0.06] bg-white/[0.02] py-10 text-[14px] text-muted-foreground transition-all hover:border-white/[0.12] hover:bg-white/[0.04] disabled:opacity-50"
+        className="flex w-full flex-col items-center gap-2 rounded-lg border border-dashed border-white/[0.09] bg-[oklch(1_0_0/2%)] py-10 text-[13px] font-medium text-muted-foreground transition-[border-color,background,color] duration-150 hover:border-primary/40 hover:bg-[oklch(1_0_0/4%)] hover:text-foreground disabled:opacity-50"
       >
-        <ImageIcon className="size-5" strokeWidth={1.5} />
+        <ImageIcon className="size-5" strokeWidth={1.75} />
         {busy ? "Decoding…" : "Choose QR image"}
       </button>
 

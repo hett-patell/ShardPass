@@ -1,18 +1,26 @@
 import { useEffect, useMemo, useState } from "react";
-import { Trash2, Check } from "lucide-react";
+import { Copy, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 import type { AccountWithCode } from "@/lib/messages";
 import { formatCode } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 const AVATAR_GRADIENTS = [
-  ["oklch(0.62 0.18 280)", "oklch(0.48 0.20 300)"],
-  ["oklch(0.62 0.16 240)", "oklch(0.48 0.20 260)"],
-  ["oklch(0.60 0.14 180)", "oklch(0.45 0.12 200)"],
-  ["oklch(0.62 0.15 50)",  "oklch(0.50 0.16 30)"],
-  ["oklch(0.60 0.15 340)", "oklch(0.50 0.18 0)"],
-  ["oklch(0.55 0.18 140)", "oklch(0.45 0.14 160)"],
-  ["oklch(0.60 0.14 80)",  "oklch(0.50 0.12 100)"],
-  ["oklch(0.58 0.16 200)", "oklch(0.44 0.18 220)"],
+  ["oklch(0.62 0.18 285)", "oklch(0.48 0.20 300)"], // violet
+  ["oklch(0.62 0.16 240)", "oklch(0.48 0.20 260)"], // indigo
+  ["oklch(0.60 0.14 180)", "oklch(0.45 0.12 200)"], // teal
+  ["oklch(0.62 0.15 50)",  "oklch(0.50 0.16 30)"],  // orange
+  ["oklch(0.60 0.15 340)", "oklch(0.50 0.18 0)"],   // magenta→red
+  ["oklch(0.55 0.18 140)", "oklch(0.45 0.14 160)"], // green
+  ["oklch(0.60 0.14 80)",  "oklch(0.50 0.12 100)"], // gold
+  ["oklch(0.58 0.16 200)", "oklch(0.44 0.18 220)"], // cyan
 ];
 
 function hashStr(s: string): number {
@@ -24,12 +32,14 @@ function hashStr(s: string): number {
 export function AccountItem({
   account,
   onDelete,
+  onEdit,
 }: {
   account: AccountWithCode;
   onDelete: () => void;
+  onEdit?: () => void;
 }) {
   const [copied, setCopied] = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
     if (!copied) return;
@@ -46,152 +56,162 @@ export function AccountItem({
     return AVATAR_GRADIENTS[hashStr(key) % AVATAR_GRADIENTS.length];
   }, [account.issuer, account.label]);
 
-  async function copy() {
+  async function copy(silent = false) {
     try {
       await navigator.clipboard.writeText(account.code);
       setCopied(true);
+      if (!silent) toast.success("Code copied", { duration: 1600 });
     } catch {
-      /* ignore */
+      if (!silent) toast.error("Couldn't copy to clipboard");
     }
   }
 
   const initial = (account.issuer || account.label || "?")[0].toUpperCase();
   const name = account.issuer || "Untitled";
 
+  // Timer ring geometry — 14px radius circle, stroke 2
+  const RADIUS = 11;
+  const CIRC = 2 * Math.PI * RADIUS;
+  const dashOffset = CIRC * (1 - ratio);
+
   return (
-    <button
-      type="button"
-      onClick={copy}
+    <div
       className={cn(
-        "group relative w-full overflow-hidden pr-4 text-left transition-all duration-200 active:scale-[0.985]",
-        "rounded-2xl",
-        "bg-card",
-        "ring-1 ring-white/[0.04] ring-inset",
-        "hover:ring-white/[0.08] hover:bg-[oklch(0.175_0.012_280)]",
-        "hover:shadow-[0_4px_20px_oklch(0_0_0/35%)] hover:shadow-primary/15",
+        "group relative flex items-center gap-3 rounded-lg",
+        "bg-card border border-white/[0.05]",
+        "transition-[background,border-color] duration-150",
+        "hover:bg-[oklch(0.185_0.01_283)] hover:border-white/[0.09]",
+        menuOpen && "bg-[oklch(0.185_0.01_283)] border-white/[0.09]",
       )}
     >
-      {/* Left accent bar — drains as time passes */}
-      <div
-        className="absolute left-0 top-0 h-full w-[3px] transition-all duration-1000 ease-linear"
-        style={{ opacity: ratio * 0.85 + 0.15 }}
+      {/* ── Clickable copy region ─────────────────────── */}
+      <button
+        type="button"
+        onClick={() => void copy()}
+        className="flex flex-1 min-w-0 items-center gap-3 py-2.5 pl-3 pr-1.5 text-left outline-none rounded-l-lg focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-inset"
+        title="Click to copy"
       >
+        {/* Avatar */}
         <div
-          className={cn(
-            "h-full w-full rounded-r-sm",
-            urgent
-              ? "bg-destructive"
-              : "bg-primary",
-          )}
-        />
-      </div>
-
-      {/* Glow halo under the accent bar */}
-      {ratio < 1 && (
-        <div
-          className={cn(
-            "pointer-events-none absolute left-0 top-0 h-full w-8 rounded-r-full opacity-30 blur-md transition-all duration-1000 ease-linear",
-            urgent ? "bg-destructive/40" : "bg-primary/30",
-          )}
-          style={{
-            height: `${Math.max(ratio * 100, 4)}%`,
-          }}
-        />
-      )}
-
-      <div className="flex items-center gap-3.5 py-3.5 pl-4">
-        <div
-          className="flex size-9 shrink-0 items-center justify-center rounded-xl text-[13px] font-semibold text-white/90"
+          className="grid size-8 shrink-0 place-items-center rounded-md text-[12.5px] font-semibold text-white/95"
           style={{
             backgroundImage: `linear-gradient(135deg, ${gradient[0]}, ${gradient[1]})`,
+            boxShadow:
+              "inset 0 1px 0 oklch(1 0 0 / 12%), 0 1px 2px oklch(0 0 0 / 25%)",
           }}
         >
           {initial}
         </div>
 
+        {/* Name + label */}
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <span className="truncate text-[15px] font-semibold tracking-tight text-foreground/90">
-              {name}
-            </span>
-            {copied && (
-              <span className="flex shrink-0 items-center gap-1 text-[11px] font-medium text-primary animate-fade-in">
-                <Check className="size-3" /> Copied
-              </span>
-            )}
+          <div className="truncate text-[13.5px] font-semibold leading-tight text-foreground/95 tracking-tight">
+            {name}
           </div>
           {account.label ? (
-            <div className="mt-0.5 truncate text-[12px] text-muted-foreground/80">
+            <div className="mt-0.5 truncate text-[11.5px] leading-tight text-muted-foreground/75">
               {account.label}
             </div>
-          ) : null}
-        </div>
-
-        <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-          {confirmDelete ? (
-            <div
-              className="flex items-center gap-1"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onDelete();
-                }}
-                className="rounded-lg px-2.5 py-1.5 text-[12px] font-medium text-destructive transition-colors hover:bg-destructive/8"
-              >
-                Delete
-              </button>
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setConfirmDelete(false);
-                }}
-                className="rounded-lg px-2.5 py-1.5 text-[12px] text-muted-foreground transition-colors hover:bg-accent"
-              >
-                Keep
-              </button>
-            </div>
           ) : (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                setConfirmDelete(true);
-              }}
-              title="Delete"
-              className="grid size-7 place-items-center rounded-lg text-muted-foreground/30 transition-colors hover:bg-accent hover:text-destructive"
-            >
-              <Trash2 className="size-3.5" strokeWidth={1.5} />
-            </button>
+            <div className="mt-0.5 truncate text-[11.5px] leading-tight text-muted-foreground/45">
+              {account.digits} digits · {account.period}s
+            </div>
           )}
         </div>
-      </div>
 
-      <div className="flex items-center justify-between pb-3.5 pl-4">
-        <div
-          className={cn(
-            "code-mono font-medium transition-colors duration-200 text-[26px]",
-            urgent ? "text-destructive" : "text-foreground/95",
-            copied ? "tracking-[0.12em]" : "tracking-[0.06em]",
-          )}
-        >
-          {formatCode(account.code)}
-        </div>
-
-        <div className="flex items-center gap-2.5">
-          <span
+        {/* Code + timer ring */}
+        <div className="flex shrink-0 items-center gap-2.5">
+          <div
             className={cn(
-              "w-8 text-right tabular-nums font-medium text-[11px]",
-              urgent ? "text-destructive/90" : "text-muted-foreground/70",
+              "code-mono text-[16px] font-medium leading-none transition-colors duration-150",
+              urgent ? "text-[oklch(0.78_0.16_22)]" : "text-foreground/95",
+              copied && "text-primary",
+            )}
+            aria-label={`Code ${account.code}`}
+          >
+            {formatCode(account.code)}
+          </div>
+
+          {/* Circular timer ring with seconds in center */}
+          <div
+            className="relative grid size-7 shrink-0 place-items-center"
+            aria-label={`${remaining} seconds remaining`}
+          >
+            <svg
+              className="absolute inset-0 -rotate-90"
+              viewBox="0 0 28 28"
+              width="28"
+              height="28"
+            >
+              <circle
+                cx="14"
+                cy="14"
+                r={RADIUS}
+                fill="none"
+                stroke="oklch(1 0 0 / 7%)"
+                strokeWidth="2"
+              />
+              <circle
+                cx="14"
+                cy="14"
+                r={RADIUS}
+                fill="none"
+                stroke={
+                  urgent ? "oklch(0.7 0.18 25)" : "oklch(0.72 0.14 285)"
+                }
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeDasharray={CIRC}
+                strokeDashoffset={dashOffset}
+                style={{
+                  transition: "stroke-dashoffset 1s linear, stroke 200ms",
+                }}
+              />
+            </svg>
+            <span
+              className={cn(
+                "tnums relative text-[9.5px] font-semibold leading-none",
+                urgent ? "text-[oklch(0.78_0.16_22)]" : "text-muted-foreground",
+              )}
+            >
+              {remaining}
+            </span>
+          </div>
+        </div>
+      </button>
+
+      {/* ── Overflow menu ────────────────────────────── */}
+      <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            aria-label="More actions"
+            className={cn(
+              "mr-1.5 grid size-7 shrink-0 place-items-center rounded-md outline-none transition-[opacity,background,color] duration-150",
+              "text-muted-foreground/55 hover:bg-[oklch(1_0_0/6%)] hover:text-foreground",
+              "focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring",
+              "data-[state=open]:bg-[oklch(1_0_0/6%)] data-[state=open]:text-foreground data-[state=open]:opacity-100",
+              "opacity-0 group-hover:opacity-100",
             )}
           >
-            {remaining}s
-          </span>
-        </div>
-      </div>
-    </button>
+            <MoreHorizontal className="size-3.5" />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" sideOffset={4}>
+          <DropdownMenuItem onSelect={() => void copy()}>
+            <Copy /> Copy code
+          </DropdownMenuItem>
+          {onEdit && (
+            <DropdownMenuItem onSelect={onEdit}>
+              <Pencil /> Edit
+            </DropdownMenuItem>
+          )}
+          <DropdownMenuSeparator />
+          <DropdownMenuItem variant="destructive" onSelect={onDelete}>
+            <Trash2 /> Delete
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
   );
 }

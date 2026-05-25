@@ -3,15 +3,20 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
 const alertVariants = cva(
-  "relative w-full rounded-xl border px-4 py-3 text-[13px] leading-relaxed",
+  "relative w-full rounded-lg border px-3.5 py-2.5 text-[12.5px] leading-relaxed",
   {
     variants: {
       variant: {
-        default: "border-white/[0.06] bg-card text-card-foreground",
+        default:
+          "border-white/[0.07] bg-[oklch(1_0_0/3%)] text-foreground",
         destructive:
-          "border-destructive/20 bg-destructive/8 text-destructive",
-        success: "border-emerald-500/15 bg-emerald-500/6 text-emerald-300",
-        info: "border-white/[0.04] bg-white/[0.02] text-muted-foreground",
+          "border-[oklch(0.62_0.18_22/22%)] bg-[oklch(0.62_0.18_22/8%)] text-[oklch(0.78_0.16_22)]",
+        success:
+          "border-[oklch(0.65_0.14_158/22%)] bg-[oklch(0.65_0.14_158/8%)] text-[oklch(0.78_0.14_158)]",
+        warning:
+          "border-[oklch(0.75_0.14_80/22%)] bg-[oklch(0.75_0.14_80/8%)] text-[oklch(0.84_0.14_80)]",
+        info:
+          "border-white/[0.05] bg-[oklch(1_0_0/2%)] text-muted-foreground",
       },
     },
     defaultVariants: { variant: "default" },
