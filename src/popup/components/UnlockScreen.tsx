@@ -25,20 +25,26 @@ export function UnlockScreen({ onUnlocked }: { onUnlocked: () => void }) {
   }
 
   return (
-    <div className="flex h-full flex-col justify-center px-8 py-12">
-      <div className="mb-8 text-center">
-        <div className="mx-auto mb-5 grid size-14 place-items-center rounded-2xl bg-white/[0.03] ring-1 ring-white/[0.06]">
-          <Lock className="size-7 text-foreground/50" strokeWidth={1.5} />
+    <div className="flex h-full flex-col items-center justify-center px-8 py-10">
+      <div className="mb-8 w-full text-center">
+        <div
+          className="mx-auto mb-6 grid size-16 place-items-center rounded-2xl"
+          style={{
+            backgroundImage:
+              "linear-gradient(135deg, oklch(0.22 0.03 270), oklch(0.18 0.02 250))",
+          }}
+        >
+          <Lock className="size-8 text-foreground/40" strokeWidth={1.5} />
         </div>
-        <h1 className="text-[18px] font-semibold tracking-tight text-foreground/90">
+        <h1 className="text-[20px] font-bold tracking-tight text-foreground/90">
           ShardPass
         </h1>
-        <p className="mt-2 text-[13px] text-muted-foreground/80">
-          Enter your master password to unlock the vault.
+        <p className="mt-2 text-[14px] leading-relaxed text-muted-foreground/70">
+          Enter your master password to unlock.
         </p>
       </div>
 
-      <form className="space-y-3.5" onSubmit={onSubmit}>
+      <form className="w-full space-y-3.5" onSubmit={onSubmit}>
         <Input
           autoFocus
           type="password"

@@ -42,9 +42,7 @@ export function AccountList({ onLocked }: { onLocked: () => void }) {
   }, [refresh]);
 
   useEffect(() => {
-    const id = window.setInterval(() => {
-      void refresh();
-    }, 1000);
+    const id = window.setInterval(() => void refresh(), 1000);
     return () => window.clearInterval(id);
   }, [refresh]);
 
@@ -83,12 +81,19 @@ export function AccountList({ onLocked }: { onLocked: () => void }) {
 
   return (
     <div className="relative flex h-full flex-col">
-      <header className="flex items-center justify-between border-b border-white/[0.04] px-5 pb-3.5 pt-5">
-        <div className="flex items-center gap-2.5">
-          <div className="grid size-8 place-items-center rounded-xl bg-white/[0.04] ring-1 ring-white/[0.06]">
-            <ShieldCheck className="size-4 text-foreground/60" strokeWidth={1.5} />
+      {/* ── Header ───────────────────────────────────── */}
+      <header className="flex items-center justify-between px-5 pb-4 pt-5">
+        <div className="flex items-center gap-3">
+          <div
+            className="grid size-8 place-items-center rounded-xl"
+            style={{
+              backgroundImage:
+                "linear-gradient(135deg, oklch(0.55 0.24 260), oklch(0.42 0.20 280))",
+            }}
+          >
+            <ShieldCheck className="size-4 text-white" strokeWidth={1.75} />
           </div>
-          <span className="text-[15px] font-semibold tracking-tight text-foreground/85">
+          <span className="text-[16px] font-bold tracking-tight text-foreground/90">
             ShardPass
           </span>
         </div>
@@ -108,9 +113,10 @@ export function AccountList({ onLocked }: { onLocked: () => void }) {
         </div>
       </header>
 
-      <div className="px-4 py-3">
+      {/* ── Search ──────────────────────────────────── */}
+      <div className="px-4 pb-3">
         <div className="relative">
-          <Search className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
+          <Search className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/30" />
           <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -120,28 +126,35 @@ export function AccountList({ onLocked }: { onLocked: () => void }) {
         </div>
       </div>
 
-      <main className="scrollbar-thin flex-1 overflow-y-auto px-4 pb-4">
+      {/* ── Account list ────────────────────────────── */}
+      <main className="scrollbar-thin flex-1 overflow-y-auto px-4 pb-4 mask-fade-b">
         {filtered.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center px-6 text-center">
             {accounts.length === 0 ? (
-              <div className="animate-fade-in">
-                <div className="mx-auto mb-4 grid size-12 place-items-center rounded-2xl bg-white/[0.03] ring-1 ring-white/[0.05]">
-                  <ShieldCheck className="size-6 text-muted-foreground/40" strokeWidth={1.5} />
+              <div className="animate-fade-in-scale">
+                <div
+                  className="mx-auto mb-5 grid size-14 place-items-center rounded-2xl"
+                  style={{
+                    backgroundImage:
+                      "linear-gradient(135deg, oklch(0.25 0.02 265), oklch(0.22 0.01 260))",
+                  }}
+                >
+                  <ShieldCheck className="size-7 text-foreground/30" strokeWidth={1.5} />
                 </div>
-                <p className="text-[15px] font-medium text-foreground/60">
+                <p className="text-[16px] font-semibold text-foreground/70">
                   No accounts yet
                 </p>
-                <p className="mt-1.5 text-[13px] text-muted-foreground/60">
+                <p className="mt-1.5 text-[13px] leading-relaxed text-muted-foreground/60">
                   Add your first TOTP account to get started
                 </p>
-                <Button size="sm" className="mt-4" onClick={() => setDialog("add")}>
+                <Button className="mt-5" onClick={() => setDialog("add")}>
                   <Plus className="size-4" />
                   Add account
                 </Button>
               </div>
             ) : (
-              <p className="text-[14px] text-muted-foreground/60">
-                No matches for "{query}"
+              <p className="animate-fade-in text-[14px] text-muted-foreground/60">
+                No matches for &ldquo;{query}&rdquo;
               </p>
             )}
           </div>
@@ -158,6 +171,7 @@ export function AccountList({ onLocked }: { onLocked: () => void }) {
         )}
       </main>
 
+      {/* ── Dialogs ─────────────────────────────────── */}
       <AddAccountDialog
         open={dialog === "add"}
         onOpenChange={(o) => setDialog(o ? "add" : null)}
@@ -180,10 +194,10 @@ export function AccountList({ onLocked }: { onLocked: () => void }) {
         onOpenChange={(o) => setDialog(o ? "settings" : null)}
       />
 
+      {/* ── Toast — pill shaped, center-bottom ──────── */}
       {toast && (
-        <div className="absolute bottom-4 left-4 right-4 z-50 rounded-2xl border border-emerald-500/10 bg-emerald-500/4 backdrop-blur-md px-4 py-3 text-[13px] text-emerald-300 animate-slide-up shadow-[0_4px_20px_oklch(0_0_0/50%)]">
-          <div className="flex items-center gap-2.5">
-            <div className="size-1.5 rounded-full bg-emerald-400/50" />
+        <div className="pointer-events-none absolute bottom-5 left-1/2 z-50 -translate-x-1/2 animate-toast-in">
+          <div className="rounded-full border border-white/[0.06] bg-[oklch(0.22_0.018_265)]/90 px-5 py-2.5 text-[13px] font-medium text-foreground/90 shadow-[0_4px_24px_oklch(0_0_0/55%)] backdrop-blur-lg">
             {toast}
           </div>
         </div>

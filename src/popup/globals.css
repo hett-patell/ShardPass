@@ -3,37 +3,40 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
-  /* 1Password-inspired warm modern palette */
-  --color-background: oklch(0.175 0.012 268);
-  --color-foreground: oklch(0.94 0 0);
+  /* Warm-navy background — like late evening sky */
+  --color-background: oklch(0.16 0.015 265);
+  --color-foreground: oklch(0.93 0 0);
 
-  --color-card: oklch(0.205 0.01 268);
+  /* Card: slightly lifted, dark grey-blue */
+  --color-card: oklch(0.195 0.012 268);
   --color-card-foreground: oklch(0.94 0 0);
 
-  --color-popover: oklch(0.195 0.012 270);
+  --color-popover: oklch(0.19 0.014 268);
   --color-popover-foreground: oklch(0.94 0 0);
 
-  /* Vivid blue — like 1Password's primary accent */
-  --color-primary: oklch(0.56 0.22 262);
+  /* Vivid electric blue — sparingly used, highly memorable */
+  --color-primary: oklch(0.55 0.24 260);
   --color-primary-foreground: oklch(0.99 0 0);
 
-  --color-secondary: oklch(0.225 0.01 265);
-  --color-secondary-foreground: oklch(0.92 0 0);
+  --color-secondary: oklch(0.215 0.012 265);
+  --color-secondary-foreground: oklch(0.91 0 0);
 
-  --color-muted: oklch(0.215 0.006 265);
-  --color-muted-foreground: oklch(0.60 0.01 260);
+  --color-muted: oklch(0.205 0.008 265);
+  --color-muted-foreground: oklch(0.58 0.012 260);
 
-  --color-accent: oklch(0.245 0.015 268);
+  --color-accent: oklch(0.235 0.018 268);
   --color-accent-foreground: oklch(0.95 0 0);
 
-  --color-destructive: oklch(0.54 0.16 18);
+  --color-destructive: oklch(0.52 0.18 18);
   --color-destructive-foreground: oklch(0.99 0 0);
 
-  --color-border: oklch(1 0 0 / 7%);
-  --color-input: oklch(1 0 0 / 5%);
-  --color-ring: oklch(0.56 0.22 262 / 30%);
+  --color-success: oklch(0.62 0.16 160);
+  --color-success-foreground: oklch(0.15 0.02 160);
 
-  /* Larger radii for the 1Password look */
+  --color-border: oklch(1 0 0 / 6%);
+  --color-input: oklch(1 0 0 / 4%);
+  --color-ring: oklch(0.55 0.24 260 / 28%);
+
   --radius-2xl: 1rem;
   --radius-xl: 0.75rem;
   --radius-lg: 0.625rem;
@@ -52,6 +55,7 @@
   html, body, #root {
     height: 100%;
     margin: 0;
+    overflow: hidden;
   }
 
   body {
@@ -59,10 +63,20 @@
     min-height: 520px;
     font-family: var(--font-sans);
     font-size: 14px;
-    background-color: var(--color-background);
     color: var(--color-foreground);
     -webkit-font-smoothing: antialiased;
     font-feature-settings: "cv11", "ss01";
+  }
+
+  /* Subtle radial gradient — a glow from the top center, like a soft spotlight */
+  body {
+    background:
+      radial-gradient(ellipse 90% 50% at 50% 0%, oklch(0.22 0.02 260 / 50%), transparent),
+      var(--color-background);
+  }
+
+  #root {
+    background: transparent;
   }
 
   button {
@@ -70,7 +84,7 @@
   }
 
   ::selection {
-    background: oklch(0.56 0.22 262 / 20%);
+    background: oklch(0.55 0.24 260 / 18%);
     color: var(--color-foreground);
   }
 }
@@ -79,17 +93,17 @@
 @utility scrollbar-thin {
   &::-webkit-scrollbar { width: 4px; }
   &::-webkit-scrollbar-thumb {
-    background: oklch(1 0 0 / 7%);
+    background: oklch(1 0 0 / 6%);
     border-radius: 2px;
   }
-  &::-webkit-scrollbar-thumb:hover { background: oklch(1 0 0 / 12%); }
+  &::-webkit-scrollbar-thumb:hover { background: oklch(1 0 0 / 10%); }
   &::-webkit-scrollbar-track { background: transparent; }
 }
 
 /* ── Typography ──────────────────────────────────── */
 @utility code-mono {
   font-family: var(--font-mono);
-  letter-spacing: 0.08em;
+  letter-spacing: 0.1em;
   font-variant-numeric: tabular-nums;
 }
 
@@ -99,19 +113,24 @@
   to { opacity: 1; transform: translateY(0); }
 }
 
+@keyframes fade-in-scale {
+  from { opacity: 0; transform: scale(0.92); }
+  to { opacity: 1; transform: scale(1); }
+}
+
 @keyframes overlay-in {
   from { opacity: 0; }
   to { opacity: 1; }
 }
 
 @keyframes content-in {
-  from { opacity: 0; transform: translateY(16px) scale(0.95); }
+  from { opacity: 0; transform: translateY(20px) scale(0.94); }
   to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 @keyframes content-out {
   from { opacity: 1; transform: translateY(0) scale(1); }
-  to { opacity: 0; transform: translateY(16px) scale(0.95); }
+  to { opacity: 0; transform: translateY(20px) scale(0.94); }
 }
 
 @keyframes slide-up {
@@ -119,10 +138,33 @@
   to { opacity: 1; transform: translateY(0); }
 }
 
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.94); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes accent-pulse {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
 @utility animate-fade-in {
   animation: fade-in 250ms ease-out;
 }
 
+@utility animate-fade-in-scale {
+  animation: fade-in-scale 220ms ease-out;
+}
+
 @utility animate-slide-up {
   animation: slide-up 300ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@utility animate-toast-in {
+  animation: toast-in 280ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ── Misc utilities ──────────────────────────────── */
+@utility mask-fade-b {
+  mask-image: linear-gradient(to top, transparent 0%, black 24px);
 }
