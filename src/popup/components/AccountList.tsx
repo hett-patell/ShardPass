@@ -38,7 +38,7 @@ function IconBtn({
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <Button variant="ghost" size="icon-sm" title={label} onClick={onClick}>
+        <Button variant="ghost" size="icon-sm" onClick={onClick}>
           {children}
         </Button>
       </TooltipTrigger>
