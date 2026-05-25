@@ -37,7 +37,8 @@ Because authenticator apps shouldn’t require a pilgrimage to your phone, and b
 | 🪟 **Detached import window** | File picker opens a small centered window so Chromium doesn’t murder the popup mid-import. (Yes, this was a whole saga.) |
 | 🪄 **Multi-account** | Five GitHub logins? The chip shows all five. Pick your poison. |
 | 🦆 **DuckDuckGo aliases** | Optional `@duck.com` generation when adding accounts; token lives **inside** the encrypted vault. |
-| 🔄 **Ente Auth sync** | Optional E2EE two-way sync with [Ente Auth](https://ente.io) — SRP login, libsodium crypto, your server or theirs. |
+| 🔄 **Ente Auth sync** | Optional E2EE two-way multi-device sync with [Ente Auth](https://ente.io) — SRP login, libsodium crypto, pull/push diffs, your server or theirs. Changes sync across all your Ente devices. |
+| 🔐 **HOTP support** | Counter-based OTP for accounts that refuse to move past RFC 4226. |
 | 🌑 **Dark UI** | React + shadcn/ui. Minimal. No confetti. We have standards (they are low, but they exist). |
 
 ---
@@ -231,12 +232,13 @@ bun run zip      # dist/ → shardpass.zip
 
 ```
 src/
-├── background/     # MV3 SW — vault session, TOTP, Ente/Duck, auto-lock
+├── background/     # MV3 SW — vault session, TOTP/HOTP, Ente/Duck, auto-lock, sync
 ├── content/        # OTP detection + Shadow DOM chip
 ├── lib/
 │   ├── crypto.ts   # PBKDF2 + AES-GCM vault
-│   ├── ente/       # Ente API, SRP, libsodium sync, queue
-│   ├── totp.ts     # otpauth parsing + code generation
+│   ├── ente/       # Ente API, SRP, libsodium sync, pending queue
+│   ├── totp.ts     # otpauth TOTP + HOTP code generation
+│   ├── format.ts   # Dependency-free code formatter (shared by content script + popup)
 │   └── …
 ├── components/ui/  # shadcn primitives
 └── popup/          # React app + detached import views
@@ -257,8 +259,9 @@ src/
 
 | Tag | Notes |
 |-----|--------|
-| **v1** | Detached-window import fix (file picker vs. popup homicide). |
+| **v3** | Multi-device Ente sync, SW restart resilience, HOTP support, change-password, input validation. |
 | **v2** | Ente Auth E2EE sync + settings UI. |
+| **v1** | Detached-window import fix (file picker vs. popup homicide). |
 
 ---
 
