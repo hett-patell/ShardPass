@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Trash2, Check } from "lucide-react";
 import type { AccountWithCode } from "@/lib/messages";
-import { formatCode } from "@/lib/totp";
+import { formatCode } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 export function AccountItem({

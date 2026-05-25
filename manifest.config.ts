@@ -6,6 +6,7 @@ export default defineManifest({
   name: "ShardPass",
   short_name: "ShardPass",
   version: pkg.version,
+  minimum_chrome_version: "110",
   description:
     "Minimal TOTP authenticator with one-click autofill.",
   icons: {

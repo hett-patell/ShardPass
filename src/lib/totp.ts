@@ -1,4 +1,4 @@
-import { TOTP, URI } from "otpauth";
+import { TOTP, HOTP, URI } from "otpauth";
 import type { Account } from "@/types";
 import { warn } from "@/lib/log";
 
@@ -12,6 +12,17 @@ export function isValidBase32(secret: string): boolean {
 }
 
 export function generateCode(account: Account, timestamp: number = Date.now()): string {
+  if (account.type === "hotp") {
+    const counter = account.counter ?? 0;
+    const hotp = new HOTP({
+      issuer: account.issuer,
+      label: account.label,
+      secret: normalizeSecret(account.secret),
+      algorithm: account.algorithm,
+      digits: account.digits,
+    });
+    return hotp.generate({ counter });
+  }
   const totp = new TOTP({
     issuer: account.issuer,
     label: account.label,
@@ -76,11 +87,4 @@ export function buildOtpAuthURI(account: Account): string {
     period: account.period,
   });
   return totp.toString();
-}
-
-export function formatCode(code: string): string {
-  if (code.length === 6) return `${code.slice(0, 3)} ${code.slice(3)}`;
-  if (code.length === 8) return `${code.slice(0, 4)} ${code.slice(4)}`;
-  if (code.length === 7) return `${code.slice(0, 3)} ${code.slice(3)}`;
-  return code;
 }

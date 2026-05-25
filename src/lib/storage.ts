@@ -109,3 +109,25 @@ export async function loadSessionKey(): Promise<CryptoKey | null> {
 export async function clearSessionKey(): Promise<void> {
   await chrome.storage.session.remove(SESSION_KEY);
 }
+
+const PENDING_2FA_KEY = "pending_2fa";
+
+interface Pending2FAState {
+  email: string;
+  serverUrl: string;
+  twoFactorSessionID: string;
+  derivedKEK: string;
+}
+
+export async function persistPending2FA(state: Pending2FAState): Promise<void> {
+  await chrome.storage.session.set({ [PENDING_2FA_KEY]: state });
+}
+
+export async function loadPending2FA(): Promise<Pending2FAState | null> {
+  const out = await chrome.storage.session.get(PENDING_2FA_KEY);
+  return (out[PENDING_2FA_KEY] as Pending2FAState | undefined) ?? null;
+}
+
+export async function clearPending2FA(): Promise<void> {
+  await chrome.storage.session.remove(PENDING_2FA_KEY);
+}

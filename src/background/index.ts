@@ -11,10 +11,13 @@ import {
 } from "@/lib/crypto";
 import {
   clearSessionKey,
+  clearPending2FA,
   createVault,
   getEncryptedVault,
   getSettings,
+  loadPending2FA,
   loadSessionKey,
+  persistPending2FA,
   persistSessionKey,
   saveVault,
   setEncryptedVault,
@@ -47,6 +50,12 @@ import { normalizeServerUrl } from "@/lib/ente/api";
 import { syncEnte } from "@/lib/ente/sync";
 
 log("bg", "service worker booted at", new Date().toISOString());
+try {
+  chrome.storage.local.setAccessLevel({ accessLevel: "TRUSTED_CONTEXTS" });
+} catch {
+  // Chrome < 114 does not support setAccessLevel; vault encryption protects
+  // the data at rest anyway so this is a defence-in-depth improvement only.
+}
 
 interface SessionState {
   key: CryptoKey | null;
@@ -75,6 +84,8 @@ let entePending2FA: {
   derivedKEK: string;
 } | null = null;
 
+let enteSyncInProgress = false;
+
 async function scheduleAutoLock(): Promise<void> {
   const settings = await getSettings();
   await chrome.alarms.clear(AUTO_LOCK_ALARM);
@@ -93,6 +104,7 @@ async function lock(reason: string): Promise<void> {
   entePending2FA = null;
   await chrome.alarms.clear(AUTO_LOCK_ALARM);
   await clearSessionKey();
+  await clearPending2FA();
 }
 
 /* ── Ente helpers ──────────────────────────────────────────── */
@@ -127,6 +139,8 @@ async function doEnteSync(): Promise<string | null> {
   if (!session.vault || !session.key) return "Vault is locked";
   const ente = session.vault.integrations?.ente;
   if (!ente) return "Ente not connected";
+  if (enteSyncInProgress) return "Sync already in progress";
+  enteSyncInProgress = true;
   try {
     log("bg:ente", "sync starting…");
     const result = await syncEnte(session.vault);
@@ -140,6 +154,8 @@ async function doEnteSync(): Promise<string | null> {
     ente.lastError = msg;
     await saveVault(session.vault, session.key);
     return msg;
+  } finally {
+    enteSyncInProgress = false;
   }
 }
 
@@ -197,6 +213,16 @@ async function tryRestoreSession(): Promise<void> {
     session.vault = vault;
     session.unlockedAt = Date.now();
     log("bg:restore", `restored session (${vault.accounts.length} accounts)`);
+    await scheduleAutoLock();
+    await scheduleEnteSync();
+    try {
+      const pending2fa = await loadPending2FA();
+      if (pending2fa) {
+        entePending2FA = pending2fa;
+        log("bg:restore", "restored pending 2FA session");
+      }
+    } catch { /* non-critical */ }
+    void doEnteSync();
   } catch (e) {
     logError("bg:restore", "failed, clearing session key:", e);
     await clearSessionKey();
@@ -225,6 +251,20 @@ function ensureUnlocked(): void {
   if (!session.key || !session.vault) {
     throw new Error("Vault is locked");
   }
+}
+
+const MAX_ACCOUNT_FIELD_LENGTH = 256;
+const MAX_SECRET_LENGTH = 1024;
+
+function validateAccountFields(account: {
+  issuer: string;
+  label: string;
+  secret: string;
+}): string | null {
+  if (account.issuer.length > MAX_ACCOUNT_FIELD_LENGTH) return "Issuer exceeds 256 characters";
+  if (account.label.length > MAX_ACCOUNT_FIELD_LENGTH) return "Label exceeds 256 characters";
+  if (account.secret.length > MAX_SECRET_LENGTH) return "Secret exceeds 1024 characters";
+  return null;
 }
 
 function findMatchesForDomain(vault: Vault, domain: string): Account[] {
@@ -298,6 +338,8 @@ async function handle(msg: Message): Promise<Response> {
       session.unlockedAt = Date.now();
       await persistSessionKey(result.key);
       await scheduleAutoLock();
+      await scheduleEnteSync();
+      void doEnteSync();
       return { ok: true, data: { state: "unlocked" as LockState } };
     }
 
@@ -315,14 +357,27 @@ async function handle(msg: Message): Promise<Response> {
     case "addAccount": {
       ensureUnlocked();
       const { account } = msg;
+      const fieldErr = validateAccountFields(account);
+      if (fieldErr) {
+        return { ok: false, error: fieldErr };
+      }
       if (!isValidBase32(account.secret)) {
         return { ok: false, error: "Invalid base32 secret" };
+      }
+      const norm = normalizeSecret(account.secret);
+      const fingerprint = `${norm}|${account.issuer}|${account.label}`.toLowerCase();
+      const duplicate = session.vault!.accounts.some(
+        (a) =>
+          `${normalizeSecret(a.secret)}|${a.issuer}|${a.label}`.toLowerCase() === fingerprint,
+      );
+      if (duplicate) {
+        return { ok: false, error: "An account with the same secret, issuer, and label already exists." };
       }
       const newAcc: Account = {
         id: crypto.randomUUID(),
         createdAt: Date.now(),
         ...account,
-        secret: normalizeSecret(account.secret),
+        secret: norm,
       };
       session.vault!.accounts.push(newAcc);
       // Enqueue BEFORE persisting so the pending push survives an SW restart.
@@ -348,6 +403,15 @@ async function handle(msg: Message): Promise<Response> {
       const nowBase = Date.now();
       let i = 0;
       for (const draft of msg.accounts) {
+        const fieldErr = validateAccountFields(draft);
+        if (fieldErr) {
+          skippedInvalid++;
+          log("bg:bulk", `skip invalid field: ${fieldErr}`, {
+            issuer: draft.issuer?.slice(0, 32),
+            label: draft.label?.slice(0, 32),
+          });
+          continue;
+        }
         if (!isValidBase32(draft.secret)) {
           skippedInvalid++;
           log("bg:bulk", `skip invalid secret`, {
@@ -374,6 +438,7 @@ async function handle(msg: Message): Promise<Response> {
           tags: draft.tags ?? [],
         };
         vault.accounts.push(newAcc);
+        enteEnqueue("create", newAcc.id);
         added++;
       }
       log("bg:bulk", `processed: added=${added} dups=${skippedDuplicates} invalid=${skippedInvalid}; vault now has ${vault.accounts.length}`);
@@ -455,7 +520,7 @@ async function handle(msg: Message): Promise<Response> {
     case "importVault": {
       try {
         const parsed = JSON.parse(msg.data) as Record<string, unknown>;
-        if (parsed.type !== "shardpass-export" && parsed.type !== "chrome-authenticator-export") {
+        if (parsed.type !== "shardpass-export") {
           return { ok: false, error: "Unrecognized export file" };
         }
         const salt = base64ToBytes(String(parsed.salt));
@@ -472,7 +537,10 @@ async function handle(msg: Message): Promise<Response> {
         if (session.key && session.vault) {
           const existingIds = new Set(session.vault.accounts.map((a) => a.id));
           for (const acc of vault.accounts) {
-            if (!existingIds.has(acc.id)) session.vault.accounts.push(acc);
+            if (!existingIds.has(acc.id)) {
+              session.vault.accounts.push(acc);
+              enteEnqueue("create", acc.id);
+            }
           }
           await saveVault(session.vault, session.key);
           return {
@@ -557,6 +625,7 @@ async function handle(msg: Message): Promise<Response> {
     case "enteLogin": {
       ensureUnlocked();
       entePending2FA = null;
+      await clearPending2FA();
       try {
         const serverUrl = normalizeServerUrl(msg.serverUrl);
         const attrs = await fetchSrpAttributes(serverUrl, msg.email);
@@ -574,6 +643,7 @@ async function handle(msg: Message): Promise<Response> {
         }
         if (outcome.status === "twofa") {
           entePending2FA = outcome;
+          await persistPending2FA(outcome);
           return { ok: true, data: { status: getEnteStatus() } };
         }
         return await finishEnteLogin(outcome);
@@ -598,6 +668,7 @@ async function handle(msg: Message): Promise<Response> {
           derivedKEK: entePending2FA.derivedKEK,
         });
         entePending2FA = null;
+        await clearPending2FA();
         return await finishEnteLogin(signed);
       } catch (e) {
         const msg2 = e instanceof Error ? e.message : String(e);
@@ -627,57 +698,44 @@ async function handle(msg: Message): Promise<Response> {
         : { ok: true, data: { status: getEnteStatus() } };
     }
 
-    case "generateDuckAlias": {
+    case "changePassword": {
       ensureUnlocked();
-      const token = session.vault!.integrations?.duckduckgo?.token;
-      if (!token) {
-        return {
-          ok: false,
-          error: "DuckDuckGo not configured — add a token in Settings.",
-        };
+      if (!msg.oldPassword || !msg.newPassword) {
+        return { ok: false, error: "Both passwords are required." };
       }
+      if (msg.newPassword.length < 12) {
+        return { ok: false, error: "New password must be at least 12 characters." };
+      }
+      if (msg.oldPassword === msg.newPassword) {
+        return { ok: false, error: "New password must differ from the current one." };
+      }
+      const enc = await getEncryptedVault();
+      if (!enc) return { ok: false, error: "No vault found." };
+      const oldSalt = base64ToBytes(enc.salt);
+      const oldKey = await deriveKey(msg.oldPassword, oldSalt, enc.iterations);
       try {
-        log("bg:ddg", "generating alias…");
-        const res = await fetch(
-          "https://quack.duckduckgo.com/api/email/addresses",
-          {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${token}`,
-              "Content-Type": "application/json",
-            },
-          },
-        );
-        if (res.status === 401 || res.status === 403) {
-          return {
-            ok: false,
-            error: "DuckDuckGo token is invalid or expired.",
-          };
-        }
-        if (res.status === 429) {
-          return {
-            ok: false,
-            error: "DuckDuckGo rate-limited the request. Wait a moment.",
-          };
-        }
-        if (!res.ok) {
-          return {
-            ok: false,
-            error: `DuckDuckGo error: ${res.status} ${res.statusText}`,
-          };
-        }
-        const json = (await res.json()) as { address?: string };
-        if (!json.address) {
-          return { ok: false, error: "Unexpected response from DuckDuckGo." };
-        }
-        const alias = `${json.address}@duck.com`;
-        log("bg:ddg", `alias generated`);
-        return { ok: true, data: { alias } };
-      } catch (e) {
-        const errMsg = e instanceof Error ? e.message : "Network error";
-        logError("bg:ddg", `generateDuckAlias failed:`, errMsg);
-        return { ok: false, error: errMsg };
+        await decryptJSON<Vault>(enc.iv, enc.ciphertext, oldKey);
+      } catch {
+        return { ok: false, error: "Current password is incorrect." };
       }
+      const newSalt = randomBytes(CRYPTO_PARAMS.SALT_BYTES);
+      const newKey = await deriveKey(msg.newPassword, newSalt);
+      const { iv, ciphertext } = await encryptJSON(session.vault!, newKey);
+      const updated: EncryptedVault = {
+        ...enc,
+        salt: bytesToBase64(newSalt),
+        iv,
+        ciphertext,
+        iterations: CRYPTO_PARAMS.PBKDF2_ITERATIONS,
+        updatedAt: Date.now(),
+      };
+      await setEncryptedVault(updated);
+      session.key = newKey;
+      await persistSessionKey(newKey);
+      await scheduleAutoLock();
+      await scheduleEnteSync();
+      log("bg", "password changed successfully");
+      return { ok: true, data: { state: "unlocked" as LockState } };
     }
 
     default:

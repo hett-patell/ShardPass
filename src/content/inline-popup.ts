@@ -1,4 +1,5 @@
 import type { AccountWithCode } from "@/lib/messages";
+import { formatCode } from "@/lib/format";
 
 export const CHIP_HOST_ID = "__shardpass_chip_host__";
 
@@ -182,13 +183,6 @@ function position(anchor: HTMLElement): void {
   if (left + chipWidth > vw - 8) left = Math.max(8, vw - chipWidth - 8);
   chip.style.top = `${Math.round(top)}px`;
   chip.style.left = `${Math.round(left)}px`;
-}
-
-function formatCode(code: string): string {
-  if (code.length === 6) return `${code.slice(0, 3)} ${code.slice(3)}`;
-  if (code.length === 8) return `${code.slice(0, 4)} ${code.slice(4)}`;
-  if (code.length === 7) return `${code.slice(0, 3)} ${code.slice(3)}`;
-  return code;
 }
 
 function rootDomain(host: string): string {

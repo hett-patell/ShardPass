@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Check, Sparkles, Trash2, RefreshCw, LogOut, Shield } from "lucide-react";
+import { Check, Sparkles, Trash2, RefreshCw, LogOut, Shield, KeyRound } from "lucide-react";
 import { send } from "@/lib/messages";
 import type { EnteStatus, IntegrationStatus } from "@/lib/messages";
 import type { Settings } from "@/types";
@@ -184,6 +184,10 @@ export function SettingsMenu({
 
           <Separator />
 
+          <ChangePasswordSection />
+
+          <Separator />
+
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <Label className="m-0">DuckDuckGo Email Protection</Label>
@@ -280,6 +284,102 @@ export function SettingsMenu({
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/* ────────────────────────────────────────────────────────────────
+   Change Password — self-contained sub-component
+   ──────────────────────────────────────────────────────────────── */
+
+function ChangePasswordSection() {
+  const [oldPassword, setOldPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
+
+  function reset() {
+    setOldPassword("");
+    setNewPassword("");
+    setConfirm("");
+    setMessage(null);
+  }
+
+  async function doChange() {
+    setMessage(null);
+    if (!oldPassword) {
+      setMessage({ kind: "err", text: "Enter your current password." });
+      return;
+    }
+    if (newPassword.length < 12) {
+      setMessage({ kind: "err", text: "New password must be at least 12 characters." });
+      return;
+    }
+    if (newPassword !== confirm) {
+      setMessage({ kind: "err", text: "New passwords do not match." });
+      return;
+    }
+    setBusy(true);
+    const res = await send({ kind: "changePassword", oldPassword, newPassword });
+    setBusy(false);
+    if (!res.ok) {
+      setMessage({ kind: "err", text: res.error });
+      return;
+    }
+    setMessage({ kind: "ok", text: "Password changed." });
+    reset();
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-1.5">
+        <KeyRound className="size-3.5 text-muted-foreground" strokeWidth={1.75} />
+        <Label className="m-0">Change master password</Label>
+      </div>
+      <p className="text-[10.5px] leading-relaxed text-muted-foreground">
+        Re-encrypts the vault with a new key derived from the new password.
+      </p>
+      <div className="space-y-2">
+        <Input
+          type="password"
+          autoComplete="off"
+          value={oldPassword}
+          onChange={(e) => setOldPassword(e.target.value)}
+          placeholder="Current password"
+          className="text-[11px]"
+        />
+        <Input
+          type="password"
+          autoComplete="new-password"
+          value={newPassword}
+          onChange={(e) => setNewPassword(e.target.value)}
+          placeholder="New password (min 12 chars)"
+          className="text-[11px]"
+        />
+        <Input
+          type="password"
+          autoComplete="new-password"
+          value={confirm}
+          onChange={(e) => setConfirm(e.target.value)}
+          placeholder="Confirm new password"
+          className="text-[11px]"
+        />
+        <Button
+          type="button"
+          size="sm"
+          className="w-full"
+          disabled={busy || !oldPassword || !newPassword || !confirm}
+          onClick={() => void doChange()}
+        >
+          {busy ? "Changing…" : "Change password"}
+        </Button>
+        {message && (
+          <Alert variant={message.kind === "ok" ? "success" : "destructive"}>
+            {message.text}
+          </Alert>
+        )}
+      </div>
+    </div>
   );
 }
 

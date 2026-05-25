@@ -40,7 +40,8 @@ export type Message =
   | { kind: "enteLogin"; email: string; password: string; serverUrl?: string }
   | { kind: "enteSubmit2FA"; code: string }
   | { kind: "enteDisconnect" }
-  | { kind: "enteSyncNow" };
+  | { kind: "enteSyncNow" }
+  | { kind: "changePassword"; oldPassword: string; newPassword: string };
 
 export interface EnteStatus {
   connected: boolean;

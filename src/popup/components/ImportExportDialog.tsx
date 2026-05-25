@@ -26,7 +26,7 @@ function detectImportKind(text: string): ImportKind {
   if (t.startsWith("{")) {
     try {
       const j = JSON.parse(text) as { type?: string };
-      if (j.type === "shardpass-export" || j.type === "chrome-authenticator-export")
+      if (j.type === "shardpass-export")
         return "json-backup";
     } catch {
       /* ignore */
