@@ -148,10 +148,10 @@ export function SettingsMenu({
         <div className="space-y-5">
           <div className="flex items-start justify-between gap-3">
             <div className="space-y-0.5">
-              <div className="text-[12.5px] font-medium text-foreground">
+              <div className="text-[14px] font-medium text-foreground">
                 Lock on screen lock
               </div>
-              <p className="text-[10.5px] text-muted-foreground">
+              <p className="text-[12px] text-muted-foreground">
                 Auto-lock when your OS screen locks.
               </p>
             </div>
@@ -192,12 +192,12 @@ export function SettingsMenu({
             <div className="flex items-center justify-between">
               <Label className="m-0">DuckDuckGo Email Protection</Label>
               {duckConfigured && (
-                <span className="flex items-center gap-1 rounded-md bg-emerald-500/10 px-1.5 py-0.5 text-[9.5px] font-medium uppercase tracking-wider text-emerald-300">
-                  <Check className="size-2.5" /> connected
+                <span className="flex items-center gap-1 rounded-lg bg-emerald-500/8 px-2 py-0.5 text-[11px] font-medium uppercase tracking-wider text-emerald-300/90">
+                  <Check className="size-3" /> connected
                 </span>
               )}
             </div>
-            <p className="text-[10.5px] leading-relaxed text-muted-foreground">
+            <p className="text-[12px] leading-relaxed text-muted-foreground">
               Generate <span className="font-mono">@duck.com</span> aliases when
               adding accounts. Your token is stored inside the encrypted vault.
             </p>
@@ -234,7 +234,7 @@ export function SettingsMenu({
                   placeholder="Bearer token"
                   value={duckTokenInput}
                   onChange={(e) => setDuckTokenInput(e.target.value)}
-                  className="font-mono text-[11px]"
+                  className="font-mono"
                 />
                 <Button
                   type="button"
@@ -245,7 +245,7 @@ export function SettingsMenu({
                 >
                   {duckBusy ? "Saving…" : "Connect"}
                 </Button>
-                <p className="text-[10px] leading-relaxed text-muted-foreground/80">
+                <p className="text-[11px] leading-relaxed text-muted-foreground/70">
                   Get your token at{" "}
                   <a
                     href="https://duckduckgo.com/email/settings/autofill"
@@ -278,7 +278,7 @@ export function SettingsMenu({
 
           <Separator />
 
-          <p className="text-[10px] text-muted-foreground/80">
+          <p className="text-[11px] text-muted-foreground/60">
             AES-256-GCM · PBKDF2 · 250k iterations · SHA-256
           </p>
         </div>
@@ -336,7 +336,7 @@ function ChangePasswordSection() {
         <KeyRound className="size-3.5 text-muted-foreground" strokeWidth={1.75} />
         <Label className="m-0">Change master password</Label>
       </div>
-      <p className="text-[10.5px] leading-relaxed text-muted-foreground">
+      <p className="text-[12px] leading-relaxed text-muted-foreground">
         Re-encrypts the vault with a new key derived from the new password.
       </p>
       <div className="space-y-2">
@@ -346,7 +346,6 @@ function ChangePasswordSection() {
           value={oldPassword}
           onChange={(e) => setOldPassword(e.target.value)}
           placeholder="Current password"
-          className="text-[11px]"
         />
         <Input
           type="password"
@@ -354,7 +353,6 @@ function ChangePasswordSection() {
           value={newPassword}
           onChange={(e) => setNewPassword(e.target.value)}
           placeholder="New password (min 12 chars)"
-          className="text-[11px]"
         />
         <Input
           type="password"
@@ -362,7 +360,6 @@ function ChangePasswordSection() {
           value={confirm}
           onChange={(e) => setConfirm(e.target.value)}
           placeholder="Confirm new password"
-          className="text-[11px]"
         />
         <Button
           type="button"
@@ -506,12 +503,12 @@ function EnteAuthSection() {
           Ente Auth Sync
         </Label>
         {status.connected && (
-          <span className="flex items-center gap-1 rounded-md bg-emerald-500/10 px-1.5 py-0.5 text-[9.5px] font-medium uppercase tracking-wider text-emerald-300">
-            <Check className="size-2.5" /> synced
+          <span className="flex items-center gap-1 rounded-lg bg-emerald-500/8 px-2 py-0.5 text-[11px] font-medium uppercase tracking-wider text-emerald-300/90">
+            <Check className="size-3" /> synced
           </span>
         )}
       </div>
-      <p className="text-[10.5px] leading-relaxed text-muted-foreground">
+      <p className="text-[12px] leading-relaxed text-muted-foreground">
         Two-way sync your TOTP accounts with{" "}
         <a
           href="https://ente.io/auth"
@@ -526,17 +523,17 @@ function EnteAuthSection() {
 
       {status.connected ? (
         <div className="space-y-2">
-          <div className="rounded-md border border-border bg-secondary/40 px-3 py-2 space-y-1">
-            <p className="text-[11px] text-foreground/85 font-medium truncate">
+          <div className="rounded-xl border border-white/[0.05] bg-white/[0.02] px-4 py-3 space-y-1">
+            <p className="text-[13px] text-foreground/85 font-medium truncate">
               {status.email}
             </p>
             {status.lastSync && (
-              <p className="text-[10px] text-muted-foreground">
+              <p className="text-[11px] text-muted-foreground">
                 Last sync: {new Date(status.lastSync).toLocaleString()}
               </p>
             )}
             {status.needsReauth && (
-              <p className="text-[10px] text-amber-400">
+              <p className="text-[11px] text-amber-400">
                 Session expired — disconnect and reconnect.
               </p>
             )}
@@ -567,7 +564,7 @@ function EnteAuthSection() {
         </div>
       ) : status.pending2FA ? (
         <div className="space-y-2">
-          <p className="text-[10.5px] text-muted-foreground">
+          <p className="text-[12px] text-muted-foreground">
             Enter the 2FA code for <span className="font-medium text-foreground/85">{status.email}</span>
           </p>
           <Input
@@ -575,7 +572,7 @@ function EnteAuthSection() {
             placeholder="6-digit code"
             value={twofaCode}
             onChange={(e) => setTwofaCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-            className="font-mono text-[11px] text-center tracking-[0.25em]"
+            className="font-mono text-center tracking-[0.25em]"
             maxLength={6}
           />
           <Button
@@ -595,7 +592,6 @@ function EnteAuthSection() {
             placeholder="Ente account email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="text-[11px]"
           />
           <Input
             type="password"
@@ -603,11 +599,10 @@ function EnteAuthSection() {
             placeholder="Password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="text-[11px]"
           />
           <button
             type="button"
-            className="text-[10px] text-muted-foreground transition-colors hover:text-foreground"
+            className="text-[12px] font-medium text-muted-foreground transition-colors hover:text-foreground"
             onClick={() => setShowAdvanced((v) => !v)}
           >
             {showAdvanced ? "Hide" : "Show"} advanced
@@ -618,7 +613,7 @@ function EnteAuthSection() {
               placeholder="Server URL (default: api.ente.io)"
               value={serverUrl}
               onChange={(e) => setServerUrl(e.target.value)}
-              className="font-mono text-[10px]"
+              className="font-mono"
             />
           )}
           <Button

@@ -33,18 +33,20 @@ export function SetupScreen({ onSetupDone }: { onSetupDone: () => void }) {
   }
 
   return (
-    <div className="flex h-full flex-col justify-center px-7 py-10">
-      <div className="mb-7 text-center">
-        <div className="mx-auto mb-4 flex size-11 items-center justify-center rounded-xl bg-secondary">
-          <ShieldCheck className="size-5 text-foreground/80" strokeWidth={1.5} />
+    <div className="flex h-full flex-col justify-center px-8 py-12">
+      <div className="mb-8 text-center">
+        <div className="mx-auto mb-5 grid size-14 place-items-center rounded-2xl bg-white/[0.03] ring-1 ring-white/[0.06]">
+          <ShieldCheck className="size-7 text-foreground/50" strokeWidth={1.5} />
         </div>
-        <h1 className="text-[15px] font-semibold tracking-tight">ShardPass</h1>
-        <p className="mt-1.5 text-[11.5px] leading-relaxed text-muted-foreground">
+        <h1 className="text-[18px] font-semibold tracking-tight text-foreground/90">
+          ShardPass
+        </h1>
+        <p className="mt-2 text-[13px] leading-relaxed text-muted-foreground/80">
           Create a master password to encrypt your vault locally.
         </p>
       </div>
 
-      <form className="space-y-2.5" onSubmit={onSubmit}>
+      <form className="space-y-3.5" onSubmit={onSubmit}>
         <Input
           type="password"
           autoComplete="new-password"
@@ -66,8 +68,8 @@ export function SetupScreen({ onSetupDone }: { onSetupDone: () => void }) {
           {busy ? "Setting up…" : "Create vault"}
         </Button>
 
-        <p className="pt-1 text-center text-[10px] leading-relaxed text-muted-foreground/70">
-          AES-256-GCM. Your password never leaves this device.
+        <p className="pt-2 text-center text-[11px] text-muted-foreground/50">
+          AES-256-GCM · PBKDF2 250k · Your password never leaves this device.
         </p>
       </form>
     </div>

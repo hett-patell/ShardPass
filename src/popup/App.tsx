@@ -26,7 +26,7 @@ export function App() {
   if (state === "loading") {
     return (
       <div className="flex h-full items-center justify-center">
-        <div className="text-[12px] text-muted-foreground">Loading…</div>
+        <div className="text-[14px] text-muted-foreground">Loading…</div>
       </div>
     );
   }
@@ -56,7 +56,7 @@ function DetachedImportExport() {
           <Check className="size-4 text-emerald-300" strokeWidth={2.25} />
         </div>
         <p className="text-[12.5px] font-medium text-foreground">{done}</p>
-        <p className="text-[10.5px] text-muted-foreground">Closing…</p>
+        <p className="text-[11px] text-muted-foreground">Closing…</p>
       </div>
     );
   }

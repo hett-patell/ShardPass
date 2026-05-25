@@ -55,8 +55,8 @@ export function DetachedQRImport() {
         <div className="grid size-9 place-items-center rounded-full bg-emerald-500/15">
           <Check className="size-4 text-emerald-300" strokeWidth={2.25} />
         </div>
-        <p className="text-[12.5px] font-medium text-foreground">{done}</p>
-        <p className="text-[10.5px] text-muted-foreground">Closing…</p>
+        <p className="text-[14px] font-medium text-foreground">{done}</p>
+        <p className="text-[11px] text-muted-foreground">Closing…</p>
       </div>
     );
   }
@@ -71,7 +71,7 @@ export function DetachedQRImport() {
           Import from QR image
         </span>
       </div>
-      <p className="mb-3 text-[11px] leading-relaxed text-muted-foreground">
+      <p className="mb-3 text-[13px] leading-relaxed text-muted-foreground">
         Pick a QR screenshot. Decoded locally — never uploaded.
       </p>
 
@@ -79,7 +79,7 @@ export function DetachedQRImport() {
         type="button"
         onClick={() => fileRef.current?.click()}
         disabled={busy}
-        className="flex w-full flex-col items-center gap-2 rounded-md border border-dashed border-border bg-card/30 py-8 text-[11.5px] text-muted-foreground transition-colors hover:border-border/80 hover:bg-card/60 disabled:opacity-50"
+        className="flex w-full flex-col items-center gap-2 rounded-xl border border-dashed border-white/[0.06] bg-white/[0.02] py-10 text-[14px] text-muted-foreground transition-all hover:border-white/[0.12] hover:bg-white/[0.04] disabled:opacity-50"
       >
         <ImageIcon className="size-5" strokeWidth={1.5} />
         {busy ? "Decoding…" : "Choose QR image"}

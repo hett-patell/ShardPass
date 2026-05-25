@@ -83,96 +83,70 @@ export function AccountList({ onLocked }: { onLocked: () => void }) {
 
   return (
     <div className="relative flex h-full flex-col">
-      <header className="flex items-center justify-between px-4 pb-2 pt-3.5">
-        <div className="flex items-center gap-2">
-          <div className="grid size-6 place-items-center rounded-md bg-secondary">
-            <ShieldCheck
-              className="size-3.5 text-foreground/85"
-              strokeWidth={1.75}
-            />
+      <header className="flex items-center justify-between border-b border-white/[0.04] px-5 pb-3.5 pt-5">
+        <div className="flex items-center gap-2.5">
+          <div className="grid size-8 place-items-center rounded-xl bg-white/[0.04] ring-1 ring-white/[0.06]">
+            <ShieldCheck className="size-4 text-foreground/60" strokeWidth={1.5} />
           </div>
-          <span className="text-[13px] font-semibold tracking-tight">
+          <span className="text-[15px] font-semibold tracking-tight text-foreground/85">
             ShardPass
           </span>
         </div>
         <div className="flex items-center gap-0.5">
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            title="Add account"
-            onClick={() => setDialog("add")}
-          >
+          <Button variant="ghost" size="icon-sm" title="Add account" onClick={() => setDialog("add")}>
             <Plus />
           </Button>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            title="Import / Export"
-            onClick={() => void openIO()}
-          >
+          <Button variant="ghost" size="icon-sm" title="Import / Export" onClick={() => void openIO()}>
             <ArrowUpFromLine />
           </Button>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            title="Settings"
-            onClick={() => setDialog("settings")}
-          >
+          <Button variant="ghost" size="icon-sm" title="Settings" onClick={() => setDialog("settings")}>
             <Settings />
           </Button>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            title="Lock"
-            onClick={() => void onLock()}
-          >
+          <Button variant="ghost" size="icon-sm" title="Lock" onClick={() => void onLock()}>
             <Lock />
           </Button>
         </div>
       </header>
 
-      <div className="px-4 pb-2.5">
+      <div className="px-4 py-3">
         <div className="relative">
-          <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground/70" />
+          <Search className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
           <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search"
-            className="h-8 pl-8"
+            placeholder="Search accounts…"
+            className="h-10 pl-9"
           />
         </div>
       </div>
 
-      <main className="scrollbar-thin flex-1 overflow-y-auto px-3 pb-3">
+      <main className="scrollbar-thin flex-1 overflow-y-auto px-4 pb-4">
         {filtered.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center px-6 text-center">
             {accounts.length === 0 ? (
               <div className="animate-fade-in">
-                <div className="mx-auto mb-3 grid size-10 place-items-center rounded-lg bg-secondary">
-                  <ShieldCheck
-                    className="size-4 text-muted-foreground"
-                    strokeWidth={1.5}
-                  />
+                <div className="mx-auto mb-4 grid size-12 place-items-center rounded-2xl bg-white/[0.03] ring-1 ring-white/[0.05]">
+                  <ShieldCheck className="size-6 text-muted-foreground/40" strokeWidth={1.5} />
                 </div>
-                <p className="text-[11.5px] text-muted-foreground">
+                <p className="text-[15px] font-medium text-foreground/60">
                   No accounts yet
                 </p>
-                <Button
-                  size="sm"
-                  className="mt-3"
-                  onClick={() => setDialog("add")}
-                >
-                  Add first account
+                <p className="mt-1.5 text-[13px] text-muted-foreground/60">
+                  Add your first TOTP account to get started
+                </p>
+                <Button size="sm" className="mt-4" onClick={() => setDialog("add")}>
+                  <Plus className="size-4" />
+                  Add account
                 </Button>
               </div>
             ) : (
-              <p className="text-[11.5px] text-muted-foreground/80">
-                No matches
+              <p className="text-[14px] text-muted-foreground/60">
+                No matches for "{query}"
               </p>
             )}
           </div>
         ) : (
-          <div className="flex flex-col gap-1.5">
+          <div className="flex flex-col gap-2">
             {filtered.map((acc) => (
               <AccountItem
                 key={acc.id}
@@ -207,8 +181,11 @@ export function AccountList({ onLocked }: { onLocked: () => void }) {
       />
 
       {toast && (
-        <div className="absolute bottom-3 left-3 right-3 z-50 rounded-md border border-emerald-500/25 bg-emerald-500/10 px-3 py-2 text-[11.5px] text-emerald-300 backdrop-blur animate-fade-in">
-          {toast}
+        <div className="absolute bottom-4 left-4 right-4 z-50 rounded-2xl border border-emerald-500/10 bg-emerald-500/4 backdrop-blur-md px-4 py-3 text-[13px] text-emerald-300 animate-slide-up shadow-[0_4px_20px_oklch(0_0_0/50%)]">
+          <div className="flex items-center gap-2.5">
+            <div className="size-1.5 rounded-full bg-emerald-400/50" />
+            {toast}
+          </div>
         </div>
       )}
     </div>

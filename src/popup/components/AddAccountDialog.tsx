@@ -218,7 +218,7 @@ export function AddAccountDialog({
                       type="button"
                       onClick={() => void generateAlias()}
                       disabled={aliasBusy}
-                      className="flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50"
+                      className="flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50"
                       title="Generate a duck.com alias and fill this field"
                     >
                       <Sparkles className="size-2.5" />
@@ -232,7 +232,7 @@ export function AddAccountDialog({
                   placeholder="you@example.com"
                 />
                 {aliasNote && (
-                  <p className="text-[10px] text-emerald-300">{aliasNote}</p>
+                  <p className="text-[11px] text-emerald-300">{aliasNote}</p>
                 )}
               </div>
               <Field
@@ -245,7 +245,7 @@ export function AddAccountDialog({
 
               <button
                 type="button"
-                className="text-[10.5px] text-muted-foreground transition-colors hover:text-foreground"
+                className="text-[12px] text-muted-foreground transition-colors hover:text-foreground"
                 onClick={() => setAdvanced((v) => !v)}
               >
                 {advanced ? "Hide" : "Show"} advanced
@@ -295,7 +295,7 @@ export function AddAccountDialog({
 
           <TabsContent value="qr">
             <div className="space-y-3">
-              <p className="text-[11px] leading-relaxed text-muted-foreground">
+              <p className="text-[13px] leading-relaxed text-muted-foreground">
                 Decoded locally — never uploaded. Paste an image you've copied
                 (screenshot tool), or pick a file (opens a small window because
                 Chrome closes the toolbar popup the moment a file dialog opens).
@@ -305,7 +305,7 @@ export function AddAccountDialog({
                   type="button"
                   onClick={() => void onPasteQRImage()}
                   disabled={qrPasteBusy || busy}
-                  className="flex flex-col items-center justify-center gap-1.5 rounded-md border border-dashed border-border bg-card/30 py-5 text-[11px] text-muted-foreground transition-colors hover:border-border/80 hover:bg-card/60 disabled:opacity-50"
+                  className="flex flex-col items-center justify-center gap-1.5 rounded-xl border border-dashed border-white/[0.06] bg-white/[0.02] py-6 text-[13px] text-muted-foreground transition-all hover:border-white/[0.12] hover:bg-white/[0.04] disabled:opacity-50"
                 >
                   <Clipboard className="size-4" strokeWidth={1.5} />
                   {qrPasteBusy ? "Reading…" : "Paste image"}
@@ -314,7 +314,7 @@ export function AddAccountDialog({
                   type="button"
                   onClick={() => void onChooseQRImage()}
                   disabled={busy}
-                  className="flex flex-col items-center justify-center gap-1.5 rounded-md border border-dashed border-border bg-card/30 py-5 text-[11px] text-muted-foreground transition-colors hover:border-border/80 hover:bg-card/60 disabled:opacity-50"
+                  className="flex flex-col items-center justify-center gap-1.5 rounded-xl border border-dashed border-white/[0.06] bg-white/[0.02] py-6 text-[13px] text-muted-foreground transition-all hover:border-white/[0.12] hover:bg-white/[0.04] disabled:opacity-50"
                 >
                   <ImageIcon className="size-4" strokeWidth={1.5} />
                   Choose file
@@ -377,9 +377,9 @@ function SmallSelect({
 }) {
   return (
     <div className="space-y-1">
-      <Label className="text-[9.5px]">{label}</Label>
+      <Label className="text-[11px]">{label}</Label>
       <Select value={value} onValueChange={onChange}>
-        <SelectTrigger className="h-8 text-[11.5px]">
+        <SelectTrigger className="h-10 text-[13px]">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>

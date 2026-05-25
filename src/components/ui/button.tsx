@@ -4,27 +4,27 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-[12.5px] font-medium transition-all outline-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-3.5 [&_svg]:shrink-0 focus-visible:ring-2 focus-visible:ring-ring/40 active:scale-[0.985]",
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-full text-[14px] font-medium transition-all outline-none disabled:pointer-events-none disabled:opacity-40 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 focus-visible:ring-2 focus-visible:ring-ring active:scale-[0.97]",
   {
     variants: {
       variant: {
         default:
-          "bg-primary text-primary-foreground hover:bg-primary/90 shadow-[0_1px_0_oklch(1_0_0/8%)_inset]",
+          "bg-primary text-primary-foreground hover:bg-primary/90 shadow-[0_2px_8px_oklch(0.56_0.22_262/20%)] hover:shadow-[0_4px_16px_oklch(0.56_0.22_262/25%)]",
         secondary:
           "bg-secondary text-secondary-foreground hover:bg-secondary/80",
         outline:
-          "border border-border bg-transparent hover:bg-accent hover:text-accent-foreground",
+          "border border-white/[0.08] bg-transparent hover:bg-accent hover:text-accent-foreground",
         ghost: "text-muted-foreground hover:bg-accent hover:text-foreground",
         destructive:
-          "bg-destructive/15 text-destructive hover:bg-destructive/20",
+          "bg-destructive/10 text-destructive hover:bg-destructive/15",
         link: "text-muted-foreground underline-offset-4 hover:text-foreground hover:underline",
       },
       size: {
-        default: "h-9 px-3.5",
-        sm: "h-8 px-3 text-[11.5px]",
-        lg: "h-10 px-5",
-        icon: "h-8 w-8",
-        "icon-sm": "h-7 w-7 [&_svg]:size-3",
+        default: "h-11 px-5",
+        sm: "h-9 px-4 text-[13px] [&_svg]:size-3.5",
+        lg: "h-12 px-6 text-[15px]",
+        icon: "h-10 w-10",
+        "icon-sm": "h-8 w-8 [&_svg]:size-3.5",
       },
     },
     defaultVariants: { variant: "default", size: "default" },

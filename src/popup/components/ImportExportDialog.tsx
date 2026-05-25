@@ -333,7 +333,7 @@ export function ImportExportDialog({
                   type="button"
                   onClick={onChooseFileClick}
                   disabled={busy}
-                  className="flex flex-col items-center justify-center gap-1.5 rounded-md border border-dashed border-border bg-card/30 py-4 text-[11px] text-muted-foreground transition-colors hover:border-border/80 hover:bg-card/60 disabled:opacity-50"
+                  className="flex flex-col items-center justify-center gap-1.5 rounded-xl border border-dashed border-white/[0.06] bg-white/[0.02] py-5 text-[13px] text-muted-foreground transition-all hover:border-white/[0.12] hover:bg-white/[0.04] disabled:opacity-50"
                 >
                   <Upload className="size-4" strokeWidth={1.5} />
                   Choose file
@@ -342,7 +342,7 @@ export function ImportExportDialog({
                   type="button"
                   onClick={() => void onPasteFromClipboard()}
                   disabled={busy}
-                  className="flex flex-col items-center justify-center gap-1.5 rounded-md border border-dashed border-border bg-card/30 py-4 text-[11px] text-muted-foreground transition-colors hover:border-border/80 hover:bg-card/60 disabled:opacity-50"
+                  className="flex flex-col items-center justify-center gap-1.5 rounded-xl border border-dashed border-white/[0.06] bg-white/[0.02] py-5 text-[13px] text-muted-foreground transition-all hover:border-white/[0.12] hover:bg-white/[0.04] disabled:opacity-50"
                 >
                   <Clipboard className="size-4" strokeWidth={1.5} />
                   Paste clipboard
@@ -363,12 +363,12 @@ export function ImportExportDialog({
                   onChange={(e) => onPasteAreaChange(e.target.value)}
                   placeholder="…or paste otpauth:// URIs / encrypted backup JSON here"
                   rows={4}
-                  className={`w-full resize-none rounded-md border bg-input/30 px-3 py-2 text-[11px] font-mono leading-relaxed text-foreground outline-none transition-colors placeholder:text-muted-foreground/60 placeholder:font-sans focus:bg-input/50 focus:ring-2 focus:ring-ring/30 ${
+                  className={`w-full resize-none rounded-xl border-white/[0.06] bg-white/[0.03] px-4 py-3 text-[13px] font-mono leading-relaxed text-foreground outline-none transition-all placeholder:text-muted-foreground/50 placeholder:font-sans focus:bg-white/[0.05] focus:ring-2 focus:ring-primary/10 ${
                     dragOver ? "border-foreground/40 bg-input/60" : "border-border"
                   }`}
                 />
                 {dragOver && (
-                  <div className="pointer-events-none absolute inset-0 grid place-items-center rounded-md bg-background/70 text-[11px] font-medium text-foreground">
+                  <div className="pointer-events-none absolute inset-0 grid place-items-center rounded-xl bg-background/70 text-[13px] font-medium text-foreground">
                     Drop file here
                   </div>
                 )}
@@ -376,7 +376,7 @@ export function ImportExportDialog({
 
               {importData && (
                 <div className="flex items-center justify-between rounded-md border border-border bg-secondary/40 px-3 py-2">
-                  <span className="flex items-center gap-2 text-[11px] text-foreground/85">
+                  <span className="flex items-center gap-2 text-[13px] text-foreground/85">
                     {importKind === "json-backup" && (
                       <>
                         <FileJson className="size-3.5 text-muted-foreground" />
@@ -398,7 +398,7 @@ export function ImportExportDialog({
                   </span>
                   <button
                     type="button"
-                    className="text-[10px] text-muted-foreground transition-colors hover:text-foreground"
+                    className="text-[12px] text-muted-foreground transition-colors hover:text-foreground"
                     onClick={reset}
                   >
                     Clear
@@ -448,7 +448,7 @@ export function ImportExportDialog({
 
           <TabsContent value="export">
             <div className="space-y-3">
-              <p className="text-[11px] leading-relaxed text-muted-foreground">
+              <p className="text-[13px] leading-relaxed text-muted-foreground">
                 Download an encrypted JSON backup. Re-import requires this
                 vault's master password.
               </p>
