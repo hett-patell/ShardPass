@@ -7,12 +7,18 @@ import {
   ArrowUpFromLine,
   ShieldCheck,
 } from "lucide-react";
+import { toast } from "sonner";
 import { send } from "@/lib/messages";
 import { log } from "@/lib/log";
 import { openImportExportWindow } from "@/lib/detached";
 import type { AccountWithCode } from "@/lib/messages";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { AccountItem } from "./AccountItem";
 import { AddAccountDialog } from "./AddAccountDialog";
 import { SettingsMenu } from "./SettingsMenu";
@@ -20,11 +26,33 @@ import { ImportExportDialog } from "./ImportExportDialog";
 
 type DialogKind = null | "add" | "io" | "settings";
 
+function IconBtn({
+  label,
+  children,
+  onClick,
+}: {
+  label: string;
+  children: React.ReactNode;
+  onClick: () => void;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button variant="ghost" size="icon-sm" title={label} onClick={onClick}>
+          {children}
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent side="bottom">
+        <p>{label}</p>
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
 export function AccountList({ onLocked }: { onLocked: () => void }) {
   const [accounts, setAccounts] = useState<AccountWithCode[]>([]);
   const [query, setQuery] = useState("");
   const [dialog, setDialog] = useState<DialogKind>(null);
-  const [toast, setToast] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     const res = await send<AccountWithCode[]>({ kind: "listAccounts" });
@@ -65,11 +93,6 @@ export function AccountList({ onLocked }: { onLocked: () => void }) {
     if (res.ok) void refresh();
   }
 
-  function showToast(msg: string) {
-    setToast(msg);
-    window.setTimeout(() => setToast(null), 4000);
-  }
-
   async function openIO() {
     const ok = await openImportExportWindow();
     if (ok) {
@@ -77,6 +100,10 @@ export function AccountList({ onLocked }: { onLocked: () => void }) {
       return;
     }
     setDialog("io");
+  }
+
+  function showToast(msg: string) {
+    toast(msg);
   }
 
   return (
@@ -92,18 +119,18 @@ export function AccountList({ onLocked }: { onLocked: () => void }) {
           </span>
         </div>
         <div className="flex items-center gap-0.5">
-          <Button variant="ghost" size="icon-sm" title="Add account" onClick={() => setDialog("add")}>
+          <IconBtn label="Add account" onClick={() => setDialog("add")}>
             <Plus />
-          </Button>
-          <Button variant="ghost" size="icon-sm" title="Import / Export" onClick={() => void openIO()}>
+          </IconBtn>
+          <IconBtn label="Import / Export" onClick={() => void openIO()}>
             <ArrowUpFromLine />
-          </Button>
-          <Button variant="ghost" size="icon-sm" title="Settings" onClick={() => setDialog("settings")}>
+          </IconBtn>
+          <IconBtn label="Settings" onClick={() => setDialog("settings")}>
             <Settings />
-          </Button>
-          <Button variant="ghost" size="icon-sm" title="Lock" onClick={() => void onLock()}>
+          </IconBtn>
+          <IconBtn label="Lock" onClick={() => void onLock()}>
             <Lock />
-          </Button>
+          </IconBtn>
         </div>
       </header>
 
@@ -181,15 +208,6 @@ export function AccountList({ onLocked }: { onLocked: () => void }) {
         open={dialog === "settings"}
         onOpenChange={(o) => setDialog(o ? "settings" : null)}
       />
-
-      {/* ── Toast — pill shaped, center-bottom ──────── */}
-      {toast && (
-        <div className="pointer-events-none absolute bottom-5 left-1/2 z-50 -translate-x-1/2 animate-toast-in">
-          <div className="rounded-full border border-white/[0.06] bg-[oklch(0.22_0.018_265)]/90 px-5 py-2.5 text-[13px] font-medium text-foreground/90 shadow-[0_4px_24px_oklch(0_0_0/55%)] backdrop-blur-lg">
-            {toast}
-          </div>
-        </div>
-      )}
     </div>
   );
 }

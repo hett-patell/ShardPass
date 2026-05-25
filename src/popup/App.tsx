@@ -3,6 +3,8 @@ import { Check } from "lucide-react";
 import { send } from "@/lib/messages";
 import type { LockState } from "@/lib/messages";
 import { getDetachedView } from "@/lib/detached";
+import { Toaster } from "@/components/ui/sonner";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { SetupScreen } from "./components/SetupScreen";
 import { UnlockScreen } from "./components/UnlockScreen";
 import { AccountList } from "./components/AccountList";
@@ -31,13 +33,16 @@ export function App() {
     );
   }
 
-  if (state === "no_vault") return <SetupScreen onSetupDone={refresh} />;
-  if (state === "locked") return <UnlockScreen onUnlocked={refresh} />;
-
-  if (detached === "io") return <DetachedImportExport />;
-  if (detached === "qr") return <DetachedQRImport />;
-
-  return <AccountList onLocked={refresh} />;
+  return (
+    <TooltipProvider delayDuration={300}>
+      {state === "no_vault" ? <SetupScreen onSetupDone={refresh} /> :
+       state === "locked" ? <UnlockScreen onUnlocked={refresh} /> :
+       detached === "io" ? <DetachedImportExport /> :
+       detached === "qr" ? <DetachedQRImport /> :
+       <AccountList onLocked={refresh} />}
+      <Toaster />
+    </TooltipProvider>
+  );
 }
 
 function DetachedImportExport() {
