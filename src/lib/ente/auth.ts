@@ -196,6 +196,9 @@ export async function completeTwoFactor(args: {
 }): Promise<SignedInSession> {
   const { serverUrl, email, twoFactorSessionID, code, derivedKEK } = args;
   const resp = await verifyTwoFactor(serverUrl, twoFactorSessionID, code);
-  // verifyTwoFactor responds with an unconditional KeyAttributes/encryptedToken pair.
-  return finalizeFromVerifyResponse(resp, derivedKEK, email, serverUrl) as Promise<SignedInSession>;
+  // TwoFactorAuthorizationResponse guarantees keyAttributes and encryptedToken
+  // are non-optional, so finalizeFromVerifyResponse will always produce a
+  // SignedInSession (never throw "missing keyAttributes/token").
+  const session = await finalizeFromVerifyResponse(resp, derivedKEK, email, serverUrl);
+  return session;
 }

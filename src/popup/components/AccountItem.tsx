@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Copy, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import type { AccountWithCode } from "@/lib/messages";
+import { send, type AccountWithCode } from "@/lib/messages";
 import { formatCode } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import {
@@ -64,6 +64,10 @@ export function AccountItem({
       await navigator.clipboard.writeText(account.code);
       setCopied(true);
       if (!silent) toast.success("Code copied", { duration: 1600 });
+      // Increment HOTP counter after use so next code generation advances
+      if (account.type === "hotp") {
+        void send({ kind: "incrementHotpCounter", id: account.id });
+      }
     } catch {
       if (!silent) toast.error("Couldn't copy to clipboard");
     }

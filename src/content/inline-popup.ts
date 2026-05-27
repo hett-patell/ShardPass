@@ -8,7 +8,7 @@ interface ChipProps {
   domain: string;
   locked: boolean;
   accounts: AccountWithCode[];
-  onFill: (code: string) => void;
+  onFill: (code: string, accountId?: string, accountType?: string) => void;
 }
 
 let host: HTMLElement | null = null;
@@ -163,12 +163,7 @@ const STYLE = `
     color: var(--sp-warning);
     border-left: 2px solid var(--sp-warning);
   }
-  .empty {
-    padding: 10px 12px;
-    font-size: 11.5px;
-    line-height: 1.5;
-    color: var(--sp-muted);
-  }
+
 `;
 
 export function mountChip(props: ChipProps): void {
@@ -259,7 +254,7 @@ function makeTimer(account: AccountWithCode, urgent: boolean): HTMLDivElement {
 function makeAccountRow(
   account: AccountWithCode,
   domain: string,
-  onFill: (code: string) => void,
+  onFill: (code: string, accountId?: string, accountType?: string) => void,
   large: boolean,
 ): HTMLButtonElement {
   const urgent = account.remainingSeconds <= 5;
@@ -304,7 +299,7 @@ function makeAccountRow(
   row.addEventListener("click", (e) => {
     e.preventDefault();
     e.stopPropagation();
-    onFill(account.code);
+    onFill(account.code, account.id, account.type);
   });
   return row;
 }
@@ -343,27 +338,11 @@ function render(): void {
     return;
   }
 
+  // The content script unmounts the chip when matches.length === 0
+  // (content/index.ts:90-92), so this branch is never reached at runtime.
+  // Keep as a safety net in case mount is called directly with empty matches.
   if (props.accounts.length === 0) {
-    const header = document.createElement("div");
-    header.className = "header";
-    const badge = document.createElement("div");
-    badge.className = "badge";
-    badge.textContent = "S";
-    header.appendChild(badge);
-    const title = document.createElement("div");
-    title.className = "header-title";
-    title.textContent = "No matching accounts";
-    header.appendChild(title);
-    header.appendChild(makeCloseButton());
-    chip.appendChild(header);
-
-    const msg = document.createElement("div");
-    msg.className = "empty";
-    msg.textContent = `No saved TOTP for ${rootDomain(props.domain)}`;
-    chip.appendChild(msg);
-
-    shadow.appendChild(chip);
-    position(props.anchor);
+    unmountChip();
     return;
   }
 

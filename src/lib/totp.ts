@@ -54,6 +54,11 @@ function coerceDigits(d: number): 6 | 7 | 8 {
   return 6;
 }
 
+/**
+ * Some broken otpauth URI encoders emit `+` as a space substitute
+ * (application/x-www-form-urlencoded style) rather than proper percent-encoding.
+ * Replace `+` with space as a defence against these non-conforming producers.
+ */
 function decodePlus(s: string): string {
   return s.replace(/\+/g, " ").trim();
 }
@@ -62,16 +67,30 @@ export function parseOtpAuthURI(
   uri: string,
 ): Omit<Account, "id" | "createdAt" | "tags"> | null {
   try {
-    const totp = URI.parse(uri);
-    if (!(totp instanceof TOTP)) return null;
-    return {
-      issuer: decodePlus(totp.issuer || ""),
-      label: decodePlus(totp.label || ""),
-      secret: totp.secret.base32,
-      algorithm: coerceAlgorithm(totp.algorithm),
-      digits: coerceDigits(totp.digits),
-      period: totp.period || 30,
-    };
+    const parsed = URI.parse(uri);
+    if (parsed instanceof TOTP) {
+      return {
+        issuer: decodePlus(parsed.issuer || ""),
+        label: decodePlus(parsed.label || ""),
+        secret: parsed.secret.base32,
+        algorithm: coerceAlgorithm(parsed.algorithm),
+        digits: coerceDigits(parsed.digits),
+        period: parsed.period || 30,
+      };
+    }
+    if (parsed instanceof HOTP) {
+      return {
+        type: "hotp",
+        issuer: decodePlus(parsed.issuer || ""),
+        label: decodePlus(parsed.label || ""),
+        secret: parsed.secret.base32,
+        algorithm: coerceAlgorithm(parsed.algorithm),
+        digits: coerceDigits(parsed.digits),
+        period: 0,
+        counter: parsed.counter ?? 0,
+      };
+    }
+    return null;
   } catch {
     return null;
   }

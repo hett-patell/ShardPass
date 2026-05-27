@@ -11,6 +11,7 @@ export interface AccountWithCode {
   period: number;
   code: string;
   remainingSeconds: number;
+  type?: "totp" | "hotp" | "steam";
 }
 
 export type Message =
@@ -41,7 +42,8 @@ export type Message =
   | { kind: "enteSubmit2FA"; code: string }
   | { kind: "enteDisconnect" }
   | { kind: "enteSyncNow" }
-  | { kind: "changePassword"; oldPassword: string; newPassword: string };
+  | { kind: "changePassword"; oldPassword: string; newPassword: string }
+  | { kind: "incrementHotpCounter"; id: string };
 
 export interface EnteStatus {
   connected: boolean;
@@ -121,7 +123,6 @@ function redactSecret(a: { secret?: string; issuer?: string; label?: string }) {
     issuer: a.issuer,
     label: a.label,
     secretLen: a.secret?.length,
-    secretHead: a.secret?.slice(0, 4),
   };
 }
 

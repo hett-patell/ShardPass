@@ -86,6 +86,39 @@ let entePending2FA: {
 
 let enteSyncInProgress = false;
 
+/* ── Brute-force protection for unlock ────────────────────── */
+const unlockAttempts = { count: 0, lastAttempt: 0 };
+const UNLOCK_MAX_ATTEMPTS = 5;
+const UNLOCK_LOCKOUT_MS = 60_000; // 1 minute lockout after max attempts
+
+function checkUnlockRateLimit(): string | null {
+  const now = Date.now();
+  // Reset counter if lockout period has passed since last attempt
+  if (now - unlockAttempts.lastAttempt > UNLOCK_LOCKOUT_MS) {
+    unlockAttempts.count = 0;
+  }
+  if (unlockAttempts.count >= UNLOCK_MAX_ATTEMPTS) {
+    const remaining = Math.ceil(
+      (UNLOCK_LOCKOUT_MS - (now - unlockAttempts.lastAttempt)) / 1000,
+    );
+    if (remaining > 0) {
+      return `Too many failed attempts. Try again in ${remaining}s`;
+    }
+    unlockAttempts.count = 0;
+  }
+  return null;
+}
+
+function recordFailedUnlock(): void {
+  unlockAttempts.count++;
+  unlockAttempts.lastAttempt = Date.now();
+}
+
+function resetUnlockAttempts(): void {
+  unlockAttempts.count = 0;
+  unlockAttempts.lastAttempt = 0;
+}
+
 async function scheduleAutoLock(): Promise<void> {
   const settings = await getSettings();
   await chrome.alarms.clear(AUTO_LOCK_ALARM);
@@ -300,6 +333,7 @@ function makeAccountWithCode(acc: Account): AccountWithCode {
     period: acc.period,
     code: generateCode(acc),
     remainingSeconds: secondsRemaining(acc.period),
+    type: acc.type,
   };
 }
 
@@ -331,8 +365,14 @@ async function handle(msg: Message): Promise<Response> {
     }
 
     case "unlock": {
+      const rateLimitErr = checkUnlockRateLimit();
+      if (rateLimitErr) return { ok: false, error: rateLimitErr };
       const result = await unlockVault(msg.password);
-      if (!result) return { ok: false, error: "Invalid password" };
+      if (!result) {
+        recordFailedUnlock();
+        return { ok: false, error: "Invalid password" };
+      }
+      resetUnlockAttempts();
       session.key = result.key;
       session.vault = result.vault;
       session.unlockedAt = Date.now();
@@ -496,6 +536,18 @@ async function handle(msg: Message): Promise<Response> {
       return { ok: true, data: makeAccountWithCode(acc) };
     }
 
+    case "incrementHotpCounter": {
+      ensureUnlocked();
+      const acc = session.vault!.accounts.find((a) => a.id === msg.id);
+      if (!acc) return { ok: false, error: "Account not found" };
+      if (acc.type !== "hotp") return { ok: false, error: "Not an HOTP account" };
+      acc.counter = (acc.counter ?? 0) + 1;
+      enteEnqueue("update", acc.id);
+      await saveVault(session.vault!, session.key!);
+      log("bg:hotp", `counter incremented for ${acc.issuer || acc.id} → ${acc.counter}`);
+      return { ok: true, data: makeAccountWithCode(acc) };
+    }
+
     case "findForDomain": {
       if (!session.vault) {
         return { ok: true, data: { locked: true, matches: [] as AccountWithCode[] } };
@@ -522,6 +574,9 @@ async function handle(msg: Message): Promise<Response> {
         const parsed = JSON.parse(msg.data) as Record<string, unknown>;
         if (parsed.type !== "shardpass-export") {
           return { ok: false, error: "Unrecognized export file" };
+        }
+        if (parsed.version !== undefined && parsed.version !== 1) {
+          return { ok: false, error: `Unsupported vault version: ${parsed.version}. Update ShardPass to import this backup.` };
         }
         const salt = base64ToBytes(String(parsed.salt));
         const key = await deriveKey(

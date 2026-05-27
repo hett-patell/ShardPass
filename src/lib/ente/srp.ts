@@ -77,6 +77,10 @@ export async function verifySRP(
     throw new Error(`srp/verify-session failed (${verifyRes.status}): ${txt}`);
   }
   const response = (await verifyRes.json()) as SRPVerificationResponse;
-  client.checkM2(b64ToBuffer(response.srpM2));
+  try {
+    client.checkM2(b64ToBuffer(response.srpM2));
+  } catch {
+    throw new Error("SRP mutual authentication failed — server proof (M2) invalid");
+  }
   return response;
 }

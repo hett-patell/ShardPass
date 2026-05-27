@@ -112,6 +112,13 @@ export function parseEnteUri(uri: string): EnteParsedCode {
   };
 }
 
+/** Guard against oversized fields from remote data (compromised server / MITM). */
+const MAX_FIELD = 256;
+const MAX_SECRET = 1024;
+function clamp(s: string, max: number): string {
+  return s.length > max ? s.slice(0, max) : s;
+}
+
 export function enteUriToAccountDraft(
   uri: string,
 ): Omit<Account, "id" | "createdAt"> | null {
@@ -124,16 +131,16 @@ export function enteUriToAccountDraft(
   const cd = parsed.codeDisplay;
   if (cd?.trashed) return null;
   return {
-    issuer: parsed.issuer,
-    label: parsed.account,
-    secret: parsed.secret,
+    issuer: clamp(parsed.issuer, MAX_FIELD),
+    label: clamp(parsed.account, MAX_FIELD),
+    secret: clamp(parsed.secret, MAX_SECRET),
     algorithm: parsed.algorithm,
     digits: parsed.digits,
     period: parsed.period,
     type: parsed.type,
     counter: parsed.counter,
-    note: cd?.note,
-    tags: cd?.tags ?? [],
+    note: cd?.note ? clamp(cd.note, MAX_FIELD) : undefined,
+    tags: cd?.tags?.map((t) => clamp(t, MAX_FIELD)) ?? [],
   };
 }
 

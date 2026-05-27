@@ -59,7 +59,7 @@ function detachInput(input: HTMLInputElement): void {
   }
 }
 
-function fillCode(code: string): void {
+function fillCode(code: string, accountId?: string, accountType?: string): void {
   const input = state.activeInput;
   if (!input) return;
   const proto = Object.getPrototypeOf(input) as HTMLInputElement;
@@ -69,6 +69,10 @@ function fillCode(code: string): void {
   input.dispatchEvent(new Event("input", { bubbles: true }));
   input.dispatchEvent(new Event("change", { bubbles: true }));
   input.focus();
+  // Increment HOTP counter after use
+  if (accountType === "hotp" && accountId) {
+    void send({ kind: "incrementHotpCounter", id: accountId });
+  }
 }
 
 function renderForActive(): void {
@@ -96,7 +100,7 @@ function renderForActive(): void {
     domain: location.hostname,
     locked: false,
     accounts: state.matches,
-    onFill: (code) => fillCode(code),
+    onFill: (code, accountId, accountType) => fillCode(code, accountId, accountType),
   });
 }
 

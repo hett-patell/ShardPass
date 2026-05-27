@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Alert } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
@@ -95,6 +96,14 @@ export function EditAccountDialog({
         </DialogHeader>
 
         <form className="space-y-2.5" onSubmit={onSubmit}>
+          {account.type && account.type !== "totp" && (
+            <div className="flex items-center gap-2">
+              <Label className="text-muted-foreground">Type</Label>
+              <Badge variant="outline">
+                {account.type}
+              </Badge>
+            </div>
+          )}
           <div className="space-y-1">
             <Label>Issuer</Label>
             <Input
