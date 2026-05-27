@@ -620,6 +620,36 @@ async function handle(msg: Message): Promise<Response> {
       return { ok: true, data: { duckduckgoConfigured: false } };
     }
 
+    case "generateDuckAlias": {
+      ensureUnlocked();
+      const token = session.vault?.integrations?.duckduckgo?.token;
+      if (!token) return { ok: false, error: "DuckDuckGo token not configured" };
+      try {
+        const resp = await fetch("https://quack.duckduckgo.com/api/email/addresses", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({}),
+        });
+        if (!resp.ok) {
+          const text = await resp.text().catch(() => resp.statusText);
+          return { ok: false, error: `DuckDuckGo API error (${resp.status}): ${text}` };
+        }
+        const json = await resp.json();
+        const address: string = json.address;
+        if (!address) return { ok: false, error: "DuckDuckGo API returned no address" };
+        const alias = `${address}@duck.com`;
+        log("bg:ddg", `alias generated: ${alias}`);
+        return { ok: true, data: { alias } };
+      } catch (e) {
+        const errMsg = e instanceof Error ? e.message : String(e);
+        logError("bg:ddg", "generateDuckAlias failed:", errMsg);
+        return { ok: false, error: errMsg };
+      }
+    }
+
     /* ── Ente Auth handlers ─────────────────────────────────── */
 
     case "enteLogin": {
