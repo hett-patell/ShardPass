@@ -19,7 +19,7 @@ export function extractOtpAuthUris(raw: string): string[] {
 
 export type ParsedFromUri = Omit<Account, "id" | "createdAt">;
 
-/** Turn URIs into account drafts; skips HOTP/non-TOTP and malformed URIs. */
+/** Turn URIs into account drafts (TOTP and HOTP); skips malformed URIs. */
 export function otpAuthUrisToAccountDrafts(uris: string[]): ParsedFromUri[] {
   const drafts: ParsedFromUri[] = [];
   const seenKey = new Set<string>();

@@ -9,6 +9,7 @@ export interface AccountWithCode {
   label: string;
   digits: number;
   period: number;
+  algorithm: "SHA1" | "SHA256" | "SHA512";
   code: string;
   remainingSeconds: number;
   type?: "totp" | "hotp" | "steam";

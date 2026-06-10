@@ -23,7 +23,8 @@ export default defineConfig({
   },
   build: {
     target: "esnext",
-    sourcemap: true,
+    // Don't ship multi-MB .map files in the store zip.
+    sourcemap: false,
     modulePreload: false,
   },
 });

@@ -73,8 +73,13 @@ export function AccountItem({
     }
   }
 
+  const isHotp = account.type === "hotp";
   const name = account.issuer || "Untitled";
-  const sub = account.label || `${account.digits} digits · ${account.period}s`;
+  const sub =
+    account.label ||
+    (isHotp
+      ? `${account.digits} digits · counter`
+      : `${account.digits} digits · ${account.period}s`);
 
   return (
     <div
@@ -138,6 +143,7 @@ export function AccountItem({
             >
               {formatCode(account.code)}
             </div>
+            {!isHotp && (
             <div className="mt-1.5 flex items-center gap-1.5 justify-end">
               <span
                 className="block size-2.5 shrink-0"
@@ -165,6 +171,7 @@ export function AccountItem({
                 {remaining}s
               </span>
             </div>
+            )}
           </div>
         </div>
       </button>

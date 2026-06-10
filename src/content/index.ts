@@ -19,7 +19,12 @@ const state: State = {
 
 async function refreshMatches(force = false): Promise<void> {
   const now = Date.now();
-  if (!force && now - state.lastFetched < 1500) return;
+  if (!force && now - state.lastFetched < 1500) {
+    // Throttled — but still render from cached state so a quick refocus of
+    // the input brings the chip back instead of showing nothing.
+    if (state.activeInput) renderForActive();
+    return;
+  }
   state.lastFetched = now;
   const res = await send<{ locked: boolean; matches: AccountWithCode[] }>({
     kind: "findForDomain",
@@ -157,8 +162,9 @@ window.addEventListener(
 
 window.setInterval(() => {
   if (!state.activeInput) return;
-  if (state.locked) return;
-  if (state.matches.length === 0) return;
+  // Keep polling while locked too — otherwise the "locked" chip never
+  // notices the vault being unlocked in the popup.
+  if (!state.locked && state.matches.length === 0) return;
   void refreshMatches(true);
 }, 1000);
 

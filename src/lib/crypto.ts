@@ -1,4 +1,6 @@
-const PBKDF2_ITERATIONS = 250_000;
+// OWASP recommendation for PBKDF2-HMAC-SHA256. Existing vaults keep working:
+// the iteration count is stored per-vault and honored on unlock/import.
+const PBKDF2_ITERATIONS = 600_000;
 const SALT_BYTES = 16;
 const IV_BYTES = 12;
 

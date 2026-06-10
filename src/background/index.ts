@@ -51,7 +51,9 @@ import { syncEnte } from "@/lib/ente/sync";
 
 log("bg", "service worker booted at", new Date().toISOString());
 try {
-  chrome.storage.local.setAccessLevel({ accessLevel: "TRUSTED_CONTEXTS" });
+  // The session key lives in chrome.storage.session — keep it scoped to
+  // trusted (extension) contexts only.
+  chrome.storage.session.setAccessLevel({ accessLevel: "TRUSTED_CONTEXTS" });
 } catch {
   // Chrome < 114 does not support setAccessLevel; vault encryption protects
   // the data at rest anyway so this is a defence-in-depth improvement only.
@@ -170,22 +172,30 @@ async function scheduleEnteSync(): Promise<void> {
 
 async function doEnteSync(): Promise<string | null> {
   if (!session.vault || !session.key) return "Vault is locked";
-  const ente = session.vault.integrations?.ente;
+  const vault = session.vault;
+  const ente = vault.integrations?.ente;
   if (!ente) return "Ente not connected";
   if (enteSyncInProgress) return "Sync already in progress";
   enteSyncInProgress = true;
+  // The vault can be locked while sync awaits the network; once that happens
+  // session.key is gone and persisting would throw — every save must re-check.
+  const stillUnlocked = () => session.key !== null && session.vault === vault;
+  const persist = async () => {
+    if (stillUnlocked()) await saveVault(vault, session.key!);
+  };
   try {
     log("bg:ente", "sync starting…");
-    const result = await syncEnte(session.vault);
+    const result = await syncEnte(vault, undefined, persist);
     log("bg:ente", "sync result", result);
-    await saveVault(session.vault, session.key);
+    if (!stillUnlocked()) return "Vault was locked during sync";
+    await saveVault(vault, session.key!);
     if (result.needsReauth) return "Session expired — please reconnect.";
     return null;
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     logError("bg:ente", "sync failed:", msg);
     ente.lastError = msg;
-    await saveVault(session.vault, session.key);
+    await persist();
     return msg;
   } finally {
     enteSyncInProgress = false;
@@ -331,6 +341,7 @@ function makeAccountWithCode(acc: Account): AccountWithCode {
     label: acc.label,
     digits: acc.digits,
     period: acc.period,
+    algorithm: acc.algorithm,
     code: generateCode(acc),
     remainingSeconds: secondsRemaining(acc.period),
     type: acc.type,
@@ -601,6 +612,14 @@ async function handle(msg: Message): Promise<Response> {
           return {
             ok: true,
             data: { merged: true, count: vault.accounts.length },
+          };
+        }
+        // A locked vault must never be replaced by an import: that would let
+        // anyone destroy (or swap out) the vault without knowing its password.
+        if (await getEncryptedVault()) {
+          return {
+            ok: false,
+            error: "Vault is locked. Unlock it before importing a backup.",
           };
         }
         const newSalt = randomBytes(CRYPTO_PARAMS.SALT_BYTES);

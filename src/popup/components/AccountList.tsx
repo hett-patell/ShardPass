@@ -126,9 +126,10 @@ export function AccountList({ onLocked }: { onLocked: () => void }) {
       issuer: account.issuer,
       label: account.label,
       secret: "",
-      algorithm: "SHA1",
+      algorithm: account.algorithm,
       digits: account.digits,
       period: account.period,
+      type: account.type,
       tags: [],
       createdAt: 0,
     } as Account);
@@ -163,7 +164,7 @@ export function AccountList({ onLocked }: { onLocked: () => void }) {
         </div>
         <span className="code-mono text-[10.5px] text-muted-foreground">
           <span className="text-foreground font-medium">
-            {accounts.length}
+            {filtered.length}
           </span>
           {" / "}
           {accounts.length}

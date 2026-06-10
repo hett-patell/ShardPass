@@ -17,7 +17,11 @@ export function UnlockScreen({ onUnlocked }: { onUnlocked: () => void }) {
     const res = await send({ kind: "unlock", password });
     setBusy(false);
     if (!res.ok) {
-      setError("Incorrect master password");
+      // Surface the real error — e.g. the rate-limit lockout message —
+      // instead of always claiming the password was wrong.
+      setError(
+        res.error === "Invalid password" ? "Incorrect master password" : res.error,
+      );
       setPassword("");
       return;
     }

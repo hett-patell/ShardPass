@@ -242,7 +242,8 @@ function hashIndex(key: string, mod: number): number {
 }
 
 function makeTimer(account: AccountWithCode, urgent: boolean): HTMLDivElement {
-  const ratio = Math.max(0, account.remainingSeconds) / account.period;
+  const ratio =
+    account.period > 0 ? Math.max(0, account.remainingSeconds) / account.period : 0;
   const pct = Math.round(ratio * 100);
   const color = urgent ? "var(--sp-accent)" : "var(--sp-fg)";
   const div = document.createElement("div");
@@ -257,10 +258,12 @@ function makeAccountRow(
   onFill: (code: string, accountId?: string, accountType?: string) => void,
   large: boolean,
 ): HTMLButtonElement {
-  const urgent = account.remainingSeconds <= 5;
+  const isHotp = account.type === "hotp";
+  const urgent = !isHotp && account.remainingSeconds <= 5;
   const row = document.createElement("button");
   row.type = "button";
   row.className = large ? "row single-row" : "row";
+  row.dataset.accountId = account.id;
   row.title = `Fill code for ${account.issuer || account.label || domain}`;
 
   const dot = document.createElement("div");
@@ -293,7 +296,7 @@ function makeAccountRow(
   code.textContent = formatCode(account.code);
   row.appendChild(code);
 
-  row.appendChild(makeTimer(account, urgent));
+  if (!isHotp) row.appendChild(makeTimer(account, urgent));
 
   row.addEventListener("mousedown", (e) => e.preventDefault());
   row.addEventListener("click", (e) => {
@@ -306,10 +309,28 @@ function makeAccountRow(
 
 function render(): void {
   if (!shadow || !lastProps) return;
-  shadow.querySelector(".chip")?.remove();
+  const prevChip = shadow.querySelector(".chip") as HTMLElement | null;
+  // The chip re-renders every second while open; capture focus and scroll
+  // so the rebuild is invisible, and only animate the very first mount.
+  const focusedAccountId =
+    (shadow.activeElement as HTMLElement | null)?.dataset?.accountId ?? null;
+  const prevScrollTop =
+    (shadow.querySelector(".list") as HTMLElement | null)?.scrollTop ?? 0;
+  prevChip?.remove();
   const props = lastProps;
   const chip = document.createElement("div");
   chip.className = "chip";
+  if (prevChip) chip.style.animation = "none";
+  const restore = () => {
+    const list = chip.querySelector(".list") as HTMLElement | null;
+    if (list && prevScrollTop) list.scrollTop = prevScrollTop;
+    if (focusedAccountId) {
+      const row = chip.querySelector(
+        `[data-account-id="${CSS.escape(focusedAccountId)}"]`,
+      ) as HTMLElement | null;
+      row?.focus();
+    }
+  };
 
   if (props.locked) {
     const header = document.createElement("div");
@@ -352,6 +373,7 @@ function render(): void {
     chip.appendChild(makeCloseButton({ floating: true }));
     shadow.appendChild(chip);
     position(props.anchor);
+    restore();
     return;
   }
 
@@ -388,6 +410,7 @@ function render(): void {
 
   shadow.appendChild(chip);
   position(props.anchor);
+  restore();
 }
 
 function makeCloseButton(opts: { floating?: boolean } = {}): HTMLButtonElement {

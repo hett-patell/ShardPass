@@ -1,4 +1,6 @@
-import { TOTP, HOTP, URI } from "otpauth";
+import { TOTP, HOTP, URI, Secret } from "otpauth";
+import { hmac } from "@noble/hashes/hmac.js";
+import { sha1 } from "@noble/hashes/legacy.js";
 import type { Account } from "@/types";
 import { warn } from "@/lib/log";
 
@@ -11,7 +13,40 @@ export function isValidBase32(secret: string): boolean {
   return /^[A-Z2-7]+=*$/.test(normalizeSecret(secret));
 }
 
+const STEAM_ALPHABET = "23456789BCDFGHJKMNPQRTVWXY";
+const STEAM_PERIOD = 30;
+const STEAM_DIGITS = 5;
+
+/** Steam Guard: standard RFC 4226 dynamic truncation, but the 31-bit value is
+ * encoded as 5 chars from Steam's base-26 alphabet instead of decimal digits. */
+function generateSteamCode(secretB32: string, timestamp: number): string {
+  const key = Secret.fromBase32(normalizeSecret(secretB32)).bytes;
+  let counter = Math.floor(timestamp / 1000 / STEAM_PERIOD);
+  const msg = new Uint8Array(8);
+  for (let i = 7; i >= 0; i--) {
+    msg[i] = counter & 0xff;
+    counter = Math.floor(counter / 256);
+  }
+  const mac = hmac(sha1, key, msg);
+  const offset = mac[mac.length - 1]! & 0xf;
+  let bin =
+    (((mac[offset]! & 0x7f) << 24) |
+      (mac[offset + 1]! << 16) |
+      (mac[offset + 2]! << 8) |
+      mac[offset + 3]!) >>>
+    0;
+  let code = "";
+  for (let i = 0; i < STEAM_DIGITS; i++) {
+    code += STEAM_ALPHABET[bin % STEAM_ALPHABET.length];
+    bin = Math.floor(bin / STEAM_ALPHABET.length);
+  }
+  return code;
+}
+
 export function generateCode(account: Account, timestamp: number = Date.now()): string {
+  if (account.type === "steam") {
+    return generateSteamCode(account.secret, timestamp);
+  }
   if (account.type === "hotp") {
     const counter = account.counter ?? 0;
     const hotp = new HOTP({
@@ -35,11 +70,13 @@ export function generateCode(account: Account, timestamp: number = Date.now()): 
 }
 
 export function secondsRemaining(period: number, timestamp: number = Date.now()): number {
+  if (period <= 0) return 0; // HOTP accounts carry period 0 — no countdown.
   const epochSec = Math.floor(timestamp / 1000);
   return period - (epochSec % period);
 }
 
 export function progress(period: number, timestamp: number = Date.now()): number {
+  if (period <= 0) return 0;
   return 1 - secondsRemaining(period, timestamp) / period;
 }
 

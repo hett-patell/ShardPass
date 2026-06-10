@@ -249,10 +249,19 @@ async function flushPendingPushes(
   ente: EnteIntegration,
   authKey: string,
   result: SyncResult,
+  persist?: () => Promise<void>,
 ): Promise<void> {
   if (!ente.pending || ente.pending.length === 0) return;
+  const queue = [...ente.pending];
   const remaining: EntePendingChange[] = [];
-  for (const change of ente.pending) {
+  // Persist after every acknowledged server mutation so an MV3 service-worker
+  // kill mid-flush cannot replay an already-pushed create as a duplicate.
+  const checkpoint = async () => {
+    ente.pending = [...remaining, ...queue];
+    if (persist) await persist();
+  };
+  while (queue.length > 0) {
+    const change = queue.shift()!;
     try {
       if (change.op === "delete") {
         const enteId = change.enteId;
@@ -264,6 +273,7 @@ async function flushPendingPushes(
           }
         }
         result.pushedDelete += 1;
+        await checkpoint();
         continue;
       }
       const account = vault.accounts.find((a) => a.id === change.accountId);
@@ -280,6 +290,7 @@ async function flushPendingPushes(
         });
         ente.entityMap[id] = account.id;
         result.pushedCreate += 1;
+        await checkpoint();
       } else {
         // update
         let enteId = change.enteId;
@@ -307,6 +318,7 @@ async function flushPendingPushes(
           });
           result.pushedUpdate += 1;
         }
+        await checkpoint();
       }
     } catch (e) {
       if (isAuthError(e)) {
@@ -327,6 +339,8 @@ async function flushPendingPushes(
 export async function syncEnte(
   vault: Vault,
   serverTimeOffsetSetter?: (offsetMs: number) => void,
+  /** Called after each acknowledged server push to persist partial progress. */
+  persist?: () => Promise<void>,
 ): Promise<SyncResult> {
   const ente = vault.integrations?.ente;
   if (!ente) throw new Error("Ente sync is not configured");
@@ -348,7 +362,7 @@ export async function syncEnte(
   }
 
   // Push first so locally-known intents reach the server before we resolve diffs.
-  await flushPendingPushes(vault, ente, authKey, result);
+  await flushPendingPushes(vault, ente, authKey, result, persist);
 
   if (result.needsReauth) {
     ente.needsReauth = true;

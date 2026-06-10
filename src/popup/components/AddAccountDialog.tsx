@@ -54,6 +54,9 @@ export function AddAccountDialog({
   const [aliasBusy, setAliasBusy] = useState(false);
   const [aliasNote, setAliasNote] = useState<string | null>(null);
   const [qrPasteBusy, setQrPasteBusy] = useState(false);
+  // HOTP details from a pasted QR — the manual form has no fields for these,
+  // so they ride along invisibly and are attached on submit.
+  const [qrHotp, setQrHotp] = useState<{ counter: number } | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -96,6 +99,7 @@ export function AddAccountDialog({
     setBusy(false);
     setAliasNote(null);
     setAliasBusy(false);
+    setQrHotp(null);
   }
 
   async function onSubmit(e: FormEvent) {
@@ -120,6 +124,8 @@ export function AddAccountDialog({
         period,
         algorithm,
         tags: [],
+        // HOTP has no period; store the counter from the scanned QR instead.
+        ...(qrHotp ? { type: "hotp" as const, counter: qrHotp.counter, period: 0 } : {}),
       },
     });
     setBusy(false);
@@ -178,8 +184,9 @@ export function AddAccountDialog({
       setLabel(parsed.label);
       setSecret(parsed.secret);
       setDigits(parsed.digits as 6 | 7 | 8);
-      setPeriod(parsed.period);
+      setPeriod(parsed.period || 30);
       setAlgorithm(parsed.algorithm);
+      setQrHotp(parsed.type === "hotp" ? { counter: parsed.counter ?? 0 } : null);
       setMode("manual");
     } catch (e) {
       setError(
