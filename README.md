@@ -200,3 +200,4 @@ src/
 | [ShardShell](https://github.com/hett-patell/ShardShell) | PHP post-exploitation shell |
 | [ShardPass](https://github.com/hett-patell/ShardPass) | Local-first TOTP authenticator for Chromium |
 | [ShardPet](https://github.com/hett-patell/ShardPet) | Pixel-Pokémon browser extension |
+| [ShardTune](https://github.com/hett-patell/ShardTune) | Spotify controller and listening analytics for Chromium |
