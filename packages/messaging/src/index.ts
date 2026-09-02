@@ -184,3 +184,28 @@ export type {
   VaultState,
   VaultStateResponse,
 } from "./vault";
+export {
+  LoginFillCancelRequestSchema,
+  LoginFillConfirmRequestSchema,
+  LoginFillReleaseResponseSchema,
+  LoginFillRequestSchema,
+  LoginFillResponseSchema,
+  LoginFillSelectRequestSchema,
+  LoginFillSuggestionSchema,
+  LoginFillSuggestionsRequestSchema,
+  LoginFillSuggestionsResponseSchema,
+  SaveLoginOfferRequestSchema,
+} from "./login-fill";
+export type { LoginFillSuggestion } from "./login-fill";
+export {
+  GeneratePasswordRequestSchema,
+  GeneratePasswordResponseSchema,
+} from "./password-gen";
+export {
+  ItemCreateRequestSchema,
+  ItemCrudRequestSchema,
+  ItemDeleteRequestSchema,
+  ItemGetRequestSchema,
+  ItemQueryRequestSchema,
+  ItemUpdateRequestSchema,
+} from "./item-crud";
