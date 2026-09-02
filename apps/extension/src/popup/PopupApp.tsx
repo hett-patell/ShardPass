@@ -1,33 +1,21 @@
-import { AppHeader, Button, StatusBadge, type Status } from "@shardpass/ui";
+import { SearchBar } from "@shardpass/ui";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { EnteUiPlatform, ExtensionPlatform } from "../platform/extension-platform";
-import styles from "./PopupApp.module.css";
-import { useFoundationStatus } from "../foundation/useFoundationStatus";
 import { VaultAccess } from "../vault-access/VaultAccess";
-import { OtpList } from "./otp/OtpList";
+import { AddItemMenu } from "./components/AddItemMenu";
+import { FilterTabs } from "./components/FilterTabs";
+import { PopupHeader } from "./components/PopupHeader";
+import { PopupItemList } from "./components/PopupItemList";
+import { useVaultItems } from "./hooks/useVaultItems";
+import styles from "./PopupApp.module.css";
 
 export interface PopupAppProps {
   platform: ExtensionPlatform & Partial<EnteUiPlatform>;
 }
 
-const safeStatusError =
-  "ShardPass couldn’t confirm its foundation status. Try reopening the popup.";
 const safeVaultError = "The vault could not be opened. Try again.";
-
-function statusPresentation(state: "loading" | "ready" | "error"): {
-  label: string;
-  status: Status;
-} {
-  switch (state) {
-    case "loading":
-      return { label: "Checking foundation status", status: "neutral" };
-    case "ready":
-      return { label: "Foundation ready", status: "success" };
-    case "error":
-      return { label: "Foundation unavailable", status: "error" };
-  }
-}
+const safeLockError = "The vault could not be locked. Try again.";
 
 export function useOpenVaultAction(platform: ExtensionPlatform) {
   const [actionError, setActionError] = useState(false);
@@ -66,97 +54,59 @@ export function useOpenVaultAction(platform: ExtensionPlatform) {
 }
 
 export function PopupApp({ platform }: PopupAppProps) {
-  const foundation = useFoundationStatus(platform);
+  // VaultAccess stays mounted at all times (just visually hidden once unlocked) so its
+  // live vault-state port subscription keeps running — that is what lets the popup
+  // notice an out-of-band lock (auto-lock, a lock triggered from the vault tab, etc.)
+  // and fall back to the lock screen immediately, matching the previous popup's pattern.
   const [vaultUnlocked, setVaultUnlocked] = useState(false);
-  const [enteConnected, setEnteConnected] = useState<boolean | null>(null);
-  const { actionError, openingVault, openVault } = useOpenVaultAction(platform);
+  const [lockError, setLockError] = useState(false);
+  const vaultItems = useVaultItems(platform, vaultUnlocked);
+  const { actionError, openVault } = useOpenVaultAction(platform);
 
-  useEffect(() => {
-    let active = true;
-    if (platform.sendEnteMessage === undefined)
-      return () => {
-        active = false;
-      };
-    void platform
-      .sendEnteMessage({ version: 1, kind: "ente.status" })
-      .then((state) => {
-        if (active) setEnteConnected(state.connected);
-      })
-      .catch(() => {
-        if (active) setEnteConnected(null);
-      });
-    return () => {
-      active = false;
-    };
+  const lock = useCallback(async (): Promise<void> => {
+    setLockError(false);
+    try {
+      await platform.sendMessage({ version: 1, kind: "vault.lock" });
+    } catch {
+      setLockError(true);
+    } finally {
+      setVaultUnlocked(false);
+    }
   }, [platform]);
-  const presentation = statusPresentation(foundation.state);
 
   return (
-    <div className={styles.shell}>
-      <AppHeader className={styles.header ?? ""} eyebrow="FOUNDATION" title="ShardPass" />
-      <main className={styles.main}>
-        <section className={styles.statusSection} aria-labelledby="foundation-heading">
-          <div className={styles.sectionHeading}>
-            <p className={styles.kicker}>SECURITY BASELINE</p>
-            <StatusBadge status={presentation.status}>{presentation.label}</StatusBadge>
-          </div>
-
-          {foundation.state === "loading" ? (
-            <div className={styles.skeleton} data-testid="foundation-skeleton" aria-hidden="true">
-              <span className={styles.skeletonTitle} />
-              <span className={styles.skeletonLine} />
-              <span className={styles.skeletonLineShort} />
-            </div>
-          ) : foundation.state === "ready" ? (
-            <VaultAccess platform={platform} onUnlockedChange={setVaultUnlocked} />
-          ) : null}
-
-          {foundation.state === "error" ? (
-            <p className={styles.error} role="alert">
-              {safeStatusError}
-            </p>
-          ) : null}
-        </section>
-
-        <OtpList platform={platform} active={foundation.state === "ready" && vaultUnlocked} />
-
-        <section className={styles.statusSection} aria-labelledby="ente-summary-heading">
-          <div className={styles.sectionHeading}>
-            <p className={styles.kicker} id="ente-summary-heading">
-              ENTE OTP SYNC
-            </p>
-            <span>
-              {enteConnected === true
-                ? "Connected"
-                : enteConnected === false
-                  ? "Disconnected"
-                  : "Unavailable"}
-            </span>
-          </div>
-          <Button variant="secondary" onClick={() => void openVault()} loading={openingVault}>
-            Open vault settings
-          </Button>
-        </section>
-
-        <div className={styles.footer}>
-          <p className={styles.boundaryCopy}>
-            Password derivation stays in a trusted extension Worker. OTP editing stays in the vault.
-          </p>
-          <Button
-            className={styles.primaryAction}
-            disabled={foundation.state === "loading"}
-            loading={openingVault}
-            onClick={() => void openVault()}
-          >
-            Open vault
-          </Button>
+    <div className={styles.popup}>
+      <div hidden={vaultUnlocked}>
+        <VaultAccess platform={platform} onUnlockedChange={setVaultUnlocked} />
+      </div>
+      {vaultUnlocked ? (
+        <>
+          <PopupHeader onLock={() => void lock()} onSettings={() => void openVault()} />
           {actionError ? (
             <p className={styles.actionError} role="alert">
               {safeVaultError}
             </p>
           ) : null}
-        </div>
-      </main>
+          {lockError ? (
+            <p className={styles.actionError} role="alert">
+              {safeLockError}
+            </p>
+          ) : null}
+          <div className={styles.searchRow}>
+            <SearchBar
+              value={vaultItems.search}
+              onChange={(value) => vaultItems.setSearch(value)}
+              placeholder="Search items"
+            />
+          </div>
+          <FilterTabs
+            active={vaultItems.filter}
+            onChange={(filter) => vaultItems.setFilter(filter)}
+          />
+          <PopupItemList items={vaultItems.items} status={vaultItems.status} platform={platform} />
+          <AddItemMenu platform={platform} />
+        </>
+      ) : null}
     </div>
   );
 }

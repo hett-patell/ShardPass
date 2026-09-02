@@ -1,14 +1,17 @@
-import { VaultItemSchema, type VaultItem } from "@shardpass/domain";
+import { VaultItemSchema, type SecretItem, type VaultItem } from "@shardpass/domain";
 import {
   ItemCrudRequestSchema,
   ItemCrudResponseSchema,
   MAX_ITEM_QUERY_RESULTS,
   type ItemCrudRequest,
   type ItemCrudResponse,
+  type ItemListItemProjection,
   type SenderContext,
 } from "@shardpass/messaging";
 
 import type { SessionVaultRepository } from "../vault/session-vault-repository";
+
+const MAX_ITEM_LIST_PREVIEW_LENGTH = 120;
 
 type ItemRepository = Pick<
   SessionVaultRepository,
@@ -16,11 +19,7 @@ type ItemRepository = Pick<
 >;
 
 export type ItemServiceErrorCode =
-  | "VAULT_LOCKED"
-  | "VAULT_UNAVAILABLE"
-  | "ITEM_INVALID"
-  | "ITEM_NOT_FOUND"
-  | "ITEM_CONFLICT";
+  "VAULT_LOCKED" | "VAULT_UNAVAILABLE" | "ITEM_INVALID" | "ITEM_NOT_FOUND" | "ITEM_CONFLICT";
 
 export class ItemServiceError extends Error {
   constructor(readonly code: ItemServiceErrorCode) {
@@ -64,6 +63,9 @@ export class ItemService {
           this.assertVaultSender(sender);
           result = await this.delete(command.itemId);
           break;
+        case "item.list":
+          result = await this.list(command);
+          break;
       }
       try {
         await this.dependencies.notePrivilegedActivity();
@@ -91,6 +93,24 @@ export class ItemService {
     }
     const sorted = [...items].sort(compareItems).slice(0, MAX_ITEM_QUERY_RESULTS);
     return response({ version: 1, kind: "item.queryResult", items: sorted });
+  }
+
+  // Popup-safe counterpart to query(): filters/sorts the same way, but returns only
+  // ItemListItemProjectionSchema (id/kind/revision/name/subtitle/favorite/tags) —
+  // never the full VaultItem, so no plaintext secret ever reaches this response.
+  private async list(
+    command: Extract<ItemCrudRequest, { kind: "item.list" }>,
+  ): Promise<ItemCrudResponse> {
+    let items = await this.dependencies.repository.listAllItems();
+    if (command.itemKind !== undefined)
+      items = items.filter((item) => item.kind === command.itemKind);
+    if (command.search !== undefined) {
+      const query = normalizeItemSearch(command.search);
+      if (query.length > 0) items = items.filter((item) => matchesSearch(item, query));
+    }
+    const sorted = [...items].sort(compareItems).slice(0, MAX_ITEM_QUERY_RESULTS);
+    const projected: ItemListItemProjection[] = sorted.map(toListProjection);
+    return response({ version: 1, kind: "item.listResult", items: projected });
   }
 
   private async get(itemId: string): Promise<ItemCrudResponse> {
@@ -174,8 +194,10 @@ function primaryLabel(item: VaultItem): string {
 function compareItems(left: VaultItem, right: VaultItem): number {
   if (left.favorite !== right.favorite) return left.favorite ? -1 : 1;
   return (
-    compareText(normalizeItemSearch(primaryLabel(left)), normalizeItemSearch(primaryLabel(right))) ||
-    compareText(left.id, right.id)
+    compareText(
+      normalizeItemSearch(primaryLabel(left)),
+      normalizeItemSearch(primaryLabel(right)),
+    ) || compareText(left.id, right.id)
   );
 }
 
@@ -195,6 +217,9 @@ function deepFreezeResponse(value: ItemCrudResponse): ItemCrudResponse {
     Object.freeze(value.items);
   } else if (value.kind === "item.getResult" || value.kind === "item.mutationResult") {
     freezeItem(value.item);
+  } else if (value.kind === "item.listResult") {
+    for (const projection of value.items) freezeProjection(projection);
+    Object.freeze(value.items);
   }
   return Object.freeze(value);
 }
@@ -203,6 +228,73 @@ function freezeItem(item: VaultItem): void {
   Object.freeze(item.tags);
   if ("urls" in item) Object.freeze(item.urls);
   Object.freeze(item);
+}
+
+function freezeProjection(projection: ItemListItemProjection): void {
+  Object.freeze(projection.tags);
+  Object.freeze(projection);
+}
+
+function toListProjection(item: VaultItem): ItemListItemProjection {
+  const { id, kind, revision, favorite, tags } = item;
+  return { id, kind, revision, favorite, tags, ...listDisplayFields(item) };
+}
+
+function listDisplayFields(item: VaultItem): Pick<ItemListItemProjection, "name" | "subtitle"> {
+  switch (item.kind) {
+    case "otp":
+      return item.issuer.length > 0
+        ? { name: item.issuer, subtitle: item.label }
+        : { name: item.label };
+    case "login":
+      return item.username.length > 0
+        ? { name: item.name, subtitle: item.username }
+        : { name: item.name };
+    case "note": {
+      const preview = firstNonEmptyLine(item.content);
+      return preview === undefined ? { name: item.name } : { name: item.name, subtitle: preview };
+    }
+    case "card": {
+      const masked = maskCardNumber(item.number);
+      return masked === undefined ? { name: item.name } : { name: item.name, subtitle: masked };
+    }
+    case "identity":
+      return { name: item.name };
+    case "secret":
+      return { name: item.name, subtitle: secretTypeLabel(item.secretType) };
+  }
+}
+
+function firstNonEmptyLine(content: string): string | undefined {
+  const line = content
+    .split(/\r?\n/u)
+    .map((candidate) => candidate.trim())
+    .find((candidate) => candidate.length > 0);
+  if (line === undefined) return undefined;
+  return line.length > MAX_ITEM_LIST_PREVIEW_LENGTH
+    ? `${line.slice(0, MAX_ITEM_LIST_PREVIEW_LENGTH)}…`
+    : line;
+}
+
+function maskCardNumber(number: string): string | undefined {
+  const digits = number.replaceAll(/\D/gu, "");
+  if (digits.length < 4) return undefined;
+  return `•••• ${digits.slice(-4)}`;
+}
+
+function secretTypeLabel(secretType: SecretItem["secretType"]): string {
+  switch (secretType) {
+    case "api_key":
+      return "API key";
+    case "ssh_key":
+      return "SSH key";
+    case "token":
+      return "Token";
+    case "env":
+      return "Environment variable";
+    case "other":
+      return "Secret";
+  }
 }
 
 function invalid(): never {

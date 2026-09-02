@@ -354,7 +354,10 @@ describe("item routing", () => {
   } as const;
 
   const itemCases = [
-    [{ version: 1, kind: "item.query" }, { version: 1, kind: "item.queryResult", items: [] }],
+    [
+      { version: 1, kind: "item.query" },
+      { version: 1, kind: "item.queryResult", items: [] },
+    ],
     [
       { version: 1, kind: "item.get", itemId: loginItemFixture.id },
       { version: 1, kind: "item.getResult", item: loginItemFixture },
@@ -387,10 +390,29 @@ describe("item routing", () => {
 
       for (const denied of [popupSender(), normalizeSenderContext(contentMetadata, extensionId)!]) {
         const deniedService = { handle: vi.fn().mockResolvedValue(response) };
-        await expect(routeItem(request, denied, deniedService)).resolves.toEqual(unauthorizedSender);
+        await expect(routeItem(request, denied, deniedService)).resolves.toEqual(
+          unauthorizedSender,
+        );
         expect(deniedService.handle).not.toHaveBeenCalled();
       }
     }
+  });
+
+  it("routes item.list — the popup-safe projection — from both the popup and the vault page", async () => {
+    const request = { version: 1, kind: "item.list" } as const;
+    const response = { version: 1, kind: "item.listResult", items: [] } as const;
+
+    for (const sender of [popupSender(), vaultSender()]) {
+      const service = { handle: vi.fn().mockResolvedValue(response) };
+      await expect(routeItem(request, sender, service)).resolves.toEqual(response);
+      expect(service.handle).toHaveBeenCalledWith(request, sender);
+    }
+
+    const deniedService = { handle: vi.fn().mockResolvedValue(response) };
+    await expect(
+      routeItem(request, normalizeSenderContext(contentMetadata, extensionId)!, deniedService),
+    ).resolves.toEqual(unauthorizedSender);
+    expect(deniedService.handle).not.toHaveBeenCalled();
   });
 
   it("rejects an unauthorized extension ID even from a vault-shaped sender", async () => {
@@ -432,7 +454,12 @@ describe("item routing", () => {
 
   it("rejects a response shape that does not match the request kind", async () => {
     const request = { version: 1, kind: "item.query" } as const;
-    const mismatched = { version: 1, kind: "item.deleteResult", itemId: loginItemFixture.id, revision: 1 };
+    const mismatched = {
+      version: 1,
+      kind: "item.deleteResult",
+      itemId: loginItemFixture.id,
+      revision: 1,
+    };
     const service = { handle: vi.fn().mockResolvedValue(mismatched) };
     await expect(routeItem(request, vaultSender(), service)).resolves.toMatchObject({
       kind: "error",
@@ -484,7 +511,9 @@ describe("login fill routing", () => {
       { ...contentMetadata, contextKind: "content" as const, documentId: undefined },
     ]) {
       const service = { handle: vi.fn().mockResolvedValue(response) };
-      await expect(routeLoginFill(request, malformed, service)).resolves.toEqual(unauthorizedSender);
+      await expect(routeLoginFill(request, malformed, service)).resolves.toEqual(
+        unauthorizedSender,
+      );
       expect(service.handle).not.toHaveBeenCalled();
     }
   });

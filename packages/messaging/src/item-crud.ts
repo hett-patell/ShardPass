@@ -1,13 +1,23 @@
-import { VAULT_ITEM_KINDS, VaultItemSchema } from "@shardpass/domain";
+import {
+  MAX_ITEM_TAGS,
+  MAX_ITEM_TAG_LENGTH,
+  VAULT_ITEM_KINDS,
+  VaultItemSchema,
+} from "@shardpass/domain";
 import { z } from "zod/mini";
 
 import type { CommandSenderPolicy } from "./context";
 import { MESSAGE_VERSION } from "./envelope";
 
 export const MAX_ITEM_QUERY_RESULTS = 10_000;
+export const MAX_ITEM_LIST_NAME_LENGTH = 1_024;
+export const MAX_ITEM_LIST_SUBTITLE_LENGTH = 512;
 
 const itemId = z.uuid();
 const positiveSafeInteger = z.int().check(z.positive(), z.maximum(Number.MAX_SAFE_INTEGER));
+const projectionTags = z
+  .array(z.string().check(z.minLength(1), z.maxLength(MAX_ITEM_TAG_LENGTH)))
+  .check(z.maxLength(MAX_ITEM_TAGS));
 
 export const ItemQueryRequestSchema = z.strictObject({
   version: z.literal(MESSAGE_VERSION),
@@ -16,6 +26,29 @@ export const ItemQueryRequestSchema = z.strictObject({
   folderId: z.optional(z.uuid()),
   search: z.optional(z.string().check(z.maxLength(256))),
   favoritesOnly: z.optional(z.boolean()),
+});
+
+// A read-only, secret-free projection of the vault item list, safe for the popup surface.
+// Unlike item.query/item.get (which return the full VaultItem, including plaintext login
+// passwords, card numbers, identity fields, or secret values, and are therefore vault-only),
+// item.list carries only display metadata: a computed name, an optional non-secret subtitle
+// (username, masked card digits, a note preview, etc.), and tags. This mirrors the existing
+// otp.list / OtpListItemProjection split between a popup-safe list and the vault-only editor.
+export const ItemListRequestSchema = z.strictObject({
+  version: z.literal(MESSAGE_VERSION),
+  kind: z.literal("item.list"),
+  itemKind: z.optional(z.enum(VAULT_ITEM_KINDS)),
+  search: z.optional(z.string().check(z.maxLength(256))),
+});
+
+export const ItemListItemProjectionSchema = z.strictObject({
+  id: itemId,
+  kind: z.enum(VAULT_ITEM_KINDS),
+  revision: positiveSafeInteger,
+  name: z.string().check(z.maxLength(MAX_ITEM_LIST_NAME_LENGTH)),
+  subtitle: z.optional(z.string().check(z.maxLength(MAX_ITEM_LIST_SUBTITLE_LENGTH))),
+  favorite: z.boolean(),
+  tags: projectionTags,
 });
 
 export const ItemGetRequestSchema = z.strictObject({
@@ -50,12 +83,19 @@ export const ItemCrudRequestSchema = z.discriminatedUnion("kind", [
   ItemCreateRequestSchema,
   ItemUpdateRequestSchema,
   ItemDeleteRequestSchema,
+  ItemListRequestSchema,
 ]);
 
 export const ItemQueryResultSchema = z.strictObject({
   version: z.literal(MESSAGE_VERSION),
   kind: z.literal("item.queryResult"),
   items: z.array(VaultItemSchema).check(z.maxLength(MAX_ITEM_QUERY_RESULTS)),
+});
+
+export const ItemListResultSchema = z.strictObject({
+  version: z.literal(MESSAGE_VERSION),
+  kind: z.literal("item.listResult"),
+  items: z.array(ItemListItemProjectionSchema).check(z.maxLength(MAX_ITEM_QUERY_RESULTS)),
 });
 
 export const ItemGetResultSchema = z.strictObject({
@@ -82,12 +122,14 @@ export const ItemCrudResponseSchema = z.discriminatedUnion("kind", [
   ItemGetResultSchema,
   ItemMutationResultSchema,
   ItemDeleteResultSchema,
+  ItemListResultSchema,
 ]);
 
 export type ItemCrudRequest = z.infer<typeof ItemCrudRequestSchema>;
 export type ItemCrudResponse = z.infer<typeof ItemCrudResponseSchema>;
 export type ItemCrudCommandKind = ItemCrudRequest["kind"];
 export type ItemCrudResponseKind = ItemCrudResponse["kind"];
+export type ItemListItemProjection = z.infer<typeof ItemListItemProjectionSchema>;
 
 export const itemCrudResponseKindByRequest = {
   "item.query": "item.queryResult",
@@ -95,6 +137,7 @@ export const itemCrudResponseKindByRequest = {
   "item.create": "item.mutationResult",
   "item.update": "item.mutationResult",
   "item.delete": "item.deleteResult",
+  "item.list": "item.listResult",
 } as const satisfies Record<ItemCrudCommandKind, ItemCrudResponseKind>;
 
 export function parseItemCrudResponseForRequest(request: ItemCrudRequest, candidate: unknown) {
@@ -106,16 +149,20 @@ export function parseItemCrudResponseForRequest(request: ItemCrudRequest, candid
 }
 
 const vaultOnly = { allowedContexts: ["vault"], requireDocument: true } as const;
+const popupAndVault = { allowedContexts: ["popup", "vault"], requireDocument: true } as const;
 
 // Unlike otp.list/otp.getCode (which return a secret-free projection safe for the
-// popup surface), ItemService returns the full VaultItem — including the plaintext
-// login password, card number, identity fields, or secret value — for every kind.
-// Every item-crud command is therefore restricted to the vault page, the same
-// full-secret-access surface as otp.getEditor/create/update/delete.
+// popup surface), item.query/item.get/item.create/item.update/item.delete return the
+// full VaultItem — including the plaintext login password, card number, identity
+// fields, or secret value — for every kind. Those commands are therefore restricted
+// to the vault page, the same full-secret-access surface as
+// otp.getEditor/create/update/delete. item.list is the secret-free counterpart (see
+// ItemListItemProjectionSchema above) and is safe for the popup, mirroring otp.list.
 export const itemCrudSenderPolicy = {
   "item.query": vaultOnly,
   "item.get": vaultOnly,
   "item.create": vaultOnly,
   "item.update": vaultOnly,
   "item.delete": vaultOnly,
+  "item.list": popupAndVault,
 } satisfies Record<ItemCrudCommandKind, CommandSenderPolicy>;

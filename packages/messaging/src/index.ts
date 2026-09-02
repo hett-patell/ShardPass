@@ -225,12 +225,17 @@ export {
   ItemDeleteResultSchema,
   ItemGetRequestSchema,
   ItemGetResultSchema,
+  ItemListItemProjectionSchema,
+  ItemListRequestSchema,
+  ItemListResultSchema,
   ItemMutationResultSchema,
   ItemQueryRequestSchema,
   ItemQueryResultSchema,
   ItemUpdateRequestSchema,
   itemCrudResponseKindByRequest,
   itemCrudSenderPolicy,
+  MAX_ITEM_LIST_NAME_LENGTH,
+  MAX_ITEM_LIST_SUBTITLE_LENGTH,
   MAX_ITEM_QUERY_RESULTS,
   parseItemCrudResponseForRequest,
 } from "./item-crud";
@@ -239,4 +244,5 @@ export type {
   ItemCrudRequest,
   ItemCrudResponse,
   ItemCrudResponseKind,
+  ItemListItemProjection,
 } from "./item-crud";

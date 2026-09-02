@@ -1,4 +1,11 @@
-import type { LoginItem, OtpItem, VaultItem } from "@shardpass/domain";
+import type {
+  CardItem,
+  IdentityItem,
+  LoginItem,
+  OtpItem,
+  SecretItem,
+  VaultItem,
+} from "@shardpass/domain";
 import type { ItemCrudRequest, SenderContext } from "@shardpass/messaging";
 import { ItemCrudResponseSchema } from "@shardpass/messaging";
 import { StorageError, type TombstoneResult } from "@shardpass/storage";
@@ -14,6 +21,9 @@ const ids = {
   note: "018f47a6-7d11-7c2f-8bd9-a1d37f147a22",
   created: "018f47a6-7d11-7c2f-8bd9-a1d37f147a23",
   missing: "018f47a6-7d11-7c2f-8bd9-a1d37f147a99",
+  card: "018f47a6-7d11-7c2f-8bd9-a1d37f147a24",
+  identity: "018f47a6-7d11-7c2f-8bd9-a1d37f147a25",
+  secret: "018f47a6-7d11-7c2f-8bd9-a1d37f147a26",
 };
 const folderId = "89abcdef-0123-4456-8789-0123456789ab";
 const nowIso = "2026-08-10T12:00:00.000Z";
@@ -72,9 +82,76 @@ function otpItem(overrides: Partial<OtpItem> = {}): OtpItem {
   };
 }
 
-class FakeRepository
-  implements Pick<SessionVaultRepository, "listAllItems" | "getItem" | "createItem" | "updateItem" | "tombstone">
-{
+function cardItem(overrides: Partial<CardItem> = {}): CardItem {
+  return {
+    id: ids.card,
+    schemaVersion: 2,
+    revision: 1,
+    createdAt: nowIso,
+    updatedAt: nowIso,
+    favorite: false,
+    tags: [],
+    kind: "card",
+    name: "Everyday Visa",
+    cardholderName: "Alice Example",
+    number: "4111 1111 1111 1234",
+    expMonth: "01",
+    expYear: "2030",
+    cvv: "123",
+    pin: "",
+    notes: "",
+    ...overrides,
+  };
+}
+
+function identityItem(overrides: Partial<IdentityItem> = {}): IdentityItem {
+  return {
+    id: ids.identity,
+    schemaVersion: 2,
+    revision: 1,
+    createdAt: nowIso,
+    updatedAt: nowIso,
+    favorite: false,
+    tags: [],
+    kind: "identity",
+    name: "Primary Identity",
+    firstName: "Alice",
+    lastName: "Example",
+    email: "alice@example.test",
+    phone: "",
+    street: "",
+    city: "",
+    state: "",
+    zip: "",
+    country: "",
+    notes: "",
+    ...overrides,
+  };
+}
+
+function secretItem(overrides: Partial<SecretItem> = {}): SecretItem {
+  return {
+    id: ids.secret,
+    schemaVersion: 2,
+    revision: 1,
+    createdAt: nowIso,
+    updatedAt: nowIso,
+    favorite: false,
+    tags: [],
+    kind: "secret",
+    name: "Deploy token",
+    secretType: "token",
+    value: "sk-super-secret-value",
+    metadata: {},
+    notes: "",
+    ...overrides,
+  };
+}
+
+class FakeRepository implements Pick<
+  SessionVaultRepository,
+  "listAllItems" | "getItem" | "createItem" | "updateItem" | "tombstone"
+> {
   readonly items = new Map<string, VaultItem>();
   tombstoneCalls = 0;
   listError: unknown;
@@ -95,7 +172,12 @@ class FakeRepository
 
   createItem(candidate: VaultItem): Promise<VaultItem> {
     if (this.items.has(candidate.id)) return Promise.reject(new StorageError("REVISION_CONFLICT"));
-    const created = { ...structuredClone(candidate), revision: 1, createdAt: nowIso, updatedAt: nowIso };
+    const created = {
+      ...structuredClone(candidate),
+      revision: 1,
+      createdAt: nowIso,
+      updatedAt: nowIso,
+    };
     this.items.set(created.id, created);
     return Promise.resolve(structuredClone(created));
   }
@@ -130,7 +212,10 @@ function asError(value: unknown): Error {
   return value instanceof Error ? value : new Error("test failure");
 }
 
-function request(kind: ItemCrudRequest["kind"], values: Record<string, unknown> = {}): ItemCrudRequest {
+function request(
+  kind: ItemCrudRequest["kind"],
+  values: Record<string, unknown> = {},
+): ItemCrudRequest {
   return { version: 1, kind, ...values } as ItemCrudRequest;
 }
 
@@ -158,10 +243,16 @@ describe("ItemService", () => {
     const candidate = { ...loginItem(), id: ids.created };
 
     const created = await service.handle(request("item.create", { item: candidate }), vaultSender);
-    expect(created).toMatchObject({ kind: "item.mutationResult", item: { id: ids.created, name: "Example" } });
+    expect(created).toMatchObject({
+      kind: "item.mutationResult",
+      item: { id: ids.created, name: "Example" },
+    });
 
     const fetched = await service.handle(request("item.get", { itemId: ids.created }), vaultSender);
-    expect(fetched).toMatchObject({ kind: "item.getResult", item: { id: ids.created, username: "alice" } });
+    expect(fetched).toMatchObject({
+      kind: "item.getResult",
+      item: { id: ids.created, username: "alice" },
+    });
   });
 
   it("queries items filtered by kind", async () => {
@@ -193,7 +284,10 @@ describe("ItemService", () => {
     if (byFolder.kind !== "item.queryResult") throw new Error("expected query result");
     expect(byFolder.items.map((item) => item.id)).toEqual([ids.login]);
 
-    const favoritesOnly = await service.handle(request("item.query", { favoritesOnly: true }), vaultSender);
+    const favoritesOnly = await service.handle(
+      request("item.query", { favoritesOnly: true }),
+      vaultSender,
+    );
     if (favoritesOnly.kind !== "item.queryResult") throw new Error("expected query result");
     expect(favoritesOnly.items.map((item) => item.id)).toEqual([ids.login]);
   });
@@ -209,7 +303,10 @@ describe("ItemService", () => {
     if (byName.kind !== "item.queryResult") throw new Error("expected query result");
     expect(byName.items.map((item) => item.id)).toEqual([ids.login]);
 
-    const byIssuer = await service.handle(request("item.query", { search: "i̇stanbul" }), vaultSender);
+    const byIssuer = await service.handle(
+      request("item.query", { search: "i̇stanbul" }),
+      vaultSender,
+    );
     if (byIssuer.kind !== "item.queryResult") throw new Error("expected query result");
     expect(byIssuer.items.map((item) => item.id)).toEqual([ids.otp]);
   });
@@ -226,14 +323,17 @@ describe("ItemService", () => {
   it("defends every item-crud command in depth and does not decrypt for popup", async () => {
     const stored = loginItem();
     const { repository, service } = fixture([stored]);
-    await expect(
-      service.handle(request("item.query", {}), popupSender),
-    ).rejects.toMatchObject({ code: "ITEM_INVALID" });
+    await expect(service.handle(request("item.query", {}), popupSender)).rejects.toMatchObject({
+      code: "ITEM_INVALID",
+    });
     await expect(
       service.handle(request("item.get", { itemId: stored.id }), popupSender),
     ).rejects.toMatchObject({ code: "ITEM_INVALID" });
     await expect(
-      service.handle(request("item.create", { item: { ...loginItem(), id: ids.created } }), popupSender),
+      service.handle(
+        request("item.create", { item: { ...loginItem(), id: ids.created } }),
+        popupSender,
+      ),
     ).rejects.toMatchObject({ code: "ITEM_INVALID" });
     await expect(
       service.handle(
@@ -258,8 +358,15 @@ describe("ItemService", () => {
       }),
       vaultSender,
     );
-    expect(result).toMatchObject({ kind: "item.mutationResult", item: { revision: 2, username: "renamed", notes: "old" } });
-    expect(repository.items.get(stored.id)).toMatchObject({ id: stored.id, kind: "login", revision: 2 });
+    expect(result).toMatchObject({
+      kind: "item.mutationResult",
+      item: { revision: 2, username: "renamed", notes: "old" },
+    });
+    expect(repository.items.get(stored.id)).toMatchObject({
+      id: stored.id,
+      kind: "login",
+      revision: 2,
+    });
     expect(activity).toEqual(["noted"]);
   });
 
@@ -274,7 +381,10 @@ describe("ItemService", () => {
       }),
       vaultSender,
     );
-    expect(result).toMatchObject({ kind: "item.mutationResult", item: { id: stored.id, kind: "login", username: "still-login" } });
+    expect(result).toMatchObject({
+      kind: "item.mutationResult",
+      item: { id: stored.id, kind: "login", username: "still-login" },
+    });
   });
 
   it("returns ITEM_CONFLICT when the displayed expectedRevision is stale", async () => {
@@ -282,7 +392,11 @@ describe("ItemService", () => {
     const { activity, service } = fixture([stored]);
     await expect(
       service.handle(
-        request("item.update", { itemId: stored.id, expectedRevision: 1, fields: { username: "x" } }),
+        request("item.update", {
+          itemId: stored.id,
+          expectedRevision: 1,
+          fields: { username: "x" },
+        }),
         vaultSender,
       ),
     ).rejects.toMatchObject({ code: "ITEM_CONFLICT" });
@@ -309,7 +423,12 @@ describe("ItemService", () => {
     const stored = loginItem();
     const { activity, repository, service } = fixture([stored]);
     const result = await service.handle(request("item.delete", { itemId: stored.id }), vaultSender);
-    expect(result).toEqual({ version: 1, kind: "item.deleteResult", itemId: stored.id, revision: 2 });
+    expect(result).toEqual({
+      version: 1,
+      kind: "item.deleteResult",
+      itemId: stored.id,
+      revision: 2,
+    });
     expect(repository.items.has(stored.id)).toBe(false);
     expect(JSON.stringify(result)).not.toContain(stored.password);
     expect(activity).toEqual(["noted"]);
@@ -354,5 +473,112 @@ describe("ItemService", () => {
       expect(ItemCrudResponseSchema.safeParse(result).success).toBe(true);
       expect(Object.isFrozen(result)).toBe(true);
     }
+  });
+
+  describe("item.list (popup-safe projection)", () => {
+    it("is reachable from the popup, unlike the full-item commands", async () => {
+      const { service } = fixture([loginItem()]);
+      const result = await service.handle(request("item.list", {}), popupSender);
+      expect(result.kind).toBe("item.listResult");
+    });
+
+    it("never includes plaintext secret material for any kind", async () => {
+      const values = [loginItem(), otpItem(), cardItem(), identityItem(), secretItem()];
+      const { service } = fixture(values);
+      const result = await service.handle(request("item.list", {}), popupSender);
+      if (result.kind !== "item.listResult") throw new Error("expected list result");
+      const serialized = JSON.stringify(result);
+      expect(serialized).not.toContain("s3cret");
+      expect(serialized).not.toContain("JBSWY3DPEHPK3PXP");
+      expect(serialized).not.toContain("4111 1111 1111 1234");
+      expect(serialized).not.toContain("sk-super-secret-value");
+      for (const item of result.items) {
+        expect(item).not.toHaveProperty("password");
+        expect(item).not.toHaveProperty("secret");
+        expect(item).not.toHaveProperty("number");
+        expect(item).not.toHaveProperty("value");
+      }
+    });
+
+    it("projects a display name and safe subtitle per kind", async () => {
+      const note: VaultItem = {
+        id: ids.note,
+        schemaVersion: 2,
+        revision: 1,
+        createdAt: nowIso,
+        updatedAt: nowIso,
+        favorite: false,
+        tags: [],
+        kind: "note",
+        name: "Wifi",
+        content: "  guest-network  \nsecondary line",
+      };
+      const values = [loginItem(), otpItem(), note, cardItem(), identityItem(), secretItem()];
+      const { service } = fixture(values);
+      const result = await service.handle(request("item.list", {}), popupSender);
+      if (result.kind !== "item.listResult") throw new Error("expected list result");
+      const byId = new Map(result.items.map((item) => [item.id, item]));
+
+      expect(byId.get(ids.login)).toMatchObject({
+        kind: "login",
+        name: "Example",
+        subtitle: "alice",
+      });
+      expect(byId.get(ids.otp)).toMatchObject({
+        kind: "otp",
+        name: "Example",
+        subtitle: "account",
+      });
+      expect(byId.get(ids.note)).toMatchObject({
+        kind: "note",
+        name: "Wifi",
+        subtitle: "guest-network",
+      });
+      expect(byId.get(ids.card)).toMatchObject({
+        kind: "card",
+        name: "Everyday Visa",
+        subtitle: "•••• 1234",
+      });
+      expect(byId.get(ids.identity)).toMatchObject({ kind: "identity", name: "Primary Identity" });
+      expect(byId.get(ids.identity)?.subtitle).toBeUndefined();
+      expect(byId.get(ids.secret)).toMatchObject({
+        kind: "secret",
+        name: "Deploy token",
+        subtitle: "Token",
+      });
+    });
+
+    it("omits the subtitle when there is nothing safe to preview", async () => {
+      const values = [loginItem({ username: "" }), cardItem({ number: "12" })];
+      const { service } = fixture(values);
+      const result = await service.handle(request("item.list", {}), popupSender);
+      if (result.kind !== "item.listResult") throw new Error("expected list result");
+      for (const item of result.items) expect(item.subtitle).toBeUndefined();
+    });
+
+    it("filters by kind and search the same way item.query does", async () => {
+      const values = [
+        loginItem({ name: "Ａcme Portal" }),
+        otpItem({ issuer: "Other", label: "x" }),
+      ];
+      const { service } = fixture(values);
+
+      const byKind = await service.handle(request("item.list", { itemKind: "login" }), popupSender);
+      if (byKind.kind !== "item.listResult") throw new Error("expected list result");
+      expect(byKind.items.map((item) => item.id)).toEqual([ids.login]);
+
+      const bySearch = await service.handle(request("item.list", { search: "acme" }), popupSender);
+      if (bySearch.kind !== "item.listResult") throw new Error("expected list result");
+      expect(bySearch.items.map((item) => item.id)).toEqual([ids.login]);
+    });
+
+    it("is also reachable from the vault page and returns a frozen, schema-valid response", async () => {
+      const { service } = fixture([loginItem()]);
+      const result = await service.handle(request("item.list", {}), vaultSender);
+      expect(ItemCrudResponseSchema.safeParse(result).success).toBe(true);
+      expect(Object.isFrozen(result)).toBe(true);
+      if (result.kind === "item.listResult")
+        expect(Object.isFrozen(result.items[0]?.tags)).toBe(true);
+    });
   });
 });
