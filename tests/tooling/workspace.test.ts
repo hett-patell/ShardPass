@@ -66,7 +66,7 @@ describe("workspace policy", () => {
       "vite build",
       "node scripts/inventory-ente-production-graph.mjs",
       "vitest run --config tests/security/vitest-output.config.ts",
-      "node scripts/scan-build.mjs",
+      "node --experimental-strip-types scripts/scan-build.mjs",
     ]);
     expect(await readFile(new URL("scripts/clean-dist.mjs", root), "utf8")).toContain(
       'rm(new URL("../dist", import.meta.url), { recursive: true, force: true })',

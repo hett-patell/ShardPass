@@ -15,7 +15,7 @@
   },
   "scripts": {
     "build": "vite build && node scripts/inventory-ente-production-graph.mjs",
-    "build:security": "node scripts/clean-dist.mjs && vite build && node scripts/inventory-ente-production-graph.mjs && vitest run --config tests/security/vitest-output.config.ts && node scripts/scan-build.mjs",
+    "build:security": "node scripts/clean-dist.mjs && vite build && node scripts/inventory-ente-production-graph.mjs && vitest run --config tests/security/vitest-output.config.ts && node --experimental-strip-types scripts/scan-build.mjs",
     "dependencies": "depcruise --config dependency-cruiser.config.cjs apps packages",
     "scan:secrets:allowlist": "node scripts/generate-project1-secret-allowlist.mjs",
     "scan:secrets:allowlist:write": "node scripts/generate-project1-secret-allowlist.mjs --write",
