@@ -6,10 +6,14 @@
   "exports": {
     ".": "./src/index.ts",
     "./backup": "./src/backup/index.ts",
+    "./bitwarden": "./src/bitwarden/index.ts",
+    "./chrome": "./src/chrome/index.ts",
     "./detect": "./src/detect.ts",
+    "./firefox": "./src/firefox/index.ts",
     "./google-migration": "./src/google-migration.ts",
     "./import-model": "./src/import-model.ts",
     "./legacy-v1": "./src/legacy-v1/index.ts",
+    "./onepassword": "./src/onepassword/index.ts",
     "./qr-worker-protocol": "./src/qr-worker-protocol.ts"
   },
   "scripts": {
