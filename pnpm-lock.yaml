@@ -331,6 +331,9 @@ importers:
 
   packages/ui:
     dependencies:
+      '@shardpass/domain':
+        specifier: workspace:*
+        version: link:../domain
       lucide-react:
         specifier: 'catalog:'
         version: 1.27.0(react@19.2.8)

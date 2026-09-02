@@ -11,3 +11,10 @@ export { IconButton } from "./primitives/IconButton";
 export type { IconButtonProps } from "./primitives/IconButton";
 export { StatusBadge } from "./primitives/StatusBadge";
 export type { Status, StatusBadgeProps } from "./primitives/StatusBadge";
+
+export { CategoryNav } from "./components/CategoryNav";
+export type { CategoryKey, CategoryNavProps } from "./components/CategoryNav";
+export { ItemRow } from "./components/ItemRow";
+export type { ItemRowProps } from "./components/ItemRow";
+export { SearchBar } from "./components/SearchBar";
+export type { SearchBarProps } from "./components/SearchBar";

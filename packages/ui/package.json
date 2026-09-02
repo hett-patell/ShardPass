@@ -11,6 +11,7 @@
     "./styles": "./src/styles/index.css"
   },
   "dependencies": {
+    "@shardpass/domain": "workspace:*",
     "lucide-react": "catalog:",
     "react": "catalog:"
   },

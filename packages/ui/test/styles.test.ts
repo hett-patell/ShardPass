@@ -54,11 +54,27 @@ describe("UI CSS contracts", () => {
     expect(css).toContain("white-space: nowrap");
   });
 
-  it("defines restrained semantic elevation and ordered stack roles", async () => {
+  it("defaults to light mode and gates dark overrides behind prefers-color-scheme or data-theme", async () => {
+    const { tokens } = await readStyles();
+    const [defaultBlock] = tokens.split('@media (prefers-color-scheme: dark)');
+
+    expect(defaultBlock).toContain("--bg-primary: #ffffff;");
+    expect(tokens).toContain('@media (prefers-color-scheme: dark)');
+    expect(tokens).toMatch(/:root:not\(\[data-theme="light"\]\)/);
+    expect(tokens).toMatch(/:root\[data-theme="dark"\]/);
+
+    const afterMediaGuard = tokens.split(':root:not([data-theme="light"])').at(1) ?? "";
+    expect(afterMediaGuard).toContain("--bg-primary: #111113;");
+
+    const afterDarkTheme = tokens.split(':root[data-theme="dark"]').at(1) ?? "";
+    expect(afterDarkTheme).toContain("--bg-primary: #111113;");
+  });
+
+  it("defines shadow tokens and an ordered, collision-free stacking scale", async () => {
     const { tokens } = await readStyles();
 
-    for (const role of ["low", "medium", "modal", "picker"]) {
-      expect(tokens).toMatch(new RegExp(`--elevation-${role}:\\s*[^;]+;`));
+    for (const role of ["sm", "md"]) {
+      expect(tokens).toMatch(new RegExp(`--shadow-${role}:\\s*[^;]+;`));
     }
 
     const stackRoles = [
@@ -80,14 +96,16 @@ describe("UI CSS contracts", () => {
     expect(new Set(values).size).toBe(values.length);
   });
 
-  it("uses precomputed badge borders and stays within the Chrome 110 CSS policy", async () => {
+  it("uses semantic status tokens for badges and stays within the Chrome 110 CSS policy", async () => {
     const { primitives, tokens } = await readStyles();
     const css = `${tokens}\n${primitives}`;
 
-    for (const status of ["neutral", "success", "warning", "error", "info"]) {
-      expect(tokens).toMatch(new RegExp(`--color-status-${status}-border:\\s*#[0-9a-f]{6};`, "i"));
+    for (const status of ["success", "warning", "danger", "info"]) {
+      expect(tokens).toMatch(new RegExp(`--${status}:\\s*#[0-9a-f]{6};`, "i"));
+      expect(tokens).toMatch(new RegExp(`--${status}-subtle:\\s*#[0-9a-f]{6};`, "i"));
     }
-    expect(primitives).toContain("border: 1px solid var(--status-border-color)");
+    expect(primitives).toContain("color: var(--status-color)");
+    expect(primitives).toContain("background: var(--status-bg)");
 
     const unsupportedWithoutFallback = [
       /color-mix\s*\(/i,
@@ -102,9 +120,9 @@ describe("UI CSS contracts", () => {
     }
   });
 
-  it("colors only the AppHeader mark with the coral accent token", async () => {
+  it("colors the AppHeader mark with the shared accent token", async () => {
     const { primitives } = await readStyles();
 
-    expect(primitives).toMatch(/\.headerMark\s*\{[^}]*color:\s*var\(--color-accent\);[^}]*\}/s);
+    expect(primitives).toMatch(/\.headerMark\s*\{[^}]*color:\s*var\(--accent\);[^}]*\}/s);
   });
 });
