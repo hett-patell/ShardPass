@@ -30,5 +30,13 @@ export {
   wrapVaultDataKeyWithKeyEncryptionKey,
 } from "./key-hierarchy";
 export type { VaultKeyMaterial } from "./key-hierarchy";
+export { generatePassphrase, generateRandomPassword } from "./password-generator";
+export type {
+  GeneratedSecret,
+  PassphraseOptions,
+  PassphraseSeparator,
+  RandomPasswordOptions,
+} from "./password-generator";
 export { createDeterministicRandomSource, webCryptoRandomSource } from "./random";
 export type { RandomSource } from "./random";
+export { EFF_WORDLIST } from "./wordlist";

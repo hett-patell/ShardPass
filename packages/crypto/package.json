@@ -6,6 +6,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./aead": "./src/aead.ts",
+    "./password-generator": "./src/password-generator.ts",
     "./random": "./src/random.ts",
     "./worker": "./src/kdf-worker-client.ts"
   },
