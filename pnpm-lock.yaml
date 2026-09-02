@@ -137,6 +137,9 @@ importers:
       '@noble/hashes':
         specifier: 'catalog:'
         version: 2.2.0
+      '@shardpass/autofill':
+        specifier: workspace:*
+        version: link:../../packages/autofill
       '@shardpass/crypto':
         specifier: workspace:*
         version: link:../../packages/crypto
@@ -210,6 +213,8 @@ importers:
       axe-core:
         specifier: 'catalog:'
         version: 4.12.1
+
+  packages/autofill: {}
 
   packages/crypto:
     dependencies:
