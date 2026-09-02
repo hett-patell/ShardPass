@@ -240,16 +240,17 @@ describe("generatePassphrase", () => {
 });
 
 describe("EFF_WORDLIST", () => {
-  it("contains exactly 7776 (6^5) diceware words", () => {
-    expect(EFF_WORDLIST).toHaveLength(7776);
+  it("contains 7772 words (EFF 7776 minus 4 hyphenated entries)", () => {
+    expect(EFF_WORDLIST).toHaveLength(7772);
   });
 
-  it("contains only unique, non-empty lowercase words", () => {
+  it("contains only unique, non-empty lowercase alpha words", () => {
     const unique = new Set(EFF_WORDLIST);
     expect(unique.size).toBe(EFF_WORDLIST.length);
     for (const word of EFF_WORDLIST) {
       expect(word.length).toBeGreaterThan(0);
       expect(word).toBe(word.toLowerCase());
+      expect(word).toMatch(/^[a-z]+$/);
     }
   });
 });
