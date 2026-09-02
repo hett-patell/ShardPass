@@ -4,6 +4,7 @@ import { normalizeSenderContext, type BackupRequest } from "@shardpass/messaging
 import type {
   BackupUiExtensionPlatform,
   ExtensionPlatform,
+  LoginFillContentPlatform,
   OtpFillContentPlatform,
   OtpImportUiExtensionPlatform,
 } from "../../src/platform/extension-platform";
@@ -557,6 +558,29 @@ describe("Chrome extension platform", () => {
     );
     await expect(platform.sendOtpFillMessage(request)).rejects.toMatchObject({
       code: "OTP_FILL_UNAVAILABLE",
+    });
+  });
+
+  it("exposes a typed login fill transport that reparses exact paired responses", async () => {
+    const platform: LoginFillContentPlatform = createChromePlatform();
+    const request = {
+      version: 1 as const,
+      kind: "login.fillSuggestions" as const,
+      domain: "example.test",
+    };
+    sendMessage.mockImplementation((_payload: unknown, callback: (response: unknown) => void) =>
+      callback({ version: 1, kind: "login.fillSuggestionsResult", suggestions: [] }),
+    );
+    await expect(platform.sendLoginFillMessage(request)).resolves.toMatchObject({
+      kind: "login.fillSuggestionsResult",
+    });
+    expect(sendMessage).toHaveBeenCalledWith(request, expect.any(Function));
+
+    sendMessage.mockImplementation((_payload: unknown, callback: (response: unknown) => void) =>
+      callback({ version: 1, kind: "login.fillAck", ok: true }),
+    );
+    await expect(platform.sendLoginFillMessage(request)).rejects.toMatchObject({
+      code: "LOGIN_FILL_UNAVAILABLE",
     });
   });
 

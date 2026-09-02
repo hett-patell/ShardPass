@@ -1,14 +1,21 @@
 :host {
-  --color-bg: #0c0c0d;
-  --color-surface: #151517;
-  --color-elevated: #1b1b1e;
-  --color-text: #f5f5f4;
-  --color-text-muted: #a1a1aa;
-  --color-border: #343438;
-  --color-border-strong: #505057;
-  --color-accent: #ff4d2e;
-  --color-accent-hover: #ff674d;
-  --color-focus: #ff8069;
+  /* Neutral palette, matched to @shardpass/ui's shared design tokens
+     (packages/ui/src/styles/tokens.css, dark palette) so the in-page
+     picker reads as part of the same system instead of carrying its own
+     brand color. Duplicated here (rather than importing tokens.css)
+     because this stylesheet is injected into an isolated shadow root on
+     arbitrary third-party pages, which never define ShardPass's tokens
+     on their own document. */
+  --color-bg: #111113;
+  --color-surface: #1a1a1e;
+  --color-elevated: #232328;
+  --color-text: #ededef;
+  --color-text-muted: #8e8e96;
+  --color-border: #27272a;
+  --color-border-strong: #3f3f46;
+  --color-accent: #3b82f6;
+  --color-accent-hover: #60a5fa;
+  --color-focus: #93c5fd;
   --font-sans: "Inter Tight", "Arial Narrow", Arial, sans-serif;
   --font-mono: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
   --space-1: 4px;

@@ -325,8 +325,12 @@ describe("content entry and style packaging contracts", () => {
     const source = await readFile(path.join(extensionRoot, "src/content/main.tsx"), "utf8");
 
     expect(source).toContain("createOtpFillController");
+    expect(source).toContain("createLoginFillController");
     expect(source).toContain("createChromePlatform");
-    expect(source).toContain("controller.start()");
+    expect(source).toContain("otpController.start()");
+    expect(source).toContain("loginController.start()");
+    expect(source).toContain("otpController.dispose()");
+    expect(source).toContain("loginController.dispose()");
     expect(source).not.toMatch(
       /createPickerHost|querySelector|MutationObserver|sendMessage|createRoot|fetch\s*\(|XMLHttpRequest|WebSocket|clipboard|mediaDevices|console\./,
     );

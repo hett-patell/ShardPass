@@ -5,6 +5,7 @@ import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
 
 import { FoundationPicker } from "./FoundationPicker";
+import loginPickerCss from "./login/login-picker.css?raw";
 import otpPickerCss from "./otp/otp-picker.css?raw";
 import pickerCss from "./picker.css?raw";
 
@@ -31,7 +32,7 @@ function normalizedOrigin(document: Document): string {
 
 function createStyle(document: Document): HTMLStyleElement {
   const style = document.createElement("style");
-  style.textContent = `${pickerCss}\n${otpPickerCss}`;
+  style.textContent = `${pickerCss}\n${otpPickerCss}\n${loginPickerCss}`;
   return style;
 }
 

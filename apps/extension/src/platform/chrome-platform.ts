@@ -3,6 +3,7 @@
 import {
   EnteSafeStateSchema,
   parseBackupResponseForRequest,
+  parseLoginFillResponseForRequest,
   parseOtpFillResponseForRequest,
   parseOtpImportResponseForRequest,
   parseOtpResponseForRequest,
@@ -10,6 +11,8 @@ import {
   type BackupResponse,
   type EnteRequest,
   type EnteSafeState,
+  type LoginFillRequest,
+  type LoginFillResponse,
   type OtpFillRequest,
   type OtpFillResponse,
   type OtpImportRequest,
@@ -25,6 +28,7 @@ import type {
   BackgroundExtensionPlatform,
   BackupUiExtensionPlatform,
   EnteUiPlatform,
+  LoginFillContentPlatform,
   OtpFillContentPlatform,
   OtpImportUiExtensionPlatform,
   OtpUiExtensionPlatform,
@@ -68,6 +72,10 @@ const safeErrorCodes = new Set<SafeErrorCode>([
   "OTP_FILL_ITEM_CHANGED",
   "OTP_FILL_CANCELLED",
   "OTP_FILL_UNCERTAIN",
+  "LOGIN_FILL_INVALID",
+  "LOGIN_FILL_UNAVAILABLE",
+  "LOGIN_FILL_NOT_FOUND",
+  "LOGIN_FILL_ITEM_CHANGED",
   "CLIPBOARD_UNAVAILABLE",
   "THROTTLED",
   "UNAUTHORIZED_SENDER",
@@ -126,7 +134,8 @@ export function createChromePlatform(): BackgroundExtensionPlatform &
   EnteUiPlatform &
   OtpUiExtensionPlatform &
   OtpImportUiExtensionPlatform &
-  OtpFillContentPlatform {
+  OtpFillContentPlatform &
+  LoginFillContentPlatform {
   const activePorts = new Set<chrome.runtime.Port>();
   const portDisposers = new Map<chrome.runtime.Port, () => void>();
   return {
@@ -329,6 +338,18 @@ export function createChromePlatform(): BackgroundExtensionPlatform &
       const parsed = parseOtpFillResponseForRequest(request, candidate);
       if (parsed.success) return parsed.data;
       throw safeUiFailure(candidate, "OTP_FILL_UNAVAILABLE");
+    },
+
+    async sendLoginFillMessage(request: LoginFillRequest): Promise<LoginFillResponse> {
+      let candidate: unknown;
+      try {
+        candidate = await this.sendMessage({ ...request });
+      } catch {
+        throw safeUiFailure(undefined, "LOGIN_FILL_UNAVAILABLE");
+      }
+      const parsed = parseLoginFillResponseForRequest(request, candidate);
+      if (parsed.success) return parsed.data;
+      throw safeUiFailure(candidate, "LOGIN_FILL_UNAVAILABLE");
     },
 
     sendOtpImportMessage(request: OtpImportRequest): Promise<OtpImportResponse> {
