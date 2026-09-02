@@ -59,6 +59,7 @@ export class VaultService {
           await this.settings.cancelAutoLock().catch(() => undefined);
           throw new Error("settings projection failed");
         }
+        await this.migrateIfNeeded();
         return { version: 1, kind: "vault.ok", state: "unlocked" };
       case "vault.lock":
         await this.sessions.lock();
@@ -100,6 +101,22 @@ export class VaultService {
     );
     await this.settings.applyMigrated(snapshot.settings);
     await this.settings.notePrivilegedActivity();
+  }
+
+  /**
+   * Persists the current item schema version onto any record still stored under a
+   * legacy one (pre-multi-kind vaults held only `kind: "otp"` items at schema
+   * version 1; every such item is already valid, and already read as upgraded, under
+   * the widened union — see `VaultRepository.migrateLegacyItemSchema`). Runs once per
+   * unlock and is a cheap no-op once the vault is fully migrated. Best-effort: a
+   * failure here must never prevent an otherwise-successful unlock, so it is logged
+   * and swallowed rather than propagated.
+   */
+  private async migrateIfNeeded(): Promise<void> {
+    // Best-effort: content is unchanged either way, so a failure here (e.g. a
+    // concurrent mutation racing the migration commit) simply leaves the affected
+    // records to retry on a later unlock rather than blocking this one.
+    await this.sessions.vaultRepository.migrateLegacySchema().catch(() => undefined);
   }
 }
 

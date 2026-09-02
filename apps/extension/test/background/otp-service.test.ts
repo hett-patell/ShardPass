@@ -64,6 +64,7 @@ class FakeRepository implements Omit<
   | "importPortableState"
   | "previewPortableOtpItems"
   | "importPortableOtpItems"
+  | "migrateLegacySchema"
 > {
   readonly items = new Map<string, OtpItem>();
   getCalls: string[] = [];

@@ -140,6 +140,7 @@ describe("SessionVaultRepository", () => {
       "listAllItems",
       "listItems",
       "listMetadata",
+      "migrateLegacySchema",
       "previewPortableImport",
       "previewPortableOtpItems",
       "readGenerationMetadata",

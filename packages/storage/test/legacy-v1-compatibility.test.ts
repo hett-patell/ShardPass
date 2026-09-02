@@ -183,3 +183,39 @@ describe("legacy Task 4 generation v1 compatibility", () => {
     await expect(repository.get(itemId, crypto)).resolves.toMatchObject({ issuer: "Legacy" });
   });
 });
+
+describe("legacy item schema migration (Task 12)", () => {
+  it("rewrites a legacy schemaVersion:1 record to the current version without changing content or revision", async () => {
+    const storage = await legacyV1Storage();
+    const crypto = context();
+    const repository = new VaultRepository(storage, wrappedKey);
+
+    const before = await repository.get(itemId, crypto);
+    expect(before).toMatchObject({ schemaVersion: 2, revision: 1, issuer: "Legacy" });
+
+    const migrated = await repository.migrateLegacyItemSchema(crypto);
+    expect(migrated).toBe(1);
+
+    const keys = generationKeys(
+      ((await storage.get([ACTIVE_ROOT_KEY]))[ACTIVE_ROOT_KEY] as { activeGenerationId: string })
+        .activeGenerationId,
+    );
+    const record = (await storage.get([keys.record(itemId)]))[keys.record(itemId)] as {
+      schemaVersion: number;
+    };
+    expect(record.schemaVersion).toBe(2);
+
+    const after = await repository.get(itemId, crypto);
+    expect(after).toMatchObject({ schemaVersion: 2, revision: 1, issuer: "Legacy" });
+
+    const activeGenerationId = ((await storage.get([ACTIVE_ROOT_KEY]))[ACTIVE_ROOT_KEY] as {
+      activeGenerationId: string;
+    }).activeGenerationId;
+    const rerun = await repository.migrateLegacyItemSchema(crypto);
+    expect(rerun).toBe(0);
+    const unchangedGenerationId = ((await storage.get([ACTIVE_ROOT_KEY]))[ACTIVE_ROOT_KEY] as {
+      activeGenerationId: string;
+    }).activeGenerationId;
+    expect(unchangedGenerationId).toBe(activeGenerationId);
+  });
+});

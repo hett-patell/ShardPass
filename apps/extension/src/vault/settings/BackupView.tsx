@@ -47,14 +47,15 @@ export function BackupView({
           <p className={styles.kicker}>LOCAL / PORTABLE</p>
           <h3 id="backup-heading">Encrypted backups</h3>
         </div>
-        <span className={styles.scope}>FULL VAULT</span>
+        <span className={styles.scope}>ONE-TIME CODES</span>
       </header>
 
       <div className={styles.warning} id="backup-sensitive-warning">
         <strong>Portable secret material</strong>
         <span>
-          A portable backup contains sensitive vault data protected only by its backup password.
-          Store both separately and securely.
+          A portable backup contains sensitive vault data (your one-time code items) protected
+          only by its backup password. Logins, notes, cards, identities, and secrets stay on
+          this device and are not included. Store both passwords separately and securely.
         </span>
       </div>
 

@@ -54,6 +54,7 @@ class Repository implements Omit<
   | "importPortableState"
   | "previewPortableOtpItems"
   | "importPortableOtpItems"
+  | "migrateLegacySchema"
 > {
   current: OtpItem | null;
   readonly receipts = new Map<

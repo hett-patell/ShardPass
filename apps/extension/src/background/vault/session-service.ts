@@ -296,6 +296,10 @@ export class SessionService {
             context,
           ),
         ),
+      migrateLegacySchema: () =>
+        this.#runRepositoryOperation((repository, context) =>
+          repository.migrateLegacyItemSchema(context),
+        ),
     });
   }
 

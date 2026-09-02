@@ -55,7 +55,7 @@
   color: var(--text-primary);
   background: var(--bg-primary);
   border: 1px solid var(--border-hover);
-  border-radius: var(--radius-xs);
+  border-radius: var(--radius-sm);
   font: inherit;
 }
 .form input:hover {
@@ -66,7 +66,7 @@
   outline-offset: 2px;
 }
 .error {
-  color: #fca5a5;
+  color: var(--danger);
   font-size: var(--text-sm);
   line-height: var(--line-body);
 }

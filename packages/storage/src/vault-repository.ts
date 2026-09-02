@@ -1280,6 +1280,47 @@ export class VaultRepository {
     return this.serialize(() => this.generations.rollback(context));
   }
 
+  /**
+   * Persists the current item schema version onto every stored record still
+   * declaring a legacy version (schema widening: pre-multi-kind vaults only ever
+   * held `kind: "otp"` records at item schema version 1). {@link decryptVaultRecord}
+   * (via `parseVaultItemPlaintext`) already upgrades such a record's in-memory
+   * `schemaVersion` transparently on every read, so this changes nothing about item
+   * content, `revision`, or `updatedAt` — it only makes that upgrade durable in the
+   * stored record's associated data by re-encrypting with a fresh nonce. No journal
+   * entry is appended, since nothing observable about the item changed. A no-op
+   * (nothing is committed, no new generation is created) once every stored record
+   * already declares the current schema version, so calling this on every unlock is
+   * cheap after the first successful migration.
+   */
+  async migrateLegacyItemSchema(context: VaultCryptoContext): Promise<number> {
+    return this.serialize(async () => {
+      const loaded = await this.load(context);
+      const stale = loaded.records
+        .map((record, index) => ({ record, index }))
+        .filter(({ record }) => record.schemaVersion !== ITEM_SCHEMA_VERSION);
+      if (stale.length === 0) return 0;
+      const records = [...loaded.records];
+      const newNonces = new Set<string>();
+      for (const { record, index } of stale) {
+        const item = await decryptVaultRecord(record, context.dek);
+        const encrypted = await encryptVaultRecord(item, context);
+        records[index] = encrypted;
+        newNonces.add(encrypted.nonce);
+      }
+      await this.commit(
+        loaded.root,
+        records,
+        loaded.journal,
+        newNonces,
+        loaded.receipts,
+        loaded.metadata,
+        context,
+      );
+      return stale.length;
+    });
+  }
+
   async collectGarbage(context: VaultCryptoContext): Promise<void> {
     await this.generations.collect(context);
   }

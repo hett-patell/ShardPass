@@ -95,6 +95,13 @@ export interface SessionVaultRepository {
   savePendingHotpReservation(
     candidate: Omit<PendingHotpReservation, "sessionEpoch">,
   ): Promise<void>;
+  /**
+   * Persists the current item schema version onto every stored record still
+   * declaring a legacy one. Returns the number of records rewritten; a no-op
+   * (returns 0, commits nothing) once every record is already current. Safe to
+   * call on every unlock — see {@link VaultRepository.migrateLegacyItemSchema}.
+   */
+  migrateLegacySchema(): Promise<number>;
 }
 
 type SessionVaultRepositoryOperations = Readonly<{
@@ -161,6 +168,7 @@ type SessionVaultRepositoryOperations = Readonly<{
   savePendingHotpReservation(
     candidate: Omit<PendingHotpReservation, "sessionEpoch">,
   ): Promise<void>;
+  migrateLegacySchema(): Promise<number>;
 }>;
 
 export function createSessionVaultRepository(
@@ -200,6 +208,7 @@ export function createSessionVaultRepository(
     cancelHotpReservation: (reservationId, binding) =>
       operations.cancelHotpReservation(reservationId, binding),
     savePendingHotpReservation: (candidate) => operations.savePendingHotpReservation(candidate),
+    migrateLegacySchema: () => operations.migrateLegacySchema(),
   };
   return Object.freeze(bridge);
 }

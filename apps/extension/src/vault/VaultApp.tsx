@@ -24,6 +24,7 @@ import { NewItemMenu } from "./components/NewItemMenu";
 import { VaultSidebar, type VaultSidebarView } from "./components/VaultSidebar";
 import { EnteSettings } from "./ente/EnteSettings";
 import { countByKind, useVaultState } from "./hooks/useVaultState";
+import { ImportDialog } from "./import/ImportDialog";
 import { summarizeFolders } from "./item-support";
 import { MigrationPanel } from "./migration/MigrationPanel";
 import { defaultOtpInput, OtpEditor } from "./otp/OtpEditor";
@@ -255,6 +256,7 @@ export function VaultApp({ platform }: VaultAppProps) {
                   <>
                     <VaultAccess platform={platform} securityControls onUnlockedChange={setVaultUnlocked} />
                     <MigrationPanel platform={platform} active onCompleted={handleUpdate} />
+                    <ImportDialog platform={platform} active onImported={handleUpdate} />
                     <BackupView platform={platform} active onImported={handleUpdate} />
                   </>
                 ) : (
