@@ -38,7 +38,7 @@
 .indexHeader span,
 .itemMeta {
   margin: 0 0 var(--space-1);
-  color: var(--color-text-muted);
+  color: var(--text-secondary);
   font-family: var(--font-mono);
   font-size: var(--text-xs);
   font-weight: 600;
@@ -50,7 +50,7 @@
 .noteField {
   display: grid;
   gap: var(--space-1);
-  color: var(--color-text);
+  color: var(--text-primary);
   font-size: var(--text-sm);
   font-weight: 600;
 }
@@ -62,15 +62,15 @@
   min-height: var(--control-height-md);
   box-sizing: border-box;
   padding: var(--space-2) var(--space-3);
-  color: var(--color-text);
-  background: #0c0c0d;
-  border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-xs);
+  color: var(--text-primary);
+  background: var(--bg-primary);
+  border: 1px solid var(--border-hover);
+  border-radius: var(--radius-sm);
   font: inherit;
 }
 
 .searchField input::placeholder {
-  color: #a1a1aa;
+  color: var(--text-tertiary);
 }
 
 .searchField input:focus-visible,
@@ -87,25 +87,25 @@
   min-width: 0;
   min-height: 480px;
   grid-template-columns: minmax(220px, 0.72fr) minmax(380px, 1.28fr);
-  border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-hover);
+  border-radius: var(--radius-md);
   overflow: clip;
 }
 
 .index,
 .detail {
   min-width: 0;
-  background: #101012;
+  background: var(--bg-primary);
 }
 
 .index {
-  border-right: 1px solid var(--color-border);
+  border-right: 1px solid var(--border);
 }
 
 .indexHeader {
   min-height: 44px;
   padding: var(--space-3);
-  border-bottom: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--border);
 }
 
 .list {
@@ -126,21 +126,21 @@
   align-items: center;
   gap: var(--space-3);
   padding: var(--space-2) var(--space-3) var(--space-2) 0;
-  color: var(--color-text);
+  color: var(--text-primary);
   background: transparent;
   border: 0;
-  border-bottom: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--border);
   border-radius: 0;
   text-align: left;
   cursor: pointer;
 }
 
 .item:hover {
-  background: var(--color-elevated);
+  background: var(--bg-secondary);
 }
 
 .item[aria-selected="true"] {
-  background: #1d1b1b;
+  background: var(--accent-subtle);
 }
 
 .marker {
@@ -149,7 +149,7 @@
 }
 
 .item[aria-selected="true"] .marker {
-  background: var(--color-accent);
+  background: var(--accent);
 }
 
 .itemCopy {
@@ -167,7 +167,7 @@
 }
 
 .itemCopy span {
-  color: var(--color-text-muted);
+  color: var(--text-secondary);
   font-size: var(--text-sm);
 }
 
@@ -186,7 +186,7 @@
 .detailEmpty {
   padding: var(--space-4);
   margin: 0;
-  color: var(--color-text-muted);
+  color: var(--text-secondary);
 }
 
 .empty,
@@ -197,16 +197,16 @@
 
 .empty strong,
 .detailEmpty strong {
-  color: var(--color-text);
+  color: var(--text-primary);
 }
 
 .error,
 .conflict,
 .formError {
-  color: #fecaca;
-  background: #221315;
-  border: 1px solid #7b3f43;
-  border-left: 2px solid var(--color-danger);
+  color: var(--danger);
+  background: var(--danger-subtle);
+  border: 1px solid var(--danger);
+  border-left: 2px solid var(--danger);
 }
 
 .editor {
@@ -217,14 +217,14 @@
 .editorHeader {
   align-items: flex-start;
   padding-bottom: var(--space-3);
-  border-bottom: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--border);
 }
 
 .conflict,
 .formError {
   padding: var(--space-3);
   margin: 0;
-  border-radius: var(--radius-xs);
+  border-radius: var(--radius-sm);
 }
 
 .fieldGrid {
@@ -259,16 +259,16 @@
   min-height: var(--control-height-md);
   box-sizing: border-box;
   padding: var(--space-2) var(--space-3);
-  color: var(--color-text-muted);
-  background: #0c0c0d;
-  border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-xs);
+  color: var(--text-secondary);
+  background: var(--bg-primary);
+  border: 1px solid var(--border-hover);
+  border-radius: var(--radius-sm);
   font-size: var(--text-sm);
 }
 
 .secretError {
   margin: 0;
-  color: #fecaca;
+  color: var(--danger);
 }
 
 .revealButton {
@@ -276,8 +276,8 @@
 }
 
 .selectField select:disabled {
-  color: #a1a1aa;
-  background: var(--color-surface);
+  color: var(--text-tertiary);
+  background: var(--bg-secondary);
 }
 
 .favoriteField {
@@ -292,7 +292,7 @@
 .favoriteField input {
   width: 18px;
   height: 18px;
-  accent-color: var(--color-accent);
+  accent-color: var(--accent);
 }
 
 .noteField textarea {
@@ -304,7 +304,7 @@
 .dialogActions {
   justify-content: flex-end;
   padding-top: var(--space-3);
-  border-top: 1px solid var(--color-border);
+  border-top: 1px solid var(--border);
 }
 
 .dialogBackdrop {
@@ -314,7 +314,7 @@
   display: grid;
   place-items: center;
   padding: var(--space-4);
-  background: rgb(0 0 0 / 72%);
+  background: rgb(0 0 0 / 45%);
 }
 
 .dialog {
@@ -324,16 +324,16 @@
   box-sizing: border-box;
   padding: var(--space-5);
   overflow: auto;
-  color: var(--color-text);
-  background: #18181b;
-  border: 1px solid var(--color-border-strong);
-  border-left: 2px solid var(--color-danger);
-  border-radius: var(--radius-sm);
-  box-shadow: var(--elevation-modal);
+  color: var(--text-primary);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-hover);
+  border-left: 2px solid var(--danger);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
 }
 
 .dialog p:not(.kicker) {
-  color: var(--color-text-muted);
+  color: var(--text-secondary);
   overflow-wrap: anywhere;
 }
 
@@ -358,7 +358,7 @@
 
   .index {
     border-right: 0;
-    border-bottom: 1px solid var(--color-border);
+    border-bottom: 1px solid var(--border);
   }
 
   .list {

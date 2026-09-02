@@ -1,10 +1,7 @@
 import "@testing-library/jest-dom/vitest";
 
-import { readFile } from "node:fs/promises";
-import path from "node:path";
-
 import { FakeExtensionPlatform } from "@shardpass/testing";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import axe from "axe-core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -23,6 +20,65 @@ const foundationStatus = {
   vaultAvailable: false,
 } as const;
 
+const unconfiguredVaultState = {
+  version: 1,
+  kind: "vault.state",
+  state: "unconfigured",
+  autoLockMinutes: 15,
+  lockOnScreenLock: true,
+  retryAfterMs: 0,
+  streamId: "00000000000000000000000000000001",
+  sequence: 1,
+} as const;
+
+function unlockedVaultState(sequence: number) {
+  return {
+    version: 1,
+    kind: "vault.state",
+    state: "unlocked",
+    autoLockMinutes: 15,
+    lockOnScreenLock: true,
+    retryAfterMs: 0,
+    streamId: "00000000000000000000000000000002",
+    sequence,
+  } as const;
+}
+
+const loginItem = {
+  id: "10000000-0000-4000-8000-000000000001",
+  kind: "login",
+  schemaVersion: 2,
+  revision: 1,
+  createdAt: "2026-01-01T00:00:00.000Z",
+  updatedAt: "2026-01-01T00:00:00.000Z",
+  favorite: false,
+  tags: [],
+  name: "Example Login",
+  username: "alice",
+  password: "correct-horse-battery-staple",
+  urls: [],
+  notes: "",
+} as const;
+
+const noteItem = {
+  id: "10000000-0000-4000-8000-000000000002",
+  kind: "note",
+  schemaVersion: 2,
+  revision: 1,
+  createdAt: "2026-01-01T00:00:00.000Z",
+  updatedAt: "2026-01-01T00:00:00.000Z",
+  favorite: false,
+  tags: [],
+  name: "Example Note",
+  content: "Hello world",
+} as const;
+
+const itemQueryResult = {
+  version: 1,
+  kind: "item.queryResult",
+  items: [loginItem, noteItem],
+} as const;
+
 async function expectNoSeriousAxeViolations(container: HTMLElement): Promise<void> {
   const results = await axe.run(container, {
     resultTypes: ["violations"],
@@ -35,156 +91,56 @@ async function expectNoSeriousAxeViolations(container: HTMLElement): Promise<voi
   expect(seriousViolations).toEqual([]);
 }
 
-function readyPlatform(): FakeExtensionPlatform {
+function readyLockedPlatform(): FakeExtensionPlatform {
   const platform = new FakeExtensionPlatform("vault-test-id");
   platform.queueSendResponse(foundationStatus);
-  platform.queueSendResponse({
-    version: 1,
-    kind: "vault.state",
-    state: "unconfigured",
-    autoLockMinutes: 15,
-    lockOnScreenLock: true,
-    retryAfterMs: 0,
-    streamId: "00000000000000000000000000000001",
-    sequence: 1,
-  });
+  platform.queueSendResponse(unconfiguredVaultState);
+  return platform;
+}
+
+function readyUnlockedPlatform(): FakeExtensionPlatform {
+  const platform = new FakeExtensionPlatform("vault-test-id");
+  platform.queueSendResponse(foundationStatus);
+  platform.queueSendResponse(unlockedVaultState(1));
+  platform.queueSendResponse(itemQueryResult);
   return platform;
 }
 
 afterEach(cleanup);
 
 describe("VaultApp foundation shell", () => {
-  it("provides skip navigation and named desktop navigation, list, and detail landmarks", async () => {
-    const platform = readyPlatform();
+  it("provides skip navigation and a named header, main, and category landmarks", async () => {
+    const platform = readyLockedPlatform();
     const { container } = render(<VaultApp platform={platform} />);
 
     const skipLink = screen.getByRole("link", { name: "Skip to vault content" });
-    const navigation = screen.getByRole("navigation", { name: "Vault navigation" });
+    const banner = screen.getByRole("banner", { name: "ShardPass" });
     const main = screen.getByRole("main");
-    const listRegion = screen.getByRole("region", { name: "Vault items" });
-    const detailRegion = screen.getByRole("region", { name: "Vault details" });
 
     expect(skipLink).toHaveAttribute("href", "#vault-content");
     expect(main).toHaveAttribute("id", "vault-content");
-    expect(navigation).toContainElement(screen.getByText("All items"));
-    expect(listRegion).toBeVisible();
-    expect(detailRegion).toBeVisible();
-    expect(container.querySelector("aside")).toContainElement(navigation);
+    expect(banner).toBeVisible();
     expect(platform.sentMessages).toEqual([{ version: 1, kind: "foundation.getStatus" }]);
 
+    await screen.findByRole("heading", { name: "Create your vault" });
     await expectNoSeriousAxeViolations(container);
   });
 
-  it("keeps keyboard focus order honest and exposes no enabled CRUD controls", () => {
-    render(<VaultApp platform={readyPlatform()} />);
-
-    const skipLink = screen.getByRole("link", { name: "Skip to vault content" });
-    const search = screen.getByRole("searchbox", { name: "Search vault" });
-    const create = screen.getByRole("button", { name: "Create item" });
-
-    expect(search).toBeDisabled();
-    expect(search).toHaveAccessibleDescription(/available after the vault is unlocked/i);
-    expect(create).toBeDisabled();
-    expect(create).toHaveAccessibleDescription(/available after the vault is unlocked/i);
-    expect(screen.getAllByRole("button")).toEqual([create]);
-
-    const searchExplanation = screen.getByText("Search is available after the vault is unlocked.");
-    const createExplanation = screen.getByText(
-      "Item creation is available after the vault is unlocked.",
-    );
-    expect(searchExplanation).toHaveAttribute("id", "search-availability");
-    expect(createExplanation).toHaveAttribute("id", "create-availability");
-    expect(search.closest("label")?.parentElement).toContainElement(searchExplanation);
-    expect(create.parentElement).toContainElement(createExplanation);
-
-    skipLink.focus();
-    expect(skipLink).toHaveFocus();
-    expect(
-      skipLink.compareDocumentPosition(search) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
-    expect(search.compareDocumentPosition(create) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-
-    expect(
-      screen.queryByRole("button", { name: /edit|delete|import|migrate|unlock/i }),
-    ).not.toBeInTheDocument();
-    expect(screen.queryByText(/demo|sample password|fake item/i)).not.toBeInTheDocument();
-  });
-
-  it("integrates migration only into the unlocked full-page detail workspace", async () => {
-    const platform = new FakeExtensionPlatform("vault-test-id");
-    platform.queueSendResponse(foundationStatus);
-    platform.queueSendResponse({
-      version: 1,
-      kind: "vault.state",
-      state: "unlocked",
-      autoLockMinutes: 15,
-      lockOnScreenLock: true,
-      retryAfterMs: 0,
-      streamId: "00000000000000000000000000000002",
-      sequence: 1,
-    });
-    platform.queueSendResponse({
-      version: 1,
-      kind: "ente.state",
-      state: "disconnected",
-      connected: false,
-      pendingCount: 0,
-      conflictCount: 0,
-      lastSuccessAt: null,
-    });
-    platform.queueSendResponse({
-      version: 1,
-      kind: "migration.status",
-      available: false,
-      phase: "none",
-      itemCount: 0,
-    });
-
-    render(<VaultApp platform={platform} />);
-
-    expect(await screen.findByRole("heading", { name: "Vault unlocked" })).toBeVisible();
-    await waitFor(() =>
-      expect(platform.sentMessages).toContainEqual({ version: 1, kind: "migration.inspect" }),
-    );
-    expect(screen.queryByRole("heading", { name: "Migrate legacy vault" })).not.toBeInTheDocument();
-  });
-
-  it("renders an honest empty state after validating foundation readiness", async () => {
-    const { container } = render(<VaultApp platform={readyPlatform()} />);
-
-    expect(await screen.findByRole("status")).toHaveTextContent("Foundation ready");
-    expect(await screen.findByRole("heading", { name: "Create your vault" })).toBeVisible();
-    expect(screen.getByText(/derives the unlock key in a dedicated worker/i)).toBeVisible();
-    expect(screen.getByText("0 AVAILABLE ITEMS")).toBeVisible();
-    expect(screen.getByText("NO ITEM SELECTED")).toBeVisible();
-
-    await expectNoSeriousAxeViolations(container);
-  });
-
-  it.each([
-    ["rejected request", new Error("secret backend stack and payload")],
-    ["malformed response", { version: 1, kind: "foundation.status", phase: "secret" }],
-  ])("shows a stable safe error for %s without reflecting details", async (_label, outcome) => {
-    const fakePlatform = new FakeExtensionPlatform("vault-test-id");
-    let platform: ExtensionPlatform &
+  it("renders an honest foundation-error state without reflecting details", async () => {
+    const platform: ExtensionPlatform &
       OtpImportUiExtensionPlatform &
       BackupUiExtensionPlatform &
-      EnteUiPlatform = fakePlatform;
-    if (outcome instanceof Error) {
-      platform = {
-        extensionId: "vault-test-id",
-        onMessage: () => () => undefined,
-        sendMessage: vi.fn(() => Promise.reject(outcome)),
-        sendBackupMessage: () => Promise.reject(new Error("unused")),
-        sendEnteMessage: () => Promise.reject(new Error("unused")),
-        sendOtpMessage: () => Promise.reject(new Error("unused")),
-        sendOtpImportMessage: () => Promise.reject(new Error("unused")),
-        writeAuthoritativeClipboardText: () => Promise.resolve(),
-        openVaultPage: vi.fn(() => Promise.resolve()),
-      };
-    } else {
-      fakePlatform.queueSendResponse(outcome);
-    }
+      EnteUiPlatform = {
+      extensionId: "vault-test-id",
+      onMessage: () => () => undefined,
+      sendMessage: vi.fn(() => Promise.reject(new Error("secret backend stack and payload"))),
+      sendBackupMessage: () => Promise.reject(new Error("unused")),
+      sendEnteMessage: () => Promise.reject(new Error("unused")),
+      sendOtpMessage: () => Promise.reject(new Error("unused")),
+      sendOtpImportMessage: () => Promise.reject(new Error("unused")),
+      writeAuthoritativeClipboardText: () => Promise.resolve(),
+      openVaultPage: vi.fn(() => Promise.resolve()),
+    };
 
     const { container } = render(<VaultApp platform={platform} />);
     const alert = await screen.findByRole("alert");
@@ -194,47 +150,89 @@ describe("VaultApp foundation shell", () => {
     );
     expect(alert).not.toHaveTextContent(/secret backend stack|payload/i);
     expect(screen.getByRole("status")).toHaveTextContent("Foundation unavailable");
-    expect(screen.getByRole("button", { name: "Create item" })).toBeDisabled();
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
 
     await expectNoSeriousAxeViolations(container);
+  });
+
+  it("lists vault items with kind-appropriate subtitles and category counts once unlocked", async () => {
+    const platform = readyUnlockedPlatform();
+    const { container } = render(<VaultApp platform={platform} />);
+
+    await screen.findByText("Example Login");
+    expect(screen.getByText("Example Note")).toBeVisible();
+    expect(screen.getByText("alice")).toBeVisible();
+
+    const allCategory = screen.getByRole("button", { name: /All/ });
+    expect(within(allCategory).getByText("2")).toBeVisible();
+
+    await waitFor(() =>
+      expect(platform.sentMessages).toContainEqual({ version: 1, kind: "item.query" }),
+    );
+
+    await expectNoSeriousAxeViolations(container);
+  });
+
+  it("shows an empty detail placeholder until an item is selected, then the item's own detail view", async () => {
+    const platform = readyUnlockedPlatform();
+    render(<VaultApp platform={platform} />);
+
+    expect(await screen.findByText("Select an item to view its details.")).toBeVisible();
+    const loginRow = await screen.findByRole("button", { name: /Example Login/ });
+    fireEvent.click(loginRow);
+
+    expect(await screen.findByRole("heading", { name: "Example Login" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Copy username" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Edit" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Delete" })).toBeVisible();
+  });
+
+  it("filters the item list by category without changing the sidebar's total counts", async () => {
+    const platform = readyUnlockedPlatform();
+    render(<VaultApp platform={platform} />);
+
+    await screen.findByText("Example Login");
+
+    fireEvent.click(screen.getByRole("button", { name: /Notes/ }));
+
+    expect(screen.queryByText("Example Login")).not.toBeInTheDocument();
+    expect(screen.getByText("Example Note")).toBeVisible();
+    expect(within(screen.getByRole("button", { name: /All/ })).getByText("2")).toBeVisible();
+  });
+
+  it("defers migration and Ente sync requests until the Settings destination is opened", async () => {
+    const platform = readyUnlockedPlatform();
+    render(<VaultApp platform={platform} />);
+
+    await screen.findByText("Example Login");
+    expect(platform.sentMessages).not.toContainEqual({ version: 1, kind: "migration.inspect" });
+
+    // MigrationPanel's migration.inspect fires synchronously on mount; VaultAccess's
+    // vault.getState only fires ~250ms later via its connectVaultState fallback timer.
+    // FakeExtensionPlatform serves queued responses in strict FIFO order regardless of
+    // which request consumes them, so the queue order here must match that send order.
+    platform.queueSendResponse({
+      version: 1,
+      kind: "migration.status",
+      available: false,
+      phase: "none",
+      itemCount: 0,
+    });
+    platform.queueSendResponse(unlockedVaultState(2));
+
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+
+    await waitFor(() =>
+      expect(platform.sentMessages).toContainEqual({ version: 1, kind: "migration.inspect" }),
+    );
+    expect(await screen.findByRole("heading", { name: "Vault unlocked" })).toBeVisible();
   });
 });
 
 describe("vault source and responsive style contracts", () => {
-  it("uses a full-viewport document and structurally collapses desktop list/detail at a compact breakpoint", async () => {
-    const extensionRoot = path.resolve(process.cwd(), "apps/extension");
-    const [html, css] = await Promise.all([
-      readFile(path.join(extensionRoot, "vault/index.html"), "utf8"),
-      readFile(path.join(extensionRoot, "src/vault/VaultApp.module.css"), "utf8"),
-    ]);
-
-    expect(html).toContain('class="vaultDocument"');
-    expect(html).toContain('class="vaultBody"');
-    expect(html).toContain('id="root" class="vaultRoot"');
-    expect(html).toContain('src="../src/vault/main.tsx"');
-    expect(html).not.toContain('src="../src/vault/main.ts"');
-
-    expect(css).toMatch(/:global\(\.vaultDocument\)[\s\S]*min-height:\s*100%/);
-    expect(css).toMatch(/:global\(\.vaultBody\)[\s\S]*min-height:\s*100vh/);
-    expect(css).toMatch(
-      /\.workspace\s*\{[\s\S]*grid-template-columns:\s*minmax\([^;]+\)\s+minmax\([^;]+\)/,
-    );
-    expect(css).toMatch(
-      /@media\s*\(max-width:\s*760px\)[\s\S]*\.shell\s*\{[\s\S]*grid-template-columns:\s*1fr/,
-    );
-    expect(css).toMatch(
-      /@media\s*\(max-width:\s*760px\)[\s\S]*\.workspace\s*\{[\s\S]*grid-template-columns:\s*1fr/,
-    );
-    expect(css).toMatch(
-      /@media\s*\(max-width:\s*760px\)[\s\S]*\.listRegion\s*\{[\s\S]*display:\s*none/,
-    );
-    expect(css).toMatch(/@media\s*\(prefers-reduced-motion:\s*reduce\)/);
-    expect(css).not.toMatch(/width:\s*360px/);
-    expect(css).not.toMatch(/overflow-x:\s*hidden/);
-    expect(css).not.toMatch(/(?:linear|radial|conic)-gradient/);
-  });
-
   it("keeps styles external and avoids unsupported Chrome 110-only syntax", async () => {
+    const { readFile } = await import("node:fs/promises");
+    const path = await import("node:path");
     const extensionRoot = path.resolve(process.cwd(), "apps/extension");
     const [html, css, main] = await Promise.all([
       readFile(path.join(extensionRoot, "vault/index.html"), "utf8"),
@@ -242,6 +240,11 @@ describe("vault source and responsive style contracts", () => {
       readFile(path.join(extensionRoot, "src/vault/main.tsx"), "utf8"),
     ]);
 
+    expect(html).toContain('class="vaultDocument"');
+    expect(html).toContain('class="vaultBody"');
+    expect(html).toContain('id="root" class="vaultRoot"');
+    expect(html).toContain('src="../src/vault/main.tsx"');
+    expect(html).not.toContain('src="../src/vault/main.ts"');
     expect(html).not.toMatch(/<style\b|style=/i);
     expect(main).toContain('import "@shardpass/ui/styles"');
     expect(main).not.toMatch(/\.style\b|setAttribute\(["']style/i);

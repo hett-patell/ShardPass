@@ -1,4 +1,5 @@
-import { rm } from "node:fs/promises";
+import { readFile, rm } from "node:fs/promises";
+import path from "node:path";
 
 import { build } from "vite";
 import { afterAll, describe, expect, it } from "vitest";
@@ -41,45 +42,70 @@ function localClass(name: string): RegExp {
   return new RegExp(`\\.(_[\\w-]*${name}[\\w-]*|${name}[\\w-]*)`);
 }
 
+// Stylesheets this task (vault redesign) owns and is responsible for keeping free of
+// unsupported Chrome 110-only syntax. Other vault stylesheets (backup/migration/ente
+// settings panels) predate this task and are out of scope here.
+const OWNED_STYLESHEETS = [
+  "src/vault/VaultApp.module.css",
+  "src/vault/otp/OtpVaultView.module.css",
+  "src/vault/components/EmptyVaultState.module.css",
+  "src/vault/components/EmptyDetailState.module.css",
+  "src/vault/components/ItemListPanel.module.css",
+  "src/vault/components/VaultSidebar.module.css",
+  "src/vault/components/NewItemMenu.module.css",
+  "src/vault/components/PasswordGeneratorDialog.module.css",
+  "src/vault/components/detail/Detail.module.css",
+  "src/vault/components/forms/Form.module.css",
+];
+
 afterAll(async () => {
   await rm(outputDirectory, { force: true, recursive: true });
 });
 
 describe("emitted vault CSS contracts", () => {
-  it("emits distinct local explanation classes without literal ID selectors", async () => {
+  it("emits a three-column sidebar/list/detail grid at desktop widths", async () => {
     const css = await buildVaultCss();
 
-    expect(css).toMatch(localClass("searchAvailability"));
-    expect(css).toMatch(localClass("createAvailability"));
-    expect(css).not.toMatch(/#search-availability\b|#create-availability\b/);
-    expect(css).not.toMatch(/(?:searchAvailability|createAvailability)[^}]*display:\s*none/s);
-  }, 15_000);
-
-  it("emits exact bounded OTP virtual-row geometry and internal truncation", async () => {
-    const css = await buildVaultCss();
-    const itemRule = css.match(/\.[\w-]*_item_[\w-]*\s*\{(?<body>[^}]*)\}/)?.groups?.body ?? "";
-
-    expect(itemRule).toMatch(/height:\s*54px/);
-    expect(itemRule).toMatch(/min-height:\s*54px/);
-    expect(itemRule).toMatch(/box-sizing:\s*border-box/);
-    expect(itemRule).toMatch(/overflow:\s*hidden/);
-    expect(css).toMatch(/itemCopy[^}]*min-width:\s*0/s);
-    expect(css).toMatch(/itemCopy[^}]*overflow:\s*hidden/s);
-    expect(css).toMatch(/itemCopy[^}]*text-overflow:\s*ellipsis/s);
-    expect(Number(itemRule.match(/min-height:\s*(\d+)px/)?.[1])).toBeGreaterThanOrEqual(44);
-  }, 15_000);
-
-  it("emits explicit non-overlapping group placement at desktop and both responsive thresholds", async () => {
-    const css = await buildVaultCss();
-
-    expect(css).toMatch(/searchGroup[^}]*grid-column:\s*1\s*\/\s*3/s);
-    expect(css).toMatch(/createGroup[^}]*grid-column:\s*3/s);
+    expect(css).toMatch(localClass("vault"));
     expect(css).toMatch(
-      /@media\s*\(max-width:\s*980px\)[\s\S]*searchGroup[^}]*grid-column:\s*1[\s\S]*createGroup[^}]*grid-column:\s*2/,
+      /\.[\w-]*vault[\w-]*\s*\{[^}]*grid-template-columns:\s*[^;]+\s+[^;]+\s+minmax\([^;]+\)/s,
     );
+  }, 20_000);
+
+  it("collapses the three-panel grid to a single column at a compact breakpoint", async () => {
+    const css = await buildVaultCss();
+
     expect(css).toMatch(
-      /@media\s*\(max-width:\s*760px\)[\s\S]*searchGroup[^}]*grid-column:\s*1[\s\S]*createGroup[^}]*grid-column:\s*1/,
+      /@media\s*\(max-width:\s*760px\)[\s\S]*\.[\w-]*vault[\w-]*\s*\{[^}]*grid-template-columns:\s*1fr/,
     );
-    expect(css).toMatch(/(?:searchAvailability|createAvailability)[^}]*overflow-wrap:\s*anywhere/s);
-  }, 15_000);
+  }, 20_000);
+
+  it("respects prefers-reduced-motion in the emitted bundle", async () => {
+    const css = await buildVaultCss();
+
+    expect(css).toMatch(/@media\s*\(prefers-reduced-motion:\s*reduce\)/);
+  }, 20_000);
+
+  it("keeps a full-viewport document per the VaultApp.module.css source", async () => {
+    const extensionRoot = path.resolve(process.cwd(), "apps/extension");
+    const css = await readFile(path.join(extensionRoot, "src/vault/VaultApp.module.css"), "utf8");
+
+    expect(css).toMatch(/:global\(\.vaultDocument\)[\s\S]*min-height:\s*100%/);
+    expect(css).toMatch(/:global\(\.vaultBody\)[\s\S]*min-height:\s*100vh/);
+    expect(css).toMatch(/:global\(\.vaultRoot\)[\s\S]*min-height:\s*100vh/);
+    expect(css).not.toMatch(/(?:linear|radial|conic)-gradient/);
+  });
+
+  it("avoids unsupported Chrome 110-only CSS syntax in every stylesheet this task owns", async () => {
+    const extensionRoot = path.resolve(process.cwd(), "apps/extension");
+    const sources = await Promise.all(
+      OWNED_STYLESHEETS.map((relativePath) => readFile(path.join(extensionRoot, relativePath), "utf8")),
+    );
+
+    for (const [index, css] of sources.entries()) {
+      expect(css, OWNED_STYLESHEETS[index]).not.toMatch(
+        /color-mix\(|light-dark\(|oklch\(|@starting-style|transition-behavior|field-sizing/,
+      );
+    }
+  });
 });

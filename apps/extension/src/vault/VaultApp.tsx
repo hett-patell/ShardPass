@@ -1,4 +1,6 @@
-import { AppHeader, Button, StatusBadge, type Status } from "@shardpass/ui";
+import type { OtpItem, VaultItemKind } from "@shardpass/domain";
+import type { OtpEditableInput, OtpResponse } from "@shardpass/messaging";
+import { AppHeader, SearchBar, StatusBadge, type CategoryKey, type Status } from "@shardpass/ui";
 import { useCallback, useState } from "react";
 
 import { useFoundationStatus } from "../foundation/useFoundationStatus";
@@ -8,14 +10,25 @@ import type {
   ExtensionPlatform,
   OtpImportUiExtensionPlatform,
 } from "../platform/extension-platform";
-import styles from "./VaultApp.module.css";
-import { VaultSidebar } from "./components/VaultSidebar";
-import { EmptyVaultState } from "./components/EmptyVaultState";
 import { VaultAccess } from "../vault-access/VaultAccess";
-import { MigrationPanel } from "./migration/MigrationPanel";
-import { OtpVaultView } from "./otp/OtpVaultView";
-import { BackupView } from "./settings/BackupView";
+import { EmptyDetailState } from "./components/EmptyDetailState";
+import { EmptyVaultState } from "./components/EmptyVaultState";
+import { CardForm } from "./components/forms/CardForm";
+import { IdentityForm } from "./components/forms/IdentityForm";
+import { LoginForm } from "./components/forms/LoginForm";
+import { NoteForm } from "./components/forms/NoteForm";
+import { SecretForm } from "./components/forms/SecretForm";
+import { ItemDetailPanel } from "./components/ItemDetailPanel";
+import { ItemListPanel } from "./components/ItemListPanel";
+import { NewItemMenu } from "./components/NewItemMenu";
+import { VaultSidebar, type VaultSidebarView } from "./components/VaultSidebar";
 import { EnteSettings } from "./ente/EnteSettings";
+import { countByKind, useVaultState } from "./hooks/useVaultState";
+import { summarizeFolders } from "./item-support";
+import { MigrationPanel } from "./migration/MigrationPanel";
+import { defaultOtpInput, OtpEditor } from "./otp/OtpEditor";
+import { BackupView } from "./settings/BackupView";
+import styles from "./VaultApp.module.css";
 
 export interface VaultAppProps {
   platform: ExtensionPlatform &
@@ -30,7 +43,7 @@ function statusPresentation(state: "loading" | "ready" | "error"): {
 } {
   switch (state) {
     case "loading":
-      return { label: "Checking foundation status", status: "neutral" };
+      return { label: "Checking foundation", status: "neutral" };
     case "ready":
       return { label: "Foundation ready", status: "success" };
     case "error":
@@ -38,12 +51,106 @@ function statusPresentation(state: "loading" | "ready" | "error"): {
   }
 }
 
+const createOtpError = "Could not create this item. Try again.";
+
 export function VaultApp({ platform }: VaultAppProps) {
   const foundation = useFoundationStatus(platform);
   const presentation = statusPresentation(foundation.state);
   const [vaultUnlocked, setVaultUnlocked] = useState(false);
-  const [otpRefreshToken, setOtpRefreshToken] = useState(0);
-  const handleImported = useCallback(() => setOtpRefreshToken((token) => token + 1), []);
+  const [view, setView] = useState<VaultSidebarView>("vault");
+  const [creatingKind, setCreatingKind] = useState<VaultItemKind | null>(null);
+  const [otpCreating, setOtpCreating] = useState(false);
+  const [otpCreateError, setOtpCreateError] = useState("");
+
+  const vaultState = useVaultState(platform, vaultUnlocked);
+  const selectedItem =
+    creatingKind === null ? (vaultState.items.find((item) => item.id === vaultState.selectedId) ?? null) : null;
+  const otpItems = vaultState.allItems.filter((item): item is OtpItem => item.kind === "otp");
+  const folders = summarizeFolders(vaultState.allItems);
+
+  const goToVaultView = useCallback(() => {
+    setView("vault");
+    setCreatingKind(null);
+  }, []);
+
+  const selectItem = useCallback(
+    (id: string) => {
+      setCreatingKind(null);
+      vaultState.setSelectedId(id);
+    },
+    [vaultState],
+  );
+
+  const handleCategoryChange = useCallback(
+    (category: CategoryKey) => {
+      goToVaultView();
+      vaultState.setCategory(category);
+    },
+    [goToVaultView, vaultState],
+  );
+
+  const handleFolderSelect = useCallback(
+    (folderId: string | null) => {
+      goToVaultView();
+      vaultState.setFolderId(folderId);
+    },
+    [goToVaultView, vaultState],
+  );
+
+  const handleUpdate = useCallback(() => vaultState.refresh(), [vaultState]);
+  const handleDeleted = useCallback(() => {
+    vaultState.setSelectedId(null);
+    vaultState.refresh();
+  }, [vaultState]);
+
+  const startCreate = useCallback(
+    (kind: VaultItemKind) => {
+      setView("vault");
+      vaultState.setSelectedId(null);
+      setOtpCreateError("");
+      setCreatingKind(kind);
+    },
+    [vaultState],
+  );
+
+  const cancelCreate = useCallback(() => setCreatingKind(null), []);
+
+  // Shared by every non-OTP create form: only `id` is needed to select the new item,
+  // and every VaultItem kind carries one, so this is safe to reuse across kinds.
+  const handleCreated = useCallback(
+    (item: { id: string }) => {
+      setCreatingKind(null);
+      vaultState.setCategory("all");
+      vaultState.setFolderId(null);
+      vaultState.refresh();
+      vaultState.setSelectedId(item.id);
+    },
+    [vaultState],
+  );
+
+  const submitOtpCreate = useCallback(
+    async (value: OtpEditableInput) => {
+      setOtpCreating(true);
+      setOtpCreateError("");
+      try {
+        const response: OtpResponse = await platform.sendOtpMessage({
+          version: 1,
+          kind: "otp.create",
+          input: value,
+        });
+        if (response.kind === "otp.mutationResult") {
+          handleCreated(response.item);
+        } else {
+          setOtpCreateError(createOtpError);
+        }
+      } catch {
+        setOtpCreateError(createOtpError);
+      } finally {
+        setOtpCreating(false);
+      }
+    },
+    [handleCreated, platform],
+  );
 
   return (
     <div className={styles.shell}>
@@ -52,135 +159,111 @@ export function VaultApp({ platform }: VaultAppProps) {
       </a>
 
       <AppHeader
-        className={styles.header ?? ""}
-        eyebrow="ENCRYPTED VAULT / FOUNDATION"
+        eyebrow="ENCRYPTED VAULT"
         title="ShardPass"
         actions={<StatusBadge status={presentation.status}>{presentation.label}</StatusBadge>}
       />
 
-      <VaultSidebar foundation={foundation} />
-
       <main className={styles.main} id="vault-content" tabIndex={-1}>
-        {!vaultUnlocked ? (
-          <div className={styles.commandBar} role="search">
-            <div className={styles.searchGroup}>
-              <label className={styles.searchLabel} htmlFor="vault-search">
-                <span className={styles.technicalLabel}>COMMAND / SEARCH</span>
-                <span className={styles.searchControl}>
-                  <span className={styles.searchGlyph} aria-hidden="true">
-                    ⌕
-                  </span>
-                  <input
-                    id="vault-search"
-                    type="search"
-                    aria-describedby="search-availability"
-                    aria-label="Search vault"
-                    placeholder="Search encrypted items"
-                    disabled
-                  />
-                </span>
-              </label>
-              <span className={styles.searchAvailability} id="search-availability">
-                Search is available after the vault is unlocked.
-              </span>
-            </div>
-            <div className={styles.createGroup}>
-              <Button
-                className={styles.createButton}
-                variant="secondary"
-                disabled
-                aria-describedby="create-availability"
-              >
-                Create item
-              </Button>
-              <span className={styles.createAvailability} id="create-availability">
-                Item creation is available after the vault is unlocked.
-              </span>
-            </div>
+        {foundation.state !== "ready" ? (
+          <EmptyVaultState foundation={foundation} />
+        ) : !vaultUnlocked ? (
+          <div className={styles.accessRegion}>
+            <VaultAccess platform={platform} securityControls onUnlockedChange={setVaultUnlocked} />
           </div>
-        ) : null}
+        ) : (
+          <div className={styles.vault}>
+            <div className={styles.sidebarColumn}>
+              <VaultSidebar
+                category={vaultState.category}
+                onCategoryChange={handleCategoryChange}
+                itemCounts={countByKind(vaultState.allItems)}
+                folders={folders}
+                selectedFolderId={vaultState.folderId}
+                onFolderSelect={handleFolderSelect}
+                view={view}
+                onOpenSettings={() => setView("settings")}
+                onOpenEnte={() => setView("ente")}
+              />
+            </div>
 
-        <div className={vaultUnlocked ? styles.unlockedWorkspace : styles.workspace}>
-          {!vaultUnlocked ? (
-            <section className={styles.listRegion} aria-labelledby="vault-items-heading">
-              <header className={styles.regionHeader}>
-                <div>
-                  <p className={styles.technicalLabel}>INDEX / ALL</p>
-                  <h2 id="vault-items-heading">Vault items</h2>
-                </div>
-                <span className={styles.regionCount}>0 AVAILABLE ITEMS</span>
-              </header>
-              <div className={styles.listPlaceholder} aria-hidden="true">
-                <span />
-                <span />
-                <span />
-              </div>
-            </section>
-          ) : null}
-
-          <section
-            className={vaultUnlocked ? styles.unlockedRegion : styles.detailRegion}
-            id="vault-details"
-            aria-labelledby="vault-details-heading"
-          >
-            {!vaultUnlocked ? (
-              <header className={styles.regionHeader}>
-                <div>
-                  <p className={styles.technicalLabel}>DETAIL / FOUNDATION</p>
-                  <h2 id="vault-details-heading">Vault details</h2>
-                </div>
-                <span className={styles.regionCount}>NO ITEM SELECTED</span>
-              </header>
-            ) : (
-              <h2 className={styles.visuallyHidden} id="vault-details-heading">
-                Unlocked vault workspace
-              </h2>
-            )}
-            {foundation.state === "ready" ? (
-              <div className={vaultUnlocked ? styles.unlockedContent : styles.accessRegion}>
-                {vaultUnlocked ? (
-                  <OtpVaultView
-                    platform={platform}
-                    active
-                    refreshToken={otpRefreshToken}
-                    onImported={handleImported}
-                  />
-                ) : null}
-                <section
-                  className={vaultUnlocked ? styles.settingsRegion : styles.accessOnlyRegion}
-                  aria-label={vaultUnlocked ? "Vault controls" : "Vault access"}
-                >
-                  {vaultUnlocked ? (
-                    <header className={styles.settingsHeader}>
-                      <p className={styles.technicalLabel}>VAULT / SECURITY &amp; MIGRATION</p>
-                      <h2>Vault controls</h2>
-                    </header>
-                  ) : null}
-                  <div className={vaultUnlocked ? styles.settingsContent : undefined}>
-                    <VaultAccess
-                      platform={platform}
-                      securityControls
-                      onUnlockedChange={setVaultUnlocked}
+            {view === "vault" ? (
+              <>
+                <div className={styles.list}>
+                  <div className={styles.listHeader}>
+                    <SearchBar
+                      value={vaultState.search}
+                      onChange={vaultState.setSearch}
+                      placeholder="Search vault"
                     />
-                    <EnteSettings platform={platform} active={vaultUnlocked} />
-                    <MigrationPanel
-                      platform={platform}
-                      active={vaultUnlocked}
-                      onCompleted={handleImported}
-                    />
-                    <BackupView
-                      platform={platform}
-                      active={vaultUnlocked}
-                      onImported={handleImported}
+                    <NewItemMenu onSelect={startCreate} />
+                  </div>
+                  <div className={styles.listBody}>
+                    <ItemListPanel
+                      items={vaultState.items}
+                      selectedId={creatingKind === null ? vaultState.selectedId : null}
+                      onSelect={selectItem}
                     />
                   </div>
-                </section>
-              </div>
+                </div>
+
+                <div className={styles.detail}>
+                  {creatingKind === "otp" ? (
+                    <>
+                      <OtpEditor
+                        mode="create"
+                        value={defaultOtpInput}
+                        submitting={otpCreating}
+                        onSubmit={submitOtpCreate}
+                        onCancel={cancelCreate}
+                      />
+                      {otpCreateError ? (
+                        <p role="alert">{otpCreateError}</p>
+                      ) : null}
+                    </>
+                  ) : creatingKind === "login" ? (
+                    <LoginForm
+                      platform={platform}
+                      otpItems={otpItems}
+                      onSaved={handleCreated}
+                      onCancel={cancelCreate}
+                    />
+                  ) : creatingKind === "note" ? (
+                    <NoteForm platform={platform} onSaved={handleCreated} onCancel={cancelCreate} />
+                  ) : creatingKind === "card" ? (
+                    <CardForm platform={platform} onSaved={handleCreated} onCancel={cancelCreate} />
+                  ) : creatingKind === "identity" ? (
+                    <IdentityForm platform={platform} onSaved={handleCreated} onCancel={cancelCreate} />
+                  ) : creatingKind === "secret" ? (
+                    <SecretForm platform={platform} onSaved={handleCreated} onCancel={cancelCreate} />
+                  ) : selectedItem ? (
+                    <ItemDetailPanel
+                      item={selectedItem}
+                      platform={platform}
+                      otpItems={otpItems}
+                      onUpdate={handleUpdate}
+                      onDeleted={handleDeleted}
+                    />
+                  ) : (
+                    <EmptyDetailState />
+                  )}
+                </div>
+              </>
             ) : (
-              <EmptyVaultState foundation={foundation} />
+              <div className={styles.settingsPanel}>
+                {view === "settings" ? (
+                  <>
+                    <VaultAccess platform={platform} securityControls onUnlockedChange={setVaultUnlocked} />
+                    <MigrationPanel platform={platform} active onCompleted={handleUpdate} />
+                    <BackupView platform={platform} active onImported={handleUpdate} />
+                  </>
+                ) : (
+                  <EnteSettings platform={platform} active />
+                )}
+              </div>
             )}
-          </section>
-        </div>
+          </div>
+        )}
       </main>
     </div>
   );
