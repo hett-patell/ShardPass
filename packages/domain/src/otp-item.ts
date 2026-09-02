@@ -1,7 +1,12 @@
 import { z } from "zod/mini";
 
+import { CardItemSchema } from "./card-item";
 import { isCanonicalUnpaddedBase32 } from "./canonical-base32";
+import { IdentityItemSchema } from "./identity-item";
 import { ITEM_SCHEMA_VERSION, ItemMetadataSchema } from "./item-metadata";
+import { LoginItemSchema } from "./login-item";
+import { NoteItemSchema } from "./note-item";
+import { SecretItemSchema } from "./secret-item";
 import { UnicodeScalarTextCheck } from "./unicode-scalar-text";
 
 export const MAX_OTP_ISSUER_LENGTH = 256;
@@ -55,7 +60,14 @@ export const OtpItemSchema = z
     ),
   );
 
-export const VaultItemSchema = z.discriminatedUnion("kind", [OtpItemSchema]);
+export const VaultItemSchema = z.discriminatedUnion("kind", [
+  OtpItemSchema,
+  LoginItemSchema,
+  NoteItemSchema,
+  CardItemSchema,
+  IdentityItemSchema,
+  SecretItemSchema,
+]);
 
 export type OtpItem = z.infer<typeof OtpItemSchema>;
 export type VaultItem = z.infer<typeof VaultItemSchema>;

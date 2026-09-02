@@ -20,3 +20,50 @@ export {
 export type { OtpItem, VaultItem } from "./otp-item";
 export { isCanonicalUnpaddedBase32 } from "./canonical-base32";
 export { isUnicodeScalarText, UnicodeScalarTextCheck } from "./unicode-scalar-text";
+
+export { FolderSchema, MAX_FOLDER_DEPTH, MAX_FOLDER_NAME_LENGTH, MAX_FOLDERS } from "./folder";
+export type { Folder } from "./folder";
+
+export {
+  LoginItemSchema,
+  MAX_LOGIN_NAME_LENGTH,
+  MAX_LOGIN_NOTES_LENGTH,
+  MAX_LOGIN_PASSWORD_LENGTH,
+  MAX_LOGIN_URL_LENGTH,
+  MAX_LOGIN_URLS,
+  MAX_LOGIN_USERNAME_LENGTH,
+} from "./login-item";
+export type { LoginItem } from "./login-item";
+
+export { MAX_NOTE_CONTENT_LENGTH, MAX_NOTE_NAME_LENGTH, NoteItemSchema } from "./note-item";
+export type { NoteItem } from "./note-item";
+
+export {
+  CardItemSchema,
+  MAX_CARD_HOLDER_LENGTH,
+  MAX_CARD_NAME_LENGTH,
+  MAX_CARD_NOTES_LENGTH,
+  MAX_CARD_NUMBER_LENGTH,
+} from "./card-item";
+export type { CardItem } from "./card-item";
+
+export {
+  IdentityItemSchema,
+  MAX_IDENTITY_NAME_LENGTH,
+  MAX_IDENTITY_NOTES_LENGTH,
+} from "./identity-item";
+export type { IdentityItem } from "./identity-item";
+
+export {
+  MAX_SECRET_METADATA_ENTRIES,
+  MAX_SECRET_METADATA_KEY_LENGTH,
+  MAX_SECRET_METADATA_VALUE_LENGTH,
+  MAX_SECRET_NAME_LENGTH,
+  MAX_SECRET_NOTES_LENGTH,
+  MAX_SECRET_VALUE_LENGTH,
+  SecretItemSchema,
+} from "./secret-item";
+export type { SecretItem } from "./secret-item";
+
+export const VAULT_ITEM_KINDS = ["otp", "login", "note", "card", "identity", "secret"] as const;
+export type VaultItemKind = (typeof VAULT_ITEM_KINDS)[number];

@@ -2,7 +2,7 @@ import { z } from "zod/mini";
 
 import { UnicodeScalarTextCheck } from "./unicode-scalar-text";
 
-export const ITEM_SCHEMA_VERSION = 1 as const;
+export const ITEM_SCHEMA_VERSION = 2 as const;
 export const MAX_ITEM_TAGS = 64;
 export const MAX_ITEM_TAG_LENGTH = 256;
 /** Pre-release parser safety bound preserving high-precision UTC fractions from the prior schema. */
@@ -40,6 +40,7 @@ export const ItemMetadataSchema = z.strictObject({
   favorite: z.boolean(),
   archivedAt: z.optional(ItemTimestampSchema),
   deletedAt: z.optional(ItemTimestampSchema),
+  folderId: z.optional(ItemIdSchema),
   tags: itemTagsSchema,
 });
 

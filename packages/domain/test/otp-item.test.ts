@@ -15,7 +15,7 @@ const createdAt = "2026-07-29T10:20:30.000Z";
 function validMetadata(overrides: Partial<Record<string, unknown>> = {}): Record<string, unknown> {
   return {
     id,
-    schemaVersion: 1,
+    schemaVersion: 2,
     revision: 1,
     createdAt,
     updatedAt: "2026-07-29T10:21:30Z",
@@ -45,7 +45,7 @@ describe("item metadata", () => {
   it("accepts immutable UUID metadata with positive revisions and exact UTC timestamps", () => {
     const metadata = ItemMetadataSchema.parse({
       id,
-      schemaVersion: 1,
+      schemaVersion: 2,
       revision: 1,
       createdAt,
       updatedAt: "2026-07-29T10:21:30Z",
@@ -63,7 +63,8 @@ describe("item metadata", () => {
     { id: "synthetic-account-default" },
     { id: "018f47a6-7d11-7c2f-8bd9-a1d37f147a2z" },
     { schemaVersion: 0 },
-    { schemaVersion: 2 },
+    { schemaVersion: 1 },
+    { schemaVersion: 3 },
     { revision: 0 },
     { revision: -1 },
     { revision: 1.5 },
@@ -108,7 +109,7 @@ describe("item metadata", () => {
   it("infers the shared metadata contract from the runtime schema", () => {
     expectTypeOf<ItemMetadata>().toMatchTypeOf<{
       id: string;
-      schemaVersion: 1;
+      schemaVersion: 2;
       revision: number;
       createdAt: string;
       updatedAt: string;
@@ -144,7 +145,8 @@ describe("OTP item", () => {
   it.each([
     { kind: "login" },
     { kind: "unknown" },
-    { schemaVersion: 2 },
+    { schemaVersion: 1 },
+    { schemaVersion: 3 },
     { issuer: "I".repeat(257) },
     { label: "" },
     { label: "L".repeat(257) },
@@ -234,10 +236,24 @@ describe("OTP item", () => {
     expect(OtpItemSchema.parse(validOtpItem({ digits: 10 })).digits).toBe(10);
   });
 
-  it("keeps the Project 1 vault union OTP-only and rejects unknown item kinds", () => {
+  it("dispatches every vault item kind to its schema and rejects unknown kinds", () => {
     expect(VaultItemSchema.parse(validOtpItem()).kind).toBe("otp");
+
+    const login = {
+      ...validMetadata(),
+      kind: "login" as const,
+      name: "GitHub",
+      username: "user@example.com",
+      password: "hunter2",
+      urls: ["github.com"],
+      notes: "",
+    };
+    expect(VaultItemSchema.parse(login).kind).toBe("login");
+
+    // Shapes for the wrong kind (extra/missing fields) are still rejected.
     expect(() => VaultItemSchema.parse(validOtpItem({ kind: "login" }))).toThrow();
     expect(() => VaultItemSchema.parse(validOtpItem({ kind: "note" }))).toThrow();
+    expect(() => VaultItemSchema.parse(validOtpItem({ kind: "unknown" }))).toThrow();
   });
 
   it("infers public item types from strict runtime schemas", () => {
