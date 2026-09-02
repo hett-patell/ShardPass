@@ -28,7 +28,6 @@ import { ImportDialog } from "./import/ImportDialog";
 import { summarizeFolders } from "./item-support";
 import { MigrationPanel } from "./migration/MigrationPanel";
 import { defaultOtpInput, OtpEditor } from "./otp/OtpEditor";
-import { BackupView } from "./settings/BackupView";
 import styles from "./VaultApp.module.css";
 
 export interface VaultAppProps {
@@ -257,7 +256,6 @@ export function VaultApp({ platform }: VaultAppProps) {
                     <VaultAccess platform={platform} securityControls onUnlockedChange={setVaultUnlocked} />
                     <MigrationPanel platform={platform} active onCompleted={handleUpdate} />
                     <ImportDialog platform={platform} active onImported={handleUpdate} />
-                    <BackupView platform={platform} active onImported={handleUpdate} />
                   </>
                 ) : (
                   <EnteSettings platform={platform} active />
