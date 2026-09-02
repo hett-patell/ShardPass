@@ -105,12 +105,16 @@ export function parseItemCrudResponseForRequest(request: ItemCrudRequest, candid
   return { success: true as const, data: parsed.data };
 }
 
-const popupAndVault = { allowedContexts: ["popup", "vault"], requireDocument: true } as const;
 const vaultOnly = { allowedContexts: ["vault"], requireDocument: true } as const;
 
+// Unlike otp.list/otp.getCode (which return a secret-free projection safe for the
+// popup surface), ItemService returns the full VaultItem — including the plaintext
+// login password, card number, identity fields, or secret value — for every kind.
+// Every item-crud command is therefore restricted to the vault page, the same
+// full-secret-access surface as otp.getEditor/create/update/delete.
 export const itemCrudSenderPolicy = {
-  "item.query": popupAndVault,
-  "item.get": popupAndVault,
+  "item.query": vaultOnly,
+  "item.get": vaultOnly,
   "item.create": vaultOnly,
   "item.update": vaultOnly,
   "item.delete": vaultOnly,

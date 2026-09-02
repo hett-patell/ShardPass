@@ -160,7 +160,7 @@ describe("ItemService", () => {
     const created = await service.handle(request("item.create", { item: candidate }), vaultSender);
     expect(created).toMatchObject({ kind: "item.mutationResult", item: { id: ids.created, name: "Example" } });
 
-    const fetched = await service.handle(request("item.get", { itemId: ids.created }), popupSender);
+    const fetched = await service.handle(request("item.get", { itemId: ids.created }), vaultSender);
     expect(fetched).toMatchObject({ kind: "item.getResult", item: { id: ids.created, username: "alice" } });
   });
 
@@ -178,7 +178,7 @@ describe("ItemService", () => {
       content: "",
     };
     const { service } = fixture([loginItem(), otpItem(), note]);
-    const result = await service.handle(request("item.query", { itemKind: "login" }), popupSender);
+    const result = await service.handle(request("item.query", { itemKind: "login" }), vaultSender);
     if (result.kind !== "item.queryResult") throw new Error("expected query result");
     expect(result.items).toHaveLength(1);
     expect(result.items[0]).toMatchObject({ kind: "login", id: ids.login });
@@ -189,11 +189,11 @@ describe("ItemService", () => {
     const other = otpItem({ id: ids.otp, favorite: false });
     const { service } = fixture([inFolder, other]);
 
-    const byFolder = await service.handle(request("item.query", { folderId }), popupSender);
+    const byFolder = await service.handle(request("item.query", { folderId }), vaultSender);
     if (byFolder.kind !== "item.queryResult") throw new Error("expected query result");
     expect(byFolder.items.map((item) => item.id)).toEqual([ids.login]);
 
-    const favoritesOnly = await service.handle(request("item.query", { favoritesOnly: true }), popupSender);
+    const favoritesOnly = await service.handle(request("item.query", { favoritesOnly: true }), vaultSender);
     if (favoritesOnly.kind !== "item.queryResult") throw new Error("expected query result");
     expect(favoritesOnly.items.map((item) => item.id)).toEqual([ids.login]);
   });
@@ -205,11 +205,11 @@ describe("ItemService", () => {
     ];
     const { service } = fixture(values);
 
-    const byName = await service.handle(request("item.query", { search: "acme" }), popupSender);
+    const byName = await service.handle(request("item.query", { search: "acme" }), vaultSender);
     if (byName.kind !== "item.queryResult") throw new Error("expected query result");
     expect(byName.items.map((item) => item.id)).toEqual([ids.login]);
 
-    const byIssuer = await service.handle(request("item.query", { search: "i̇stanbul" }), popupSender);
+    const byIssuer = await service.handle(request("item.query", { search: "i̇stanbul" }), vaultSender);
     if (byIssuer.kind !== "item.queryResult") throw new Error("expected query result");
     expect(byIssuer.items.map((item) => item.id)).toEqual([ids.otp]);
   });
@@ -223,9 +223,15 @@ describe("ItemService", () => {
     expect(activity).toEqual([]);
   });
 
-  it("rejects item.create, item.update, and item.delete from a popup sender in depth", async () => {
+  it("defends every item-crud command in depth and does not decrypt for popup", async () => {
     const stored = loginItem();
     const { repository, service } = fixture([stored]);
+    await expect(
+      service.handle(request("item.query", {}), popupSender),
+    ).rejects.toMatchObject({ code: "ITEM_INVALID" });
+    await expect(
+      service.handle(request("item.get", { itemId: stored.id }), popupSender),
+    ).rejects.toMatchObject({ code: "ITEM_INVALID" });
     await expect(
       service.handle(request("item.create", { item: { ...loginItem(), id: ids.created } }), popupSender),
     ).rejects.toMatchObject({ code: "ITEM_INVALID" });
@@ -286,7 +292,7 @@ describe("ItemService", () => {
   it("returns ITEM_NOT_FOUND for get, update, and delete of a missing item", async () => {
     const { service } = fixture();
     await expect(
-      service.handle(request("item.get", { itemId: ids.missing }), popupSender),
+      service.handle(request("item.get", { itemId: ids.missing }), vaultSender),
     ).rejects.toMatchObject({ code: "ITEM_NOT_FOUND" });
     await expect(
       service.handle(
@@ -320,7 +326,7 @@ describe("ItemService", () => {
       const { repository, service } = fixture();
       repository.listError = source;
       const failure = await service
-        .handle(request("item.query", {}), popupSender)
+        .handle(request("item.query", {}), vaultSender)
         .catch((error: unknown) => error);
       expect(failure).toBeInstanceOf(ItemServiceError);
       expect(failure).toEqual(expect.objectContaining({ code }));
@@ -342,8 +348,8 @@ describe("ItemService", () => {
     const stored = loginItem();
     const { service } = fixture([stored]);
     for (const result of [
-      await service.handle(request("item.query", {}), popupSender),
-      await service.handle(request("item.get", { itemId: stored.id }), popupSender),
+      await service.handle(request("item.query", {}), vaultSender),
+      await service.handle(request("item.get", { itemId: stored.id }), vaultSender),
     ]) {
       expect(ItemCrudResponseSchema.safeParse(result).success).toBe(true);
       expect(Object.isFrozen(result)).toBe(true);

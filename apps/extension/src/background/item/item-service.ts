@@ -45,9 +45,11 @@ export class ItemService {
       let result: ItemCrudResponse;
       switch (command.kind) {
         case "item.query":
+          this.assertVaultSender(sender);
           result = await this.query(command);
           break;
         case "item.get":
+          this.assertVaultSender(sender);
           result = await this.get(command.itemId);
           break;
         case "item.create":
