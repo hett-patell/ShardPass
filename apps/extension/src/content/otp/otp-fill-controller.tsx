@@ -1,0 +1,310 @@
+import { useEffect, useRef } from "react";
+import type { OtpFillResponse } from "@shardpass/messaging";
+
+import type { OtpFillContentPlatform } from "../../platform/extension-platform";
+import { createPickerHost, type PickerHandle } from "../createPickerHost";
+import { createOtpFieldDiscovery } from "./field-discovery";
+import { createOtpFieldEligibility } from "./field-eligibility";
+import { createOtpFieldHandleRegistry } from "./field-handles";
+import { createOtpFillAttempt, fillOtpField } from "./fill-otp-field";
+import { OtpPicker, type OtpPickerSuggestion } from "./OtpPicker";
+
+export interface OtpFillController {
+  start(): void;
+  dispose(): void;
+}
+
+type Owner = Readonly<{
+  token: object;
+  input: HTMLInputElement;
+  fieldHandle: string;
+  url: string;
+  origin: string;
+}>;
+
+type MutableRelease = Extract<OtpFillResponse, { kind: "otp.fillRelease" }> & { code: string };
+
+function randomOpaqueId(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  return [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function originOf(ownerWindow: Window): string | null {
+  try {
+    const origin = new URL(ownerWindow.location.href).origin;
+    return origin === "null" ? null : origin;
+  } catch {
+    return null;
+  }
+}
+
+function OtpTrigger({ onActivate }: Readonly<{ onActivate: () => void }>) {
+  return (
+    <button
+      type="button"
+      className="otpTrigger"
+      aria-label="Fill one-time code with ShardPass"
+      onMouseDown={(event) => event.preventDefault()}
+      onClick={onActivate}
+    >
+      <span aria-hidden="true">SP</span>
+    </button>
+  );
+}
+
+function FocusedOtpPicker(
+  props: Readonly<{
+    suggestions: readonly OtpPickerSuggestion[];
+    state: "busy" | "ready" | "empty" | "error";
+    onClose: () => void;
+    onSelect: (suggestion: OtpPickerSuggestion) => void;
+  }>,
+) {
+  const container = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    container.current?.querySelector<HTMLInputElement>('input[type="search"]')?.focus();
+  }, [props.state]);
+  return (
+    <div ref={container}>
+      <OtpPicker {...props} />
+    </div>
+  );
+}
+
+export function createOtpFillController(
+  options: Readonly<{
+    document: Document;
+    window: Window;
+    platform: OtpFillContentPlatform;
+  }>,
+): OtpFillController {
+  const eligibility = createOtpFieldEligibility(options.window);
+  const discovery = createOtpFieldDiscovery({
+    document: options.document,
+    window: options.window,
+    eligibility,
+  });
+  const registry = createOtpFieldHandleRegistry();
+  let started = false;
+  let disposed = false;
+  let owner: Owner | null = null;
+  let host: PickerHandle | null = null;
+  let release: MutableRelease | null = null;
+  let capability: string | null = null;
+
+  const owns = (candidate: Owner): boolean =>
+    !disposed &&
+    owner?.token === candidate.token &&
+    registry.resolveActive(candidate.fieldHandle) === candidate.input &&
+    candidate.input.isConnected &&
+    options.window.location.href === candidate.url &&
+    originOf(options.window) === candidate.origin;
+
+  const clearRelease = (): Readonly<{
+    releaseId: string;
+    code: string;
+    expiresAt: number;
+  }> | null => {
+    if (release === null) return null;
+    const terminal = {
+      releaseId: release.releaseId,
+      code: release.code,
+      expiresAt: release.expiresAt,
+    };
+    release.code = "";
+    release = null;
+    return terminal;
+  };
+
+  const closeHost = (): void => {
+    const current = host;
+    host = null;
+    current?.close();
+  };
+
+  const invalidate = (restoreFocus: boolean): void => {
+    owner = null;
+    capability = null;
+    clearRelease();
+    registry.clearActive();
+    closeHost();
+    if (restoreFocus) {
+      const focused = discovery.revalidateFocusedField();
+      focused?.focus({ preventScroll: true });
+    }
+  };
+
+  const sendCancel = (candidate: Owner, releaseId: string): void => {
+    void options.platform
+      .sendOtpFillMessage({
+        version: 1,
+        kind: "otp.fillCancel",
+        releaseId,
+        fieldHandle: candidate.fieldHandle,
+      })
+      .catch(() => undefined);
+  };
+
+  const showTrigger = (input: HTMLInputElement): void => {
+    invalidate(false);
+    const origin = originOf(options.window);
+    if (origin === null) return;
+    const candidate: Owner = {
+      token: Object.freeze({}),
+      input,
+      fieldHandle: registry.activate(input),
+      url: options.window.location.href,
+      origin,
+    };
+    owner = candidate;
+    host = createPickerHost(input, {
+      positionToAnchor: true,
+      content: <OtpTrigger onActivate={() => void openPicker(candidate)} />,
+    });
+  };
+
+  const renderPicker = (
+    candidate: Owner,
+    state: "busy" | "ready" | "empty" | "error",
+    suggestions: readonly OtpPickerSuggestion[],
+  ): void => {
+    if (!owns(candidate)) return;
+    closeHost();
+    if (!owns(candidate)) return;
+    host = createPickerHost(candidate.input, {
+      positionToAnchor: true,
+      content: (
+        <FocusedOtpPicker
+          suggestions={suggestions}
+          state={state}
+          onClose={() => invalidate(true)}
+          onSelect={(suggestion) => void selectSuggestion(candidate, suggestion)}
+        />
+      ),
+    });
+  };
+
+  const openPicker = async (candidate: Owner): Promise<void> => {
+    if (!owns(candidate) || options.document.activeElement !== candidate.input) return;
+    renderPicker(candidate, "busy", []);
+    try {
+      const response = await options.platform.sendOtpFillMessage({
+        version: 1,
+        kind: "otp.fillSuggestions",
+        requestId: randomOpaqueId(),
+        fieldHandle: candidate.fieldHandle,
+      });
+      if (!owns(candidate) || response.kind !== "otp.fillSuggestionsResult") return;
+      capability = response.capability;
+      renderPicker(
+        candidate,
+        response.suggestions.length === 0 ? "empty" : "ready",
+        response.suggestions,
+      );
+    } catch {
+      if (owns(candidate)) renderPicker(candidate, "error", []);
+    }
+  };
+
+  const selectSuggestion = async (
+    candidate: Owner,
+    suggestion: OtpPickerSuggestion,
+  ): Promise<void> => {
+    const selectedCapability = capability;
+    capability = null;
+    if (!owns(candidate) || selectedCapability === null) return;
+    try {
+      const response = await options.platform.sendOtpFillMessage({
+        version: 1,
+        kind: "otp.fillSelect",
+        capability: selectedCapability,
+        itemId: suggestion.itemId,
+        expectedRevision: suggestion.expectedRevision,
+        fieldHandle: candidate.fieldHandle,
+      });
+      if (response.kind !== "otp.fillRelease") return;
+      release = response;
+      if (!owns(candidate)) {
+        const stale = clearRelease();
+        if (stale !== null) sendCancel(candidate, stale.releaseId);
+        return;
+      }
+      const current = release;
+      const result = fillOtpField({
+        input: candidate.input,
+        fieldHandle: candidate.fieldHandle,
+        registry,
+        eligibility,
+        code: current.code,
+        expiresAt: current.expiresAt,
+        expectedUrl: candidate.url,
+        expectedOrigin: candidate.origin,
+        attempt: createOtpFillAttempt(),
+      });
+      const terminal = clearRelease();
+      if (terminal === null) return;
+      if (result.status !== "filled") {
+        sendCancel(candidate, terminal.releaseId);
+        invalidate(false);
+        return;
+      }
+      closeHost();
+      candidate.input.focus({ preventScroll: true });
+      void options.platform
+        .sendOtpFillMessage({
+          version: 1,
+          kind: "otp.fillConfirm",
+          releaseId: terminal.releaseId,
+          fieldHandle: candidate.fieldHandle,
+          result: "filled",
+        })
+        .catch(() => undefined);
+    } catch {
+      const stale = clearRelease();
+      if (stale !== null) sendCancel(candidate, stale.releaseId);
+      invalidate(false);
+    }
+  };
+
+  const onFocusIn = (event?: FocusEvent): void => {
+    if (disposed) return;
+    if (event?.target instanceof Element && event.target.localName === "shardpass-picker-host")
+      return;
+    const input = discovery.revalidateFocusedField();
+    if (input === null) {
+      invalidate(false);
+      return;
+    }
+    if (owner?.input === input && host?.status === "open") return;
+    showTrigger(input);
+  };
+
+  const onPageInvalidated = (): void => invalidate(false);
+
+  return {
+    start() {
+      if (started || disposed) return;
+      started = true;
+      discovery.start();
+      options.document.addEventListener("focusin", onFocusIn, true);
+      options.window.addEventListener("pagehide", onPageInvalidated, { once: true });
+      options.window.addEventListener("popstate", onPageInvalidated);
+      options.window.addEventListener("hashchange", onPageInvalidated);
+      onFocusIn();
+    },
+    dispose() {
+      if (disposed) return;
+      disposed = true;
+      started = false;
+      options.document.removeEventListener("focusin", onFocusIn, true);
+      options.window.removeEventListener("pagehide", onPageInvalidated);
+      options.window.removeEventListener("popstate", onPageInvalidated);
+      options.window.removeEventListener("hashchange", onPageInvalidated);
+      const terminal = clearRelease();
+      const candidate = owner;
+      if (terminal !== null && candidate !== null) sendCancel(candidate, terminal.releaseId);
+      invalidate(false);
+      discovery.dispose();
+    },
+  };
+}

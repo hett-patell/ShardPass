@@ -1,0 +1,13 @@
+{
+  "synthetic": true,
+  "testOnlyPassword": "TEST-ONLY ShardPass fixture password; never use for real data",
+  "vault": {
+    "version": 1,
+    "salt": "ouXMwZfuH6cVXXftv4DDpA==",
+    "iv": "gfkm3eQM92+1+Gei",
+    "ciphertext": "iL4ZUGkngUMHewMP3YpXgwX6hmQxCw6hVjCIwyy8ih16c93dYZasTIuAajT3iap3C1SfcD5u1Hym+LU5+1FKBl7P8YrszPeTHsBZoX0TJQnQjwq/1QW81WMeJGvhy7YyxXua/Usv27bF0JsiEapiii4U3V8isOTt1iA0v8eAVJiCUdeYNI2dgOBh5HarXVriIpC3ZdQ8y3ILl3tYNdL8DdO9yJv5EHsFob4gPymD3JSFfO78wiPNy0teTk1pIzKi8UD2hjAH8PmO5xUSy6Z7MsnysQtG8HAit+dO/ogZRsJF0aISfAeL0S/8B+aEWr+FqSCG4znd+asVMWp4/mmgNUwAgsCHWO6vv9NKj2PXz08ODetApbmP1CHMeEqAfEHVutj4J9C9cm/Bs6RWqVObD04u1t78tcPyYDzFVu8h522+TUBpTDZsnwXYi3D0URIMd0uYn6rF0zVF4h4m/U5ZEVLDJolFtWV/DdRAU3Kp6yE8esHNcGnKYANTozgddVEDDxOcl10kLuT/xtDQgtHQB+4RqmjElSedTan05cYDaALG4XJRcfhpyzpYn7GmkOogu0jZhhwdPbPErmQKORlWzH0JQ6BxpD8EM/pR7wKyfLdQgHaAd7YKzY+P/yvL2yyAAz6ECT8k4fFZtXLjbASUqyqJmyPl7i9vjNuPbwyP0mD8Ob8VkxWvaejR3RG/CRAdVXIaH+RVf5RXd11LtxBIU/iUVSqFWwXhv2nSuQbdrI98aJMnQ7VuEHLCDKU742UEm2aOWi1Q5ZR/9YNn86at1JcwNL/NU1c/EYQxS+TnggMcJvizGAAXERNhAQ9j6EAJ6QsSbQt01K5d0mLEBesA5dh4A9FmZuksXQgmZxdQDLD71M50/dtCaq2ha+3mxXa1HYZnXk9GU9yEm2zHwYbyb+Vp8ELqCMS7huRps+Dw430jju7VBeIGLUHgrEd/jcoUt/xGBbWzHmBvTEy2j7VjE522Si7kgoRqErjTvH6RGyOXnIAFIcDGR6hg9B27S0LMpkIoDn6AotqLuyIcWMukvfg57CnBNqlrsv/0ZVGm",
+    "iterations": 600000,
+    "createdAt": 1700000000000,
+    "updatedAt": 1700000000000
+  }
+}

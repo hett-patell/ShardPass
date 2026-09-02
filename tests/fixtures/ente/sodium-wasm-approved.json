@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "package": "libsodium-sumo@0.8.0",
+  "containingModuleSha256": "71db3efbdef65b5bff9bc885b558a9414a1504e667ef36df95c7eec459fde3c1",
+  "packagedContainingModuleSha256": "166d52b195f3d6d8a8386d1d528d50a59364b1610f4bd6d8076f406a03f3a4bb",
+  "embeddedPayloadCount": 1,
+  "wasmMagicHex": "0061736d",
+  "decodedWasmSha256": "b15a381270ba8869e3a6b91d45e5a6439370c769e25ceef78aee9439f791d18f",
+  "importsCount": 7,
+  "importsSha256": "a5b5390f62925cc37c84edcd2117ddea27bc88b41c3f1cd143473be2744fe64d",
+  "exportsCount": 668,
+  "exportsSha256": "65af216ac8a046ac32237abc6c7eaa56af9be1ce03918b449e622515d573a0a6"
+}

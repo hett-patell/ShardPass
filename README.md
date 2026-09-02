@@ -1,203 +1,68 @@
 # ShardPass
 
-[![Release](https://img.shields.io/github/v/release/hett-patell/ShardPass?color=blue)](https://github.com/hett-patell/ShardPass/releases)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![TypeScript](https://img.shields.io/badge/TypeScript-strict-blue.svg)](https://www.typescriptlang.org/)
+ShardPass is being rebuilt as a maintainable, local-first password manager extension. This workspace contains a clean-room TypeScript implementation alongside the untouched ShardPass 1.2.1 packaged extension used as a behavioral reference.
 
-<p align="center">
-  <picture>
-    <img src="https://github.com/user-attachments/assets/ad08c8a6-8418-4240-8153-4b34eec64efc" alt="ShardPass" width="500">
-  </picture>
-</p>
+## Prerequisites
 
-ShardPass is a **local-first TOTP authenticator** browser extension for Chromium (Manifest V3). It detects OTP fields on web pages and surfaces matching codes via an inline floating chip — no phone needed, no cloud dependency.
+- Node.js 22.14 or later, before Node.js 23
+- pnpm 10.14.0 (Corepack can provide the pinned version)
 
-All secrets are encrypted at rest with AES-256-GCM, with the key derived from a master password using PBKDF2-HMAC-SHA256. The master password is never stored or transmitted.
+## Setup
 
----
-<p align="center">
-  <picture>
-    <img src="https://github.com/user-attachments/assets/b779f606-9af6-4deb-81b0-f34d53f9bf54" alt="ShardPass" width="250  ">
-  </picture>
-</p>
-
-## Features
-
-- End-to-end encrypted vault (AES-256-GCM, PBKDF2 250k rounds, SHA-256)
-- Inline autofill chip matches accounts to the current domain and fills OTP codes on click
-- TOTP (RFC 6238) and HOTP (RFC 4226) support
-- Import from manual secret, QR image, `otpauth://` URI dump, or encrypted JSON backup
-- Export encrypted vault backups
-- Detached window for file-based import/export (survives Chromium popup dismissal)
-- Optional E2EE two-way sync with [Ente Auth](https://ente.io) via SRP + libsodium
-- Optional DuckDuckGo Email Protection alias generation
-- Auto-lock on idle or OS screen lock
-
----
-
-## Install
-
-```bash
-bun install
-bun run build
+```sh
+corepack enable
+pnpm install --frozen-lockfile
 ```
 
-1. Navigate to `chrome://extensions`
-2. Enable **Developer mode**
-3. Click **Load unpacked** and select the `dist/` directory
+The frozen install is a release prerequisite, not a hidden step inside verification. This preserves the committed dependency graph and avoids network/package-manager changes during evidence collection.
 
----
+## Commands
 
-## First run
+- `pnpm build` — build clean source into `dist/`
+- `pnpm typecheck` — run strict TypeScript project checks
+- `pnpm lint` — run ESLint with zero warnings allowed
+- `pnpm format:check` — verify Prettier formatting
+- `pnpm test` — run Vitest tests
+- `pnpm test:browser` — clean/build/scan and run the nine Playwright browser tests; install the pinned browser first with `pnpm exec playwright install chromium` if Playwright reports a missing executable
+- `pnpm verify` — run the baseline source checks, dependency boundaries, fresh build-output tests, and semantic build scanner
+- `pnpm verify:project0` — official Project 0 gate; fails immediately unless Node `>=22.14.0 <23` and pnpm `10.14.0` are active, then runs all source, dependency, fresh output, nine-browser-test, reproducibility, and production-audit evidence
+- `pnpm verify:project0:local-node24` — development-only Node 24 bypass that runs the same evidence; it never clears the Node 22 release blocker
 
-1. Click the toolbar icon and set a **master password** (minimum 12 characters)
-2. Add accounts via manual entry, QR paste, or import
-3. Visit a site's 2FA page, focus the OTP field, and click the chip to autofill
+## Project 0 verification
 
----
+From a clean workspace under the approved runtime:
 
-## Inline autofill
-
-OTP inputs are detected by scanning the page for:
-
-- `autocomplete="one-time-code"`
-- Heuristic matching on `name`, `id`, `placeholder`, `aria-label`, and `data-testid`
-- `inputmode="numeric"` with `maxlength` between 4 and 8
-
-Domain matching tokenizes the hostname and eTLD+1, then compares against each account's `issuer`, `label`, and `tags`. Multiple matching accounts are shown in a scrollable list; a single match is shown directly.
-
----
-
-## Security architecture
-
-### Local vault
-
-| Layer | Mechanism |
-|-------|-----------|
-| At rest | Entire vault (accounts, Duck token, Ente state) encrypted as one AES-256-GCM blob in `chrome.storage.local` |
-| Key derivation | PBKDF2-HMAC-SHA256, 250,000 iterations, 16-byte random salt |
-| In memory | `CryptoKey` + plaintext vault held in the service worker while unlocked |
-| Session persistence | Raw AES key bytes in `chrome.storage.session` for SW restart resilience; cleared on lock |
-| Master password | Never written to disk; incorrect password causes decrypt failure |
-| Export | JSON backup contains ciphertext + salt + IV; re-import requires the export password |
-
-### Trust boundaries
-
-| Extension surface | Access to secrets |
-|---|---|
-| Popup | No — receives codes on demand, never stores secrets |
-| Content script | No — receives only metadata and generated codes |
-| Service worker | Yes (when unlocked) — sole surface that decrypts the vault, generates TOTP, and talks to remote APIs |
-| Detached import window | Same as popup |
-
-### Auto-lock
-
-- Configurable timer via `chrome.alarms` (0 = disabled)
-- Optional lock on OS screen lock via `chrome.idle`
-- Lock clears the in-memory vault and session key; content scripts stop displaying codes
-
-### Permissions
-
-| Permission | Purpose |
-|---|---|
-| `storage` | Encrypted vault and settings |
-| `activeTab` | Context on current tab |
-| `alarms` | Auto-lock and periodic Ente sync |
-| `idle` | Lock on OS screen lock |
-| `clipboardRead` / `clipboardWrite` | Paste imports and QR, copy codes and aliases |
-| `<all_urls>` | Content script on login pages for the chip; domain matching happens locally |
-
-### What ShardPass does not do
-
-- No analytics or telemetry
-- No plaintext secrets in storage
-- No remote code execution
-- No master password recovery — it is not stored
-
----
-
-## Ente Auth sync (optional)
-
-Two-way E2EE sync with Ente's authenticator backend:
-
-- **Login**: SRP-6a (`fast-srp-hap`) + libsodium KEK derivation
-- **Sync**: Pulls remote diffs, decrypts with the authenticator key, and merges accounts by fingerprint; pushes local changes via a deduplicated pending queue
-- **Server**: Defaults to `https://api.ente.io`; self-hosted URL configurable in settings
-
-Ente credentials are stored inside the encrypted vault blob. Sync runs in the service worker with `wasm-unsafe-eval` CSP enabled for libsodium.
-
----
-
-## DuckDuckGo Email Protection (optional)
-
-Generate `@duck.com` aliases from within the extension:
-
-1. Sign up at [DuckDuckGo Email Protection](https://duckduckgo.com/email/)
-2. Visit [autofill settings](https://duckduckgo.com/email/settings/autofill)
-3. Open DevTools → Network → Generate Private Duck Address → copy the `Authorization: Bearer …` token
-4. Settings → DuckDuckGo → Connect
-
-The token is stored inside the encrypted vault and is never read back in plaintext.
-
----
-
-## Development
-
-```bash
-bun run dev      # Watch mode → dist/
-bun run build    # tsc --noEmit && vite build
-bun run zip      # Package dist/ → shardpass.zip
+```sh
+corepack pnpm@10.14.0 install --frozen-lockfile
+corepack pnpm@10.14.0 verify:project0
 ```
 
-### Project layout
+`verify:project0` cleans and builds `dist/`, applies source-output manifest/CSP tests, recursively scans production files, runs the browser suite against that preserved candidate, builds twice into temporary directories and compares sorted paths plus exact SHA-256 bytes, and finishes with `pnpm audit --prod`. The scanner rejects remote executable resources, maps/source-map references, prohibited console transports, `.env` leakage, inline executable scripts, legacy bundles, test harnesses, dynamic code, broken local references, and unexpected web-accessible exposure. Harmless manifest metadata URLs are not rejected merely for containing HTTPS.
 
-```
-src/
-├── background/     # MV3 service worker — vault session, TOTP/HOTP, Ente, Duck, auto-lock
-├── content/        # OTP detection + Shadow DOM inline chip
-├── lib/
-│   ├── crypto.ts   # PBKDF2 + AES-GCM vault encryption
-│   ├── ente/       # Ente API client, SRP, libsodium sync, pending queue
-│   ├── totp.ts     # TOTP and HOTP code generation
-│   ├── format.ts   # Dependency-free code formatter
-│   └── …
-├── components/ui/  # shadcn/ui primitives
-└── popup/          # React application and detached import views
+On this development machine only Node 24 is available. Equivalent local evidence can be collected explicitly with:
+
+```sh
+COREPACK_ENABLE_PROJECT_SPEC=0 corepack pnpm@10.14.0 --config.engine-strict=false verify:project0:local-node24
 ```
 
-### Stack
+Project 0 is **not release-ready** while its current hard blocker remains: the official gate has not passed on Node 22. The approved system fallback typography is accepted for Project 0, so unavailable verified redistributable Inter Tight/IBM Plex Mono WOFF2 assets are a documented visual deviation and future opportunity, not a release blocker. Do not claim preferred-font parity or fetch/fabricate font files; do not weaken the package engine.
 
-- Chrome Manifest V3 (service worker + content script + popup)
-- React 18 + TypeScript 5.7 + Tailwind v4 + shadcn/ui
-- otpauth · jsqr · libsodium-wrappers-sumo · fast-srp-hap
-- Vite 6 · Bun · CRXJS
+## Project 1 release verification
 
----
+`pnpm verify:project1` is the sole official Project 1 release decision. It first enforces Node `>=22.14.0 <23` (observed Node 22) and pnpm 10.14.0, then invokes the production Task 13 orchestrator. The gate requires an actual observed Chrome 110 executable, an absolute independently enforcing external network wrapper, the canonical Task 12 reviewer trust store, and valid same-`candidateDigest` Chrome 110 and signed external-review records. Missing infrastructure or evidence is a hard `STOP-PROJECT1-RELEASE`; only the complete official evidence DAG may emit `PASS-PROJECT1-RELEASE`.
 
-## Releases
+The gate copies only declared inputs into a disposable workspace, rejects symlinks and ambient generated state, performs one frozen bootstrap, then uses four separated network modes: `bootstrap` permits one recorded HTTPS pnpm registry origin; `offline` denies all networking; `mock` permits one loopback origin while denying egress; and `audit` permits only `pnpm audit --prod` at the registry audit endpoint. It runs typecheck, lint, formatting, dependency analysis, exact source and candidate secret scans, all Vitest projects including Project 1 security/legacy/tooling coverage, packaged browser checks, an independent deterministic scratch build, production audit, documentation tests, archive verification, and final DAG validation.
 
-| Tag | Notes |
-|---|---|
-| v3 | Multi-device Ente sync, SW restart resilience, HOTP, change-password, input validation |
-| v2 | Ente Auth E2EE sync and settings UI |
-| v1 | Detached-window import fix |
+The one production `dist/` is frozen after computing the Task 12-compatible identity `{ name, version, candidateDigest }` with domain `ShardPass packaged candidate v1\0`. Every subsequent check and imported Task 12 record binds that same identity. Packaging creates byte-identical ZIPs rooted at `ShardPass-<version>/`, using fixed `1980-01-01T00:00:00Z` timestamps, 0644 files, 0755 directories, raw DEFLATE level 9, and round-trip identity verification.
 
----
+For feasible local diagnosis on this machine, use:
 
-## License
+```sh
+COREPACK_ENABLE_PROJECT_SPEC=0 corepack pnpm@10.14.0 --config.engine-strict=false verify:project1:local-node24
+```
 
-[MIT](LICENSE) © Het Patel
+That helper requires Node 24, pnpm 10.14.0, and packaged Playwright Chromium 151.0.7922.34. Every evidence node is `developmentOnly: true`; it cannot write external review/Chrome records, cannot create a final PASS root, and reports `DEVELOPMENT-ONLY` at most. Node 24, Chromium 151, mocks, static `chrome110` targeting, and source inspection never satisfy release blockers.
 
----
+## Legacy artifact boundary
 
-## Shard ecosystem
-
-| Project | Description |
-|---|---|
-| [ShardLure](https://github.com/hett-patell/ShardLure) | SSH honeypot and threat-intel dashboard |
-| [ShardC2](https://github.com/hett-patell/ShardC2) | Red-team C2 framework in Go |
-| [ShardFlow](https://github.com/hett-patell/ShardFlow) | Layer-2 LAN workbench (ARP, drop, throttle) |
-| [ShardShell](https://github.com/hett-patell/ShardShell) | PHP post-exploitation shell |
-| [ShardPass](https://github.com/hett-patell/ShardPass) | Local-first TOTP authenticator for Chromium |
-| [ShardPet](https://github.com/hett-patell/ShardPet) | Pixel-Pokémon browser extension |
-| [ShardTune](https://github.com/hett-patell/ShardTune) | Spotify controller and listening analytics for Chromium |
+The root `manifest.json`, `assets/`, `icons/`, `service-worker-loader.js`, and `src/popup/index.html` belong to the packaged ShardPass 1.2.1 artifact. Do not edit, move, delete, or import these generated files into maintainable source. New builds are emitted only to `dist/`. See [legacy artifact provenance](docs/architecture/legacy-artifact.md).

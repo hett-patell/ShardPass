@@ -1,0 +1,3 @@
+# Task 8 evidence is append-only and the sealed Task 7 recovery artifact is read-only.
+.sdd/project1-task8-execution-ledger.md
+.sdd/recovery/project1-task7-contaminated-execution-ledger-2026-08-10.md

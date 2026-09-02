@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Synthetic controlled OTP field</title>
+  </head>
+  <body>
+    <label for="react-otp">One-time code</label>
+    <input id="react-otp" autocomplete="one-time-code" />
+    <output id="react-events">0</output>
+    <script>
+      const input = document.querySelector("#react-otp");
+      const output = document.querySelector("#react-events");
+      let events = 0;
+      input.addEventListener("input", () => {
+        events += 1;
+        output.value = String(events);
+      });
+    </script>
+  </body>
+</html>

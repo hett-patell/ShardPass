@@ -1,0 +1,4 @@
+# Task 9 evidence is append-only; the Task 8 ledger and sealed Task 7 recovery artifact are pre-existing evidence.
+.sdd/project1-task9-execution-ledger.md
+.sdd/project1-task8-execution-ledger.md
+.sdd/recovery/project1-task7-contaminated-execution-ledger-2026-08-10.md

@@ -1,0 +1,18 @@
+{
+  "name": "@shardpass/crypto",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./aead": "./src/aead.ts",
+    "./random": "./src/random.ts",
+    "./worker": "./src/kdf-worker-client.ts"
+  },
+  "dependencies": {
+    "@noble/ciphers": "catalog:",
+    "@noble/hashes": "catalog:",
+    "@shardpass/storage": "workspace:*",
+    "zod": "catalog:"
+  }
+}

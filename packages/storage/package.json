@@ -1,0 +1,15 @@
+{
+  "name": "@shardpass/storage",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@noble/hashes": "catalog:",
+    "@shardpass/crypto": "workspace:*",
+    "@shardpass/domain": "workspace:*",
+    "zod": "catalog:"
+  }
+}

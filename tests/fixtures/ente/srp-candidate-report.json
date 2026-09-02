@@ -1,0 +1,194 @@
+{
+  "schemaVersion": 1,
+  "protocolPin": "c69dcf66704ad7ec1f95e32920455be429a566ef",
+  "candidate": {
+    "name": "fast-srp-hap",
+    "version": "2.0.4",
+    "integrity": "sha512-lHRYYaaIbMrhZtsdGTwPN82UbqD9Bv8QfOlKs+Dz6YRnByZifOh93EYmf2iEWFtkOEIqR2IK8cFD0UN5wLIWBQ==",
+    "license": "MIT",
+    "licenseSha256": "ed3a44ce6f22ea85ebfc8f171dba2ff81a9fbb72daa61d70aa2d82739a48f82a",
+    "repository": "https://github.com/homebridge/fast-srp",
+    "maintenanceReviewedAt": "2026-08-20",
+    "maintenanceDisposition": "accepted-exact-pin-manual-upgrade-review",
+    "packageJsonSha256": "3e48a82c36fe07d8befed36a57b067b450e4d8efe3ac6f415b0a280282935d89"
+  },
+  "transitiveGraph": [
+    {
+      "name": "fast-srp-hap",
+      "version": "2.0.4",
+      "integrity": "sha512-lHRYYaaIbMrhZtsdGTwPN82UbqD9Bv8QfOlKs+Dz6YRnByZifOh93EYmf2iEWFtkOEIqR2IK8cFD0UN5wLIWBQ==",
+      "license": "MIT",
+      "repository": "https://github.com/homebridge/fast-srp",
+      "packageJsonSha256": "3e48a82c36fe07d8befed36a57b067b450e4d8efe3ac6f415b0a280282935d89",
+      "licenseFile": "LICENSE",
+      "licenseSha256": "ed3a44ce6f22ea85ebfc8f171dba2ff81a9fbb72daa61d70aa2d82739a48f82a",
+      "dependencies": [],
+      "sourceGraph": [
+        {
+          "path": "jsbn/jsbn.js",
+          "sha256": "984b7c04533bd4d5ed6a1964f5fc9a936b64a2147f44b4857f0fc9a8e3127e0c"
+        },
+        {
+          "path": "lib/params.js",
+          "sha256": "293fc7f1bea8431bb90fe1c4984cc10608bfbc4084a87a21692be17560f89631"
+        },
+        {
+          "path": "lib/srp.js",
+          "sha256": "471ca97687bc884e306dc446f48146a2e5c2cac8e2913f8af2b41c8711976b17"
+        }
+      ]
+    },
+    {
+      "name": "buffer",
+      "version": "6.0.3",
+      "integrity": "sha512-FTiCpNxtwiZZHEZbcbTIcZjERVICn9yq/pDFkTl95/AxzD1naBctN7YO68riM/gLSDY7sdrMby8hofADYuuqOA==",
+      "license": "MIT",
+      "repository": "git://github.com/feross/buffer.git",
+      "packageJsonSha256": "5b105ac0abbf5985cbe62ad28a34032d85c7ef623e0eb01f39441b0feb419004",
+      "licenseFile": "LICENSE",
+      "licenseSha256": "06bafa45fdad2579ba0e43b0c9b2c6290287c99c4203c300254a462b38a307f6",
+      "dependencies": ["base64-js@1.5.1", "ieee754@1.2.1"],
+      "sourceGraph": [
+        {
+          "path": "index.js",
+          "sha256": "c25853fd31addfce188b01061fe85bfe667d5fb6c7a7bbb1c83d0ddfd8627acc"
+        }
+      ]
+    },
+    {
+      "name": "base64-js",
+      "version": "1.5.1",
+      "integrity": "sha512-AKpaYlHn8t4SVbOHCy+b5+KKgvR4vrsD8vbvrbiQJps7fKDTkjkDry6ji0rUJjC0kzbNePLwzxq8iypo41qeWA==",
+      "license": "MIT",
+      "repository": "git://github.com/beatgammit/base64-js.git",
+      "packageJsonSha256": "9758f3ab8c45e07bb9a368e32f9a8b3729623bbf47cbbb205b32d674ab2a91f0",
+      "licenseFile": "LICENSE",
+      "licenseSha256": "5b37224c080cdcc97c871ada971c224e9926370fe74f11b539aa1cf9f3b1aca1",
+      "dependencies": [],
+      "sourceGraph": [
+        {
+          "path": "index.js",
+          "sha256": "829eadd8a1a441d25be0cb93b00e16a0d0c20fd294db95d8f2ed87e6954b7182"
+        }
+      ]
+    },
+    {
+      "name": "ieee754",
+      "version": "1.2.1",
+      "integrity": "sha512-dcyqhDvX1C46lXZcVqCpK+FtMRQVdIMN6/Df5js2zouUsqG7I6sFxitIC+7KYK29KdXOLHdu9zL4sFnoVQnqaA==",
+      "license": "BSD-3-Clause",
+      "repository": "git://github.com/feross/ieee754.git",
+      "packageJsonSha256": "a8004b9c8dffe2e1b01a058ecf968a5d50beabcabc43cc98c655184ba6afc050",
+      "licenseFile": "LICENSE",
+      "licenseSha256": "18d45466ba3253deae04667e267a91ea8de8548f18c1125264d1c9db28194cc1",
+      "dependencies": [],
+      "sourceGraph": [
+        {
+          "path": "index.js",
+          "sha256": "fe3e2b20c1ebb57c3b390c8f685ad1e04e6f493517fa7e432f4351bb77a1a4d0"
+        }
+      ]
+    },
+    {
+      "name": "@noble/hashes",
+      "version": "2.2.0",
+      "integrity": "sha512-IYqDGiTXab6FniAgnSdZwgWbomxpy9FtYvLKs7wCUs2a8RkITG+DFGO1DM9cr+E3/RgADRpFjrKVaJ1z6sjtEg==",
+      "license": "MIT",
+      "repository": "git+https://github.com/paulmillr/noble-hashes.git",
+      "packageJsonSha256": "df2580ed1896b0deffc07437c6a8d83fcf233e4c4c1e77c12e491563222c4719",
+      "licenseFile": "LICENSE",
+      "licenseSha256": "4f221aee6e072336700c408c68ab3b96a3fc09f6aebe6f48f1bd99e5ef13faec",
+      "dependencies": [],
+      "sourceGraph": [
+        {
+          "path": "sha2.js",
+          "sha256": "0fb8e3c3f2c73a890be2524ac5d2542aaed4decff69e561231a86131203b3973"
+        }
+      ]
+    }
+  ],
+  "sourceGraph": [
+    {
+      "path": "jsbn/jsbn.js",
+      "sha256": "984b7c04533bd4d5ed6a1964f5fc9a936b64a2147f44b4857f0fc9a8e3127e0c"
+    },
+    {
+      "path": "lib/params.js",
+      "sha256": "293fc7f1bea8431bb90fe1c4984cc10608bfbc4084a87a21692be17560f89631"
+    },
+    {
+      "path": "lib/srp.js",
+      "sha256": "471ca97687bc884e306dc446f48146a2e5c2cac8e2913f8af2b41c8711976b17"
+    }
+  ],
+  "compatibilityGraph": [
+    {
+      "path": "assert.ts",
+      "sha256": "97118839c8f321223067a479f92200b78b557cbe97f536ab6e004fc8f69ff32b"
+    },
+    {
+      "path": "buffer.ts",
+      "sha256": "701ba05d6044e34acb63cc46609fa984ea9217ac8ffbe6d51fadfa7496c061b6"
+    },
+    {
+      "path": "crypto.ts",
+      "sha256": "b55bb354ee4b4ecbdadcf8bc4c63bc67bf717bfe6cf82d2b20ca400c52c7260a"
+    },
+    {
+      "path": "install-buffer-global.ts",
+      "sha256": "7238a8f4261e9edbcd9f68d44391bf382da43f9f467c3e951ced83f1a15a26c7"
+    }
+  ],
+  "browser": {
+    "target": "chrome110",
+    "packagedReplay": "derived-pass:1fd83211491bee7e8be9f51690c9b999c3957371c51f03f8ea72d8e580986df6"
+  },
+  "csp": {
+    "positive": "derived-pass:53372ee667e9e81b872b35b1b4e0c0bbd412bbe8e5192e3262eee3b38fb230d1",
+    "controlledNegative": "derived-pass:6e143062f5787b8a3b162572be960f4a081417d988ac90aecd4a8eabfdf475aa"
+  },
+  "sideChannel": {
+    "review": "no-new-claim-upstream-bigint-reviewed",
+    "timingSafeProofComparison": "candidate"
+  },
+  "output": {
+    "productionEntry": "ente-srp-worker-entry",
+    "inventoryManifest": "dist/.ente-srp-production-graph.json",
+    "forbidden": ["randomBytes", "node-externals", "dynamic-code", "network", "transcripts"]
+  },
+  "replays": {
+    "legacy": {
+      "disposition": "derived-pass:aad917e6ab2967c030e1ceb21cbf848563597a2343c095cb643d5f1cbf10c6b9"
+    },
+    "current": {
+      "disposition": "derived-pass:a789f6c7b0a1bfe6e87408a5a199490d523d075ad822dcc0ffb68add2d9aac92"
+    }
+  },
+  "disposition": "derived-pass:733be3133db75d907e10051f9a3bf7924b34088d041c0e8a63a851ebf54cf133",
+  "evidence": {
+    "reference": {
+      "path": "scripts/replay-ente-srp-reference.mjs",
+      "sha256": "54e6ead2066d3aeb8cb2595a60ca896c8715f8b7110474073a052fc737a8a1d4"
+    },
+    "candidate": {
+      "path": "tests/tooling/ente-srp-deterministic-adapter.ts",
+      "sha256": "2bb99b91f74f41ad13a63f37ef8c68495658109fd26b7a86ed01c7cdb05dca73"
+    },
+    "legacy": {
+      "path": "tests/fixtures/ente/srp-legacy-1.2.1-transcript.json",
+      "sha256": "0348206c4ca90543bbc647523146a0bfb7b424df73646b60ff158a22911358e3"
+    },
+    "current": {
+      "path": "tests/fixtures/ente/srp-current-pin-transcript.json",
+      "sha256": "d0b6e7c7b9d1b0812e38f712b4eac2f9c4a1d38817b3561b3a0bec2b21e504a1"
+    },
+    "browserHarness": {
+      "path": "tests/browser/ente-srp-csp.spec.ts",
+      "sha256": "5af01cc7cf42a21bf844b8a763e8297f3284779fab1073728d404fb9f971642c"
+    },
+    "outputScanner": {
+      "path": "scripts/scan-build.mjs",
+      "sha256": "bd5549d4c9653b7b0eaf1858744a96693aa63f4fdb424c3feb31ae3e2450356b"
+    }
+  }
+}

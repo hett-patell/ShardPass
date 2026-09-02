@@ -1,0 +1,125 @@
+import { canonicalJson } from "@shardpass/storage";
+import type { z } from "zod/mini";
+
+import type { EnteClient, EnteResponseBudget } from "./client";
+import { ENTE_SYNC_LIMITS, EnteProtocolError } from "./protocol";
+import type { authenticatorEntitySchema } from "./schemas";
+
+type Entity = z.infer<typeof authenticatorEntitySchema>;
+export type RemoteOtpState = Entity;
+type Observation = Readonly<{ updatedAt: number; digest: string; entity: Entity }>;
+
+function observationDigest(entity: Entity): string {
+  return canonicalJson({
+    isDeleted: entity.isDeleted,
+    encryptedData: entity.encryptedData,
+    header: entity.header,
+  });
+}
+
+export async function readRemoteState(input: {
+  readonly client: Pick<EnteClient, "getEntityDiff">;
+  readonly token: string;
+  readonly authKey?: Uint8Array;
+  readonly sinceTime: number;
+  readonly forceSnapshot: boolean;
+  readonly signal: AbortSignal;
+  readonly budget?: EnteResponseBudget;
+}): Promise<{
+  mode: "incremental" | "snapshot";
+  complete: boolean;
+  entities: ReadonlyMap<string, RemoteOtpState>;
+  nextCursor: number;
+}> {
+  const attempt = async (since: number, mode: "incremental" | "snapshot") => {
+    const observations = new Map<string, Observation>();
+    const entities = new Map<string, Entity>();
+    let cursor = since;
+    let total = 0;
+    const maxPages =
+      mode === "snapshot"
+        ? ENTE_SYNC_LIMITS.maxPagesPerSnapshot
+        : ENTE_SYNC_LIMITS.maxPagesPerIncremental;
+
+    for (let page = 0; page < maxPages; page += 1) {
+      if (input.signal.aborted) throw new EnteProtocolError("ENTE_UNAVAILABLE");
+      const requested = cursor;
+      const response =
+        input.budget === undefined
+          ? await input.client.getEntityDiff(input.token, requested, input.signal)
+          : await input.client.getEntityDiff(input.token, requested, input.signal, input.budget);
+      total += response.diff.length;
+      if (total > ENTE_SYNC_LIMITS.maxRemoteChanges)
+        throw new EnteProtocolError("ENTE_LIMIT_REACHED");
+
+      let maximum = requested;
+      let maximumCount = 0;
+      for (const entity of response.diff) {
+        if (entity.updatedAt <= requested && mode === "incremental")
+          throw new EnteProtocolError("ENTE_TIMESTAMP_AMBIGUOUS");
+        if (entity.updatedAt < requested) throw new EnteProtocolError("ENTE_TIMESTAMP_AMBIGUOUS");
+        if (entity.updatedAt > maximum) {
+          maximum = entity.updatedAt;
+          maximumCount = 1;
+        } else if (entity.updatedAt === maximum) maximumCount += 1;
+
+        const digest = observationDigest(entity);
+        const previous = observations.get(entity.id);
+        if (previous !== undefined) {
+          if (entity.updatedAt < previous.updatedAt)
+            throw new EnteProtocolError("ENTE_TIMESTAMP_AMBIGUOUS");
+          if (entity.updatedAt === previous.updatedAt && digest !== previous.digest)
+            throw new EnteProtocolError("ENTE_TIMESTAMP_AMBIGUOUS");
+          if (entity.updatedAt === previous.updatedAt) continue;
+        }
+        observations.set(entity.id, { updatedAt: entity.updatedAt, digest, entity });
+        if (mode === "snapshot" && entity.isDeleted) entities.delete(entity.id);
+        else entities.set(entity.id, entity);
+      }
+
+      const serverTimestamp = response.timestamp ?? maximum;
+      if (serverTimestamp < requested || serverTimestamp < maximum)
+        throw new EnteProtocolError("ENTE_TIMESTAMP_AMBIGUOUS");
+
+      let liveEntityCount = 0;
+      for (const entity of entities.values()) if (!entity.isDeleted) liveEntityCount += 1;
+      if (liveEntityCount > ENTE_SYNC_LIMITS.maxLiveRemoteEntities)
+        throw new EnteProtocolError("ENTE_LIMIT_REACHED");
+
+      const full = response.diff.length === ENTE_SYNC_LIMITS.pageSize;
+      if (full) {
+        if (maximum <= requested || maximumCount > 1)
+          throw new EnteProtocolError("ENTE_TIMESTAMP_AMBIGUOUS");
+        cursor = maximum;
+        continue;
+      }
+
+      cursor = Math.max(cursor, serverTimestamp);
+      return {
+        mode,
+        complete: mode === "snapshot",
+        entities,
+        nextCursor: cursor,
+      };
+    }
+    throw new EnteProtocolError("ENTE_LIMIT_REACHED");
+  };
+
+  if (input.forceSnapshot) return attempt(0, "snapshot");
+  try {
+    return await attempt(input.sinceTime, "incremental");
+  } catch (error) {
+    if (!(error instanceof EnteProtocolError) || error.code !== "ENTE_TIMESTAMP_AMBIGUOUS")
+      throw error;
+    try {
+      return await attempt(0, "snapshot");
+    } catch (snapshotError) {
+      if (
+        snapshotError instanceof EnteProtocolError &&
+        snapshotError.code !== "ENTE_TIMESTAMP_AMBIGUOUS"
+      )
+        throw snapshotError;
+      throw new EnteProtocolError("ENTE_TIMESTAMP_AMBIGUOUS");
+    }
+  }
+}

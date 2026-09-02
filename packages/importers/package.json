@@ -1,0 +1,32 @@
+{
+  "name": "@shardpass/importers",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./backup": "./src/backup/index.ts",
+    "./detect": "./src/detect.ts",
+    "./google-migration": "./src/google-migration.ts",
+    "./import-model": "./src/import-model.ts",
+    "./legacy-v1": "./src/legacy-v1/index.ts",
+    "./qr-worker-protocol": "./src/qr-worker-protocol.ts"
+  },
+  "scripts": {
+    "generate:google-migration": "buf generate src/google-authenticator-migration.proto --template buf.gen.yaml"
+  },
+  "dependencies": {
+    "@bufbuild/protobuf": "catalog:",
+    "@shardpass/crypto": "workspace:*",
+    "@noble/hashes": "catalog:",
+    "@shardpass/domain": "workspace:*",
+    "@shardpass/otp": "workspace:*",
+    "@shardpass/security": "workspace:*",
+    "@streamparser/json": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@bufbuild/buf": "catalog:",
+    "@bufbuild/protoc-gen-es": "catalog:"
+  }
+}

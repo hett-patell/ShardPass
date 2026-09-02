@@ -1,0 +1,111 @@
+{
+  "formatVersion": 1,
+  "synthetic": true,
+  "disclosure": "Secrets are public standards vectors or deterministic synthetic values and must never protect real accounts.",
+  "vectors": [
+    {
+      "id": "rfc4226-hotp-counter-0",
+      "algorithm": "SHA1",
+      "code": "755224",
+      "counter": 0,
+      "digits": 6,
+      "period": 0,
+      "secretBase32": "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ",
+      "source": "RFC 4226 Appendix D",
+      "standard": "RFC4226",
+      "timestamp": null,
+      "verificationState": "Verified standard vector"
+    },
+    {
+      "id": "rfc4226-hotp-counter-7",
+      "algorithm": "SHA1",
+      "code": "162583",
+      "counter": 7,
+      "digits": 6,
+      "period": 0,
+      "secretBase32": "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ",
+      "source": "RFC 4226 Appendix D",
+      "standard": "RFC4226",
+      "timestamp": null,
+      "verificationState": "Verified standard vector"
+    },
+    {
+      "id": "rfc6238-sha1-59",
+      "algorithm": "SHA1",
+      "code": "94287082",
+      "counter": 1,
+      "digits": 8,
+      "period": 30,
+      "secretBase32": "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ",
+      "source": "RFC 6238 Appendix B",
+      "standard": "RFC6238",
+      "timestamp": 59000,
+      "verificationState": "Verified standard vector"
+    },
+    {
+      "id": "rfc6238-sha256-59",
+      "algorithm": "SHA256",
+      "code": "46119246",
+      "counter": 1,
+      "digits": 8,
+      "period": 30,
+      "secretBase32": "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZA",
+      "source": "RFC 6238 Appendix B",
+      "standard": "RFC6238",
+      "timestamp": 59000,
+      "verificationState": "Verified standard vector"
+    },
+    {
+      "id": "rfc6238-sha512-59",
+      "algorithm": "SHA512",
+      "code": "90693936",
+      "counter": 1,
+      "digits": 8,
+      "period": 30,
+      "secretBase32": "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNA",
+      "source": "RFC 6238 Appendix B",
+      "standard": "RFC6238",
+      "timestamp": 59000,
+      "verificationState": "Verified standard vector"
+    },
+    {
+      "id": "synthetic-default-totp",
+      "algorithm": "SHA1",
+      "code": "921300",
+      "counter": 56666666,
+      "digits": 6,
+      "period": 30,
+      "secretBase32": "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ",
+      "source": "RFC 6238 calculation using a synthetic standards-vector secret",
+      "standard": "RFC6238",
+      "timestamp": 1700000000000,
+      "verificationState": "Verified standard vector"
+    },
+    {
+      "id": "synthetic-eight-digit-period-45",
+      "algorithm": "SHA256",
+      "code": "61212327",
+      "counter": 37777777,
+      "digits": 8,
+      "period": 45,
+      "secretBase32": "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZA",
+      "source": "RFC 6238 calculation using synthetic parameters",
+      "standard": "RFC6238",
+      "timestamp": 1700000000000,
+      "verificationState": "Verified standard vector"
+    },
+    {
+      "id": "synthetic-steam",
+      "algorithm": "STEAM",
+      "code": "R87JJ",
+      "counter": 56666666,
+      "digits": 5,
+      "period": 30,
+      "secretBase32": "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ",
+      "source": "ShardPass 1.2.1 static Steam inference; no artifact runtime execution or capture was performed",
+      "standard": "static-inference-only",
+      "timestamp": 1700000000000,
+      "verificationState": "Unverified runtime parity"
+    }
+  ]
+}

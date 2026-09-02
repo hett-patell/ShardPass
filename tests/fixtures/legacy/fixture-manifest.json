@@ -1,0 +1,401 @@
+{
+  "formatVersion": 1,
+  "artifactVersion": "1.2.1",
+  "synthetic": true,
+  "pathBase": "project-root",
+  "generatedBy": "scripts/capture-legacy-fixtures.mjs",
+  "manifestPath": "tests/fixtures/legacy/fixture-manifest.json",
+  "manifestHashing": "excluded to avoid self-hash recursion",
+  "fixtures": [
+    {
+      "id": "vault-standard",
+      "path": "tests/fixtures/legacy/vault-standard.json",
+      "synthetic": true,
+      "sourceFiles": [
+        "assets/_commonjsHelpers-BNVkcQi_.js",
+        "assets/index.ts-DTcWtSwh.js"
+      ],
+      "generationMethod": "Deterministic Node crypto recreation of confirmed PBKDF2-SHA256/AES-256-GCM vault envelope",
+      "sha256": "84153e219bf67d8efd694b3a928e4162b566d758ef0c03138e9b2b6eb33b1e60",
+      "expectedOtpAt": [
+        {
+          "id": "synthetic-default-totp",
+          "algorithm": "SHA1",
+          "code": "921300",
+          "counter": 56666666,
+          "digits": 6,
+          "period": 30,
+          "standard": "RFC6238",
+          "timestamp": 1700000000000,
+          "verificationState": "Verified standard vector"
+        },
+        {
+          "id": "rfc6238-sha256-59",
+          "algorithm": "SHA256",
+          "code": "46119246",
+          "counter": 1,
+          "digits": 8,
+          "period": 30,
+          "standard": "RFC6238",
+          "timestamp": 59000,
+          "verificationState": "Verified standard vector"
+        },
+        {
+          "id": "rfc6238-sha512-59",
+          "algorithm": "SHA512",
+          "code": "90693936",
+          "counter": 1,
+          "digits": 8,
+          "period": 30,
+          "standard": "RFC6238",
+          "timestamp": 59000,
+          "verificationState": "Verified standard vector"
+        },
+        {
+          "id": "synthetic-eight-digit-period-45",
+          "algorithm": "SHA256",
+          "code": "61212327",
+          "counter": 37777777,
+          "digits": 8,
+          "period": 45,
+          "standard": "RFC6238",
+          "timestamp": 1700000000000,
+          "verificationState": "Verified standard vector"
+        },
+        {
+          "id": "rfc4226-hotp-counter-0",
+          "algorithm": "SHA1",
+          "code": "755224",
+          "counter": 0,
+          "digits": 6,
+          "period": 0,
+          "standard": "RFC4226",
+          "timestamp": null,
+          "verificationState": "Verified standard vector"
+        },
+        {
+          "id": "rfc4226-hotp-counter-7",
+          "algorithm": "SHA1",
+          "code": "162583",
+          "counter": 7,
+          "digits": 6,
+          "period": 0,
+          "standard": "RFC4226",
+          "timestamp": null,
+          "verificationState": "Verified standard vector"
+        },
+        {
+          "id": "synthetic-steam",
+          "algorithm": "STEAM",
+          "code": "R87JJ",
+          "counter": 56666666,
+          "digits": 5,
+          "period": 30,
+          "standard": "static-inference-only",
+          "timestamp": 1700000000000,
+          "verificationState": "Unverified runtime parity"
+        }
+      ],
+      "verificationState": "Verified static format"
+    },
+    {
+      "id": "vault-boundaries",
+      "path": "tests/fixtures/legacy/vault-boundaries.json",
+      "synthetic": true,
+      "sourceFiles": [
+        "assets/index.ts-DTcWtSwh.js"
+      ],
+      "generationMethod": "Deterministic envelope containing confirmed 256-character metadata and 1024-character secret boundaries",
+      "sha256": "676a3ed337a3e43a47309de1410f0ba6fc5258ea39e55f25ed96779f38983e1b",
+      "expectedOtpAt": [],
+      "verificationState": "Verified static format"
+    },
+    {
+      "id": "vault-ente-state",
+      "path": "tests/fixtures/legacy/vault-ente-state.json",
+      "synthetic": true,
+      "sourceFiles": [
+        "assets/index.ts-DTcWtSwh.js"
+      ],
+      "generationMethod": "Deterministic envelope containing only statically confirmed Ente integration, entityMap, and pending-operation fields",
+      "sha256": "f692be91823e7ba54a6fd5191129747118e7595b6321633a08230003b94f1591",
+      "expectedOtpAt": [
+        {
+          "id": "synthetic-default-totp",
+          "algorithm": "SHA1",
+          "code": "921300",
+          "counter": 56666666,
+          "digits": 6,
+          "period": 30,
+          "standard": "RFC6238",
+          "timestamp": 1700000000000,
+          "verificationState": "Verified standard vector"
+        }
+      ],
+      "verificationState": "Verified static format"
+    },
+    {
+      "id": "settings",
+      "path": "tests/fixtures/legacy/settings.json",
+      "synthetic": true,
+      "sourceFiles": [
+        "assets/index.ts-DTcWtSwh.js"
+      ],
+      "generationMethod": "Direct deterministic serialization of the confirmed chrome.storage.local settings value",
+      "sha256": "77cde601755c3d23296f65946d64cd9933a0e54f2e7bec0b739db7cc533085a4",
+      "expectedOtpAt": [],
+      "verificationState": "Verified static format"
+    },
+    {
+      "id": "wrong-password",
+      "path": "tests/fixtures/legacy/wrong-password.json",
+      "synthetic": true,
+      "sourceFiles": [
+        "assets/index.ts-DTcWtSwh.js"
+      ],
+      "generationMethod": "Valid deterministic legacy envelope paired with a clearly test-only incorrect password",
+      "sha256": "64531696460eb90db810c4c3608e3320603b105ebcfd93a95f4452ab05ae1bfc",
+      "expectedOtpAt": [],
+      "verificationState": "Verified static format",
+      "expectedErrorCategory": "AUTHENTICATION_FAILED",
+      "expectedFailurePhase": "decrypt",
+      "scenario": "wrong-password"
+    },
+    {
+      "id": "malformed-envelope",
+      "path": "tests/fixtures/legacy/malformed-envelope.json",
+      "synthetic": true,
+      "sourceFiles": [
+        "assets/index.ts-DTcWtSwh.js"
+      ],
+      "generationMethod": "Deterministic mutation of the confirmed envelope IV encoding",
+      "sha256": "302727d88a7faa7fa3abe8fe27fc069f8582a14184117947bb231287a3f7eb61",
+      "expectedOtpAt": [],
+      "verificationState": "Verified static format",
+      "expectedErrorCategory": "MALFORMED_ENVELOPE",
+      "expectedFailurePhase": "validation",
+      "scenario": "malformed-envelope"
+    },
+    {
+      "id": "tampered-ciphertext",
+      "path": "tests/fixtures/legacy/tampered-ciphertext.json",
+      "synthetic": true,
+      "sourceFiles": [
+        "assets/index.ts-DTcWtSwh.js"
+      ],
+      "generationMethod": "Single deterministic bit flip in a valid confirmed AES-GCM ciphertext",
+      "sha256": "905131e74ce81fc511a3778f182fa16396a31375a2162254498346ea8a0db458",
+      "expectedOtpAt": [],
+      "verificationState": "Verified static format",
+      "expectedErrorCategory": "AUTHENTICATION_FAILED",
+      "expectedFailurePhase": "decrypt",
+      "scenario": "tampered-ciphertext"
+    },
+    {
+      "id": "backup-export",
+      "path": "tests/fixtures/legacy/backup-export.json",
+      "synthetic": true,
+      "sourceFiles": [
+        "assets/index.ts-DTcWtSwh.js",
+        "assets/_commonjsHelpers-BNVkcQi_.js"
+      ],
+      "generationMethod": "Confirmed legacy export wrapper around the deterministic encrypted vault envelope",
+      "sha256": "5bdcc17c148f80892953d37cc21ddd3eb7e6bceef76303350a4ad27c459e3948",
+      "expectedOtpAt": [
+        {
+          "id": "synthetic-default-totp",
+          "algorithm": "SHA1",
+          "code": "921300",
+          "counter": 56666666,
+          "digits": 6,
+          "period": 30,
+          "standard": "RFC6238",
+          "timestamp": 1700000000000,
+          "verificationState": "Verified standard vector"
+        },
+        {
+          "id": "rfc6238-sha256-59",
+          "algorithm": "SHA256",
+          "code": "46119246",
+          "counter": 1,
+          "digits": 8,
+          "period": 30,
+          "standard": "RFC6238",
+          "timestamp": 59000,
+          "verificationState": "Verified standard vector"
+        },
+        {
+          "id": "rfc6238-sha512-59",
+          "algorithm": "SHA512",
+          "code": "90693936",
+          "counter": 1,
+          "digits": 8,
+          "period": 30,
+          "standard": "RFC6238",
+          "timestamp": 59000,
+          "verificationState": "Verified standard vector"
+        },
+        {
+          "id": "synthetic-eight-digit-period-45",
+          "algorithm": "SHA256",
+          "code": "61212327",
+          "counter": 37777777,
+          "digits": 8,
+          "period": 45,
+          "standard": "RFC6238",
+          "timestamp": 1700000000000,
+          "verificationState": "Verified standard vector"
+        },
+        {
+          "id": "rfc4226-hotp-counter-0",
+          "algorithm": "SHA1",
+          "code": "755224",
+          "counter": 0,
+          "digits": 6,
+          "period": 0,
+          "standard": "RFC4226",
+          "timestamp": null,
+          "verificationState": "Verified standard vector"
+        },
+        {
+          "id": "rfc4226-hotp-counter-7",
+          "algorithm": "SHA1",
+          "code": "162583",
+          "counter": 7,
+          "digits": 6,
+          "period": 0,
+          "standard": "RFC4226",
+          "timestamp": null,
+          "verificationState": "Verified standard vector"
+        },
+        {
+          "id": "synthetic-steam",
+          "algorithm": "STEAM",
+          "code": "R87JJ",
+          "counter": 56666666,
+          "digits": 5,
+          "period": 30,
+          "standard": "static-inference-only",
+          "timestamp": 1700000000000,
+          "verificationState": "Unverified runtime parity"
+        }
+      ],
+      "verificationState": "Verified static format"
+    },
+    {
+      "id": "otp-known-answers",
+      "path": "tests/fixtures/otp/known-answers.json",
+      "synthetic": true,
+      "sourceFiles": [
+        "assets/_commonjsHelpers-BNVkcQi_.js"
+      ],
+      "generationMethod": "Deterministic Node HMAC calculation of RFC vectors plus static Steam inference; no artifact runtime execution or capture was performed",
+      "sha256": "f860873234f99fd1e4753586caf4635f795e49e7beaea914175ad451d3c35487",
+      "expectedOtpAt": [
+        {
+          "id": "rfc4226-hotp-counter-0",
+          "algorithm": "SHA1",
+          "code": "755224",
+          "counter": 0,
+          "digits": 6,
+          "period": 0,
+          "standard": "RFC4226",
+          "timestamp": null,
+          "verificationState": "Verified standard vector"
+        },
+        {
+          "id": "rfc4226-hotp-counter-7",
+          "algorithm": "SHA1",
+          "code": "162583",
+          "counter": 7,
+          "digits": 6,
+          "period": 0,
+          "standard": "RFC4226",
+          "timestamp": null,
+          "verificationState": "Verified standard vector"
+        },
+        {
+          "id": "rfc6238-sha1-59",
+          "algorithm": "SHA1",
+          "code": "94287082",
+          "counter": 1,
+          "digits": 8,
+          "period": 30,
+          "standard": "RFC6238",
+          "timestamp": 59000,
+          "verificationState": "Verified standard vector"
+        },
+        {
+          "id": "rfc6238-sha256-59",
+          "algorithm": "SHA256",
+          "code": "46119246",
+          "counter": 1,
+          "digits": 8,
+          "period": 30,
+          "standard": "RFC6238",
+          "timestamp": 59000,
+          "verificationState": "Verified standard vector"
+        },
+        {
+          "id": "rfc6238-sha512-59",
+          "algorithm": "SHA512",
+          "code": "90693936",
+          "counter": 1,
+          "digits": 8,
+          "period": 30,
+          "standard": "RFC6238",
+          "timestamp": 59000,
+          "verificationState": "Verified standard vector"
+        },
+        {
+          "id": "synthetic-default-totp",
+          "algorithm": "SHA1",
+          "code": "921300",
+          "counter": 56666666,
+          "digits": 6,
+          "period": 30,
+          "standard": "RFC6238",
+          "timestamp": 1700000000000,
+          "verificationState": "Verified standard vector"
+        },
+        {
+          "id": "synthetic-eight-digit-period-45",
+          "algorithm": "SHA256",
+          "code": "61212327",
+          "counter": 37777777,
+          "digits": 8,
+          "period": 45,
+          "standard": "RFC6238",
+          "timestamp": 1700000000000,
+          "verificationState": "Verified standard vector"
+        },
+        {
+          "id": "synthetic-steam",
+          "algorithm": "STEAM",
+          "code": "R87JJ",
+          "counter": 56666666,
+          "digits": 5,
+          "period": 30,
+          "standard": "static-inference-only",
+          "timestamp": 1700000000000,
+          "verificationState": "Unverified runtime parity"
+        }
+      ],
+      "verificationState": "Unverified runtime parity"
+    }
+  ],
+  "gaps": [
+    {
+      "dimension": "Ente pending 2FA chrome.storage.session value",
+      "status": "Unverified",
+      "reason": "The packaged worker confirms key pending_2fa and session lifecycle but static analysis did not establish a stable persisted field schema suitable for migration fixtures.",
+      "deferredTo": "Project 1 Task 12"
+    },
+    {
+      "dimension": "Live Ente server ciphertext and undocumented response fields",
+      "status": "Unverified",
+      "reason": "No account or network access was used; only the exact locally persisted integration fields confirmed in the artifact are represented.",
+      "deferredTo": "Project 1 Task 12"
+    }
+  ]
+}

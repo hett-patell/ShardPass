@@ -1,0 +1,2747 @@
+{
+  "protocolPin": "c69dcf66704ad7ec1f95e32920455be429a566ef",
+  "wrapperVersion": "0.8.4",
+  "wasmVersion": "0.8.0",
+  "provenance": "synthetic test-only vectors generated from exact pinned npm libsodium artifacts",
+  "generatorSha256": "38f1c14bb6cc5cb07fd4e54a00bdc6d732f0cd6e8a00eb2d41f5799ba5475499",
+  "loaderSha256": "40de1ef7cb8f2caae02c2a8f04809151904fa28cb9364cadedc57af89a6c9284",
+  "browserHarnessSha256": "8972cac33391402e90a8f082ca18f7f11cef663d3860e93870f1235893276328",
+  "outputScannerSha256": "bd5549d4c9653b7b0eaf1858744a96693aa63f4fdb424c3feb31ae3e2450356b",
+  "sumoModuleSha256": "71db3efbdef65b5bff9bc885b558a9414a1504e667ef36df95c7eec459fde3c1",
+  "decodedWasmSha256": "b15a381270ba8869e3a6b91d45e5a6439370c769e25ceef78aee9439f791d18f",
+  "wasmImports": [
+    {
+      "module": "a",
+      "name": "a",
+      "kind": "function"
+    },
+    {
+      "module": "a",
+      "name": "b",
+      "kind": "function"
+    },
+    {
+      "module": "a",
+      "name": "c",
+      "kind": "function"
+    },
+    {
+      "module": "a",
+      "name": "d",
+      "kind": "function"
+    },
+    {
+      "module": "a",
+      "name": "e",
+      "kind": "function"
+    },
+    {
+      "module": "a",
+      "name": "f",
+      "kind": "function"
+    },
+    {
+      "module": "a",
+      "name": "g",
+      "kind": "function"
+    }
+  ],
+  "wasmExports": [
+    {
+      "name": "_",
+      "kind": "function"
+    },
+    {
+      "name": "_a",
+      "kind": "function"
+    },
+    {
+      "name": "_b",
+      "kind": "function"
+    },
+    {
+      "name": "_c",
+      "kind": "function"
+    },
+    {
+      "name": "_d",
+      "kind": "function"
+    },
+    {
+      "name": "_e",
+      "kind": "function"
+    },
+    {
+      "name": "_f",
+      "kind": "function"
+    },
+    {
+      "name": "_g",
+      "kind": "function"
+    },
+    {
+      "name": "_h",
+      "kind": "function"
+    },
+    {
+      "name": "_i",
+      "kind": "function"
+    },
+    {
+      "name": "_j",
+      "kind": "function"
+    },
+    {
+      "name": "_k",
+      "kind": "function"
+    },
+    {
+      "name": "$",
+      "kind": "function"
+    },
+    {
+      "name": "$a",
+      "kind": "function"
+    },
+    {
+      "name": "$b",
+      "kind": "function"
+    },
+    {
+      "name": "$c",
+      "kind": "function"
+    },
+    {
+      "name": "$d",
+      "kind": "function"
+    },
+    {
+      "name": "$e",
+      "kind": "function"
+    },
+    {
+      "name": "$f",
+      "kind": "function"
+    },
+    {
+      "name": "$g",
+      "kind": "function"
+    },
+    {
+      "name": "$h",
+      "kind": "function"
+    },
+    {
+      "name": "$i",
+      "kind": "function"
+    },
+    {
+      "name": "$j",
+      "kind": "function"
+    },
+    {
+      "name": "$k",
+      "kind": "function"
+    },
+    {
+      "name": "A",
+      "kind": "function"
+    },
+    {
+      "name": "aa",
+      "kind": "function"
+    },
+    {
+      "name": "Aa",
+      "kind": "function"
+    },
+    {
+      "name": "ab",
+      "kind": "function"
+    },
+    {
+      "name": "Ab",
+      "kind": "function"
+    },
+    {
+      "name": "ac",
+      "kind": "function"
+    },
+    {
+      "name": "Ac",
+      "kind": "function"
+    },
+    {
+      "name": "ad",
+      "kind": "function"
+    },
+    {
+      "name": "Ad",
+      "kind": "function"
+    },
+    {
+      "name": "ae",
+      "kind": "function"
+    },
+    {
+      "name": "Ae",
+      "kind": "function"
+    },
+    {
+      "name": "af",
+      "kind": "function"
+    },
+    {
+      "name": "Af",
+      "kind": "function"
+    },
+    {
+      "name": "ag",
+      "kind": "function"
+    },
+    {
+      "name": "Ag",
+      "kind": "function"
+    },
+    {
+      "name": "ah",
+      "kind": "function"
+    },
+    {
+      "name": "Ah",
+      "kind": "function"
+    },
+    {
+      "name": "ai",
+      "kind": "function"
+    },
+    {
+      "name": "Ai",
+      "kind": "function"
+    },
+    {
+      "name": "aj",
+      "kind": "function"
+    },
+    {
+      "name": "Aj",
+      "kind": "function"
+    },
+    {
+      "name": "ak",
+      "kind": "function"
+    },
+    {
+      "name": "Ak",
+      "kind": "function"
+    },
+    {
+      "name": "al",
+      "kind": "function"
+    },
+    {
+      "name": "Al",
+      "kind": "function"
+    },
+    {
+      "name": "B",
+      "kind": "function"
+    },
+    {
+      "name": "ba",
+      "kind": "function"
+    },
+    {
+      "name": "Ba",
+      "kind": "function"
+    },
+    {
+      "name": "bb",
+      "kind": "function"
+    },
+    {
+      "name": "Bb",
+      "kind": "function"
+    },
+    {
+      "name": "bc",
+      "kind": "function"
+    },
+    {
+      "name": "Bc",
+      "kind": "function"
+    },
+    {
+      "name": "bd",
+      "kind": "function"
+    },
+    {
+      "name": "Bd",
+      "kind": "function"
+    },
+    {
+      "name": "be",
+      "kind": "function"
+    },
+    {
+      "name": "Be",
+      "kind": "function"
+    },
+    {
+      "name": "bf",
+      "kind": "function"
+    },
+    {
+      "name": "Bf",
+      "kind": "function"
+    },
+    {
+      "name": "bg",
+      "kind": "function"
+    },
+    {
+      "name": "Bg",
+      "kind": "function"
+    },
+    {
+      "name": "bh",
+      "kind": "function"
+    },
+    {
+      "name": "Bh",
+      "kind": "function"
+    },
+    {
+      "name": "bi",
+      "kind": "function"
+    },
+    {
+      "name": "Bi",
+      "kind": "function"
+    },
+    {
+      "name": "bj",
+      "kind": "function"
+    },
+    {
+      "name": "Bj",
+      "kind": "function"
+    },
+    {
+      "name": "bk",
+      "kind": "function"
+    },
+    {
+      "name": "Bk",
+      "kind": "function"
+    },
+    {
+      "name": "bl",
+      "kind": "function"
+    },
+    {
+      "name": "Bl",
+      "kind": "function"
+    },
+    {
+      "name": "C",
+      "kind": "function"
+    },
+    {
+      "name": "ca",
+      "kind": "function"
+    },
+    {
+      "name": "Ca",
+      "kind": "function"
+    },
+    {
+      "name": "cb",
+      "kind": "function"
+    },
+    {
+      "name": "Cb",
+      "kind": "function"
+    },
+    {
+      "name": "cc",
+      "kind": "function"
+    },
+    {
+      "name": "Cc",
+      "kind": "function"
+    },
+    {
+      "name": "cd",
+      "kind": "function"
+    },
+    {
+      "name": "Cd",
+      "kind": "function"
+    },
+    {
+      "name": "ce",
+      "kind": "function"
+    },
+    {
+      "name": "Ce",
+      "kind": "function"
+    },
+    {
+      "name": "cf",
+      "kind": "function"
+    },
+    {
+      "name": "Cf",
+      "kind": "function"
+    },
+    {
+      "name": "cg",
+      "kind": "function"
+    },
+    {
+      "name": "Cg",
+      "kind": "function"
+    },
+    {
+      "name": "ch",
+      "kind": "function"
+    },
+    {
+      "name": "Ch",
+      "kind": "function"
+    },
+    {
+      "name": "ci",
+      "kind": "function"
+    },
+    {
+      "name": "Ci",
+      "kind": "function"
+    },
+    {
+      "name": "cj",
+      "kind": "function"
+    },
+    {
+      "name": "Cj",
+      "kind": "function"
+    },
+    {
+      "name": "ck",
+      "kind": "function"
+    },
+    {
+      "name": "Ck",
+      "kind": "function"
+    },
+    {
+      "name": "cl",
+      "kind": "function"
+    },
+    {
+      "name": "D",
+      "kind": "function"
+    },
+    {
+      "name": "da",
+      "kind": "function"
+    },
+    {
+      "name": "Da",
+      "kind": "function"
+    },
+    {
+      "name": "db",
+      "kind": "function"
+    },
+    {
+      "name": "Db",
+      "kind": "function"
+    },
+    {
+      "name": "dc",
+      "kind": "function"
+    },
+    {
+      "name": "Dc",
+      "kind": "function"
+    },
+    {
+      "name": "dd",
+      "kind": "function"
+    },
+    {
+      "name": "Dd",
+      "kind": "function"
+    },
+    {
+      "name": "de",
+      "kind": "function"
+    },
+    {
+      "name": "De",
+      "kind": "function"
+    },
+    {
+      "name": "df",
+      "kind": "function"
+    },
+    {
+      "name": "Df",
+      "kind": "function"
+    },
+    {
+      "name": "dg",
+      "kind": "function"
+    },
+    {
+      "name": "Dg",
+      "kind": "function"
+    },
+    {
+      "name": "dh",
+      "kind": "function"
+    },
+    {
+      "name": "Dh",
+      "kind": "function"
+    },
+    {
+      "name": "di",
+      "kind": "function"
+    },
+    {
+      "name": "Di",
+      "kind": "function"
+    },
+    {
+      "name": "dj",
+      "kind": "function"
+    },
+    {
+      "name": "Dj",
+      "kind": "function"
+    },
+    {
+      "name": "dk",
+      "kind": "function"
+    },
+    {
+      "name": "Dk",
+      "kind": "function"
+    },
+    {
+      "name": "dl",
+      "kind": "function"
+    },
+    {
+      "name": "E",
+      "kind": "function"
+    },
+    {
+      "name": "ea",
+      "kind": "function"
+    },
+    {
+      "name": "Ea",
+      "kind": "function"
+    },
+    {
+      "name": "eb",
+      "kind": "function"
+    },
+    {
+      "name": "Eb",
+      "kind": "function"
+    },
+    {
+      "name": "ec",
+      "kind": "function"
+    },
+    {
+      "name": "Ec",
+      "kind": "function"
+    },
+    {
+      "name": "ed",
+      "kind": "function"
+    },
+    {
+      "name": "Ed",
+      "kind": "function"
+    },
+    {
+      "name": "ee",
+      "kind": "function"
+    },
+    {
+      "name": "Ee",
+      "kind": "function"
+    },
+    {
+      "name": "ef",
+      "kind": "function"
+    },
+    {
+      "name": "Ef",
+      "kind": "function"
+    },
+    {
+      "name": "eg",
+      "kind": "function"
+    },
+    {
+      "name": "Eg",
+      "kind": "function"
+    },
+    {
+      "name": "eh",
+      "kind": "function"
+    },
+    {
+      "name": "Eh",
+      "kind": "function"
+    },
+    {
+      "name": "ei",
+      "kind": "function"
+    },
+    {
+      "name": "Ei",
+      "kind": "function"
+    },
+    {
+      "name": "ej",
+      "kind": "function"
+    },
+    {
+      "name": "Ej",
+      "kind": "function"
+    },
+    {
+      "name": "ek",
+      "kind": "function"
+    },
+    {
+      "name": "Ek",
+      "kind": "function"
+    },
+    {
+      "name": "el",
+      "kind": "function"
+    },
+    {
+      "name": "F",
+      "kind": "function"
+    },
+    {
+      "name": "fa",
+      "kind": "function"
+    },
+    {
+      "name": "Fa",
+      "kind": "function"
+    },
+    {
+      "name": "fb",
+      "kind": "function"
+    },
+    {
+      "name": "Fb",
+      "kind": "function"
+    },
+    {
+      "name": "fc",
+      "kind": "function"
+    },
+    {
+      "name": "Fc",
+      "kind": "function"
+    },
+    {
+      "name": "fd",
+      "kind": "function"
+    },
+    {
+      "name": "Fd",
+      "kind": "function"
+    },
+    {
+      "name": "fe",
+      "kind": "function"
+    },
+    {
+      "name": "Fe",
+      "kind": "function"
+    },
+    {
+      "name": "ff",
+      "kind": "function"
+    },
+    {
+      "name": "Ff",
+      "kind": "function"
+    },
+    {
+      "name": "fg",
+      "kind": "function"
+    },
+    {
+      "name": "Fg",
+      "kind": "function"
+    },
+    {
+      "name": "fh",
+      "kind": "function"
+    },
+    {
+      "name": "Fh",
+      "kind": "function"
+    },
+    {
+      "name": "fi",
+      "kind": "function"
+    },
+    {
+      "name": "Fi",
+      "kind": "function"
+    },
+    {
+      "name": "fj",
+      "kind": "function"
+    },
+    {
+      "name": "Fj",
+      "kind": "function"
+    },
+    {
+      "name": "fk",
+      "kind": "function"
+    },
+    {
+      "name": "Fk",
+      "kind": "function"
+    },
+    {
+      "name": "fl",
+      "kind": "function"
+    },
+    {
+      "name": "G",
+      "kind": "function"
+    },
+    {
+      "name": "ga",
+      "kind": "function"
+    },
+    {
+      "name": "Ga",
+      "kind": "function"
+    },
+    {
+      "name": "gb",
+      "kind": "function"
+    },
+    {
+      "name": "Gb",
+      "kind": "function"
+    },
+    {
+      "name": "gc",
+      "kind": "function"
+    },
+    {
+      "name": "Gc",
+      "kind": "function"
+    },
+    {
+      "name": "gd",
+      "kind": "function"
+    },
+    {
+      "name": "Gd",
+      "kind": "function"
+    },
+    {
+      "name": "ge",
+      "kind": "function"
+    },
+    {
+      "name": "Ge",
+      "kind": "function"
+    },
+    {
+      "name": "gf",
+      "kind": "function"
+    },
+    {
+      "name": "Gf",
+      "kind": "function"
+    },
+    {
+      "name": "gg",
+      "kind": "function"
+    },
+    {
+      "name": "Gg",
+      "kind": "function"
+    },
+    {
+      "name": "gh",
+      "kind": "function"
+    },
+    {
+      "name": "Gh",
+      "kind": "function"
+    },
+    {
+      "name": "gi",
+      "kind": "function"
+    },
+    {
+      "name": "Gi",
+      "kind": "function"
+    },
+    {
+      "name": "gj",
+      "kind": "function"
+    },
+    {
+      "name": "Gj",
+      "kind": "function"
+    },
+    {
+      "name": "gk",
+      "kind": "function"
+    },
+    {
+      "name": "Gk",
+      "kind": "function"
+    },
+    {
+      "name": "gl",
+      "kind": "function"
+    },
+    {
+      "name": "H",
+      "kind": "function"
+    },
+    {
+      "name": "h",
+      "kind": "memory"
+    },
+    {
+      "name": "ha",
+      "kind": "function"
+    },
+    {
+      "name": "Ha",
+      "kind": "function"
+    },
+    {
+      "name": "hb",
+      "kind": "function"
+    },
+    {
+      "name": "Hb",
+      "kind": "function"
+    },
+    {
+      "name": "hc",
+      "kind": "function"
+    },
+    {
+      "name": "Hc",
+      "kind": "function"
+    },
+    {
+      "name": "hd",
+      "kind": "function"
+    },
+    {
+      "name": "Hd",
+      "kind": "function"
+    },
+    {
+      "name": "he",
+      "kind": "function"
+    },
+    {
+      "name": "He",
+      "kind": "function"
+    },
+    {
+      "name": "hf",
+      "kind": "function"
+    },
+    {
+      "name": "Hf",
+      "kind": "function"
+    },
+    {
+      "name": "hg",
+      "kind": "function"
+    },
+    {
+      "name": "Hg",
+      "kind": "function"
+    },
+    {
+      "name": "hh",
+      "kind": "function"
+    },
+    {
+      "name": "Hh",
+      "kind": "function"
+    },
+    {
+      "name": "hi",
+      "kind": "function"
+    },
+    {
+      "name": "Hi",
+      "kind": "function"
+    },
+    {
+      "name": "hj",
+      "kind": "function"
+    },
+    {
+      "name": "Hj",
+      "kind": "function"
+    },
+    {
+      "name": "hk",
+      "kind": "function"
+    },
+    {
+      "name": "Hk",
+      "kind": "function"
+    },
+    {
+      "name": "hl",
+      "kind": "function"
+    },
+    {
+      "name": "i",
+      "kind": "function"
+    },
+    {
+      "name": "I",
+      "kind": "function"
+    },
+    {
+      "name": "ia",
+      "kind": "function"
+    },
+    {
+      "name": "Ia",
+      "kind": "function"
+    },
+    {
+      "name": "ib",
+      "kind": "function"
+    },
+    {
+      "name": "Ib",
+      "kind": "function"
+    },
+    {
+      "name": "ic",
+      "kind": "function"
+    },
+    {
+      "name": "Ic",
+      "kind": "function"
+    },
+    {
+      "name": "id",
+      "kind": "function"
+    },
+    {
+      "name": "Id",
+      "kind": "function"
+    },
+    {
+      "name": "ie",
+      "kind": "function"
+    },
+    {
+      "name": "Ie",
+      "kind": "function"
+    },
+    {
+      "name": "If",
+      "kind": "function"
+    },
+    {
+      "name": "ig",
+      "kind": "function"
+    },
+    {
+      "name": "Ig",
+      "kind": "function"
+    },
+    {
+      "name": "ih",
+      "kind": "function"
+    },
+    {
+      "name": "Ih",
+      "kind": "function"
+    },
+    {
+      "name": "ii",
+      "kind": "function"
+    },
+    {
+      "name": "Ii",
+      "kind": "function"
+    },
+    {
+      "name": "ij",
+      "kind": "function"
+    },
+    {
+      "name": "Ij",
+      "kind": "function"
+    },
+    {
+      "name": "ik",
+      "kind": "function"
+    },
+    {
+      "name": "Ik",
+      "kind": "function"
+    },
+    {
+      "name": "il",
+      "kind": "function"
+    },
+    {
+      "name": "j",
+      "kind": "function"
+    },
+    {
+      "name": "J",
+      "kind": "function"
+    },
+    {
+      "name": "ja",
+      "kind": "function"
+    },
+    {
+      "name": "Ja",
+      "kind": "function"
+    },
+    {
+      "name": "jb",
+      "kind": "function"
+    },
+    {
+      "name": "Jb",
+      "kind": "function"
+    },
+    {
+      "name": "jc",
+      "kind": "function"
+    },
+    {
+      "name": "Jc",
+      "kind": "function"
+    },
+    {
+      "name": "jd",
+      "kind": "function"
+    },
+    {
+      "name": "Jd",
+      "kind": "function"
+    },
+    {
+      "name": "je",
+      "kind": "function"
+    },
+    {
+      "name": "Je",
+      "kind": "function"
+    },
+    {
+      "name": "jf",
+      "kind": "function"
+    },
+    {
+      "name": "Jf",
+      "kind": "function"
+    },
+    {
+      "name": "jg",
+      "kind": "function"
+    },
+    {
+      "name": "Jg",
+      "kind": "function"
+    },
+    {
+      "name": "jh",
+      "kind": "function"
+    },
+    {
+      "name": "Jh",
+      "kind": "function"
+    },
+    {
+      "name": "ji",
+      "kind": "function"
+    },
+    {
+      "name": "Ji",
+      "kind": "function"
+    },
+    {
+      "name": "jj",
+      "kind": "function"
+    },
+    {
+      "name": "Jj",
+      "kind": "function"
+    },
+    {
+      "name": "jk",
+      "kind": "function"
+    },
+    {
+      "name": "Jk",
+      "kind": "function"
+    },
+    {
+      "name": "jl",
+      "kind": "function"
+    },
+    {
+      "name": "k",
+      "kind": "function"
+    },
+    {
+      "name": "K",
+      "kind": "function"
+    },
+    {
+      "name": "ka",
+      "kind": "function"
+    },
+    {
+      "name": "Ka",
+      "kind": "function"
+    },
+    {
+      "name": "kb",
+      "kind": "function"
+    },
+    {
+      "name": "Kb",
+      "kind": "function"
+    },
+    {
+      "name": "kc",
+      "kind": "function"
+    },
+    {
+      "name": "Kc",
+      "kind": "function"
+    },
+    {
+      "name": "kd",
+      "kind": "function"
+    },
+    {
+      "name": "Kd",
+      "kind": "function"
+    },
+    {
+      "name": "ke",
+      "kind": "function"
+    },
+    {
+      "name": "Ke",
+      "kind": "function"
+    },
+    {
+      "name": "kf",
+      "kind": "function"
+    },
+    {
+      "name": "Kf",
+      "kind": "function"
+    },
+    {
+      "name": "kg",
+      "kind": "function"
+    },
+    {
+      "name": "Kg",
+      "kind": "function"
+    },
+    {
+      "name": "kh",
+      "kind": "function"
+    },
+    {
+      "name": "Kh",
+      "kind": "function"
+    },
+    {
+      "name": "ki",
+      "kind": "function"
+    },
+    {
+      "name": "Ki",
+      "kind": "function"
+    },
+    {
+      "name": "kj",
+      "kind": "function"
+    },
+    {
+      "name": "Kj",
+      "kind": "function"
+    },
+    {
+      "name": "kk",
+      "kind": "function"
+    },
+    {
+      "name": "Kk",
+      "kind": "function"
+    },
+    {
+      "name": "kl",
+      "kind": "function"
+    },
+    {
+      "name": "l",
+      "kind": "function"
+    },
+    {
+      "name": "L",
+      "kind": "function"
+    },
+    {
+      "name": "la",
+      "kind": "function"
+    },
+    {
+      "name": "La",
+      "kind": "function"
+    },
+    {
+      "name": "lb",
+      "kind": "function"
+    },
+    {
+      "name": "Lb",
+      "kind": "function"
+    },
+    {
+      "name": "lc",
+      "kind": "function"
+    },
+    {
+      "name": "Lc",
+      "kind": "function"
+    },
+    {
+      "name": "ld",
+      "kind": "function"
+    },
+    {
+      "name": "Ld",
+      "kind": "function"
+    },
+    {
+      "name": "le",
+      "kind": "function"
+    },
+    {
+      "name": "Le",
+      "kind": "function"
+    },
+    {
+      "name": "lf",
+      "kind": "function"
+    },
+    {
+      "name": "Lf",
+      "kind": "function"
+    },
+    {
+      "name": "lg",
+      "kind": "function"
+    },
+    {
+      "name": "Lg",
+      "kind": "function"
+    },
+    {
+      "name": "lh",
+      "kind": "function"
+    },
+    {
+      "name": "Lh",
+      "kind": "function"
+    },
+    {
+      "name": "li",
+      "kind": "function"
+    },
+    {
+      "name": "Li",
+      "kind": "function"
+    },
+    {
+      "name": "lj",
+      "kind": "function"
+    },
+    {
+      "name": "Lj",
+      "kind": "function"
+    },
+    {
+      "name": "lk",
+      "kind": "function"
+    },
+    {
+      "name": "Lk",
+      "kind": "function"
+    },
+    {
+      "name": "ll",
+      "kind": "function"
+    },
+    {
+      "name": "m",
+      "kind": "function"
+    },
+    {
+      "name": "M",
+      "kind": "function"
+    },
+    {
+      "name": "ma",
+      "kind": "function"
+    },
+    {
+      "name": "Ma",
+      "kind": "function"
+    },
+    {
+      "name": "mb",
+      "kind": "function"
+    },
+    {
+      "name": "Mb",
+      "kind": "function"
+    },
+    {
+      "name": "mc",
+      "kind": "function"
+    },
+    {
+      "name": "Mc",
+      "kind": "function"
+    },
+    {
+      "name": "md",
+      "kind": "function"
+    },
+    {
+      "name": "Md",
+      "kind": "function"
+    },
+    {
+      "name": "me",
+      "kind": "function"
+    },
+    {
+      "name": "Me",
+      "kind": "function"
+    },
+    {
+      "name": "mf",
+      "kind": "function"
+    },
+    {
+      "name": "Mf",
+      "kind": "function"
+    },
+    {
+      "name": "mg",
+      "kind": "function"
+    },
+    {
+      "name": "Mg",
+      "kind": "function"
+    },
+    {
+      "name": "mh",
+      "kind": "function"
+    },
+    {
+      "name": "Mh",
+      "kind": "function"
+    },
+    {
+      "name": "mi",
+      "kind": "function"
+    },
+    {
+      "name": "Mi",
+      "kind": "function"
+    },
+    {
+      "name": "mj",
+      "kind": "function"
+    },
+    {
+      "name": "Mj",
+      "kind": "function"
+    },
+    {
+      "name": "mk",
+      "kind": "function"
+    },
+    {
+      "name": "Mk",
+      "kind": "function"
+    },
+    {
+      "name": "ml",
+      "kind": "function"
+    },
+    {
+      "name": "n",
+      "kind": "function"
+    },
+    {
+      "name": "N",
+      "kind": "function"
+    },
+    {
+      "name": "na",
+      "kind": "function"
+    },
+    {
+      "name": "Na",
+      "kind": "function"
+    },
+    {
+      "name": "nb",
+      "kind": "function"
+    },
+    {
+      "name": "Nb",
+      "kind": "function"
+    },
+    {
+      "name": "nc",
+      "kind": "function"
+    },
+    {
+      "name": "Nc",
+      "kind": "function"
+    },
+    {
+      "name": "nd",
+      "kind": "function"
+    },
+    {
+      "name": "Nd",
+      "kind": "function"
+    },
+    {
+      "name": "ne",
+      "kind": "function"
+    },
+    {
+      "name": "Ne",
+      "kind": "function"
+    },
+    {
+      "name": "nf",
+      "kind": "function"
+    },
+    {
+      "name": "Nf",
+      "kind": "function"
+    },
+    {
+      "name": "ng",
+      "kind": "function"
+    },
+    {
+      "name": "Ng",
+      "kind": "function"
+    },
+    {
+      "name": "nh",
+      "kind": "function"
+    },
+    {
+      "name": "Nh",
+      "kind": "function"
+    },
+    {
+      "name": "ni",
+      "kind": "function"
+    },
+    {
+      "name": "Ni",
+      "kind": "function"
+    },
+    {
+      "name": "nj",
+      "kind": "function"
+    },
+    {
+      "name": "Nj",
+      "kind": "function"
+    },
+    {
+      "name": "nk",
+      "kind": "function"
+    },
+    {
+      "name": "Nk",
+      "kind": "function"
+    },
+    {
+      "name": "nl",
+      "kind": "function"
+    },
+    {
+      "name": "o",
+      "kind": "function"
+    },
+    {
+      "name": "O",
+      "kind": "function"
+    },
+    {
+      "name": "oa",
+      "kind": "function"
+    },
+    {
+      "name": "Oa",
+      "kind": "function"
+    },
+    {
+      "name": "ob",
+      "kind": "function"
+    },
+    {
+      "name": "Ob",
+      "kind": "function"
+    },
+    {
+      "name": "oc",
+      "kind": "function"
+    },
+    {
+      "name": "Oc",
+      "kind": "function"
+    },
+    {
+      "name": "od",
+      "kind": "function"
+    },
+    {
+      "name": "Od",
+      "kind": "function"
+    },
+    {
+      "name": "oe",
+      "kind": "function"
+    },
+    {
+      "name": "Oe",
+      "kind": "function"
+    },
+    {
+      "name": "of",
+      "kind": "function"
+    },
+    {
+      "name": "Of",
+      "kind": "function"
+    },
+    {
+      "name": "og",
+      "kind": "function"
+    },
+    {
+      "name": "Og",
+      "kind": "function"
+    },
+    {
+      "name": "oh",
+      "kind": "function"
+    },
+    {
+      "name": "Oh",
+      "kind": "function"
+    },
+    {
+      "name": "oi",
+      "kind": "function"
+    },
+    {
+      "name": "Oi",
+      "kind": "function"
+    },
+    {
+      "name": "oj",
+      "kind": "function"
+    },
+    {
+      "name": "Oj",
+      "kind": "function"
+    },
+    {
+      "name": "ok",
+      "kind": "function"
+    },
+    {
+      "name": "Ok",
+      "kind": "function"
+    },
+    {
+      "name": "ol",
+      "kind": "function"
+    },
+    {
+      "name": "p",
+      "kind": "function"
+    },
+    {
+      "name": "P",
+      "kind": "function"
+    },
+    {
+      "name": "pa",
+      "kind": "function"
+    },
+    {
+      "name": "Pa",
+      "kind": "function"
+    },
+    {
+      "name": "pb",
+      "kind": "function"
+    },
+    {
+      "name": "Pb",
+      "kind": "function"
+    },
+    {
+      "name": "pc",
+      "kind": "function"
+    },
+    {
+      "name": "Pc",
+      "kind": "function"
+    },
+    {
+      "name": "pd",
+      "kind": "function"
+    },
+    {
+      "name": "Pd",
+      "kind": "function"
+    },
+    {
+      "name": "pe",
+      "kind": "function"
+    },
+    {
+      "name": "Pe",
+      "kind": "function"
+    },
+    {
+      "name": "pf",
+      "kind": "function"
+    },
+    {
+      "name": "Pf",
+      "kind": "function"
+    },
+    {
+      "name": "pg",
+      "kind": "function"
+    },
+    {
+      "name": "Pg",
+      "kind": "function"
+    },
+    {
+      "name": "ph",
+      "kind": "function"
+    },
+    {
+      "name": "Ph",
+      "kind": "function"
+    },
+    {
+      "name": "pi",
+      "kind": "function"
+    },
+    {
+      "name": "Pi",
+      "kind": "function"
+    },
+    {
+      "name": "pj",
+      "kind": "function"
+    },
+    {
+      "name": "Pj",
+      "kind": "function"
+    },
+    {
+      "name": "pk",
+      "kind": "function"
+    },
+    {
+      "name": "Pk",
+      "kind": "function"
+    },
+    {
+      "name": "pl",
+      "kind": "function"
+    },
+    {
+      "name": "q",
+      "kind": "function"
+    },
+    {
+      "name": "Q",
+      "kind": "function"
+    },
+    {
+      "name": "qa",
+      "kind": "function"
+    },
+    {
+      "name": "Qa",
+      "kind": "function"
+    },
+    {
+      "name": "qb",
+      "kind": "function"
+    },
+    {
+      "name": "Qb",
+      "kind": "function"
+    },
+    {
+      "name": "qc",
+      "kind": "function"
+    },
+    {
+      "name": "Qc",
+      "kind": "function"
+    },
+    {
+      "name": "qd",
+      "kind": "function"
+    },
+    {
+      "name": "Qd",
+      "kind": "function"
+    },
+    {
+      "name": "qe",
+      "kind": "function"
+    },
+    {
+      "name": "Qe",
+      "kind": "function"
+    },
+    {
+      "name": "qf",
+      "kind": "function"
+    },
+    {
+      "name": "Qf",
+      "kind": "function"
+    },
+    {
+      "name": "qg",
+      "kind": "function"
+    },
+    {
+      "name": "Qg",
+      "kind": "function"
+    },
+    {
+      "name": "qh",
+      "kind": "function"
+    },
+    {
+      "name": "Qh",
+      "kind": "function"
+    },
+    {
+      "name": "qi",
+      "kind": "function"
+    },
+    {
+      "name": "Qi",
+      "kind": "function"
+    },
+    {
+      "name": "qj",
+      "kind": "function"
+    },
+    {
+      "name": "Qj",
+      "kind": "function"
+    },
+    {
+      "name": "qk",
+      "kind": "function"
+    },
+    {
+      "name": "Qk",
+      "kind": "function"
+    },
+    {
+      "name": "ql",
+      "kind": "function"
+    },
+    {
+      "name": "r",
+      "kind": "function"
+    },
+    {
+      "name": "R",
+      "kind": "function"
+    },
+    {
+      "name": "ra",
+      "kind": "function"
+    },
+    {
+      "name": "Ra",
+      "kind": "function"
+    },
+    {
+      "name": "rb",
+      "kind": "function"
+    },
+    {
+      "name": "Rb",
+      "kind": "function"
+    },
+    {
+      "name": "rc",
+      "kind": "function"
+    },
+    {
+      "name": "Rc",
+      "kind": "function"
+    },
+    {
+      "name": "rd",
+      "kind": "function"
+    },
+    {
+      "name": "Rd",
+      "kind": "function"
+    },
+    {
+      "name": "re",
+      "kind": "function"
+    },
+    {
+      "name": "Re",
+      "kind": "function"
+    },
+    {
+      "name": "rf",
+      "kind": "function"
+    },
+    {
+      "name": "Rf",
+      "kind": "function"
+    },
+    {
+      "name": "rg",
+      "kind": "function"
+    },
+    {
+      "name": "Rg",
+      "kind": "function"
+    },
+    {
+      "name": "rh",
+      "kind": "function"
+    },
+    {
+      "name": "Rh",
+      "kind": "function"
+    },
+    {
+      "name": "ri",
+      "kind": "function"
+    },
+    {
+      "name": "Ri",
+      "kind": "function"
+    },
+    {
+      "name": "rj",
+      "kind": "function"
+    },
+    {
+      "name": "Rj",
+      "kind": "function"
+    },
+    {
+      "name": "rk",
+      "kind": "function"
+    },
+    {
+      "name": "Rk",
+      "kind": "function"
+    },
+    {
+      "name": "rl",
+      "kind": "function"
+    },
+    {
+      "name": "s",
+      "kind": "function"
+    },
+    {
+      "name": "S",
+      "kind": "function"
+    },
+    {
+      "name": "sa",
+      "kind": "function"
+    },
+    {
+      "name": "Sa",
+      "kind": "function"
+    },
+    {
+      "name": "sb",
+      "kind": "function"
+    },
+    {
+      "name": "Sb",
+      "kind": "function"
+    },
+    {
+      "name": "sc",
+      "kind": "function"
+    },
+    {
+      "name": "Sc",
+      "kind": "function"
+    },
+    {
+      "name": "sd",
+      "kind": "function"
+    },
+    {
+      "name": "Sd",
+      "kind": "function"
+    },
+    {
+      "name": "se",
+      "kind": "function"
+    },
+    {
+      "name": "Se",
+      "kind": "function"
+    },
+    {
+      "name": "sf",
+      "kind": "function"
+    },
+    {
+      "name": "Sf",
+      "kind": "function"
+    },
+    {
+      "name": "sg",
+      "kind": "function"
+    },
+    {
+      "name": "Sg",
+      "kind": "function"
+    },
+    {
+      "name": "sh",
+      "kind": "function"
+    },
+    {
+      "name": "Sh",
+      "kind": "function"
+    },
+    {
+      "name": "si",
+      "kind": "function"
+    },
+    {
+      "name": "Si",
+      "kind": "function"
+    },
+    {
+      "name": "sj",
+      "kind": "function"
+    },
+    {
+      "name": "Sj",
+      "kind": "function"
+    },
+    {
+      "name": "sk",
+      "kind": "function"
+    },
+    {
+      "name": "Sk",
+      "kind": "function"
+    },
+    {
+      "name": "sl",
+      "kind": "function"
+    },
+    {
+      "name": "t",
+      "kind": "function"
+    },
+    {
+      "name": "T",
+      "kind": "function"
+    },
+    {
+      "name": "ta",
+      "kind": "function"
+    },
+    {
+      "name": "Ta",
+      "kind": "function"
+    },
+    {
+      "name": "tb",
+      "kind": "function"
+    },
+    {
+      "name": "Tb",
+      "kind": "function"
+    },
+    {
+      "name": "tc",
+      "kind": "function"
+    },
+    {
+      "name": "Tc",
+      "kind": "function"
+    },
+    {
+      "name": "td",
+      "kind": "function"
+    },
+    {
+      "name": "Td",
+      "kind": "function"
+    },
+    {
+      "name": "te",
+      "kind": "function"
+    },
+    {
+      "name": "Te",
+      "kind": "function"
+    },
+    {
+      "name": "tf",
+      "kind": "function"
+    },
+    {
+      "name": "Tf",
+      "kind": "function"
+    },
+    {
+      "name": "tg",
+      "kind": "function"
+    },
+    {
+      "name": "Tg",
+      "kind": "function"
+    },
+    {
+      "name": "th",
+      "kind": "function"
+    },
+    {
+      "name": "Th",
+      "kind": "function"
+    },
+    {
+      "name": "ti",
+      "kind": "function"
+    },
+    {
+      "name": "Ti",
+      "kind": "function"
+    },
+    {
+      "name": "tj",
+      "kind": "function"
+    },
+    {
+      "name": "Tj",
+      "kind": "function"
+    },
+    {
+      "name": "tk",
+      "kind": "function"
+    },
+    {
+      "name": "Tk",
+      "kind": "function"
+    },
+    {
+      "name": "tl",
+      "kind": "function"
+    },
+    {
+      "name": "u",
+      "kind": "function"
+    },
+    {
+      "name": "U",
+      "kind": "function"
+    },
+    {
+      "name": "ua",
+      "kind": "function"
+    },
+    {
+      "name": "Ua",
+      "kind": "function"
+    },
+    {
+      "name": "ub",
+      "kind": "function"
+    },
+    {
+      "name": "Ub",
+      "kind": "function"
+    },
+    {
+      "name": "uc",
+      "kind": "function"
+    },
+    {
+      "name": "Uc",
+      "kind": "function"
+    },
+    {
+      "name": "ud",
+      "kind": "function"
+    },
+    {
+      "name": "Ud",
+      "kind": "function"
+    },
+    {
+      "name": "ue",
+      "kind": "function"
+    },
+    {
+      "name": "Ue",
+      "kind": "function"
+    },
+    {
+      "name": "uf",
+      "kind": "function"
+    },
+    {
+      "name": "Uf",
+      "kind": "function"
+    },
+    {
+      "name": "ug",
+      "kind": "function"
+    },
+    {
+      "name": "Ug",
+      "kind": "function"
+    },
+    {
+      "name": "uh",
+      "kind": "function"
+    },
+    {
+      "name": "Uh",
+      "kind": "function"
+    },
+    {
+      "name": "ui",
+      "kind": "function"
+    },
+    {
+      "name": "Ui",
+      "kind": "function"
+    },
+    {
+      "name": "uj",
+      "kind": "function"
+    },
+    {
+      "name": "Uj",
+      "kind": "function"
+    },
+    {
+      "name": "uk",
+      "kind": "function"
+    },
+    {
+      "name": "Uk",
+      "kind": "function"
+    },
+    {
+      "name": "ul",
+      "kind": "function"
+    },
+    {
+      "name": "v",
+      "kind": "function"
+    },
+    {
+      "name": "V",
+      "kind": "function"
+    },
+    {
+      "name": "va",
+      "kind": "function"
+    },
+    {
+      "name": "Va",
+      "kind": "function"
+    },
+    {
+      "name": "vb",
+      "kind": "function"
+    },
+    {
+      "name": "Vb",
+      "kind": "function"
+    },
+    {
+      "name": "vc",
+      "kind": "function"
+    },
+    {
+      "name": "Vc",
+      "kind": "function"
+    },
+    {
+      "name": "vd",
+      "kind": "function"
+    },
+    {
+      "name": "Vd",
+      "kind": "function"
+    },
+    {
+      "name": "ve",
+      "kind": "function"
+    },
+    {
+      "name": "Ve",
+      "kind": "function"
+    },
+    {
+      "name": "vf",
+      "kind": "function"
+    },
+    {
+      "name": "Vf",
+      "kind": "function"
+    },
+    {
+      "name": "vg",
+      "kind": "function"
+    },
+    {
+      "name": "Vg",
+      "kind": "function"
+    },
+    {
+      "name": "vh",
+      "kind": "function"
+    },
+    {
+      "name": "Vh",
+      "kind": "function"
+    },
+    {
+      "name": "vi",
+      "kind": "function"
+    },
+    {
+      "name": "Vi",
+      "kind": "function"
+    },
+    {
+      "name": "vj",
+      "kind": "function"
+    },
+    {
+      "name": "Vj",
+      "kind": "function"
+    },
+    {
+      "name": "vk",
+      "kind": "function"
+    },
+    {
+      "name": "Vk",
+      "kind": "function"
+    },
+    {
+      "name": "vl",
+      "kind": "function"
+    },
+    {
+      "name": "w",
+      "kind": "function"
+    },
+    {
+      "name": "W",
+      "kind": "function"
+    },
+    {
+      "name": "wa",
+      "kind": "function"
+    },
+    {
+      "name": "Wa",
+      "kind": "function"
+    },
+    {
+      "name": "wb",
+      "kind": "function"
+    },
+    {
+      "name": "Wb",
+      "kind": "function"
+    },
+    {
+      "name": "wc",
+      "kind": "function"
+    },
+    {
+      "name": "Wc",
+      "kind": "function"
+    },
+    {
+      "name": "wd",
+      "kind": "function"
+    },
+    {
+      "name": "Wd",
+      "kind": "function"
+    },
+    {
+      "name": "we",
+      "kind": "function"
+    },
+    {
+      "name": "We",
+      "kind": "function"
+    },
+    {
+      "name": "wf",
+      "kind": "function"
+    },
+    {
+      "name": "Wf",
+      "kind": "function"
+    },
+    {
+      "name": "wg",
+      "kind": "function"
+    },
+    {
+      "name": "Wg",
+      "kind": "function"
+    },
+    {
+      "name": "wh",
+      "kind": "function"
+    },
+    {
+      "name": "Wh",
+      "kind": "function"
+    },
+    {
+      "name": "wi",
+      "kind": "function"
+    },
+    {
+      "name": "Wi",
+      "kind": "function"
+    },
+    {
+      "name": "wj",
+      "kind": "function"
+    },
+    {
+      "name": "Wj",
+      "kind": "function"
+    },
+    {
+      "name": "wk",
+      "kind": "function"
+    },
+    {
+      "name": "Wk",
+      "kind": "function"
+    },
+    {
+      "name": "wl",
+      "kind": "function"
+    },
+    {
+      "name": "x",
+      "kind": "function"
+    },
+    {
+      "name": "X",
+      "kind": "function"
+    },
+    {
+      "name": "xa",
+      "kind": "function"
+    },
+    {
+      "name": "Xa",
+      "kind": "function"
+    },
+    {
+      "name": "xb",
+      "kind": "function"
+    },
+    {
+      "name": "Xb",
+      "kind": "function"
+    },
+    {
+      "name": "xc",
+      "kind": "function"
+    },
+    {
+      "name": "Xc",
+      "kind": "function"
+    },
+    {
+      "name": "xd",
+      "kind": "function"
+    },
+    {
+      "name": "Xd",
+      "kind": "function"
+    },
+    {
+      "name": "xe",
+      "kind": "function"
+    },
+    {
+      "name": "Xe",
+      "kind": "function"
+    },
+    {
+      "name": "xf",
+      "kind": "function"
+    },
+    {
+      "name": "Xf",
+      "kind": "function"
+    },
+    {
+      "name": "xg",
+      "kind": "function"
+    },
+    {
+      "name": "Xg",
+      "kind": "function"
+    },
+    {
+      "name": "xh",
+      "kind": "function"
+    },
+    {
+      "name": "Xh",
+      "kind": "function"
+    },
+    {
+      "name": "xi",
+      "kind": "function"
+    },
+    {
+      "name": "Xi",
+      "kind": "function"
+    },
+    {
+      "name": "xj",
+      "kind": "function"
+    },
+    {
+      "name": "Xj",
+      "kind": "function"
+    },
+    {
+      "name": "xk",
+      "kind": "function"
+    },
+    {
+      "name": "Xk",
+      "kind": "function"
+    },
+    {
+      "name": "xl",
+      "kind": "function"
+    },
+    {
+      "name": "y",
+      "kind": "function"
+    },
+    {
+      "name": "Y",
+      "kind": "function"
+    },
+    {
+      "name": "ya",
+      "kind": "function"
+    },
+    {
+      "name": "Ya",
+      "kind": "function"
+    },
+    {
+      "name": "yb",
+      "kind": "function"
+    },
+    {
+      "name": "Yb",
+      "kind": "function"
+    },
+    {
+      "name": "yc",
+      "kind": "function"
+    },
+    {
+      "name": "Yc",
+      "kind": "function"
+    },
+    {
+      "name": "yd",
+      "kind": "function"
+    },
+    {
+      "name": "Yd",
+      "kind": "function"
+    },
+    {
+      "name": "ye",
+      "kind": "function"
+    },
+    {
+      "name": "Ye",
+      "kind": "function"
+    },
+    {
+      "name": "yf",
+      "kind": "function"
+    },
+    {
+      "name": "Yf",
+      "kind": "function"
+    },
+    {
+      "name": "yg",
+      "kind": "function"
+    },
+    {
+      "name": "Yg",
+      "kind": "function"
+    },
+    {
+      "name": "yh",
+      "kind": "function"
+    },
+    {
+      "name": "Yh",
+      "kind": "function"
+    },
+    {
+      "name": "yi",
+      "kind": "function"
+    },
+    {
+      "name": "Yi",
+      "kind": "function"
+    },
+    {
+      "name": "yj",
+      "kind": "function"
+    },
+    {
+      "name": "Yj",
+      "kind": "function"
+    },
+    {
+      "name": "yk",
+      "kind": "function"
+    },
+    {
+      "name": "Yk",
+      "kind": "function"
+    },
+    {
+      "name": "yl",
+      "kind": "function"
+    },
+    {
+      "name": "z",
+      "kind": "function"
+    },
+    {
+      "name": "Z",
+      "kind": "function"
+    },
+    {
+      "name": "za",
+      "kind": "function"
+    },
+    {
+      "name": "Za",
+      "kind": "function"
+    },
+    {
+      "name": "zb",
+      "kind": "function"
+    },
+    {
+      "name": "Zb",
+      "kind": "function"
+    },
+    {
+      "name": "zc",
+      "kind": "function"
+    },
+    {
+      "name": "Zc",
+      "kind": "function"
+    },
+    {
+      "name": "zd",
+      "kind": "function"
+    },
+    {
+      "name": "Zd",
+      "kind": "function"
+    },
+    {
+      "name": "ze",
+      "kind": "function"
+    },
+    {
+      "name": "Ze",
+      "kind": "function"
+    },
+    {
+      "name": "zf",
+      "kind": "function"
+    },
+    {
+      "name": "Zf",
+      "kind": "function"
+    },
+    {
+      "name": "zg",
+      "kind": "function"
+    },
+    {
+      "name": "Zg",
+      "kind": "function"
+    },
+    {
+      "name": "zh",
+      "kind": "function"
+    },
+    {
+      "name": "Zh",
+      "kind": "function"
+    },
+    {
+      "name": "zi",
+      "kind": "function"
+    },
+    {
+      "name": "Zi",
+      "kind": "function"
+    },
+    {
+      "name": "zj",
+      "kind": "function"
+    },
+    {
+      "name": "Zj",
+      "kind": "function"
+    },
+    {
+      "name": "zk",
+      "kind": "function"
+    },
+    {
+      "name": "Zk",
+      "kind": "function"
+    },
+    {
+      "name": "zl",
+      "kind": "function"
+    }
+  ],
+  "vectors": [
+    {
+      "operation": "secretbox",
+      "inputHex": "464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f6061626364",
+      "deterministicRandomHex": "2122232425262728292a2b2c2d2e2f303132333435363738",
+      "expectedWireHex": "8caaa404088a2ac178d1d21cf539c41a6706d9cc115d9eb9252dd63c500c759205b89dc88e5bdc54a967fcd11be9a9"
+    },
+    {
+      "operation": "sealed-box",
+      "inputHex": "464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f6061626364",
+      "deterministicRandomHex": "636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182",
+      "expectedWireHex": "01973f58f2cb17d9855a55cfc027a70a19a5d8ca1bffe93fb8af5bd850b927232e3a8aa8a9021b646564f132e0a6f5fba839ee8a11c26510000b65b81247e099124f831ddc69ebcc8c6d67cbd803ab"
+    },
+    {
+      "operation": "secretstream-final",
+      "inputHex": "464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f6061626364",
+      "deterministicRandomHex": "05060708090a0b0c0d0e0f101112131415161718191a1b1c",
+      "expectedWire": {
+        "headerHex": "05060708090a0b0c0d0e0f101112131415161718191a1b1c",
+        "ciphertextHex": "52f1f5eaca2e446c3f39edc13bd3860c3ff3efe6c93d935b13e312cc1572340cbd52df7645c84edfba4d321783297bbd",
+        "tag": 3
+      }
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "name": "@shardpass/testing",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/fake-extension-platform.ts",
+    "./fake-storage-port": "./src/fake-storage-port.ts"
+  },
+  "dependencies": {
+    "@shardpass/storage": "workspace:*"
+  }
+}

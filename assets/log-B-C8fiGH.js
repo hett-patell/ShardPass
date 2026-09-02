@@ -1,0 +1,1 @@
+const s="[ShardPass]";function r(o){return`${s}[${o}]`}function c(o,...n){console.log(r(o),...n)}function e(o,...n){console.warn(r(o),...n)}function t(o,...n){console.error(r(o),...n)}export{t as e,c as l,e as w};

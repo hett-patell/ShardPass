@@ -1,0 +1,102 @@
+import { describe, expect, it } from "vitest";
+
+import {
+  ENTE_PROTOCOL_PIN,
+  ENTE_SNAPSHOT_LIMITS,
+  parseEnteProtocolResponse,
+} from "../../src/background/ente/protocol";
+import {
+  authenticatorEntityDiffResponseSchema,
+  authenticatorKeyResponseSchema,
+  srpAttributesResponseSchema,
+} from "../../src/background/ente/schemas";
+import type { EnteOtpAdapterInput } from "../../src/background/ente/schemas";
+
+describe("pinned strict Ente protocol schemas", () => {
+  it("pins the reviewed protocol and immutable limits", () => {
+    expect(ENTE_PROTOCOL_PIN).toBe("c69dcf66704ad7ec1f95e32920455be429a566ef");
+    expect(ENTE_SNAPSHOT_LIMITS).toMatchObject({ pageSize: 2500, maxPages: 40 });
+    expect(Object.isFrozen(ENTE_SNAPSHOT_LIMITS)).toBe(true);
+  });
+
+  it("strictly projects SRP attributes and rejects nested drift and malformed encodings", () => {
+    const valid = {
+      attributes: {
+        srpUserID: "123e4567-e89b-42d3-a456-426614174000",
+        srpSalt: "AA==",
+        memLimit: 1,
+        opsLimit: 1,
+        kekSalt: "AQ==",
+        isEmailMFAEnabled: false,
+      },
+    };
+    expect(parseEnteProtocolResponse(srpAttributesResponseSchema, valid)).toEqual(valid);
+    expect(() =>
+      parseEnteProtocolResponse(srpAttributesResponseSchema, { ...valid, drift: true }),
+    ).toThrow();
+    expect(() =>
+      parseEnteProtocolResponse(srpAttributesResponseSchema, {
+        attributes: { ...valid.attributes, srpSalt: "%%%" },
+      }),
+    ).toThrow();
+    expect(() =>
+      parseEnteProtocolResponse(srpAttributesResponseSchema, {
+        attributes: { ...valid.attributes, memLimit: -1 },
+      }),
+    ).toThrow();
+  });
+
+  it("rejects unknown key envelopes, unsafe values, malformed tombstones, and oversized fields", () => {
+    expect(() =>
+      parseEnteProtocolResponse(authenticatorKeyResponseSchema, { version: 999 }),
+    ).toThrow();
+    expect(() =>
+      parseEnteProtocolResponse(authenticatorEntityDiffResponseSchema, {
+        diff: [
+          {
+            id: "x",
+            isDeleted: true,
+            createdAt: 0,
+            updatedAt: -1,
+            encryptedData: "AA==",
+            header: "AA==",
+          },
+        ],
+      }),
+    ).toThrow();
+    expect(() =>
+      parseEnteProtocolResponse(authenticatorEntityDiffResponseSchema, {
+        diff: [
+          {
+            id: "x",
+            isDeleted: false,
+            createdAt: 0,
+            updatedAt: Number.MAX_SAFE_INTEGER + 1,
+            encryptedData: "AA==",
+            header: "AA==",
+          },
+        ],
+      }),
+    ).toThrow();
+    expect(() =>
+      parseEnteProtocolResponse(authenticatorEntityDiffResponseSchema, {
+        diff: [
+          {
+            id: "x",
+            isDeleted: false,
+            createdAt: 0,
+            updatedAt: 1,
+            encryptedData: "A".repeat(1_048_580),
+            header: "AA==",
+          },
+        ],
+      }),
+    ).toThrow();
+  });
+
+  it("makes password LoginItem structurally impossible at the OTP adapter boundary", () => {
+    // @ts-expect-error Login/password entities are forbidden by the OTP-only adapter contract.
+    const forbidden: EnteOtpAdapterInput = { type: "LoginItem", password: "synthetic-only" };
+    expect((forbidden as unknown as { type: string }).type).toBe("LoginItem");
+  });
+});

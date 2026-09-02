@@ -1,0 +1,7 @@
+{
+  "synthetic": true,
+  "settings": {
+    "autoLockMinutes": 7,
+    "lockOnScreenLock": false
+  }
+}

@@ -1,0 +1,66 @@
+{
+  "manifest_version": 3,
+  "name": "ShardPass",
+  "short_name": "ShardPass",
+  "version": "1.2.1",
+  "minimum_chrome_version": "110",
+  "description": "Minimal TOTP authenticator with one-click autofill.",
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
+  "action": {
+    "default_popup": "src/popup/index.html",
+    "default_title": "ShardPass",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png"
+    }
+  },
+  "background": {
+    "service_worker": "service-worker-loader.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "js": [
+        "assets/index.ts-loader-BWnrBa67.js"
+      ],
+      "matches": [
+        "<all_urls>"
+      ],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ],
+  "permissions": [
+    "storage",
+    "activeTab",
+    "alarms",
+    "idle",
+    "clipboardRead",
+    "clipboardWrite"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
+  },
+  "web_accessible_resources": [
+    {
+      "matches": [
+        "<all_urls>"
+      ],
+      "resources": [
+        "assets/detect-GJf8O2wT.js",
+        "assets/format-BF4VSr4S.js",
+        "assets/log-B-C8fiGH.js",
+        "assets/index.ts-BbWVF1-a.js"
+      ],
+      "use_dynamic_url": false
+    }
+  ]
+}

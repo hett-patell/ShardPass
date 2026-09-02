@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" href="data:," />
+    <title>Synthetic OTP fill surface</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 32px;
+        color: #18181b;
+        font:
+          16px/1.5 system-ui,
+          sans-serif;
+        background: #f4f4f5;
+      }
+      main {
+        display: grid;
+        gap: 20px;
+        max-width: 720px;
+      }
+      label {
+        display: grid;
+        gap: 6px;
+        max-width: 320px;
+      }
+      input {
+        min-height: 40px;
+        padding: 6px 10px;
+        font: inherit;
+      }
+      iframe {
+        width: 100%;
+        min-height: 120px;
+        border: 1px solid #a1a1aa;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <form id="otp-form">
+        <label for="explicit-otp">One-time code</label>
+        <input id="explicit-otp" autocomplete="one-time-code" />
+        <button id="submit" type="submit">Continue</button>
+      </form>
+      <label for="heuristic-otp">Verification code</label>
+      <input id="heuristic-otp" inputmode="numeric" maxlength="6" />
+      <label for="postal-code">Postal code</label>
+      <input id="postal-code" inputmode="numeric" maxlength="6" />
+      <label for="security-pin">Security PIN</label>
+      <input id="security-pin" inputmode="numeric" maxlength="6" />
+      <label for="coupon-code">Coupon code</label>
+      <input id="coupon-code" inputmode="numeric" maxlength="6" />
+      <label for="phone-number">Phone number</label>
+      <input id="phone-number" inputmode="numeric" maxlength="6" />
+      <input id="hidden-otp" autocomplete="one-time-code" hidden />
+      <label for="disabled-otp">Authentication code</label>
+      <input id="disabled-otp" autocomplete="one-time-code" disabled />
+      <label for="replacement-otp">Verification code</label>
+      <input id="replacement-otp" inputmode="numeric" maxlength="6" />
+      <iframe id="same-origin-frame" title="Same-origin OTP frame" src="./otp-frame.html"></iframe>
+      <iframe
+        id="cross-origin-frame"
+        title="Cross-origin OTP frame"
+        src="http://localhost:4173/tests/fixtures/sites/otp-frame.html"
+      ></iframe>
+    </main>
+    <script>
+      window.__otpFixture = { submissions: 0, focusMoves: 0 };
+      document.querySelector("#otp-form").addEventListener("submit", (event) => {
+        event.preventDefault();
+        window.__otpFixture.submissions += 1;
+      });
+      document.addEventListener("focusin", (event) => {
+        if (event.target?.id === "submit") window.__otpFixture.focusMoves += 1;
+      });
+      window.__replaceOtpField = () => {
+        const current = document.querySelector("#replacement-otp");
+        const replacement = current.cloneNode();
+        current.replaceWith(replacement);
+        replacement.focus();
+      };
+    </script>
+  </body>
+</html>

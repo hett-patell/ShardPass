@@ -1,0 +1,29 @@
+packages:
+  - apps/*
+  - packages/*
+
+catalog:
+  "@bufbuild/buf": 1.72.0
+  "@bufbuild/protobuf": 2.13.0
+  "@bufbuild/protoc-gen-es": 2.13.0
+  "@noble/ciphers": 2.2.0
+  "@noble/hashes": 2.2.0
+  "@streamparser/json": 0.0.22
+  "@testing-library/jest-dom": 7.0.0
+  "@testing-library/react": 16.3.2
+  "@types/chrome": 0.2.2
+  "@types/react": 19.2.17
+  "@types/react-dom": 19.2.3
+  axe-core: 4.12.1
+  buffer: 6.0.3
+  dependency-cruiser: 18.1.0
+  fast-srp-hap: 2.0.4
+  image-dimensions: 2.5.1
+  jsqr: 1.4.0
+  libsodium-wrappers-sumo: 0.8.4
+  lucide-react: 1.27.0
+  react: 19.2.8
+  react-dom: 19.2.8
+  zod: 4.4.3
+
+catalogMode: strict

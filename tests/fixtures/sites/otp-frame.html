@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Synthetic OTP frame</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 20px;
+        color: #18181b;
+        font:
+          16px/1.5 system-ui,
+          sans-serif;
+        background: #fafafa;
+      }
+      label {
+        display: grid;
+        gap: 6px;
+        max-width: 320px;
+      }
+      input {
+        min-height: 40px;
+        padding: 6px 10px;
+        font: inherit;
+      }
+    </style>
+  </head>
+  <body>
+    <label for="frame-otp">Authentication code</label>
+    <input id="frame-otp" inputmode="numeric" maxlength="6" />
+  </body>
+</html>
