@@ -84,7 +84,7 @@ function cycleToItem(item: EnteCycleItem): OtpItem {
   return {
     id: item.localId,
     kind: "otp",
-    schemaVersion: 1,
+    schemaVersion: 2,
     revision: 1,
     createdAt: "1970-01-01T00:00:00.000Z",
     updatedAt: "1970-01-01T00:00:00.000Z",

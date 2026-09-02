@@ -67,7 +67,7 @@ const payload: PortableBackupPayload = {
   items: [
     {
       id: "11111111-1111-4111-8111-111111111111",
-      schemaVersion: 1,
+      schemaVersion: 2,
       revision: 7,
       createdAt: "2026-01-02T03:04:05.000Z",
       updatedAt: "2026-06-07T08:09:10.000Z",
@@ -86,7 +86,7 @@ const payload: PortableBackupPayload = {
     },
     {
       id: "22222222-2222-4222-8222-222222222222",
-      schemaVersion: 1,
+      schemaVersion: 2,
       revision: 3,
       createdAt: "2026-02-03T04:05:06.000Z",
       updatedAt: "2026-03-04T05:06:07.000Z",
@@ -105,7 +105,7 @@ const payload: PortableBackupPayload = {
     },
     {
       id: "33333333-3333-4333-8333-333333333333",
-      schemaVersion: 1,
+      schemaVersion: 2,
       revision: 1,
       createdAt: "2026-03-04T05:06:07.000Z",
       updatedAt: "2026-03-04T05:06:07.000Z",

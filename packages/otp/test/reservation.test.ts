@@ -12,7 +12,7 @@ const binding: ReservationBinding = { tabId: 7, frameId: 0, documentId: "documen
 const otherBinding: ReservationBinding = { ...binding, documentId: "document-b" };
 const item: OtpItem = {
   id: "018f47a6-7d11-7c2f-8bd9-a1d37f147a20",
-  schemaVersion: 1,
+  schemaVersion: 2,
   revision: 4,
   createdAt: "2026-07-29T10:20:30.000Z",
   updatedAt: "2026-07-29T10:20:30.000Z",

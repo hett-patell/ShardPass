@@ -18,7 +18,7 @@ const sender: SenderContext = {
 function otp(overrides: Partial<OtpItem> = {}): OtpItem {
   return {
     id: itemId,
-    schemaVersion: 1,
+    schemaVersion: 2,
     revision: 1,
     createdAt: "2026-08-10T12:00:00.000Z",
     updatedAt: "2026-08-10T12:00:00.000Z",

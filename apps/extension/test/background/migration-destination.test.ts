@@ -34,7 +34,7 @@ const binding = {
 function item(): OtpItem {
   return {
     id: "018f47a6-7d11-7c2f-8bd9-a1d37f147a29",
-    schemaVersion: 1,
+    schemaVersion: 2,
     revision: 1,
     createdAt: "2023-11-14T22:13:20.000Z",
     updatedAt: "2023-11-14T22:13:20.000Z",

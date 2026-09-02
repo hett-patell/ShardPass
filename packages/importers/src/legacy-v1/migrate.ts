@@ -16,7 +16,7 @@ export function mapLegacyAccount(candidate: unknown): OtpItem {
   const otpType = account.type ?? "totp";
   const mapped = {
     id: legacyAccountId(account.id),
-    schemaVersion: 1 as const,
+    schemaVersion: 2 as const,
     revision: 1,
     createdAt: new Date(account.createdAt).toISOString(),
     updatedAt: new Date(account.createdAt).toISOString(),

@@ -65,7 +65,7 @@ export function parseOtpAuthUri(uri: string, metadata: OtpUriMetadata): OtpItem 
 
     const candidate = {
       id: metadata.id,
-      schemaVersion: 1,
+      schemaVersion: 2,
       revision: metadata.revision,
       createdAt: metadata.createdAt,
       updatedAt: metadata.updatedAt,

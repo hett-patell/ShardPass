@@ -23,7 +23,7 @@ const payload: PortableBackupPayload = {
     {
       id: "10000000-0000-4000-8000-000000000032",
       kind: "otp",
-      schemaVersion: 1,
+      schemaVersion: 2,
       revision: 1,
       createdAt: "2026-08-12T00:00:00.000Z",
       updatedAt: "2026-08-12T00:00:00.000Z",

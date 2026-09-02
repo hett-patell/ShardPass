@@ -26,7 +26,7 @@ const contentB: SenderContext = { ...contentA, documentId: "document-b" };
 function hotp(overrides: Partial<OtpItem> = {}): OtpItem {
   return {
     id: itemId,
-    schemaVersion: 1,
+    schemaVersion: 2,
     revision: 1,
     createdAt: nowIso,
     updatedAt: nowIso,

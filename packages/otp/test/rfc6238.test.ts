@@ -21,7 +21,7 @@ const secrets = {
 function item(algorithm: keyof typeof secrets): OtpItem {
   return {
     id: "018f47a6-7d11-7c2f-8bd9-a1d37f147a20",
-    schemaVersion: 1,
+    schemaVersion: 2,
     revision: 1,
     createdAt: "2026-07-29T10:20:30.000Z",
     updatedAt: "2026-07-29T10:20:30.000Z",

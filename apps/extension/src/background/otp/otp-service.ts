@@ -159,7 +159,7 @@ export class OtpService {
     const timestamp = this.dependencies.clock.isoNow();
     const candidate = parseItem({
       id: this.dependencies.ids.next(),
-      schemaVersion: 1,
+      schemaVersion: 2,
       revision: 1,
       createdAt: timestamp,
       updatedAt: timestamp,

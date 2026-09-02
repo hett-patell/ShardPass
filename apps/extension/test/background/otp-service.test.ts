@@ -37,7 +37,7 @@ const vaultSender: SenderContext = {
 function item(overrides: Partial<OtpItem> = {}): OtpItem {
   return {
     id: ids.first,
-    schemaVersion: 1,
+    schemaVersion: 2,
     revision: 1,
     createdAt: nowIso,
     updatedAt: nowIso,
@@ -373,7 +373,7 @@ describe("OtpService search and CRUD", () => {
       revision: 1,
       createdAt: nowIso,
       updatedAt: nowIso,
-      schemaVersion: 1,
+      schemaVersion: 2,
       kind: "otp",
     });
     expect(activity).toEqual(["noted"]);

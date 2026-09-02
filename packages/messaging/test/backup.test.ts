@@ -14,7 +14,7 @@ const keyEncryptionKey = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
 const item = {
   id: "10000000-0000-4000-8000-000000000001",
   kind: "otp" as const,
-  schemaVersion: 1 as const,
+  schemaVersion: 2 as const,
   revision: 1,
   createdAt: "2026-08-12T00:00:00.000Z",
   updatedAt: "2026-08-12T00:00:00.000Z",
