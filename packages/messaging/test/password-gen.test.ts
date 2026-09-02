@@ -43,9 +43,9 @@ describe("password generation messaging", () => {
   });
 
   it("rejects an invalid mode and out-of-range numeric fields", () => {
-    expect(GeneratePasswordRequestSchema.safeParse({ ...minimalRequest, mode: "bogus" }).success).toBe(
-      false,
-    );
+    expect(
+      GeneratePasswordRequestSchema.safeParse({ ...minimalRequest, mode: "bogus" }).success,
+    ).toBe(false);
     expect(GeneratePasswordRequestSchema.safeParse({ ...randomRequest, length: 7 }).success).toBe(
       false,
     );

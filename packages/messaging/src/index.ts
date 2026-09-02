@@ -197,10 +197,7 @@ export {
   SaveLoginOfferRequestSchema,
 } from "./login-fill";
 export type { LoginFillSuggestion } from "./login-fill";
-export {
-  GeneratePasswordRequestSchema,
-  GeneratePasswordResponseSchema,
-} from "./password-gen";
+export { GeneratePasswordRequestSchema, GeneratePasswordResponseSchema } from "./password-gen";
 export {
   ItemCreateRequestSchema,
   ItemCrudRequestSchema,

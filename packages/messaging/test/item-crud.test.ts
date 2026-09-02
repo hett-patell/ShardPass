@@ -42,9 +42,9 @@ describe("item CRUD messaging", () => {
     expect(ItemQueryRequestSchema.safeParse({ ...requests[0], itemKind: "bogus" }).success).toBe(
       false,
     );
-    expect(ItemQueryRequestSchema.safeParse({ ...requests[0], folderId: "not-a-uuid" }).success).toBe(
-      false,
-    );
+    expect(
+      ItemQueryRequestSchema.safeParse({ ...requests[0], folderId: "not-a-uuid" }).success,
+    ).toBe(false);
     expect(
       ItemQueryRequestSchema.safeParse({ ...requests[0], search: "x".repeat(257) }).success,
     ).toBe(false);
@@ -55,9 +55,9 @@ describe("item CRUD messaging", () => {
     expect(ItemUpdateRequestSchema.safeParse({ ...requests[4], expectedRevision: 0 }).success).toBe(
       false,
     );
-    expect(ItemUpdateRequestSchema.safeParse({ ...requests[4], expectedRevision: -1 }).success).toBe(
-      false,
-    );
+    expect(
+      ItemUpdateRequestSchema.safeParse({ ...requests[4], expectedRevision: -1 }).success,
+    ).toBe(false);
     expect(ItemDeleteRequestSchema.safeParse({ kind: "item.delete" }).success).toBe(false);
   });
 
