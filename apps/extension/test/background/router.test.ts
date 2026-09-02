@@ -22,6 +22,9 @@ import type {
 import { OtpServiceError } from "../../src/background/otp/otp-service";
 import { BackupServiceError } from "../../src/background/vault/backup-service";
 import { EnteProtocolError } from "../../src/background/ente/protocol";
+import { ItemServiceError } from "../../src/background/item/item-service";
+import { LoginFillServiceError } from "../../src/background/login/login-fill-service";
+import { PasswordGenServiceError } from "../../src/background/password/password-gen-service";
 
 const extensionId = "expected-extension-id";
 
@@ -41,6 +44,64 @@ function vaultSender(id = extensionId): SenderContext {
     documentId: "vault-document",
     senderUrl: `chrome-extension://${id}/vault/index.html`,
   };
+}
+
+// Thin wrappers around the long routeMessage(...) positional signature so each
+// route's tests only have to name the service they care about. `service` is
+// cast to `never` at the call boundary the same way other tests in this file
+// bypass the handler's exact structural type for a plain vi.fn() mock.
+function routeItem(input: unknown, sender: unknown, service?: unknown) {
+  return routeMessage(
+    input,
+    sender,
+    extensionId,
+    undefined, // vaultService
+    undefined, // getState
+    undefined, // migrationHandler
+    undefined, // otpService
+    undefined, // otpImportService
+    undefined, // backupService
+    undefined, // otpFillService
+    undefined, // enteService
+    service as never, // itemService
+  );
+}
+
+function routeLoginFill(input: unknown, sender: unknown, service?: unknown) {
+  return routeMessage(
+    input,
+    sender,
+    extensionId,
+    undefined, // vaultService
+    undefined, // getState
+    undefined, // migrationHandler
+    undefined, // otpService
+    undefined, // otpImportService
+    undefined, // backupService
+    undefined, // otpFillService
+    undefined, // enteService
+    undefined, // itemService
+    service as never, // loginFillService
+  );
+}
+
+function routePasswordGen(input: unknown, sender: unknown, service?: unknown) {
+  return routeMessage(
+    input,
+    sender,
+    extensionId,
+    undefined, // vaultService
+    undefined, // getState
+    undefined, // migrationHandler
+    undefined, // otpService
+    undefined, // otpImportService
+    undefined, // backupService
+    undefined, // otpFillService
+    undefined, // enteService
+    undefined, // itemService
+    undefined, // loginFillService
+    service as never, // passwordGenService
+  );
 }
 
 const contentMetadata = {
@@ -272,6 +333,264 @@ describe("vault router", () => {
     await expect(
       routeMessage({ version: 1, kind: "vault.getState" }, sender, extensionId, service),
     ).resolves.toEqual(unauthorizedSender);
+  });
+});
+
+describe("item routing", () => {
+  const loginItemFixture = {
+    id: "018f47a6-7d11-7c2f-8bd9-a1d37f147a20",
+    schemaVersion: 2,
+    revision: 1,
+    createdAt: "2026-08-10T12:00:00.000Z",
+    updatedAt: "2026-08-10T12:00:00.000Z",
+    favorite: false,
+    tags: [],
+    kind: "login",
+    name: "Example",
+    username: "alice",
+    password: "s3cret",
+    urls: ["https://example.test"],
+    notes: "",
+  } as const;
+
+  const itemCases = [
+    [{ version: 1, kind: "item.query" }, { version: 1, kind: "item.queryResult", items: [] }],
+    [
+      { version: 1, kind: "item.get", itemId: loginItemFixture.id },
+      { version: 1, kind: "item.getResult", item: loginItemFixture },
+    ],
+    [
+      { version: 1, kind: "item.create", item: loginItemFixture },
+      { version: 1, kind: "item.mutationResult", item: loginItemFixture },
+    ],
+    [
+      {
+        version: 1,
+        kind: "item.update",
+        itemId: loginItemFixture.id,
+        expectedRevision: 1,
+        fields: {},
+      },
+      { version: 1, kind: "item.mutationResult", item: loginItemFixture },
+    ],
+    [
+      { version: 1, kind: "item.delete", itemId: loginItemFixture.id },
+      { version: 1, kind: "item.deleteResult", itemId: loginItemFixture.id, revision: 2 },
+    ],
+  ] as const;
+
+  it("routes item.query/get/create/update/delete only from the vault page", async () => {
+    for (const [request, response] of itemCases) {
+      const service = { handle: vi.fn().mockResolvedValue(response) };
+      await expect(routeItem(request, vaultSender(), service)).resolves.toEqual(response);
+      expect(service.handle).toHaveBeenCalledWith(request, vaultSender());
+
+      for (const denied of [popupSender(), normalizeSenderContext(contentMetadata, extensionId)!]) {
+        const deniedService = { handle: vi.fn().mockResolvedValue(response) };
+        await expect(routeItem(request, denied, deniedService)).resolves.toEqual(unauthorizedSender);
+        expect(deniedService.handle).not.toHaveBeenCalled();
+      }
+    }
+  });
+
+  it("rejects an unauthorized extension ID even from a vault-shaped sender", async () => {
+    const service = { handle: vi.fn() };
+    await expect(
+      routeItem({ version: 1, kind: "item.query" }, vaultSender("external-extension-id"), service),
+    ).resolves.toEqual(unauthorizedSender);
+    expect(service.handle).not.toHaveBeenCalled();
+  });
+
+  it("rejects invalid item payloads before authorization or service invocation", async () => {
+    const service = { handle: vi.fn() };
+    await expect(
+      routeItem({ version: 1, kind: "item.query", forged: true }, vaultSender(), service),
+    ).resolves.toEqual(invalidMessage);
+    expect(service.handle).not.toHaveBeenCalled();
+  });
+
+  it("reports vault unavailable when no item service is registered", async () => {
+    await expect(
+      routeItem({ version: 1, kind: "item.query" }, vaultSender(), undefined),
+    ).resolves.toMatchObject({ kind: "error", error: { code: "VAULT_UNAVAILABLE" } });
+  });
+
+  it("maps ItemServiceError codes and treats unknown throws as unexpected", async () => {
+    const request = { version: 1, kind: "item.get", itemId: loginItemFixture.id };
+    const known = { handle: vi.fn(() => Promise.reject(new ItemServiceError("ITEM_NOT_FOUND"))) };
+    await expect(routeItem(request, vaultSender(), known)).resolves.toMatchObject({
+      kind: "error",
+      error: { code: "ITEM_NOT_FOUND" },
+    });
+
+    const unknown = { handle: vi.fn(() => Promise.reject(new Error("boom"))) };
+    await expect(routeItem(request, vaultSender(), unknown)).resolves.toMatchObject({
+      kind: "error",
+      error: { code: "UNEXPECTED" },
+    });
+  });
+
+  it("rejects a response shape that does not match the request kind", async () => {
+    const request = { version: 1, kind: "item.query" } as const;
+    const mismatched = { version: 1, kind: "item.deleteResult", itemId: loginItemFixture.id, revision: 1 };
+    const service = { handle: vi.fn().mockResolvedValue(mismatched) };
+    await expect(routeItem(request, vaultSender(), service)).resolves.toMatchObject({
+      kind: "error",
+      error: { code: "VAULT_UNAVAILABLE" },
+    });
+  });
+});
+
+describe("login fill routing", () => {
+  const loginFillCases = [
+    [
+      { version: 1, kind: "login.fillSuggestions", domain: "example.test" },
+      { version: 1, kind: "login.fillSuggestionsResult", suggestions: [] },
+    ],
+    [
+      {
+        version: 1,
+        kind: "login.fillSelect",
+        itemId: "018f47a6-7d11-7c2f-8bd9-a1d37f147a20",
+        expectedRevision: 1,
+      },
+      { version: 1, kind: "login.fillRelease", username: "alice", password: "s3cret" },
+    ],
+  ] as const;
+
+  it("routes login.fillSuggestions/fillSelect only from a content script", async () => {
+    const content = normalizeSenderContext(contentMetadata, extensionId)!;
+    for (const [request, response] of loginFillCases) {
+      const service = { handle: vi.fn().mockResolvedValue(response) };
+      await expect(routeLoginFill(request, content, service)).resolves.toEqual(response);
+      expect(service.handle).toHaveBeenCalledWith(request, content);
+
+      for (const denied of [popupSender(), vaultSender()]) {
+        const deniedService = { handle: vi.fn().mockResolvedValue(response) };
+        await expect(routeLoginFill(request, denied, deniedService)).resolves.toEqual(
+          unauthorizedSender,
+        );
+        expect(deniedService.handle).not.toHaveBeenCalled();
+      }
+    }
+  });
+
+  it("fails closed for a content sender missing tab, frame, or document identity", async () => {
+    const response = { version: 1, kind: "login.fillSuggestionsResult", suggestions: [] };
+    const request = { version: 1, kind: "login.fillSuggestions", domain: "example.test" };
+    for (const malformed of [
+      { ...contentMetadata, contextKind: "content" as const, tabId: undefined },
+      { ...contentMetadata, contextKind: "content" as const, frameId: undefined },
+      { ...contentMetadata, contextKind: "content" as const, documentId: undefined },
+    ]) {
+      const service = { handle: vi.fn().mockResolvedValue(response) };
+      await expect(routeLoginFill(request, malformed, service)).resolves.toEqual(unauthorizedSender);
+      expect(service.handle).not.toHaveBeenCalled();
+    }
+  });
+
+  it("rejects invalid login fill payloads before authorization or service invocation", async () => {
+    const content = normalizeSenderContext(contentMetadata, extensionId)!;
+    const service = { handle: vi.fn() };
+    await expect(
+      routeLoginFill(
+        { version: 1, kind: "login.fillSuggestions", domain: "example.test", forged: true },
+        content,
+        service,
+      ),
+    ).resolves.toEqual(invalidMessage);
+    expect(service.handle).not.toHaveBeenCalled();
+  });
+
+  it("reports unavailable when no login fill service is registered", async () => {
+    const content = normalizeSenderContext(contentMetadata, extensionId)!;
+    await expect(
+      routeLoginFill(
+        { version: 1, kind: "login.fillSuggestions", domain: "example.test" },
+        content,
+        undefined,
+      ),
+    ).resolves.toMatchObject({ kind: "error", error: { code: "LOGIN_FILL_UNAVAILABLE" } });
+  });
+
+  it("maps LoginFillServiceError codes and treats unknown throws as unavailable", async () => {
+    const content = normalizeSenderContext(contentMetadata, extensionId)!;
+    const request = {
+      version: 1,
+      kind: "login.fillSelect",
+      itemId: "018f47a6-7d11-7c2f-8bd9-a1d37f147a20",
+      expectedRevision: 1,
+    };
+    const known = {
+      handle: vi.fn(() => Promise.reject(new LoginFillServiceError("LOGIN_FILL_NOT_FOUND"))),
+    };
+    await expect(routeLoginFill(request, content, known)).resolves.toMatchObject({
+      kind: "error",
+      error: { code: "LOGIN_FILL_NOT_FOUND" },
+    });
+
+    const unknown = { handle: vi.fn(() => Promise.reject(new Error("boom"))) };
+    await expect(routeLoginFill(request, content, unknown)).resolves.toMatchObject({
+      kind: "error",
+      error: { code: "LOGIN_FILL_UNAVAILABLE" },
+    });
+  });
+});
+
+describe("password generation routing", () => {
+  const request = { version: 1, kind: "password.generate", mode: "random" } as const;
+  const response = {
+    version: 1,
+    kind: "password.generateResult",
+    password: "Ab3!fghijklmno1234pq",
+    entropyBits: 120,
+  } as const;
+
+  it.each([popupSender(), vaultSender()])(
+    "routes password.generate from an authorized extension page",
+    async (sender) => {
+      const service = { handle: vi.fn().mockResolvedValue(response) };
+      await expect(routePasswordGen(request, sender, service)).resolves.toEqual(response);
+      expect(service.handle).toHaveBeenCalledWith(request);
+    },
+  );
+
+  it("denies password.generate from a content script sender", async () => {
+    const service = { handle: vi.fn().mockResolvedValue(response) };
+    const content = normalizeSenderContext(contentMetadata, extensionId)!;
+    await expect(routePasswordGen(request, content, service)).resolves.toEqual(unauthorizedSender);
+    expect(service.handle).not.toHaveBeenCalled();
+  });
+
+  it("rejects invalid password generation payloads before authorization or service invocation", async () => {
+    const service = { handle: vi.fn() };
+    await expect(
+      routePasswordGen({ ...request, forged: true }, popupSender(), service),
+    ).resolves.toEqual(invalidMessage);
+    expect(service.handle).not.toHaveBeenCalled();
+  });
+
+  it("reports invalid when no password generation service is registered", async () => {
+    await expect(routePasswordGen(request, popupSender(), undefined)).resolves.toMatchObject({
+      kind: "error",
+      error: { code: "PASSWORD_GEN_INVALID" },
+    });
+  });
+
+  it("maps PasswordGenServiceError codes and treats unknown throws as invalid", async () => {
+    const known = {
+      handle: vi.fn(() => Promise.reject(new PasswordGenServiceError("PASSWORD_GEN_INVALID"))),
+    };
+    await expect(routePasswordGen(request, popupSender(), known)).resolves.toMatchObject({
+      kind: "error",
+      error: { code: "PASSWORD_GEN_INVALID" },
+    });
+
+    const unknown = { handle: vi.fn(() => Promise.reject(new Error("boom"))) };
+    await expect(routePasswordGen(request, popupSender(), unknown)).resolves.toMatchObject({
+      kind: "error",
+      error: { code: "PASSWORD_GEN_INVALID" },
+    });
   });
 });
 
