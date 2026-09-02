@@ -57,12 +57,12 @@ async function encryptedRecord() {
     formatVersion: 1 as const,
     itemId,
     kind: "otp" as const,
-    schemaVersion: 1 as const,
+    schemaVersion: 2 as const,
     revision: 1,
   };
   const item = {
     id: itemId,
-    schemaVersion: 1,
+    schemaVersion: 2,
     revision: 1,
     createdAt: now,
     updatedAt: now,

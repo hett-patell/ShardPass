@@ -54,7 +54,7 @@ function context(): VaultCryptoContext {
 function item(): OtpItem {
   return {
     id: itemId,
-    schemaVersion: 1,
+    schemaVersion: 2,
     revision: 1,
     createdAt: timestamps[0]!,
     updatedAt: timestamps[0]!,
@@ -78,6 +78,17 @@ const request = {
   expectedCounter: 0,
   reservationId,
 };
+
+/** Reads back the item as an OTP item; every item this suite stores is OTP. */
+async function getOtp(
+  repository: VaultRepository,
+  id: string,
+  crypto: VaultCryptoContext,
+): Promise<OtpItem> {
+  const found = await repository.get(id, crypto);
+  if (found === null || found.kind !== "otp") throw new Error("expected an OTP item");
+  return found;
+}
 
 describe("VaultRepository HOTP reservation idempotency", () => {
   it("increments the exact revision/counter and records the opaque mutation id", async () => {
@@ -118,7 +129,7 @@ describe("VaultRepository HOTP reservation idempotency", () => {
     const repository = new VaultRepository(storage, wrappedKey);
     await repository.create(item(), crypto);
     const original = await repository.commitHotpReservation(request, crypto);
-    const current = (await repository.get(itemId, crypto))!;
+    const current = await getOtp(repository, itemId, crypto);
     await repository.update(current, 2, (value) => ({ ...value, note: "later edit" }), crypto);
     await repository.commitHotpReservation(
       {
@@ -165,7 +176,7 @@ describe("VaultRepository HOTP reservation idempotency", () => {
     await repository.create(item(), crypto);
     let firstRequest = request;
     for (let index = 0; index < 4; index += 1) {
-      const current = (await repository.get(itemId, crypto))!;
+      const current = await getOtp(repository, itemId, crypto);
       const nextRequest = {
         itemId,
         expectedRevision: current.revision,
@@ -175,7 +186,7 @@ describe("VaultRepository HOTP reservation idempotency", () => {
       if (index === 0) firstRequest = nextRequest;
       await repository.commitHotpReservation(nextRequest, crypto);
     }
-    const current = (await repository.get(itemId, crypto))!;
+    const current = await getOtp(repository, itemId, crypto);
     const writes = storage.writes.length;
 
     await expect(
@@ -204,7 +215,7 @@ describe("VaultRepository HOTP reservation idempotency", () => {
     const crypto = context();
     const repository = new VaultRepository(storage, wrappedKey);
     await repository.create(item(), crypto);
-    const current = (await repository.get(itemId, crypto))!;
+    const current = await getOtp(repository, itemId, crypto);
     const generations = new GenerationStore(storage);
     const active = (await generations.readActive(crypto))!;
     const receipts = await Promise.all(
@@ -279,7 +290,7 @@ describe("VaultRepository HOTP reservation idempotency", () => {
     await repository.create(item(), crypto);
     const committed: (typeof request)[] = [];
     for (let index = 0; index < 2; index += 1) {
-      const current = (await repository.get(itemId, crypto))!;
+      const current = await getOtp(repository, itemId, crypto);
       const nextRequest = {
         itemId,
         expectedRevision: current.revision,
@@ -290,7 +301,7 @@ describe("VaultRepository HOTP reservation idempotency", () => {
       await repository.commitHotpReservation(nextRequest, crypto);
     }
     crypto.clock.now = () => "2026-07-29T10:30:30.000Z";
-    const current = (await repository.get(itemId, crypto))!;
+    const current = await getOtp(repository, itemId, crypto);
     await repository.commitHotpReservation(
       {
         itemId,
@@ -317,7 +328,7 @@ describe("VaultRepository HOTP reservation idempotency", () => {
     await repository.create(item(), crypto);
     for (let index = 0; index < 3; index += 1) {
       if (index === 2) crypto.clock.now = () => "2026-07-29T10:30:30.000Z";
-      const current = (await repository.get(itemId, crypto))!;
+      const current = await getOtp(repository, itemId, crypto);
       await repository.commitHotpReservation(
         {
           itemId,

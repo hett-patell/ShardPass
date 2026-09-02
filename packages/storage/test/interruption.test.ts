@@ -1,3 +1,4 @@
+import type { OtpItem, VaultItem } from "@shardpass/domain";
 import { describe, expect, it } from "vitest";
 
 import { FakeStoragePort } from "../../testing/src/fake-storage-port";
@@ -7,6 +8,11 @@ import {
   type VaultCryptoContext,
   type WrappedVaultKey,
 } from "../src";
+
+/** Narrows a decrypted vault item (or `null`/`undefined`) to an OTP item for assertions. */
+function asOtp(item: VaultItem | null | undefined): OtpItem | undefined {
+  return item != null && item.kind === "otp" ? item : undefined;
+}
 
 const itemId = "018f47a6-7d11-7c2f-8bd9-a1d37f147a20";
 const generationIds = [
@@ -65,7 +71,7 @@ function hotpItem() {
 function initialItem() {
   return {
     id: itemId,
-    schemaVersion: 1 as const,
+    schemaVersion: 2 as const,
     revision: 1,
     createdAt: "2026-07-29T10:20:30.000Z",
     updatedAt: "2026-07-29T10:20:30.000Z",
@@ -150,7 +156,7 @@ describe("generation interruption safety", () => {
         storage.clearFailure();
 
         const restarted = new VaultRepository(storage, wrappedKey);
-        const current = await restarted.get(itemId, crypto);
+        const current = asOtp(await restarted.get(itemId, crypto));
         if (current?.counter === 8) {
           await expect(
             restarted.commitPendingHotpReservation(reservationId, binding, 0, 2_001, crypto),
@@ -199,7 +205,7 @@ describe("generation interruption safety", () => {
         storage.clearFailure();
 
         const restarted = new VaultRepository(storage, wrappedKey);
-        const active = await restarted.get(itemId, crypto);
+        const active = asOtp(await restarted.get(itemId, crypto));
         const changes = await restarted.listChangesAfter(0, 10, crypto);
         const root = (await storage.get([ACTIVE_ROOT_KEY]))[ACTIVE_ROOT_KEY] as {
           activeGenerationId: string;

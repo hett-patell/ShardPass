@@ -1,6 +1,5 @@
 import { decryptEnvelope, encryptEnvelope } from "@shardpass/crypto/aead";
 import type { RandomSource } from "@shardpass/crypto/random";
-import { VaultItemSchema } from "@shardpass/domain";
 import { sha256 } from "@noble/hashes/sha2.js";
 
 import { decryptAndValidateJournalRecord } from "./change-journal";
@@ -25,9 +24,11 @@ import {
   MAX_GENERATION_ENTRIES,
   MAX_GENERATION_METADATA_PLAINTEXT_BYTES,
   LegacyUnsignedGenerationManifestSchema,
+  parseVaultItemPlaintext,
   ReceiptUnsignedGenerationManifestSchema,
   UnsignedGenerationManifestSchema,
   VAULT_FORMAT_VERSION,
+  vaultItemMatchesRecord,
   VaultRootSchema,
   VerifiedGenerationSchema,
   type EncryptedGenerationMetadata,
@@ -662,14 +663,10 @@ async function validateVaultRecord(record: EncryptedRecord, key: Uint8Array): Pr
       recordAssociatedData(record),
     );
     const decoded = new TextDecoder("utf-8", { fatal: true }).decode(plaintext);
-    const item = VaultItemSchema.parse(JSON.parse(decoded));
-    if (decoded !== canonicalJson(item)) throw new Error("noncanonical plaintext");
-    if (
-      item.id !== record.itemId ||
-      item.revision !== record.revision ||
-      item.kind !== record.kind ||
-      item.schemaVersion !== record.schemaVersion
-    )
+    const raw: unknown = JSON.parse(decoded);
+    if (decoded !== canonicalJson(raw)) throw new Error("noncanonical plaintext");
+    const { item, upgradedFromLegacySchemaVersion } = parseVaultItemPlaintext(raw);
+    if (!vaultItemMatchesRecord(item, record, upgradedFromLegacySchemaVersion))
       throw new Error("mismatch");
   } catch {
     corrupt();

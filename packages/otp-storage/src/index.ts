@@ -49,7 +49,9 @@ export function createRepositoryHotpCommitter(
           if (receipt !== null) return receipt;
           const current = await get();
           if (
-            current?.otpType === "hotp" &&
+            current !== null &&
+            current.kind === "otp" &&
+            current.otpType === "hotp" &&
             current.revision === request.expectedRevision &&
             current.counter === request.expectedCounter
           )

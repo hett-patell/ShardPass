@@ -28,7 +28,11 @@ const journalEntry = z.strictObject({
   sequence: z.int().check(z.positive(), z.maximum(Number.MAX_SAFE_INTEGER)),
   itemId: z.uuid(),
   kind: z.literal("otp"),
-  schemaVersion: z.literal(1),
+  // Accepts both the legacy OTP-only item schema version (1) and the current
+  // multi-kind version (2, the value @shardpass/domain's OtpItemSchema now requires)
+  // so portable snapshots of real vaults stay valid. The backup format's own
+  // top-level `schemaVersion` (below) is a separate, unrelated version number.
+  schemaVersion: z.union([z.literal(1), z.literal(2)]),
   revision: z.int().check(z.positive(), z.maximum(Number.MAX_SAFE_INTEGER)),
   operation: z.enum(["create", "update", "delete"]),
   changedAt: ItemTimestampSchema,

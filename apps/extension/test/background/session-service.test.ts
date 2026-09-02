@@ -31,7 +31,7 @@ const hotpItemId = "018f47a6-7d11-7c2f-8bd9-a1d37f147a20";
 const reservationId = "018f47a6-7d11-7c2f-8bd9-a1d37f147a99";
 const hotpItem: OtpItem = {
   id: hotpItemId,
-  schemaVersion: 1,
+  schemaVersion: 2,
   revision: 1,
   createdAt: "2026-08-03T12:00:00.000Z",
   updatedAt: "2026-08-03T12:00:00.000Z",

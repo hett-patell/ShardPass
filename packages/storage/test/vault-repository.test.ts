@@ -1,10 +1,12 @@
 import {
+  LoginItemSchema,
   MAX_ITEM_TAGS,
   MAX_ITEM_TAG_LENGTH,
   MAX_OTP_ISSUER_LENGTH,
   MAX_OTP_LABEL_LENGTH,
   MAX_OTP_NOTE_LENGTH,
   MAX_OTP_SECRET_LENGTH,
+  NoteItemSchema,
   OtpItemSchema,
 } from "@shardpass/domain";
 import { describe, expect, it } from "vitest";
@@ -95,7 +97,7 @@ function maximumEscapedItem() {
     `${suffix}${"\u0001".repeat(length - suffix.length)}`;
   return OtpItemSchema.parse({
     id: itemId,
-    schemaVersion: 1,
+    schemaVersion: 2,
     revision: 1,
     createdAt: timestamps[0]!,
     updatedAt: timestamps[0]!,
@@ -157,7 +159,7 @@ function pending(
 function item(revision = 1) {
   return {
     id: itemId,
-    schemaVersion: 1 as const,
+    schemaVersion: 2 as const,
     revision,
     createdAt: timestamps[0]!,
     updatedAt: timestamps[0]!,
@@ -173,6 +175,41 @@ function item(revision = 1) {
     period: 30,
     note: "private",
   };
+}
+
+function loginItem(overrides: Partial<Record<string, unknown>> = {}) {
+  return LoginItemSchema.parse({
+    id: "018f47a6-7d11-7c2f-8bd9-a1d37f147b01",
+    schemaVersion: 2,
+    revision: 1,
+    createdAt: timestamps[0]!,
+    updatedAt: timestamps[0]!,
+    favorite: false,
+    tags: [],
+    kind: "login",
+    name: "Example Login",
+    username: "user@example.test",
+    password: "hunter2",
+    urls: ["https://example.test"],
+    notes: "",
+    ...overrides,
+  });
+}
+
+function noteItem(overrides: Partial<Record<string, unknown>> = {}) {
+  return NoteItemSchema.parse({
+    id: "018f47a6-7d11-7c2f-8bd9-a1d37f147b02",
+    schemaVersion: 2,
+    revision: 1,
+    createdAt: timestamps[0]!,
+    updatedAt: timestamps[0]!,
+    favorite: false,
+    tags: [],
+    kind: "note",
+    name: "Example Note",
+    content: "Remember the milk",
+    ...overrides,
+  });
 }
 
 function portableCandidate() {
@@ -504,7 +541,7 @@ describe("VaultRepository", () => {
       {
         id: itemId,
         kind: "otp",
-        schemaVersion: 1,
+        schemaVersion: 2,
         revision: 1,
         createdAt: timestamps[0],
         updatedAt: timestamps[0],
@@ -1293,5 +1330,111 @@ describe("VaultRepository", () => {
       code: "STORAGE_CORRUPT",
     });
     expect(await storage.snapshot()).toEqual(before);
+  });
+});
+
+describe("VaultRepository with non-OTP items", () => {
+  it("creates and retrieves a login item", async () => {
+    const storage = new FakeStoragePort();
+    const repository = new VaultRepository(storage, wrappedKey);
+    const context = cryptoContext();
+    const login = loginItem();
+
+    await repository.create(login, context);
+    const retrieved = await repository.get(login.id, context);
+
+    expect(retrieved?.kind).toBe("login");
+    expect(retrieved).toMatchObject({ name: login.name, username: login.username });
+  });
+
+  it("lists items filtered by kind", async () => {
+    const storage = new FakeStoragePort();
+    const repository = new VaultRepository(storage, wrappedKey);
+    const context = cryptoContext();
+    await repository.create(item(), context);
+    await repository.create(loginItem(), context);
+    await repository.create(noteItem(), context);
+
+    const logins = await repository.listItemsByKind("login", context);
+
+    expect(logins).toHaveLength(1);
+    expect(logins[0]!.kind).toBe("login");
+  });
+
+  it("lists metadata across every item kind present in the vault", async () => {
+    const storage = new FakeStoragePort();
+    const repository = new VaultRepository(storage, wrappedKey);
+    const context = cryptoContext();
+    await repository.create(item(), context);
+    await repository.create(loginItem(), context);
+    await repository.create(noteItem(), context);
+
+    const metadata = await repository.listMetadata(context);
+
+    expect(metadata.map((entry) => entry.kind).sort()).toEqual(["login", "note", "otp"]);
+    expect(metadata.every((entry) => entry.schemaVersion === 2)).toBe(true);
+  });
+
+  it("imports items of multiple kinds, skipping ids that already exist", async () => {
+    const storage = new FakeStoragePort();
+    const repository = new VaultRepository(storage, wrappedKey);
+    const context = cryptoContext();
+    const existingLogin = await repository.create(loginItem(), context);
+
+    const result = await repository.importItems([existingLogin, noteItem(), item()], context);
+
+    expect(result).toEqual({ imported: 2, skipped: 1 });
+    const all = await repository.listItems(context);
+    expect(all.map((candidate) => candidate.kind).sort()).toEqual(["login", "note", "otp"]);
+  });
+
+  it("keeps non-OTP items untouched when replacing the complete OTP set", async () => {
+    const storage = new FakeStoragePort();
+    const repository = new VaultRepository(storage, wrappedKey);
+    const context = cryptoContext();
+    const login = await repository.create(loginItem(), context);
+    await repository.create(item(), context);
+
+    await repository.replaceOtpItemsAndMetadata(
+      [],
+      {
+        name: "migration-descriptor",
+        schemaVersion: 1,
+        plaintext: new TextEncoder().encode(canonicalJson({ source: "test" })),
+      },
+      context,
+    );
+
+    const remaining = await repository.listItems(context);
+    expect(remaining.map((candidate) => candidate.kind)).toEqual(["login"]);
+    expect(await repository.get(login.id, context)).toMatchObject({ kind: "login" });
+    expect(await repository.get(itemId, context)).toBeNull();
+  });
+
+  it("ignores non-OTP items when checking the OTP set for removeOtpMetadata", async () => {
+    const storage = new FakeStoragePort();
+    const repository = new VaultRepository(storage, wrappedKey);
+    const context = cryptoContext();
+    await repository.create(loginItem(), context);
+    const created = await repository.create(item(), context);
+    if (created.kind !== "otp") throw new Error("expected an OTP item");
+    const otp = created;
+    await repository.replaceOtpItemsAndMetadata(
+      [otp],
+      {
+        name: "migration-descriptor",
+        schemaVersion: 1,
+        plaintext: new TextEncoder().encode(canonicalJson({ source: "test" })),
+      },
+      context,
+    );
+
+    await repository.removeOtpMetadata([otp], "migration-descriptor", context);
+
+    const all = await repository.listItems(context);
+    expect(all.map((candidate) => candidate.kind).sort()).toEqual(["login", "otp"]);
+    await expect(
+      repository.readGenerationMetadata("migration-descriptor", context),
+    ).resolves.toBeNull();
   });
 });

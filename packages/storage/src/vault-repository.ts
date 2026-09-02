@@ -1,5 +1,12 @@
 import { AEAD_TAG_BYTES, decryptEnvelope, encryptEnvelope } from "@shardpass/crypto/aead";
-import { OtpItemSchema, VaultItemSchema, type OtpItem, type VaultItem } from "@shardpass/domain";
+import {
+  ITEM_SCHEMA_VERSION,
+  OtpItemSchema,
+  VaultItemSchema,
+  type OtpItem,
+  type VaultItem,
+  type VaultItemKind,
+} from "@shardpass/domain";
 
 import { ChangeJournal, MAX_JOURNAL_ENTRIES, type ChangeJournalEntry } from "./change-journal";
 import {
@@ -27,7 +34,9 @@ import { StorageError, type StoragePort } from "./storage-port";
 import {
   EncryptedRecordSchema,
   MAX_ENCRYPTED_RECORD_BYTES,
+  parseVaultItemPlaintext,
   RECORD_FORMAT_VERSION,
+  vaultItemMatchesRecord,
   type EncryptedGenerationMetadata,
   type EncryptedHotpReceipt,
   type EncryptedJournalRecord,
@@ -41,13 +50,23 @@ const HOTP_RECEIPT_RETENTION_MS = 5 * 60_000;
 
 export interface VaultItemMetadata {
   readonly id: string;
-  readonly kind: "otp";
-  readonly schemaVersion: 1;
+  readonly kind: VaultItemKind;
+  readonly schemaVersion: number;
   readonly revision: number;
   readonly createdAt: string;
   readonly updatedAt: string;
   readonly favorite: boolean;
   readonly tags: readonly string[];
+}
+
+/** Type guard narrowing a decrypted vault item to an OTP item. */
+function isOtpItem(item: VaultItem): item is OtpItem {
+  return item.kind === "otp";
+}
+
+/** Type guard narrowing a change-journal entry to one describing an OTP-kind item. */
+function isOtpJournalEntry(entry: ChangeJournalEntry): entry is OtpChangeJournalEntry {
+  return entry.kind === "otp";
 }
 
 export interface TombstoneResult {
@@ -87,10 +106,12 @@ export type PortableImportPreview = Readonly<{
   settings: "unchanged" | "replace";
   history: Readonly<{ journalAdded: number; tombstonesAdded: number }>;
 }>;
+/** A change-journal entry known (by construction) to describe an OTP-kind item. */
+export type OtpChangeJournalEntry = ChangeJournalEntry & { readonly kind: "otp" };
 export type PortableVaultState = Readonly<{
   items: readonly OtpItem[];
   settings: PortableLockSettings | null;
-  journal: readonly ChangeJournalEntry[];
+  journal: readonly OtpChangeJournalEntry[];
   tombstones: readonly Readonly<{ itemId: string; revision: number; deletedAt: string }>[];
 }>;
 export type ImportOtpItemsResult = Readonly<{
@@ -178,6 +199,15 @@ export class VaultRepository {
     return Promise.all(loaded.records.map((record) => decryptVaultRecord(record, context.dek)));
   }
 
+  /** Lists every vault item of the given kind, decrypted. */
+  async listItemsByKind(
+    kind: VaultItemKind,
+    context: VaultCryptoContext,
+  ): Promise<readonly VaultItem[]> {
+    const items = await this.listItems(context);
+    return items.filter((item) => item.kind === kind);
+  }
+
   async listMetadata(context: VaultCryptoContext): Promise<readonly VaultItemMetadata[]> {
     const items = await this.listItems(context);
     return items.map((item) => ({
@@ -224,9 +254,17 @@ export class VaultRepository {
   ): Promise<void> {
     return this.serialize(async () => {
       const loaded = await this.load(context);
-      const currentItems = await Promise.all(
-        loaded.records.map((record) => decryptVaultRecord(record, context.dek)),
-      );
+      // Only OTP-kind records participate in this replace-the-complete-OTP-set operation;
+      // records of every other kind are carried through untouched (not decrypted,
+      // not re-encrypted, and never journaled as deleted).
+      const otherRecords = loaded.records.filter((record) => record.kind !== "otp");
+      const currentItems = (
+        await Promise.all(
+          loaded.records
+            .filter((record) => record.kind === "otp")
+            .map((record) => decryptVaultRecord(record, context.dek)),
+        )
+      ).filter(isOtpItem);
       const current = new Map(currentItems.map((item) => [item.id, item]));
       const requestedIds = new Set<string>();
       const now = context.clock.now();
@@ -272,8 +310,8 @@ export class VaultRepository {
             journal,
             {
               itemId: previous.id,
-              kind: "otp",
-              schemaVersion: 1,
+              kind: previous.kind,
+              schemaVersion: previous.schemaVersion,
               revision: previous.revision + 1,
               operation: "delete",
               changedAt: now,
@@ -303,7 +341,7 @@ export class VaultRepository {
       });
       await this.commitPlaintextMetadata(
         loaded.root,
-        records,
+        [...otherRecords, ...records],
         journal,
         loaded.receipts,
         metadataPlaintext,
@@ -320,10 +358,14 @@ export class VaultRepository {
   ): Promise<void> {
     return this.serialize(async () => {
       const loaded = await this.load(context);
-      const currentItems = await Promise.all(
-        loaded.records.map((record) => decryptVaultRecord(record, context.dek)),
-      );
-      if (canonicalJson(currentItems) !== canonicalJson(candidates)) conflict();
+      const currentOtpItems = (
+        await Promise.all(
+          loaded.records
+            .filter((record) => record.kind === "otp")
+            .map((record) => decryptVaultRecord(record, context.dek)),
+        )
+      ).filter(isOtpItem);
+      if (canonicalJson(currentOtpItems) !== canonicalJson(candidates)) conflict();
       const metadataPlaintext = await Promise.all(
         loaded.metadata
           .filter((entry) => entry.name !== name)
@@ -385,9 +427,12 @@ export class VaultRepository {
     const items = await Promise.all(
       loaded.records.map((record) => decryptVaultRecord(record, context.dek)),
     );
-    const journal = await Promise.all(
-      loaded.journal.map((record) => this.changes.decrypt(record, context.dek)),
-    );
+    // The portable format is OTP-only: entries for other item kinds must not leak into
+    // the exported journal (their ids, kinds, and change timestamps are not this format's
+    // business), so the journal is filtered to OTP-kind entries before deriving tombstones.
+    const journal = (
+      await Promise.all(loaded.journal.map((record) => this.changes.decrypt(record, context.dek)))
+    ).filter(isOtpJournalEntry);
     const tombstones = journal
       .filter((entry) => entry.operation === "delete")
       .map((entry) => ({
@@ -397,7 +442,9 @@ export class VaultRepository {
       }));
     return Object.freeze({
       items: Object.freeze(
-        items.map((item) => OtpItemSchema.parse({ ...item, tags: [...item.tags] })),
+        items
+          .filter(isOtpItem)
+          .map((item) => OtpItemSchema.parse({ ...item, tags: [...item.tags] })),
       ),
       settings: await readPortableSettings(loaded.metadata, context, this.generations),
       journal: Object.freeze(journal.map((entry) => Object.freeze({ ...entry }))),
@@ -489,6 +536,9 @@ export class VaultRepository {
       const newNonces = new Set<string>();
       for (const accepted of classified.accepted) {
         const current = existing[accepted.existingIndex];
+        // classifyPortableItems() only accepts a matching existingIndex whose item
+        // already compared equal to an OTP candidate, so it is always OTP-kind here.
+        if (current !== undefined && current.kind !== "otp") conflict();
         const item =
           current === undefined
             ? OtpItemSchema.parse({
@@ -645,6 +695,9 @@ export class VaultRepository {
       const newNonces = new Set<string>();
       for (const accepted of classified.accepted) {
         const current = existing[accepted.existingIndex];
+        // classifyPortableItems() only accepts a matching existingIndex whose item
+        // already compared equal to an OTP candidate, so it is always OTP-kind here.
+        if (current !== undefined && current.kind !== "otp") conflict();
         const item =
           current === undefined
             ? OtpItemSchema.parse({
@@ -695,6 +748,30 @@ export class VaultRepository {
         classified.statuses,
       );
     });
+  }
+
+  /**
+   * Imports pre-built vault items of any kind, skipping any candidate whose id already
+   * exists in the vault. Unlike {@link importOtpItems}, candidates are created one at a
+   * time (one generation per accepted item) rather than staged into a single generation.
+   */
+  async importItems(
+    items: readonly VaultItem[],
+    context: VaultCryptoContext,
+  ): Promise<{ imported: number; skipped: number }> {
+    let imported = 0;
+    let skipped = 0;
+    for (const candidate of items) {
+      const parsed = VaultItemSchema.parse(candidate);
+      const existing = await this.get(parsed.id, context);
+      if (existing !== null) {
+        skipped++;
+        continue;
+      }
+      await this.create(parsed, context);
+      imported++;
+    }
+    return { imported, skipped };
   }
 
   async importOtpItems(
@@ -759,7 +836,7 @@ export class VaultRepository {
           ...candidate,
           id: context.ids.next(),
           kind: "otp",
-          schemaVersion: 1,
+          schemaVersion: ITEM_SCHEMA_VERSION,
           revision: 1,
           createdAt: now,
           updatedAt: now,
@@ -1002,6 +1079,7 @@ export class VaultRepository {
       if (index < 0 || loaded.records[index]!.revision !== pending.expectedRevision) conflict();
       const current = await decryptVaultRecord(loaded.records[index]!, context.dek);
       if (
+        current.kind !== "otp" ||
         current.otpType !== "hotp" ||
         current.counter !== pending.expectedCounter ||
         current.counter >= Number.MAX_SAFE_INTEGER
@@ -1083,6 +1161,7 @@ export class VaultRepository {
       const index = loaded.records.findIndex((record) => record.itemId === request.itemId);
       if (index < 0 || loaded.records[index]!.revision !== request.expectedRevision) conflict();
       const current = await decryptVaultRecord(loaded.records[index]!, context.dek);
+      if (current.kind !== "otp") conflict();
       const counter = current.counter;
       if (
         current.otpType !== "hotp" ||
@@ -1169,8 +1248,8 @@ export class VaultRepository {
           loaded.journal,
           {
             itemId,
-            kind: "otp",
-            schemaVersion: 1,
+            kind: current.kind,
+            schemaVersion: current.schemaVersion,
             revision,
             operation: "delete",
             changedAt: deletedAt,
@@ -1376,14 +1455,10 @@ export async function decryptVaultRecord(
       recordAssociatedData(record),
     );
     const decoded = new TextDecoder("utf-8", { fatal: true }).decode(plaintext);
-    const item = VaultItemSchema.parse(JSON.parse(decoded));
-    if (decoded !== canonicalJson(item)) throw new Error("noncanonical plaintext");
-    if (
-      item.id !== record.itemId ||
-      item.revision !== record.revision ||
-      item.kind !== record.kind ||
-      item.schemaVersion !== record.schemaVersion
-    )
+    const raw: unknown = JSON.parse(decoded);
+    if (decoded !== canonicalJson(raw)) throw new Error("noncanonical plaintext");
+    const { item, upgradedFromLegacySchemaVersion } = parseVaultItemPlaintext(raw);
+    if (!vaultItemMatchesRecord(item, record, upgradedFromLegacySchemaVersion))
       throw new Error("mismatch");
     return item;
   } catch {
@@ -1751,7 +1826,7 @@ function validateImportCandidate(candidate: OtpImportCandidate): void {
     ...candidate,
     id: "00000000-0000-4000-8000-000000000000",
     kind: "otp",
-    schemaVersion: 1,
+    schemaVersion: ITEM_SCHEMA_VERSION,
     revision: 1,
     createdAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
@@ -1771,7 +1846,11 @@ function classifyPortableItems(existing: readonly VaultItem[], candidates: reado
     if (existingIndex >= 0) {
       const current = existing[existingIndex]!;
       if (!samePortableStableIdentity(current, candidate)) return "conflict";
-      if (current.otpType === "hotp" && (candidate.counter ?? 0) > (current.counter ?? 0)) {
+      if (
+        current.kind === "otp" &&
+        current.otpType === "hotp" &&
+        (candidate.counter ?? 0) > (current.counter ?? 0)
+      ) {
         accepted.push({ candidate, existingIndex });
         return "accepted";
       }
@@ -1787,10 +1866,21 @@ function classifyPortableItems(existing: readonly VaultItem[], candidates: reado
 function samePortableStableIdentity(left: VaultItem, right: OtpItem): boolean {
   return left.id === right.id && sameOtpSemanticKeyIgnoringCounter(left, right);
 }
+/**
+ * Non-OTP vault items never match an OTP candidate: `VaultItem` values narrow to
+ * `OtpItem` when their `kind` is `"otp"`; `OtpImportCandidate` values (which carry no
+ * `kind` discriminant) are always OTP-shaped.
+ */
+function isOtpComparable(
+  value: VaultItem | OtpImportCandidate,
+): value is OtpItem | OtpImportCandidate {
+  return !("kind" in value) || value.kind === "otp";
+}
 function sameOtpSemanticKeyIgnoringCounter(
   left: VaultItem | OtpImportCandidate,
   right: VaultItem | OtpImportCandidate,
 ): boolean {
+  if (!isOtpComparable(left) || !isOtpComparable(right)) return false;
   return (
     left.otpType === right.otpType &&
     left.secret === right.secret &&
@@ -1822,6 +1912,7 @@ function sameOtpSemanticKey(
   left: VaultItem | OtpImportCandidate,
   right: OtpImportCandidate,
 ): boolean {
+  if (!isOtpComparable(left)) return false;
   return (
     left.otpType === right.otpType &&
     left.secret === right.secret &&

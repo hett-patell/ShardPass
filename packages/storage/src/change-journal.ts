@@ -1,6 +1,6 @@
 import { decryptEnvelope, encryptEnvelope } from "@shardpass/crypto/aead";
 import type { RandomSource } from "@shardpass/crypto/random";
-import { ItemTimestampSchema } from "@shardpass/domain";
+import { ItemTimestampSchema, VAULT_ITEM_KINDS } from "@shardpass/domain";
 import { z } from "zod/mini";
 
 import { canonicalJson, decodeBase64, encodeBase64 } from "./serialization";
@@ -17,8 +17,10 @@ export const MAX_JOURNAL_ENTRIES = 4096;
 export const ChangeJournalEntrySchema = z.strictObject({
   sequence: z.int().check(z.positive(), z.maximum(Number.MAX_SAFE_INTEGER)),
   itemId: z.uuid(),
-  kind: z.literal("otp"),
-  schemaVersion: z.literal(1),
+  kind: z.enum(VAULT_ITEM_KINDS),
+  // Accepts both the legacy OTP-only item schema version (1) and the current
+  // multi-kind version (2) so previously written journal entries stay decodable.
+  schemaVersion: z.union([z.literal(1), z.literal(2)]),
   revision: z.int().check(z.positive()),
   operation: z.enum(["create", "update", "delete"]),
   changedAt: ItemTimestampSchema,

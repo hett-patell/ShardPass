@@ -1,3 +1,4 @@
+import type { OtpItem, VaultItem } from "@shardpass/domain";
 import { describe, expect, it } from "vitest";
 
 import { FakeStoragePort } from "../../testing/src/fake-storage-port";
@@ -14,6 +15,22 @@ import {
   type VaultCryptoContext,
   type WrappedVaultKey,
 } from "../src";
+
+/** Narrows a decrypted vault item (or `null`/`undefined`) to an OTP item for assertions. */
+function asOtp(item: VaultItem | null | undefined): OtpItem | undefined {
+  return item != null && item.kind === "otp" ? item : undefined;
+}
+
+/** Reads back the item as an OTP item; every item this suite stores is OTP. */
+async function getOtp(
+  repository: VaultRepository,
+  id: string,
+  crypto: VaultCryptoContext,
+): Promise<OtpItem> {
+  const found = await repository.get(id, crypto);
+  if (found === null || found.kind !== "otp") throw new Error("expected an OTP item");
+  return found;
+}
 
 const itemId = "018f47a6-7d11-7c2f-8bd9-a1d37f147a20";
 const generations = [
@@ -58,7 +75,7 @@ function context(nonceStart = 1): VaultCryptoContext {
 function item() {
   return {
     id: itemId,
-    schemaVersion: 1 as const,
+    schemaVersion: 2 as const,
     revision: 1,
     createdAt: "2026-07-29T11:00:00.000Z",
     updatedAt: "2026-07-29T11:00:00.000Z",
@@ -89,7 +106,7 @@ describe("Task 4 round 1 format corrections", () => {
     expect(rolledBack).toEqual(oldRoot);
 
     const restarted = new VaultRepository(storage, wrappedKey);
-    expect((await restarted.get(itemId, crypto))?.issuer).toBe("Old");
+    expect(asOtp(await restarted.get(itemId, crypto))?.issuer).toBe("Old");
     expect(
       (await restarted.listChangesAfter(0, 10, crypto)).map((entry) => entry.operation),
     ).toEqual(["create"]);
@@ -208,7 +225,7 @@ describe("Task 4 round 1 format corrections", () => {
     const newest = hashes.indexOf([...hashes].sort()[0]!);
     const orderedIds = [ids[(newest + 1) % 3]!, ids[(newest + 2) % 3]!, ids[newest]!];
     for (const reservationId of orderedIds) {
-      const current = (await repository.get(itemId, crypto))!;
+      const current = await getOtp(repository, itemId, crypto);
       await repository.commitHotpReservation(
         {
           itemId,

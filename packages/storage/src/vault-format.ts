@@ -1,4 +1,11 @@
-import { ItemIdSchema, ItemTimestampSchema } from "@shardpass/domain";
+import {
+  ITEM_SCHEMA_VERSION,
+  ItemIdSchema,
+  ItemTimestampSchema,
+  VAULT_ITEM_KINDS,
+  VaultItemSchema,
+  type VaultItem,
+} from "@shardpass/domain";
 import { z } from "zod/mini";
 
 import { validateCanonicalBase64 } from "./canonical-base64";
@@ -35,6 +42,16 @@ const base64Bytes = (minimumBytes: number, maximumBytes: number) =>
     ),
   );
 const fixedBase64Bytes = (bytes: number) => base64Bytes(bytes, bytes);
+
+/** All item kinds an encrypted record's plaintext-associated-data `kind` field may declare. */
+const vaultItemKindSchema = z.enum(VAULT_ITEM_KINDS);
+/**
+ * The item schema version an encrypted record's plaintext-associated-data `schemaVersion`
+ * field may declare. Accepts both the legacy OTP-only version (1) and the current
+ * multi-kind version (2) so existing vault records remain decryptable; new records are
+ * always written with the current version. See vault migration (upgrades records in place).
+ */
+const recordItemSchemaVersionSchema = z.union([z.literal(1), z.literal(2)]);
 
 export const Argon2idParametersSchema = z
   .strictObject({
@@ -120,8 +137,8 @@ export const EncryptedRecordSchema = z.strictObject({
   format: z.literal("shardpass-encrypted-record"),
   formatVersion: z.literal(RECORD_FORMAT_VERSION),
   itemId: ItemIdSchema,
-  kind: z.literal("otp"),
-  schemaVersion: z.literal(1),
+  kind: vaultItemKindSchema,
+  schemaVersion: recordItemSchemaVersionSchema,
   revision: z.int().check(z.positive()),
   nonce: fixedBase64Bytes(24),
   ciphertext: base64Bytes(16, MAX_ENCRYPTED_RECORD_BYTES),
@@ -131,14 +148,63 @@ export const EncryptedJournalRecordSchema = z.strictObject({
   format: z.literal("shardpass-encrypted-journal"),
   formatVersion: z.literal(RECORD_FORMAT_VERSION),
   itemId: ItemIdSchema,
-  kind: z.literal("otp"),
-  schemaVersion: z.literal(1),
+  kind: vaultItemKindSchema,
+  schemaVersion: recordItemSchemaVersionSchema,
   revision: z.int().check(z.positive()),
   sequence: z.int().check(z.positive(), z.maximum(Number.MAX_SAFE_INTEGER)),
   nonce: fixedBase64Bytes(24),
   ciphertext: base64Bytes(16, MAX_ENCRYPTED_RECORD_BYTES),
   encoding: z.literal("base64"),
 });
+/**
+ * Parses a decrypted vault-item plaintext payload, transparently upgrading a legacy
+ * (pre-multi-kind) OTP item — `kind: "otp"` at the old item schema version (1) — to
+ * the current item schema version in memory. Pre-widening vaults only ever held OTP
+ * items at schema version 1 (every other kind, and schema version 2, postdate this
+ * widening), so that is the only legacy shape that can exist on disk. The vault
+ * migration is responsible for rewriting the persisted ciphertext at schema version 2;
+ * this only makes existing records readable in the meantime. Returns the parsed item
+ * plus whether the legacy-upgrade path was used, so callers can relax their
+ * record/item schema-version consistency check for exactly that case.
+ */
+export function parseVaultItemPlaintext(raw: unknown): {
+  item: VaultItem;
+  upgradedFromLegacySchemaVersion: boolean;
+} {
+  const isLegacyOtpPayload =
+    typeof raw === "object" &&
+    raw !== null &&
+    !Array.isArray(raw) &&
+    (raw as Record<string, unknown>).kind === "otp" &&
+    (raw as Record<string, unknown>).schemaVersion === 1;
+  const item = VaultItemSchema.parse(
+    isLegacyOtpPayload
+      ? { ...(raw as Record<string, unknown>), schemaVersion: ITEM_SCHEMA_VERSION }
+      : raw,
+  );
+  return { item, upgradedFromLegacySchemaVersion: isLegacyOtpPayload };
+}
+
+/**
+ * Whether a parsed item is consistent with the encrypted record's own plaintext-
+ * associated-data fields: either they agree exactly (the common case), or the record
+ * declares the legacy item schema version (1) and the item was upgraded from it by
+ * {@link parseVaultItemPlaintext}.
+ */
+export function vaultItemMatchesRecord(
+  item: VaultItem,
+  record: { itemId: string; kind: string; schemaVersion: number; revision: number },
+  upgradedFromLegacySchemaVersion: boolean,
+): boolean {
+  return (
+    item.id === record.itemId &&
+    item.revision === record.revision &&
+    item.kind === record.kind &&
+    (item.schemaVersion === record.schemaVersion ||
+      (upgradedFromLegacySchemaVersion && record.schemaVersion === 1))
+  );
+}
+
 export const EncryptedHotpReceiptSchema = z.strictObject({
   format: z.literal("shardpass-encrypted-hotp-receipt"),
   formatVersion: z.literal(VAULT_FORMAT_VERSION),

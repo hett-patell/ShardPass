@@ -8,6 +8,7 @@ import {
   MAX_OTP_NOTE_LENGTH,
   MAX_OTP_SECRET_LENGTH,
   OtpItemSchema,
+  VAULT_ITEM_KINDS,
 } from "@shardpass/domain";
 import { describe, expect, expectTypeOf, it } from "vitest";
 
@@ -288,13 +289,26 @@ describe("encrypted record", () => {
     ]);
   });
 
+  it.each(VAULT_ITEM_KINDS.map((kind) => [kind] as const))(
+    "accepts every vault item kind: %s",
+    (kind) => {
+      expect(EncryptedRecordSchema.parse(validRecord({ kind }))).toEqual(validRecord({ kind }));
+    },
+  );
+
+  it("accepts the current item schema version alongside the legacy OTP-only version", () => {
+    expect(EncryptedRecordSchema.parse(validRecord({ schemaVersion: 2 }))).toEqual(
+      validRecord({ schemaVersion: 2 }),
+    );
+  });
+
   it.each([
     { format: "record" },
     { formatVersion: 2 },
     { itemId: "synthetic-account-default" },
-    { kind: "login" },
     { kind: "unknown" },
-    { schemaVersion: 2 },
+    { schemaVersion: 0 },
+    { schemaVersion: 3 },
     { revision: 0 },
     { revision: -1 },
     { revision: 1.5 },
@@ -317,7 +331,7 @@ describe("encrypted record", () => {
     expect(maximumTimestamp).toHaveLength(MAX_ITEM_TIMESTAMP_LENGTH);
     const maximumItem = OtpItemSchema.parse({
       id: itemId,
-      schemaVersion: 1,
+      schemaVersion: 2,
       revision: Number.MAX_SAFE_INTEGER,
       createdAt: maximumTimestamp,
       updatedAt: maximumTimestamp,

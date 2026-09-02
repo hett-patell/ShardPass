@@ -941,9 +941,9 @@ export class SessionService {
     if (this.dek === null) throw new VaultSessionError("VAULT_LOCKED");
     const contents = await this.generations.readStaged(stage.verified, { dek: this.dek });
     return {
-      items: await Promise.all(
-        contents.records.map((record) => decryptVaultRecord(record, this.dek!)),
-      ),
+      items: (
+        await Promise.all(contents.records.map((record) => decryptVaultRecord(record, this.dek!)))
+      ).filter((item): item is OtpItem => item.kind === "otp"),
       metadata: await Promise.all(
         contents.metadata.map(async (metadata) => ({
           name: metadata.name,
@@ -961,9 +961,9 @@ export class SessionService {
     if (contents === null) throw new VaultSessionError("VAULT_UNAVAILABLE");
     return {
       generationId: contents.root.activeGenerationId,
-      items: await Promise.all(
-        contents.records.map((record) => decryptVaultRecord(record, this.dek!)),
-      ),
+      items: (
+        await Promise.all(contents.records.map((record) => decryptVaultRecord(record, this.dek!)))
+      ).filter((item): item is OtpItem => item.kind === "otp"),
       metadata: await Promise.all(
         contents.metadata.map(async (metadata) => ({
           name: metadata.name,
@@ -1030,19 +1030,31 @@ export class SessionService {
   }
 
   private repositoryGet(itemId: string): Promise<OtpItem | null> {
-    return this.#runRepositoryOperation((repository, context) => repository.get(itemId, context));
+    return this.#runRepositoryOperation(async (repository, context) => {
+      const item = await repository.get(itemId, context);
+      return item !== null && item.kind === "otp" ? item : null;
+    });
   }
 
   private repositoryCreate(candidate: OtpItem): Promise<OtpItem> {
-    return this.#runRepositoryOperation((repository, context) =>
-      repository.create(candidate, context),
-    );
+    return this.#runRepositoryOperation(async (repository, context) => {
+      const created = await repository.create(candidate, context);
+      if (created.kind !== "otp") throw new StorageError("VAULT_INVALID");
+      return created;
+    });
   }
 
   private repositoryUpdate(candidate: OtpItem, expectedRevision: number): Promise<OtpItem> {
-    return this.#runRepositoryOperation((repository, context) =>
-      repository.update(candidate, expectedRevision, () => candidate, context),
-    );
+    return this.#runRepositoryOperation(async (repository, context) => {
+      const updated = await repository.update(
+        candidate,
+        expectedRevision,
+        () => candidate,
+        context,
+      );
+      if (updated.kind !== "otp") throw new StorageError("VAULT_INVALID");
+      return updated;
+    });
   }
 
   private repositoryTombstone(itemId: string, expectedRevision: number): Promise<TombstoneResult> {
@@ -1058,7 +1070,9 @@ export class SessionService {
   > {
     return this.#runRepositoryOperation(async (repository, context) => ({
       sessionEpoch: this.repositoryRevision,
-      items: (await repository.listItems(context)).map((item) => freezeOtpItem(item)),
+      items: (await repository.listItems(context))
+        .filter((item): item is OtpItem => item.kind === "otp")
+        .map((item) => freezeOtpItem(item)),
       metadata: await repository.readGenerationMetadata(name, context),
     }));
   }

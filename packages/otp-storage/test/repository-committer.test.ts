@@ -44,7 +44,7 @@ function context(): VaultCryptoContext {
 function item(): OtpItem {
   return {
     id: itemId,
-    schemaVersion: 1,
+    schemaVersion: 2,
     revision: 1,
     createdAt: "2026-07-29T10:00:30.000Z",
     updatedAt: "2026-07-29T10:00:30.000Z",
@@ -68,7 +68,9 @@ async function setup() {
   const storage = new FakeStoragePort();
   const crypto = context();
   const repository = new VaultRepository(storage, wrappedKey);
-  const created = await repository.create(item(), crypto);
+  const createdItem = await repository.create(item(), crypto);
+  if (createdItem.kind !== "otp") throw new Error("expected an OTP item");
+  const created = createdItem;
   const committer = createRepositoryHotpCommitter(repository, () => crypto);
   let id = 90;
   const service = new HotpReservationService({

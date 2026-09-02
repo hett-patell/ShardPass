@@ -59,7 +59,7 @@ function projection(label: string): EnteOtpProjection {
 function item(localId: string, value: EnteOtpProjection): OtpItem {
   return {
     id: localId,
-    schemaVersion: 1,
+    schemaVersion: 2,
     revision: 1,
     createdAt: "2026-08-20T00:00:00.000Z",
     updatedAt: "2026-08-20T00:00:00.000Z",
