@@ -1,0 +1,226 @@
+import { VaultItemSchema, type VaultItem } from "@shardpass/domain";
+import {
+  ItemCrudRequestSchema,
+  ItemCrudResponseSchema,
+  MAX_ITEM_QUERY_RESULTS,
+  type ItemCrudRequest,
+  type ItemCrudResponse,
+  type SenderContext,
+} from "@shardpass/messaging";
+
+import type { SessionVaultRepository } from "../vault/session-vault-repository";
+
+type ItemRepository = Pick<
+  SessionVaultRepository,
+  "listAllItems" | "getItem" | "createItem" | "updateItem" | "tombstone"
+>;
+
+export type ItemServiceErrorCode =
+  | "VAULT_LOCKED"
+  | "VAULT_UNAVAILABLE"
+  | "ITEM_INVALID"
+  | "ITEM_NOT_FOUND"
+  | "ITEM_CONFLICT";
+
+export class ItemServiceError extends Error {
+  constructor(readonly code: ItemServiceErrorCode) {
+    super(code);
+    this.name = "ItemServiceError";
+  }
+}
+
+type ItemServiceDependencies = Readonly<{
+  repository: ItemRepository;
+  notePrivilegedActivity(): Promise<void>;
+}>;
+
+export class ItemService {
+  constructor(private readonly dependencies: ItemServiceDependencies) {}
+
+  async handle(request: ItemCrudRequest, sender: SenderContext): Promise<ItemCrudResponse> {
+    try {
+      const parsed = ItemCrudRequestSchema.safeParse(request);
+      if (!parsed.success) invalid();
+      const command = parsed.data;
+      let result: ItemCrudResponse;
+      switch (command.kind) {
+        case "item.query":
+          result = await this.query(command);
+          break;
+        case "item.get":
+          result = await this.get(command.itemId);
+          break;
+        case "item.create":
+          this.assertVaultSender(sender);
+          result = await this.create(command.item);
+          break;
+        case "item.update":
+          this.assertVaultSender(sender);
+          result = await this.update(command.itemId, command.expectedRevision, command.fields);
+          break;
+        case "item.delete":
+          this.assertVaultSender(sender);
+          result = await this.delete(command.itemId);
+          break;
+      }
+      try {
+        await this.dependencies.notePrivilegedActivity();
+      } catch {
+        // Activity scheduling is best-effort and cannot invalidate a completed operation.
+      }
+      return result;
+    } catch (error) {
+      throw mapError(error);
+    }
+  }
+
+  private async query(
+    command: Extract<ItemCrudRequest, { kind: "item.query" }>,
+  ): Promise<ItemCrudResponse> {
+    let items = await this.dependencies.repository.listAllItems();
+    if (command.itemKind !== undefined)
+      items = items.filter((item) => item.kind === command.itemKind);
+    if (command.folderId !== undefined)
+      items = items.filter((item) => item.folderId === command.folderId);
+    if (command.favoritesOnly === true) items = items.filter((item) => item.favorite);
+    if (command.search !== undefined) {
+      const query = normalizeItemSearch(command.search);
+      if (query.length > 0) items = items.filter((item) => matchesSearch(item, query));
+    }
+    const sorted = [...items].sort(compareItems).slice(0, MAX_ITEM_QUERY_RESULTS);
+    return response({ version: 1, kind: "item.queryResult", items: sorted });
+  }
+
+  private async get(itemId: string): Promise<ItemCrudResponse> {
+    const item = await this.dependencies.repository.getItem(itemId);
+    if (item === null) throw new ItemServiceError("ITEM_NOT_FOUND");
+    return response({ version: 1, kind: "item.getResult", item });
+  }
+
+  private async create(rawItem: unknown): Promise<ItemCrudResponse> {
+    const parsed = VaultItemSchema.safeParse(rawItem);
+    if (!parsed.success) invalid();
+    const created = await this.dependencies.repository.createItem(parsed.data);
+    return response({ version: 1, kind: "item.mutationResult", item: created });
+  }
+
+  private async update(
+    itemId: string,
+    expectedRevision: number,
+    fields: unknown,
+  ): Promise<ItemCrudResponse> {
+    if (typeof fields !== "object" || fields === null || Array.isArray(fields)) invalid();
+    const current = await this.dependencies.repository.getItem(itemId);
+    if (current === null) throw new ItemServiceError("ITEM_NOT_FOUND");
+    if (current.revision !== expectedRevision) conflict();
+    // id/kind/schemaVersion/revision/createdAt are always re-derived by the repository
+    // from the stored record regardless of what `fields` supplies, so pinning them here
+    // (rather than trusting the caller) keeps the pre-validated candidate consistent with
+    // what the repository will ultimately persist, instead of validating against a shape
+    // the client tried to smuggle in (e.g. a different `kind`).
+    const merged = {
+      ...current,
+      ...(fields as Record<string, unknown>),
+      id: current.id,
+      kind: current.kind,
+      schemaVersion: current.schemaVersion,
+      revision: current.revision,
+      createdAt: current.createdAt,
+      updatedAt: current.updatedAt,
+    };
+    const parsed = VaultItemSchema.safeParse(merged);
+    if (!parsed.success) invalid();
+    const updated = await this.dependencies.repository.updateItem(parsed.data, expectedRevision);
+    return response({ version: 1, kind: "item.mutationResult", item: updated });
+  }
+
+  private async delete(itemId: string): Promise<ItemCrudResponse> {
+    const current = await this.dependencies.repository.getItem(itemId);
+    if (current === null) throw new ItemServiceError("ITEM_NOT_FOUND");
+    const deleted = await this.dependencies.repository.tombstone(itemId, current.revision);
+    return response({
+      version: 1,
+      kind: "item.deleteResult",
+      itemId: deleted.id,
+      revision: deleted.revision,
+    });
+  }
+
+  private assertVaultSender(sender: SenderContext): void {
+    if (sender.contextKind !== "vault") invalid();
+  }
+}
+
+export function normalizeItemSearch(value: string): string {
+  return value.trim().normalize("NFKC").toLocaleLowerCase("en-US");
+}
+
+function searchableFields(item: VaultItem): readonly string[] {
+  return item.kind === "otp" ? [item.issuer, item.label] : [item.name];
+}
+
+function matchesSearch(item: VaultItem, query: string): boolean {
+  return [...searchableFields(item), ...item.tags].some((value) =>
+    normalizeItemSearch(value).includes(query),
+  );
+}
+
+function primaryLabel(item: VaultItem): string {
+  return item.kind === "otp" ? `${item.issuer} ${item.label}` : item.name;
+}
+
+function compareItems(left: VaultItem, right: VaultItem): number {
+  if (left.favorite !== right.favorite) return left.favorite ? -1 : 1;
+  return (
+    compareText(normalizeItemSearch(primaryLabel(left)), normalizeItemSearch(primaryLabel(right))) ||
+    compareText(left.id, right.id)
+  );
+}
+
+function compareText(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
+function response(candidate: ItemCrudResponse): ItemCrudResponse {
+  const parsed = ItemCrudResponseSchema.safeParse(candidate);
+  if (!parsed.success) invalid();
+  return deepFreezeResponse(parsed.data);
+}
+
+function deepFreezeResponse(value: ItemCrudResponse): ItemCrudResponse {
+  if (value.kind === "item.queryResult") {
+    for (const item of value.items) freezeItem(item);
+    Object.freeze(value.items);
+  } else if (value.kind === "item.getResult" || value.kind === "item.mutationResult") {
+    freezeItem(value.item);
+  }
+  return Object.freeze(value);
+}
+
+function freezeItem(item: VaultItem): void {
+  Object.freeze(item.tags);
+  if ("urls" in item) Object.freeze(item.urls);
+  Object.freeze(item);
+}
+
+function invalid(): never {
+  throw new ItemServiceError("ITEM_INVALID");
+}
+
+function conflict(): never {
+  throw new ItemServiceError("ITEM_CONFLICT");
+}
+
+function errorCode(error: unknown): unknown {
+  if (typeof error !== "object" || error === null || !("code" in error)) return undefined;
+  return (error as { readonly code?: unknown }).code;
+}
+
+function mapError(error: unknown): ItemServiceError {
+  if (error instanceof ItemServiceError) return error;
+  const code = errorCode(error);
+  if (code === "VAULT_LOCKED") return new ItemServiceError("VAULT_LOCKED");
+  if (code === "REVISION_CONFLICT") return new ItemServiceError("ITEM_CONFLICT");
+  if (code === "VAULT_INVALID") return new ItemServiceError("ITEM_INVALID");
+  return new ItemServiceError("VAULT_UNAVAILABLE");
+}

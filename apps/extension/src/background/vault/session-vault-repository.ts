@@ -1,4 +1,4 @@
-import type { OtpItem } from "@shardpass/domain";
+import type { OtpItem, VaultItem } from "@shardpass/domain";
 import type {
   GenerationMetadataName,
   HotpReservationCommitResult,
@@ -45,6 +45,18 @@ export interface SessionVaultRepository {
   replaceOtpItemsAndMetadataIfEpoch?: EnteSessionVaultRepository["replaceOtpItemsAndMetadataIfEpoch"];
   removeOtpMetadataIfEpoch?: EnteSessionVaultRepository["removeOtpMetadataIfEpoch"];
   listItems(): Promise<readonly OtpItem[]>;
+  /**
+   * Lists every vault item of every kind, undecoded to the OTP-only view. Used by the
+   * generic item CRUD surface (Task 7); unlike {@link listItems}, this never throws on
+   * a non-OTP item, since mixed-kind vaults are the norm once other item kinds exist.
+   */
+  listAllItems(): Promise<readonly VaultItem[]>;
+  /** Generic item lookup by id, any kind. Returns null for a missing or tombstoned item. */
+  getItem(itemId: string): Promise<VaultItem | null>;
+  /** Generic item creation, any kind. */
+  createItem(candidate: VaultItem): Promise<VaultItem>;
+  /** Generic item update, any kind. The repository re-derives id/kind/schemaVersion/revision/timestamps. */
+  updateItem(candidate: VaultItem, expectedRevision: number): Promise<VaultItem>;
   readPortableState(): Promise<PortableVaultState>;
   previewPortableImport(
     candidates: readonly OtpItem[],
@@ -87,6 +99,10 @@ export interface SessionVaultRepository {
 
 type SessionVaultRepositoryOperations = Readonly<{
   listItems(): Promise<readonly OtpItem[]>;
+  listAllItems(): Promise<readonly VaultItem[]>;
+  getItem(itemId: string): Promise<VaultItem | null>;
+  createItem(candidate: VaultItem): Promise<VaultItem>;
+  updateItem(candidate: VaultItem, expectedRevision: number): Promise<VaultItem>;
   readGenerationMetadata(name: GenerationMetadataName): Promise<Uint8Array | null>;
   readOtpItemsAndMetadata(
     name: GenerationMetadataName,
@@ -152,6 +168,10 @@ export function createSessionVaultRepository(
 ): SessionVaultRepository {
   const bridge: SessionVaultRepository = {
     listItems: () => operations.listItems(),
+    listAllItems: () => operations.listAllItems(),
+    getItem: (itemId) => operations.getItem(itemId),
+    createItem: (candidate) => operations.createItem(candidate),
+    updateItem: (candidate, expectedRevision) => operations.updateItem(candidate, expectedRevision),
     readGenerationMetadata: (name) => operations.readGenerationMetadata(name),
     readOtpItemsAndMetadata: (name) => operations.readOtpItemsAndMetadata(name),
     replaceOtpItemsAndMetadata: (candidates, metadata) =>

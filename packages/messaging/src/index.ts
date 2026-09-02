@@ -185,6 +185,7 @@ export type {
   VaultStateResponse,
 } from "./vault";
 export {
+  LoginFillAckSchema,
   LoginFillCancelRequestSchema,
   LoginFillConfirmRequestSchema,
   LoginFillReleaseResponseSchema,
@@ -194,15 +195,48 @@ export {
   LoginFillSuggestionSchema,
   LoginFillSuggestionsRequestSchema,
   LoginFillSuggestionsResponseSchema,
+  loginFillResponseKindByRequest,
+  loginFillSenderPolicy,
+  parseLoginFillResponseForRequest,
   SaveLoginOfferRequestSchema,
 } from "./login-fill";
-export type { LoginFillSuggestion } from "./login-fill";
-export { GeneratePasswordRequestSchema, GeneratePasswordResponseSchema } from "./password-gen";
+export type {
+  LoginFillCommandKind,
+  LoginFillRequest,
+  LoginFillResponse,
+  LoginFillResponseKind,
+  LoginFillSuggestion,
+} from "./login-fill";
+export {
+  GeneratePasswordRequestSchema,
+  GeneratePasswordResponseSchema,
+  passwordGenSenderPolicy,
+} from "./password-gen";
+export type {
+  GeneratePasswordRequest,
+  GeneratePasswordResponse,
+  PasswordGenCommandKind,
+} from "./password-gen";
 export {
   ItemCreateRequestSchema,
   ItemCrudRequestSchema,
+  ItemCrudResponseSchema,
   ItemDeleteRequestSchema,
+  ItemDeleteResultSchema,
   ItemGetRequestSchema,
+  ItemGetResultSchema,
+  ItemMutationResultSchema,
   ItemQueryRequestSchema,
+  ItemQueryResultSchema,
   ItemUpdateRequestSchema,
+  itemCrudResponseKindByRequest,
+  itemCrudSenderPolicy,
+  MAX_ITEM_QUERY_RESULTS,
+  parseItemCrudResponseForRequest,
+} from "./item-crud";
+export type {
+  ItemCrudCommandKind,
+  ItemCrudRequest,
+  ItemCrudResponse,
+  ItemCrudResponseKind,
 } from "./item-crud";

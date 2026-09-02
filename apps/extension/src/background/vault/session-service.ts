@@ -8,7 +8,7 @@ import {
   wrapVaultDataKeyWithKeyEncryptionKey,
   type RandomSource,
 } from "@shardpass/crypto";
-import { OtpItemSchema, type OtpItem } from "@shardpass/domain";
+import { OtpItemSchema, VaultItemSchema, type OtpItem, type VaultItem } from "@shardpass/domain";
 import type {
   PortableBackupSnapshot,
   SafeBackupDescriptor,
@@ -193,6 +193,11 @@ export class SessionService {
     this.generations = new GenerationStore(dependencies.local);
     this.vaultRepository = createSessionVaultRepository({
       listItems: () => this.repositoryListItems(),
+      listAllItems: () => this.repositoryListAllItems(),
+      getItem: (itemId) => this.repositoryGetItem(itemId),
+      createItem: (candidate) => this.repositoryCreateItem(candidate),
+      updateItem: (candidate, expectedRevision) =>
+        this.repositoryUpdateItem(candidate, expectedRevision),
       readGenerationMetadata: (name) =>
         this.#runRepositoryOperation((repository, context) =>
           repository.readGenerationMetadata(name, context),
@@ -1015,14 +1020,60 @@ export class SessionService {
   private repositoryListItems(): Promise<readonly OtpItem[]> {
     return this.#runRepositoryOperation(async (repository, context) => {
       const candidates = await repository.listItems(context);
-      const items = candidates.map((candidate) => {
+      // Excludes (rather than asserts on) any record that is not a valid, live OTP
+      // item: since Task 7 every other item kind lives in the same vault, so a
+      // login/note/card/identity/secret record here is expected, not corruption.
+      // OtpService.list() applies this same "skip on parse failure" policy itself;
+      // this mirrors that policy so a mixed-kind vault never fails the OTP-only view.
+      const items: OtpItem[] = [];
+      for (const candidate of candidates) {
         const parsed = OtpItemSchema.safeParse(candidate);
-        if (!parsed.success || parsed.data.deletedAt !== undefined)
-          throw new StorageError("VAULT_INVALID");
-        return freezeOtpItem(parsed.data);
-      });
+        if (!parsed.success || parsed.data.deletedAt !== undefined) continue;
+        items.push(freezeOtpItem(parsed.data));
+      }
       return Object.freeze(items);
     });
+  }
+
+  /**
+   * Lists every vault item of every kind. Unlike {@link repositoryListItems} (the
+   * OTP-only view backing `otp.list`), a non-OTP item does not fail this snapshot:
+   * once other item kinds exist in the same vault, asserting OTP-only shape here
+   * would break every OTP consumer as soon as one login/note/card/identity/secret
+   * item is created.
+   */
+  private repositoryListAllItems(): Promise<readonly VaultItem[]> {
+    return this.#runRepositoryOperation(async (repository, context) => {
+      const candidates = await repository.listItems(context);
+      const items: VaultItem[] = [];
+      for (const candidate of candidates) {
+        const parsed = VaultItemSchema.safeParse(candidate);
+        if (!parsed.success || parsed.data.deletedAt !== undefined) continue;
+        items.push(freezeVaultItem(parsed.data));
+      }
+      return Object.freeze(items);
+    });
+  }
+
+  private repositoryGetItem(itemId: string): Promise<VaultItem | null> {
+    return this.#runRepositoryOperation(async (repository, context) => {
+      const candidate = await repository.get(itemId, context);
+      if (candidate === null) return null;
+      const parsed = VaultItemSchema.safeParse(candidate);
+      return parsed.success && parsed.data.deletedAt === undefined ? parsed.data : null;
+    });
+  }
+
+  private repositoryCreateItem(candidate: VaultItem): Promise<VaultItem> {
+    return this.#runRepositoryOperation((repository, context) =>
+      repository.create(candidate, context),
+    );
+  }
+
+  private repositoryUpdateItem(candidate: VaultItem, expectedRevision: number): Promise<VaultItem> {
+    return this.#runRepositoryOperation((repository, context) =>
+      repository.update(candidate, expectedRevision, () => candidate, context),
+    );
   }
 
   private repositoryListMetadata(): Promise<readonly VaultItemMetadata[]> {
@@ -1569,6 +1620,9 @@ function copyImportCandidate(candidate: OtpImportCandidate) {
 }
 function freezeOtpItem(item: OtpItem): OtpItem {
   return Object.freeze({ ...item, tags: Object.freeze([...item.tags]) }) as OtpItem;
+}
+function freezeVaultItem(item: VaultItem): VaultItem {
+  return Object.freeze({ ...item, tags: Object.freeze([...item.tags]) }) as VaultItem;
 }
 function isUuid(value: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(value);

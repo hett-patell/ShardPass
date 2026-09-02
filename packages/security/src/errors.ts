@@ -21,6 +21,14 @@ export type SafeErrorCode =
   | "OTP_FILL_ITEM_CHANGED"
   | "OTP_FILL_CANCELLED"
   | "OTP_FILL_UNCERTAIN"
+  | "ITEM_INVALID"
+  | "ITEM_NOT_FOUND"
+  | "ITEM_CONFLICT"
+  | "LOGIN_FILL_INVALID"
+  | "LOGIN_FILL_UNAVAILABLE"
+  | "LOGIN_FILL_NOT_FOUND"
+  | "LOGIN_FILL_ITEM_CHANGED"
+  | "PASSWORD_GEN_INVALID"
   | "CLIPBOARD_UNAVAILABLE"
   | "BACKUP_INVALID"
   | "BACKUP_AUTH_FAILED"
@@ -77,6 +85,14 @@ const messages: Readonly<Record<SafeErrorCode, string>> = {
   OTP_FILL_ITEM_CHANGED: "This one-time code account changed.",
   OTP_FILL_CANCELLED: "This one-time code fill was cancelled.",
   OTP_FILL_UNCERTAIN: "The one-time code confirmation could not be verified.",
+  ITEM_INVALID: "The item is invalid.",
+  ITEM_NOT_FOUND: "The item was not found.",
+  ITEM_CONFLICT: "This item changed. Review the latest version and try again.",
+  LOGIN_FILL_INVALID: "This fill request is invalid.",
+  LOGIN_FILL_UNAVAILABLE: "Login fill is unavailable.",
+  LOGIN_FILL_NOT_FOUND: "This saved login was not found.",
+  LOGIN_FILL_ITEM_CHANGED: "This saved login changed.",
+  PASSWORD_GEN_INVALID: "Those password options are invalid.",
   CLIPBOARD_UNAVAILABLE: "Copy failed. Try again.",
   BACKUP_INVALID: "The backup request is invalid.",
   BACKUP_AUTH_FAILED: "The current password could not be verified.",

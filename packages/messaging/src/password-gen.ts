@@ -1,5 +1,6 @@
 import { z } from "zod/mini";
 
+import type { CommandSenderPolicy } from "./context";
 import { MESSAGE_VERSION } from "./envelope";
 
 export const GeneratePasswordRequestSchema = z.strictObject({
@@ -23,3 +24,13 @@ export const GeneratePasswordResponseSchema = z.strictObject({
   password: z.string(),
   entropyBits: z.number(),
 });
+
+export type GeneratePasswordRequest = z.infer<typeof GeneratePasswordRequestSchema>;
+export type GeneratePasswordResponse = z.infer<typeof GeneratePasswordResponseSchema>;
+export type PasswordGenCommandKind = GeneratePasswordRequest["kind"];
+
+const popupAndVault = { allowedContexts: ["popup", "vault"], requireDocument: true } as const;
+
+export const passwordGenSenderPolicy = {
+  "password.generate": popupAndVault,
+} satisfies Record<PasswordGenCommandKind, CommandSenderPolicy>;

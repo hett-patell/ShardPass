@@ -1,4 +1,4 @@
-import type { OtpItem } from "@shardpass/domain";
+import type { OtpItem, VaultItem } from "@shardpass/domain";
 import type { OtpRequest, SenderContext } from "@shardpass/messaging";
 import { HotpReservationService } from "@shardpass/otp";
 import {
@@ -91,21 +91,33 @@ class Repository implements Omit<
   listItems(): Promise<readonly OtpItem[]> {
     return Promise.resolve(this.current === null ? [] : [structuredClone(this.current)]);
   }
+  listAllItems(): Promise<readonly VaultItem[]> {
+    return this.listItems();
+  }
   listMetadata(): Promise<readonly never[]> {
     return Promise.resolve([]);
   }
   get(): Promise<OtpItem | null> {
     return Promise.resolve(this.current === null ? null : structuredClone(this.current));
   }
+  getItem(): Promise<VaultItem | null> {
+    return this.get();
+  }
   create(candidate: OtpItem): Promise<OtpItem> {
     this.current = structuredClone(candidate);
     return Promise.resolve(structuredClone(candidate));
+  }
+  createItem(candidate: VaultItem): Promise<VaultItem> {
+    return this.create(candidate as OtpItem);
   }
   update(candidate: OtpItem, expectedRevision: number): Promise<OtpItem> {
     if (this.current === null || this.current.revision !== expectedRevision)
       return Promise.reject(new StorageError("REVISION_CONFLICT"));
     this.current = { ...structuredClone(candidate), revision: expectedRevision + 1 };
     return Promise.resolve(structuredClone(this.current));
+  }
+  updateItem(candidate: VaultItem, expectedRevision: number): Promise<VaultItem> {
+    return this.update(candidate as OtpItem, expectedRevision);
   }
   tombstone(_itemId: string, expectedRevision: number): Promise<TombstoneResult> {
     if (this.current === null || this.current.revision !== expectedRevision)

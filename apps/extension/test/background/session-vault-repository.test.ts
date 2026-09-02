@@ -2,7 +2,7 @@ import {
   createDeterministicRandomSource,
   unwrapVaultDataKeyWithKeyEncryptionKey,
 } from "@shardpass/crypto";
-import type { OtpItem } from "@shardpass/domain";
+import type { LoginItem, OtpItem } from "@shardpass/domain";
 import {
   ACTIVE_ROOT_KEY,
   GenerationStore,
@@ -42,6 +42,25 @@ function otpCandidate(): OtpItem {
     digits: 6,
     period: 30,
     note: "",
+  };
+}
+
+function loginCandidate(overrides: Partial<LoginItem> = {}): LoginItem {
+  return {
+    id: "018f47a6-7d11-7c2f-8bd9-a1d37f147b30",
+    schemaVersion: 2,
+    revision: 1,
+    createdAt: "2026-08-10T12:00:00.000Z",
+    updatedAt: "2026-08-10T12:00:00.000Z",
+    favorite: false,
+    tags: [],
+    kind: "login",
+    name: "Example",
+    username: "alice",
+    password: "s3cret",
+    urls: ["https://example.test"],
+    notes: "",
+    ...overrides,
   };
 }
 
@@ -112,10 +131,13 @@ describe("SessionVaultRepository", () => {
       "cancelHotpReservation",
       "commitHotpReservation",
       "create",
+      "createItem",
       "get",
+      "getItem",
       "importOtpBatch",
       "importPortableOtpItems",
       "importPortableState",
+      "listAllItems",
       "listItems",
       "listMetadata",
       "previewPortableImport",
@@ -129,6 +151,7 @@ describe("SessionVaultRepository", () => {
       "savePendingHotpReservation",
       "tombstone",
       "update",
+      "updateItem",
     ]);
   });
 
@@ -167,6 +190,33 @@ describe("SessionVaultRepository", () => {
     expect(Object.isFrozen(first)).toBe(true);
     expect(Object.isFrozen(first[0])).toBe(true);
     expect(Object.isFrozen(first[0]!.tags)).toBe(true);
+  });
+
+  it("keeps otp.list working once a non-OTP item exists, and exposes it only through the generic bridge", async () => {
+    const { bridge, session } = fixture();
+    await setup(session);
+    const otp = await bridge.create(otpCandidate());
+    const login = (await bridge.createItem(loginCandidate())) as LoginItem;
+
+    // The OTP-only view must not throw once a non-OTP item is present: it silently
+    // excludes it rather than asserting, which used to break every OTP.list call as
+    // soon as any other item kind existed in the same vault.
+    await expect(bridge.listItems()).resolves.toEqual([otp]);
+    await expect(bridge.get(login.id)).resolves.toBeNull();
+
+    const all = await bridge.listAllItems();
+    expect([...all].sort((a, b) => a.id.localeCompare(b.id))).toEqual(
+      [otp, login].sort((a, b) => a.id.localeCompare(b.id)),
+    );
+    await expect(bridge.getItem(login.id)).resolves.toEqual(login);
+    await expect(bridge.getItem(otp.id)).resolves.toEqual(otp);
+
+    const updated = (await bridge.updateItem(
+      { ...login, username: "renamed" },
+      login.revision,
+    )) as LoginItem;
+    expect(updated).toMatchObject({ id: login.id, revision: 2, username: "renamed" });
+    await expect(bridge.getItem(login.id)).resolves.toEqual(updated);
   });
 
   it("fails closed when explicit lock wins during an OTP snapshot", async () => {

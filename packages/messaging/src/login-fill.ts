@@ -1,5 +1,6 @@
 import { z } from "zod/mini";
 
+import type { CommandSenderPolicy } from "./context";
 import { MESSAGE_VERSION } from "./envelope";
 
 export const LoginFillSuggestionSchema = z.strictObject({
@@ -61,7 +62,7 @@ export const SaveLoginOfferRequestSchema = z.strictObject({
   password: z.string(),
 });
 
-export const LoginFillRequestSchema = z.union([
+export const LoginFillRequestSchema = z.discriminatedUnion("kind", [
   LoginFillSuggestionsRequestSchema,
   LoginFillSelectRequestSchema,
   LoginFillConfirmRequestSchema,
@@ -69,7 +70,51 @@ export const LoginFillRequestSchema = z.union([
   SaveLoginOfferRequestSchema,
 ]);
 
-export const LoginFillResponseSchema = z.union([
+/** Acknowledges a fire-and-forget command (confirm, cancel, save-offer) that carries no data. */
+export const LoginFillAckSchema = z.strictObject({
+  version: z.literal(MESSAGE_VERSION),
+  kind: z.literal("login.fillAck"),
+  ok: z.literal(true),
+});
+
+export const LoginFillResponseSchema = z.discriminatedUnion("kind", [
   LoginFillSuggestionsResponseSchema,
   LoginFillReleaseResponseSchema,
+  LoginFillAckSchema,
 ]);
+
+export type LoginFillRequest = z.infer<typeof LoginFillRequestSchema>;
+export type LoginFillResponse = z.infer<typeof LoginFillResponseSchema>;
+export type LoginFillCommandKind = LoginFillRequest["kind"];
+export type LoginFillResponseKind = LoginFillResponse["kind"];
+
+export const loginFillResponseKindByRequest = {
+  "login.fillSuggestions": "login.fillSuggestionsResult",
+  "login.fillSelect": "login.fillRelease",
+  "login.fillConfirm": "login.fillAck",
+  "login.fillCancel": "login.fillAck",
+  "login.saveOffer": "login.fillAck",
+} as const satisfies Record<LoginFillCommandKind, LoginFillResponseKind>;
+
+export function parseLoginFillResponseForRequest(request: LoginFillRequest, candidate: unknown) {
+  const parsed = LoginFillResponseSchema.safeParse(candidate);
+  if (!parsed.success || parsed.data.kind !== loginFillResponseKindByRequest[request.kind]) {
+    return { success: false as const };
+  }
+  return { success: true as const, data: parsed.data };
+}
+
+const contentOnly = {
+  allowedContexts: ["content"],
+  requireTab: true,
+  requireFrame: true,
+  requireDocument: true,
+} as const;
+
+export const loginFillSenderPolicy = {
+  "login.fillSuggestions": contentOnly,
+  "login.fillSelect": contentOnly,
+  "login.fillConfirm": contentOnly,
+  "login.fillCancel": contentOnly,
+  "login.saveOffer": contentOnly,
+} satisfies Record<LoginFillCommandKind, CommandSenderPolicy>;

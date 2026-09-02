@@ -1,4 +1,4 @@
-import type { OtpItem } from "@shardpass/domain";
+import type { OtpItem, VaultItem } from "@shardpass/domain";
 import type { OtpRequest, SenderContext } from "@shardpass/messaging";
 import { OtpResponseSchema } from "@shardpass/messaging";
 import { HotpReservationService } from "@shardpass/otp";
@@ -84,6 +84,10 @@ class FakeRepository implements Omit<
     return Promise.resolve([...this.items.values()].map((value) => structuredClone(value)));
   }
 
+  listAllItems(): Promise<readonly VaultItem[]> {
+    return this.listItems();
+  }
+
   listMetadata(): Promise<never> {
     return Promise.reject(new Error("OtpService list must use one item snapshot"));
   }
@@ -93,6 +97,10 @@ class FakeRepository implements Omit<
     await this.beforeGet?.(itemId, this.getCalls.length);
     const value = this.items.get(itemId);
     return value === undefined ? null : structuredClone(value);
+  }
+
+  getItem(itemId: string): Promise<VaultItem | null> {
+    return this.get(itemId);
   }
 
   create(candidate: OtpItem): Promise<OtpItem> {
@@ -106,6 +114,14 @@ class FakeRepository implements Omit<
     };
     this.items.set(created.id, created);
     return Promise.resolve(structuredClone(created));
+  }
+
+  createItem(candidate: VaultItem): Promise<VaultItem> {
+    return this.create(candidate as OtpItem);
+  }
+
+  updateItem(candidate: VaultItem, expectedRevision: number): Promise<VaultItem> {
+    return this.update(candidate as OtpItem, expectedRevision);
   }
 
   update(candidate: OtpItem, expectedRevision: number): Promise<OtpItem> {

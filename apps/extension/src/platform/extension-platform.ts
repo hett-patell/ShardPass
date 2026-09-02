@@ -3,6 +3,12 @@ import type {
   BackupResponse,
   EnteRequest,
   EnteSafeState,
+  GeneratePasswordRequest,
+  GeneratePasswordResponse,
+  ItemCrudRequest,
+  ItemCrudResponse,
+  LoginFillRequest,
+  LoginFillResponse,
   OtpFillRequest,
   OtpFillResponse,
   OtpImportRequest,
@@ -44,6 +50,18 @@ export interface OtpImportUiExtensionPlatform extends RuntimeExtensionPlatform {
 
 export interface OtpFillContentPlatform extends RuntimeExtensionPlatform {
   sendOtpFillMessage(request: OtpFillRequest): Promise<OtpFillResponse>;
+}
+
+export interface ItemUiPlatform extends RuntimeExtensionPlatform {
+  sendItemMessage(request: ItemCrudRequest): Promise<ItemCrudResponse>;
+}
+
+export interface LoginFillContentPlatform extends RuntimeExtensionPlatform {
+  sendLoginFillMessage(request: LoginFillRequest): Promise<LoginFillResponse>;
+}
+
+export interface PasswordGenUiPlatform extends RuntimeExtensionPlatform {
+  sendPasswordGenMessage(request: GeneratePasswordRequest): Promise<GeneratePasswordResponse>;
 }
 
 export interface ExtensionPlatform extends RuntimeExtensionPlatform {

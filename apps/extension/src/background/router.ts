@@ -7,6 +7,15 @@ import {
   foundationSenderPolicy,
   EnteRequestSchema,
   enteSenderPolicy,
+  GeneratePasswordRequestSchema,
+  GeneratePasswordResponseSchema,
+  passwordGenSenderPolicy,
+  ItemCrudRequestSchema,
+  itemCrudSenderPolicy,
+  parseItemCrudResponseForRequest,
+  LoginFillRequestSchema,
+  loginFillSenderPolicy,
+  parseLoginFillResponseForRequest,
   MigrationRequestSchema,
   MigrationResponseSchema,
   OtpFillRequestSchema,
@@ -26,6 +35,12 @@ import {
   type BackupResponse,
   type FoundationResponse,
   type EnteSafeState,
+  type GeneratePasswordRequest,
+  type GeneratePasswordResponse,
+  type ItemCrudRequest,
+  type ItemCrudResponse,
+  type LoginFillRequest,
+  type LoginFillResponse,
   type MigrationRequest,
   type MigrationResponse,
   type OtpFillRequest,
@@ -38,8 +53,11 @@ import {
 } from "@shardpass/messaging";
 import { toSafeError, type SafeError, type SafeErrorCode } from "@shardpass/security";
 
+import { ItemServiceError, type ItemServiceErrorCode } from "./item/item-service";
+import { LoginFillServiceError, type LoginFillServiceErrorCode } from "./login/login-fill-service";
 import { OtpFillServiceError, type OtpFillServiceErrorCode } from "./otp/otp-fill-service";
 import { OtpServiceError, type OtpService, type OtpServiceErrorCode } from "./otp/otp-service";
+import { PasswordGenServiceError, type PasswordGenServiceErrorCode } from "./password/password-gen-service";
 import { BackupServiceError, type BackupServiceErrorCode } from "./vault/backup-service";
 import { VaultSessionError } from "./vault/session-service";
 import type { VaultService } from "./vault/vault-service";
@@ -55,6 +73,9 @@ export type BackgroundErrorResponse = Readonly<{
 export type BackgroundResponse =
   | BackupResponse
   | FoundationResponse
+  | GeneratePasswordResponse
+  | ItemCrudResponse
+  | LoginFillResponse
   | MigrationResponse
   | OtpFillResponse
   | OtpImportResponse
@@ -82,6 +103,25 @@ const otpFillErrorCodes = {
   OTP_FILL_UNCERTAIN: "OTP_FILL_UNCERTAIN",
 } satisfies Record<OtpFillServiceErrorCode, SafeErrorCode>;
 
+const itemErrorCodes = {
+  VAULT_LOCKED: "VAULT_LOCKED",
+  VAULT_UNAVAILABLE: "VAULT_UNAVAILABLE",
+  ITEM_INVALID: "ITEM_INVALID",
+  ITEM_NOT_FOUND: "ITEM_NOT_FOUND",
+  ITEM_CONFLICT: "ITEM_CONFLICT",
+} satisfies Record<ItemServiceErrorCode, SafeErrorCode>;
+
+const loginFillErrorCodes = {
+  LOGIN_FILL_INVALID: "LOGIN_FILL_INVALID",
+  LOGIN_FILL_UNAVAILABLE: "LOGIN_FILL_UNAVAILABLE",
+  LOGIN_FILL_NOT_FOUND: "LOGIN_FILL_NOT_FOUND",
+  LOGIN_FILL_ITEM_CHANGED: "LOGIN_FILL_ITEM_CHANGED",
+} satisfies Record<LoginFillServiceErrorCode, SafeErrorCode>;
+
+const passwordGenErrorCodes = {
+  PASSWORD_GEN_INVALID: "PASSWORD_GEN_INVALID",
+} satisfies Record<PasswordGenServiceErrorCode, SafeErrorCode>;
+
 const otpErrorCodes = {
   VAULT_LOCKED: "VAULT_LOCKED",
   VAULT_UNAVAILABLE: "VAULT_UNAVAILABLE",
@@ -105,6 +145,15 @@ type OtpFillHandler = Readonly<{
 }>;
 type OtpImportHandler = Readonly<{
   handle(request: OtpImportRequest, sender: SenderContext): Promise<unknown>;
+}>;
+type ItemHandler = Readonly<{
+  handle(request: ItemCrudRequest, sender: SenderContext): Promise<unknown>;
+}>;
+type LoginFillHandler = Readonly<{
+  handle(request: LoginFillRequest, sender: SenderContext): Promise<unknown>;
+}>;
+type PasswordGenHandler = Readonly<{
+  handle(request: GeneratePasswordRequest): Promise<unknown>;
 }>;
 
 function errorResponse(code: SafeErrorCode): BackgroundErrorResponse {
@@ -213,7 +262,71 @@ export function routeMessage(
   backupService?: BackupHandler,
   otpFillService?: OtpFillHandler,
   enteService?: EnteService,
+  itemService?: ItemHandler,
+  loginFillService?: LoginFillHandler,
+  passwordGenService?: PasswordGenHandler,
 ): Promise<BackgroundResponse> {
+  const itemRequest = ItemCrudRequestSchema.safeParse(input);
+  if (itemRequest.success) {
+    const policy = itemCrudSenderPolicy[itemRequest.data.kind];
+    if (!authorizeSender(senderContext, { extensionId: expectedExtensionId, ...policy }))
+      return Promise.resolve(errorResponse("UNAUTHORIZED_SENDER"));
+    if (itemService === undefined) return Promise.resolve(errorResponse("VAULT_UNAVAILABLE"));
+    return itemService
+      .handle(itemRequest.data, senderContext as SenderContext)
+      .then((candidate) => {
+        const parsed = parseItemCrudResponseForRequest(itemRequest.data, candidate);
+        return parsed.success ? parsed.data : errorResponse("VAULT_UNAVAILABLE");
+      })
+      .catch((error: unknown) =>
+        errorResponse(error instanceof ItemServiceError ? itemErrorCodes[error.code] : "UNEXPECTED"),
+      );
+  }
+
+  const loginFillRequest = LoginFillRequestSchema.safeParse(input);
+  if (loginFillRequest.success) {
+    const policy = loginFillSenderPolicy[loginFillRequest.data.kind];
+    if (!authorizeSender(senderContext, { extensionId: expectedExtensionId, ...policy }))
+      return Promise.resolve(errorResponse("UNAUTHORIZED_SENDER"));
+    if (loginFillService === undefined)
+      return Promise.resolve(errorResponse("LOGIN_FILL_UNAVAILABLE"));
+    return loginFillService
+      .handle(loginFillRequest.data, senderContext as SenderContext)
+      .then((candidate) => {
+        const parsed = parseLoginFillResponseForRequest(loginFillRequest.data, candidate);
+        return parsed.success ? parsed.data : errorResponse("LOGIN_FILL_UNAVAILABLE");
+      })
+      .catch((error: unknown) =>
+        errorResponse(
+          error instanceof LoginFillServiceError
+            ? loginFillErrorCodes[error.code]
+            : "LOGIN_FILL_UNAVAILABLE",
+        ),
+      );
+  }
+
+  const passwordGenRequest = GeneratePasswordRequestSchema.safeParse(input);
+  if (passwordGenRequest.success) {
+    const policy = passwordGenSenderPolicy[passwordGenRequest.data.kind];
+    if (!authorizeSender(senderContext, { extensionId: expectedExtensionId, ...policy }))
+      return Promise.resolve(errorResponse("UNAUTHORIZED_SENDER"));
+    if (passwordGenService === undefined)
+      return Promise.resolve(errorResponse("PASSWORD_GEN_INVALID"));
+    return passwordGenService
+      .handle(passwordGenRequest.data)
+      .then((candidate) => {
+        const parsed = GeneratePasswordResponseSchema.safeParse(candidate);
+        return parsed.success ? parsed.data : errorResponse("PASSWORD_GEN_INVALID");
+      })
+      .catch((error: unknown) =>
+        errorResponse(
+          error instanceof PasswordGenServiceError
+            ? passwordGenErrorCodes[error.code]
+            : "PASSWORD_GEN_INVALID",
+        ),
+      );
+  }
+
   const enteRequest = EnteRequestSchema.safeParse(input);
   if (enteRequest.success) {
     const policy = enteSenderPolicy[enteRequest.data.kind];

@@ -1,5 +1,6 @@
 import {
   BackupRequestSchema,
+  ItemCrudRequestSchema,
   MigrationRequestSchema,
   normalizeSenderContext,
   OtpFillRequestSchema,
@@ -24,10 +25,13 @@ import { EnteSyncScheduler } from "./ente/scheduler";
 import { EnteProtocolError } from "./ente/protocol";
 import { createProductionEnteRuntimeDependencies } from "./ente/production-runtime";
 import { createEnteRuntimeOwner, type EnteRuntimeDependencies } from "./ente/runtime";
+import { ItemService } from "./item/item-service";
+import { LoginFillService } from "./login/login-fill-service";
 import { createInternalHotpLifecycle } from "./otp/hotp-lifecycle";
 import { OtpImportService } from "./otp/import-service";
 import { OtpFillService } from "./otp/otp-fill-service";
 import { OtpService } from "./otp/otp-service";
+import { PasswordGenService } from "./password/password-gen-service";
 import { routeMessage, type BackgroundErrorResponse, type BackgroundResponse } from "./router";
 import { StatePublisher } from "./state-publisher";
 import { BackupService } from "./vault/backup-service";
@@ -133,6 +137,16 @@ export function installBackground(
     notePrivilegedActivity: () => settings.notePrivilegedActivity(),
   });
   const unregisterImportCleanup = sessions.onLockOrDispose(() => otpImport.clearForSession());
+  const item = new ItemService({
+    repository: sessions.vaultRepository,
+    notePrivilegedActivity: () => settings.notePrivilegedActivity(),
+  });
+  const loginFill = new LoginFillService({
+    repository: sessions.vaultRepository,
+    now: () => Date.now(),
+    notePrivilegedActivity: () => settings.notePrivilegedActivity(),
+  });
+  const passwordGen = new PasswordGenService();
   const ente = new EnteOtpMetadataStore();
   const credentials = new MigrationCredentialService(platform.localStorage, sessions, {
     now: () => Date.now(),
@@ -248,6 +262,7 @@ export function installBackground(
       const parsedOtp = OtpRequestSchema.safeParse(payload);
       const parsedImport = OtpImportRequestSchema.safeParse(payload);
       const parsedFill = OtpFillRequestSchema.safeParse(payload);
+      const parsedItemCrud = ItemCrudRequestSchema.safeParse(payload);
       const response = await routeMessage(
         payload,
         senderContext,
@@ -260,6 +275,9 @@ export function installBackground(
         backup,
         otpFill,
         enteService,
+        item,
+        loginFill,
+        passwordGen,
       );
       if (parsedVault.success) {
         const state = await sessions.getState();
@@ -294,7 +312,11 @@ export function installBackground(
         (parsedImport.success &&
           (response.kind === "otp.importConfirmed" || shouldRefreshOtpState(response))) ||
         (parsedFill.success &&
-          (response.kind === "otp.fillConfirmed" || shouldRefreshOtpState(response)))
+          (response.kind === "otp.fillConfirmed" || shouldRefreshOtpState(response))) ||
+        (parsedItemCrud.success &&
+          (response.kind === "item.mutationResult" ||
+            response.kind === "item.deleteResult" ||
+            shouldRefreshOtpState(response)))
       )
         publisher.publish();
       return response;
