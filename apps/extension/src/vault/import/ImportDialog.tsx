@@ -17,6 +17,7 @@ import type {
 import { createItem } from "../components/forms/submit-item";
 import { itemDisplayName, itemDisplaySubtitle } from "../item-support";
 import { OtpImportView } from "../otp/import/OtpImportView";
+import { runKeePassImport } from "../keepass/keepass-executor";
 import { BackupView } from "../settings/BackupView";
 import styles from "./ImportDialog.module.css";
 
@@ -24,7 +25,7 @@ import styles from "./ImportDialog.module.css";
 const MAX_THIRD_PARTY_IMPORT_BYTES = 4 * 1024 * 1024;
 const MAX_VISIBLE_WARNINGS = 20;
 
-type ThirdPartySourceId = "chrome" | "firefox" | "bitwarden" | "onepassword";
+type ThirdPartySourceId = "chrome" | "firefox" | "bitwarden" | "onepassword" | "keepass";
 type SourceId = "otp" | "backup" | ThirdPartySourceId;
 
 interface ThirdPartySource {
@@ -32,7 +33,12 @@ interface ThirdPartySource {
   readonly label: string;
   readonly accept: string;
   readonly instructions: string;
-  readonly parse: (text: string) => ImportResult;
+  /**
+   * Plain-text exports parse synchronously from the file's text. Encrypted sources leave this
+   * undefined and are decrypted in a worker after the user supplies a password instead.
+   */
+  readonly parse?: (text: string) => ImportResult;
+  readonly encrypted?: true;
 }
 
 const THIRD_PARTY_SOURCES: readonly ThirdPartySource[] = Object.freeze([
@@ -68,6 +74,15 @@ const THIRD_PARTY_SOURCES: readonly ThirdPartySource[] = Object.freeze([
       "In 1Password, select the items to export, choose File → Export, pick the CSV format, then select the downloaded file below.",
     parse: importOnePasswordCsv,
   },
+  {
+    id: "keepass",
+    label: "KeePass database",
+    accept: ".kdbx,application/x-keepass",
+    instructions:
+      "Choose your .kdbx database, then enter its master password. The file is decrypted on this " +
+      "device and neither it nor the password ever leaves your machine.",
+    encrypted: true,
+  },
 ]);
 
 const SOURCE_OPTIONS: readonly Readonly<{ id: SourceId; label: string }>[] = Object.freeze([
@@ -75,13 +90,14 @@ const SOURCE_OPTIONS: readonly Readonly<{ id: SourceId; label: string }>[] = Obj
   { id: "firefox", label: "Firefox CSV" },
   { id: "bitwarden", label: "Bitwarden JSON" },
   { id: "onepassword", label: "1Password CSV" },
+  { id: "keepass", label: "KeePass database" },
   { id: "otp", label: "QR code / otpauth://" },
   { id: "backup", label: "ShardPass backup" },
 ]);
 
 type Row = Readonly<{ id: string; item: VaultItem; selected: boolean }>;
 type ThirdPartyState = Readonly<{
-  phase: "pick" | "reading" | "preview" | "importing" | "done";
+  phase: "pick" | "reading" | "password" | "unlocking" | "preview" | "importing" | "done";
   rows: readonly Row[];
   warnings: readonly string[];
   error: string | null;
@@ -120,10 +136,15 @@ export function ImportDialog({ platform, active, onImported }: ImportDialogProps
   const [state, setState] = useState<ThirdPartyState>(INITIAL_THIRD_PARTY_STATE);
   const fileRef = useRef<HTMLInputElement | null>(null);
   const ownerRef = useRef(0);
+  const [password, setPassword] = useState("");
+  // Held only between choosing an encrypted file and unlocking it.
+  const pendingFileRef = useRef<File | null>(null);
 
   const resetThirdParty = useCallback(() => {
     ownerRef.current += 1;
     if (fileRef.current !== null) fileRef.current.value = "";
+    pendingFileRef.current = null;
+    setPassword("");
     setState(INITIAL_THIRD_PARTY_STATE);
   }, []);
 
@@ -157,6 +178,12 @@ export function ImportDialog({ platform, active, onImported }: ImportDialogProps
       setState({ ...INITIAL_THIRD_PARTY_STATE, error: "The file is too large to import safely." });
       return;
     }
+    if (parser.encrypted === true) {
+      pendingFileRef.current = file;
+      setPassword("");
+      setState({ ...INITIAL_THIRD_PARTY_STATE, phase: "password" });
+      return;
+    }
     const owner = ++ownerRef.current;
     setState({ ...INITIAL_THIRD_PARTY_STATE, phase: "reading" });
     void file.text().then(
@@ -164,6 +191,7 @@ export function ImportDialog({ platform, active, onImported }: ImportDialogProps
         if (owner !== ownerRef.current) return;
         let result: ImportResult;
         try {
+          if (parser.parse === undefined) throw new Error("Source has no text parser.");
           result = parser.parse(text);
         } catch {
           setState({ ...INITIAL_THIRD_PARTY_STATE, error: "The file could not be read." });
@@ -184,6 +212,36 @@ export function ImportDialog({ platform, active, onImported }: ImportDialogProps
         setState({ ...INITIAL_THIRD_PARTY_STATE, error: "The file could not be read." });
       },
     );
+  };
+
+  const unlockDatabase = async () => {
+    const file = pendingFileRef.current;
+    if (file === null) return;
+    const owner = ++ownerRef.current;
+    setState((current) => ({ ...current, phase: "unlocking", error: null }));
+    try {
+      const buffer = await file.arrayBuffer();
+      const outcome = await runKeePassImport(buffer, password);
+      if (owner !== ownerRef.current) return;
+      // Cleared as soon as it has been used; the worker has already terminated.
+      setPassword("");
+      pendingFileRef.current = null;
+      setState({
+        phase: "preview",
+        rows: outcome.items.map((item) => ({ id: item.id, item, selected: true })),
+        warnings: [...outcome.warnings],
+        error: outcome.items.length === 0 ? "No importable entries were found in this database." : null,
+        imported: 0,
+        failed: 0,
+      });
+    } catch (error) {
+      if (owner !== ownerRef.current) return;
+      setState({
+        ...INITIAL_THIRD_PARTY_STATE,
+        phase: "password",
+        error: error instanceof Error ? error.message : "The database could not be opened.",
+      });
+    }
   };
 
   const toggleRow = (id: string) => {
@@ -259,7 +317,42 @@ export function ImportDialog({ platform, active, onImported }: ImportDialogProps
             </p>
           ) : null}
 
-          {state.phase === "pick" || state.phase === "reading" ? (
+          {state.phase === "password" || state.phase === "unlocking" ? (
+            <form
+              className={styles.unlockForm}
+              onSubmit={(event) => {
+                event.preventDefault();
+                void unlockDatabase();
+              }}
+            >
+              <label className={styles.unlockLabel} htmlFor="import-dialog-kdbx-password">
+                Master password
+              </label>
+              <input
+                id="import-dialog-kdbx-password"
+                className={styles.unlockInput}
+                type="password"
+                autoComplete="current-password"
+                autoFocus
+                required
+                disabled={state.phase === "unlocking"}
+                value={password}
+                onChange={(event) => setPassword(event.currentTarget.value)}
+              />
+              <p className={styles.unlockHint}>
+                Opening a database is deliberately slow: KeePass key derivation can take several
+                seconds.
+              </p>
+              <div className={styles.unlockActions}>
+                <Button type="submit" disabled={state.phase === "unlocking" || password === ""}>
+                  {state.phase === "unlocking" ? "Opening…" : "Open database"}
+                </Button>
+                <Button variant="secondary" type="button" onClick={resetThirdParty}>
+                  Cancel
+                </Button>
+              </div>
+            </form>
+          ) : state.phase === "pick" || state.phase === "reading" ? (
             <>
               <input
                 ref={fileRef}
