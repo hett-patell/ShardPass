@@ -93,3 +93,74 @@ describe("LoginItemSchema", () => {
     ).toThrow();
   });
 });
+
+describe("login item v2 extensions", () => {
+  const base = {
+    id: "018f47a6-7d11-7c2f-8bd9-a1d37f147a20",
+    schemaVersion: 2,
+    revision: 1,
+    createdAt: "2026-08-10T12:00:00.000Z",
+    updatedAt: "2026-08-10T12:00:00.000Z",
+    favorite: false,
+    tags: [],
+    kind: "login",
+    name: "Example",
+    username: "alice",
+    password: "s3cret",
+    urls: ["https://example.test", "https://sso.example.test/login"],
+    notes: "",
+  };
+
+  it("still accepts a login without any of the new fields", () => {
+    expect(LoginItemSchema.safeParse(base).success).toBe(true);
+  });
+
+  it("accepts per-URL match modes, custom fields, inline TOTP, and password history", () => {
+    const parsed = LoginItemSchema.safeParse({
+      ...base,
+      urlMatches: ["domain", "exact"],
+      totp: "otpauth://totp/Example:alice?secret=JBSWY3DPEHPK3PXP&issuer=Example",
+      customFields: [
+        { name: "Security question", type: "text", value: "first pet" },
+        { name: "PIN", type: "hidden", value: "1234" },
+        { name: "Remember me", type: "boolean", value: "true" },
+        { name: "user_email", type: "linked", value: "", linkedTo: "username" },
+      ],
+      passwordHistory: [{ password: "old-one", changedAt: "2026-08-01T00:00:00.000Z" }],
+    });
+    expect(parsed.success).toBe(true);
+  });
+
+  it("requires linkedTo on a linked field and forbids it elsewhere", () => {
+    expect(
+      LoginItemSchema.safeParse({
+        ...base,
+        customFields: [{ name: "x", type: "linked", value: "" }],
+      }).success,
+    ).toBe(false);
+    expect(
+      LoginItemSchema.safeParse({
+        ...base,
+        customFields: [{ name: "x", type: "text", value: "v", linkedTo: "password" }],
+      }).success,
+    ).toBe(false);
+  });
+
+  it("bounds custom fields and password history", () => {
+    const fields = Array.from({ length: 33 }, (_, index) => ({
+      name: `f${index}`,
+      type: "text",
+      value: "",
+    }));
+    expect(LoginItemSchema.safeParse({ ...base, customFields: fields }).success).toBe(false);
+    const history = Array.from({ length: 11 }, () => ({
+      password: "p",
+      changedAt: "2026-08-01T00:00:00.000Z",
+    }));
+    expect(LoginItemSchema.safeParse({ ...base, passwordHistory: history }).success).toBe(false);
+  });
+
+  it("rejects an unknown match mode", () => {
+    expect(LoginItemSchema.safeParse({ ...base, urlMatches: ["regex"] }).success).toBe(false);
+  });
+});

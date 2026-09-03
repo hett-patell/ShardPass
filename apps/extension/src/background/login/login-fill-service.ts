@@ -1,4 +1,4 @@
-import { matchDomain } from "@shardpass/autofill";
+import { matchLoginUrls } from "@shardpass/autofill";
 import {
   LoginFillRequestSchema,
   LoginFillResponseSchema,
@@ -46,7 +46,7 @@ export class LoginFillService {
       const command = parsed.data;
       switch (command.kind) {
         case "login.fillSuggestions":
-          return validated(await this.suggestions(command.domain));
+          return validated(await this.suggestions(command.pageUrl ?? command.domain));
         case "login.fillSelect":
           return validated(await this.select(command.itemId, command.expectedRevision));
         case "login.fillConfirm":
@@ -70,7 +70,7 @@ export class LoginFillService {
     const suggestions: LoginFillSuggestion[] = [];
     for (const item of items) {
       if (item.kind !== "login" || item.deletedAt !== undefined) continue;
-      if (!matchDomain(domain, item.urls)) continue;
+      if (!matchLoginUrls(domain, item.urls, item.urlMatches)) continue;
       suggestions.push({
         itemId: item.id,
         expectedRevision: item.revision,
@@ -82,7 +82,9 @@ export class LoginFillService {
       });
     }
     suggestions.sort(compareSuggestions);
-    await this.noteActivity();
+    // Not activity: the content script asks for suggestions on every page it lands on, so
+    // counting it would keep the vault unlocked for as long as the browser is in use.
+    // Selecting a suggestion (select) is the deliberate act, and does count.
     return { version: 1, kind: "login.fillSuggestionsResult", suggestions };
   }
 

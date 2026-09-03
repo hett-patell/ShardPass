@@ -525,7 +525,8 @@ describe("OtpService search and CRUD", () => {
     expect(result.code).toMatch(/^\d{8}$/u);
     expect(JSON.stringify(result)).not.toContain(stored.secret);
     expect(repository.getCalls).toEqual([stored.id, stored.id]);
-    expect(activity).toEqual(["noted"]);
+    // Reading a code is automatic polling, not a deliberate act; it must not reset the lock.
+    expect(activity).toEqual([]);
   });
 
   it("uses period-bound countdown immediately before rollover", async () => {
@@ -727,13 +728,15 @@ describe("OtpService search and CRUD", () => {
     },
   );
 
-  it("records activity once only after every successful intentional operation", async () => {
+  it("records activity for deliberate operations but not for automatic polling", async () => {
     const stored = item();
     const { activity, service } = fixture([stored]);
+    // list and getCode are issued by views on a schedule; only opening the editor is a person acting.
     await service.handle(request("otp.list", { query: "" }), popupSender);
-    await service.handle(request("otp.getEditor", { itemId: stored.id }), vaultSender);
     await service.handle(request("otp.getCode", { itemId: stored.id }), popupSender);
-    expect(activity).toEqual(["noted", "noted", "noted"]);
+    expect(activity).toEqual([]);
+    await service.handle(request("otp.getEditor", { itemId: stored.id }), vaultSender);
+    expect(activity).toEqual(["noted"]);
   });
 
   it("returns responses accepted by strict messaging schemas", async () => {

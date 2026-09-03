@@ -112,7 +112,12 @@ export class OtpService {
           response = await this.cancelHotp(command.reservationId, sender);
           break;
       }
-      if (response.kind !== "otp.hotpCancelled" || response.cancelled) {
+      // otp.list and otp.getCode are issued automatically by the popup and vault views to
+      // keep live codes current, not by a person. Counting them as activity would reset the
+      // inactivity lock every few seconds for as long as a view stays open. Copying a code,
+      // editing, and HOTP reservation are deliberate acts and do count.
+      const automatic = command.kind === "otp.list" || command.kind === "otp.getCode";
+      if (!automatic && (response.kind !== "otp.hotpCancelled" || response.cancelled)) {
         try {
           await this.dependencies.notePrivilegedActivity();
         } catch {

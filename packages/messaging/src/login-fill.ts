@@ -19,6 +19,8 @@ export const LoginFillSuggestionsRequestSchema = z.strictObject({
   version: z.literal(MESSAGE_VERSION),
   kind: z.literal("login.fillSuggestions"),
   domain: z.string().check(z.minLength(1), z.maxLength(2048)),
+  /** Full page URL when known; lets path-sensitive match modes ("startsWith", "exact") apply. */
+  pageUrl: z.optional(z.string().check(z.minLength(1), z.maxLength(2048))),
 });
 
 export const LoginFillSuggestionsResponseSchema = z.strictObject({

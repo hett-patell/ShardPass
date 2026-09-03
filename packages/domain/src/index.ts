@@ -25,6 +25,13 @@ export { FolderSchema, MAX_FOLDER_DEPTH, MAX_FOLDER_NAME_LENGTH, MAX_FOLDERS } f
 export type { Folder } from "./folder";
 
 export {
+  LOGIN_CUSTOM_FIELD_TYPES,
+  LOGIN_URL_MATCH_MODES,
+  MAX_LOGIN_CUSTOM_FIELDS,
+  MAX_LOGIN_CUSTOM_FIELD_NAME_LENGTH,
+  MAX_LOGIN_CUSTOM_FIELD_VALUE_LENGTH,
+  MAX_LOGIN_PASSWORD_HISTORY,
+  MAX_LOGIN_TOTP_LENGTH,
   LoginItemSchema,
   MAX_LOGIN_NAME_LENGTH,
   MAX_LOGIN_NOTES_LENGTH,
@@ -33,19 +40,26 @@ export {
   MAX_LOGIN_URLS,
   MAX_LOGIN_USERNAME_LENGTH,
 } from "./login-item";
-export type { LoginItem } from "./login-item";
+export type {
+  LoginCustomField,
+  LoginCustomFieldType,
+  LoginItem,
+  LoginPasswordHistoryEntry,
+  LoginUrlMatchMode,
+} from "./login-item";
 
 export { MAX_NOTE_CONTENT_LENGTH, MAX_NOTE_NAME_LENGTH, NoteItemSchema } from "./note-item";
 export type { NoteItem } from "./note-item";
 
 export {
+  CARD_BRANDS,
   CardItemSchema,
   MAX_CARD_HOLDER_LENGTH,
   MAX_CARD_NAME_LENGTH,
   MAX_CARD_NOTES_LENGTH,
   MAX_CARD_NUMBER_LENGTH,
 } from "./card-item";
-export type { CardItem } from "./card-item";
+export type { CardBrand, CardItem } from "./card-item";
 
 export {
   IdentityItemSchema,

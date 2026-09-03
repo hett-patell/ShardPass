@@ -16,6 +16,25 @@ export interface DetailActionsProps {
 
 const deleteUnavailable = "Could not delete this item. Try again.";
 
+/** Names the background's refusal so a failed delete is diagnosable, not just reported. */
+function describeFailure(candidate: unknown): string {
+  if (typeof candidate !== "object" || candidate === null || !("error" in candidate)) return deleteUnavailable;
+  const error = (candidate as { error?: { code?: unknown } }).error;
+  const code = typeof error?.code === "string" ? error.code : undefined;
+  switch (code) {
+    case "ITEM_CONFLICT":
+      return "This item changed elsewhere. Reload and try again.";
+    case "ITEM_NOT_FOUND":
+      return "This item no longer exists. Reload the list.";
+    case "VAULT_LOCKED":
+      return "The vault is locked. Unlock it and try again.";
+    case undefined:
+      return deleteUnavailable;
+    default:
+      return `${deleteUnavailable} (${code})`;
+  }
+}
+
 /**
  * Shared Edit/Delete row for the non-OTP detail views. Deletes through the generic
  * item.delete message (OTP items keep their own otp.delete + DeleteOtpDialog flow,
@@ -38,7 +57,7 @@ export function DetailActions({ itemId, itemName, platform, onEdit, onDeleted }:
           setConfirming(false);
           onDeleted();
         } else {
-          setError(deleteUnavailable);
+          setError(describeFailure(candidate));
         }
       },
       () => {

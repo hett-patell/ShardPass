@@ -99,7 +99,9 @@ describe("importBitwardenJson", () => {
     if (identity!.kind !== "identity") throw new Error("expected identity");
     expect(identity!.firstName).toBe("John");
     expect(identity!.lastName).toBe("Doe");
-    expect(identity!.street).toBe("123 Main St, Apt 4");
+    // address2 is its own field now rather than folded into street.
+    expect(identity!.street).toBe("123 Main St");
+    expect(identity!.address2).toBe("Apt 4");
     expect(identity!.city).toBe("Springfield");
     expect(identity!.email).toBe("john@example.com");
   });

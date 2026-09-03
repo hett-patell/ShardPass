@@ -1,4 +1,10 @@
-import { VaultItemSchema, type SecretItem, type VaultItem } from "@shardpass/domain";
+import {
+  MAX_LOGIN_PASSWORD_HISTORY,
+  VaultItemSchema,
+  type LoginItem,
+  type SecretItem,
+  type VaultItem,
+} from "@shardpass/domain";
 import {
   ItemCrudRequestSchema,
   ItemCrudResponseSchema,
@@ -13,6 +19,12 @@ import {
 import type { SessionVaultRepository } from "../vault/session-vault-repository";
 
 const MAX_ITEM_LIST_PREVIEW_LENGTH = 120;
+const MUTATING_COMMANDS: ReadonlySet<ItemCrudRequest["kind"]> = new Set([
+  "item.create",
+  "item.createMany",
+  "item.update",
+  "item.delete",
+]);
 
 type ItemRepository = Pick<
   SessionVaultRepository,
@@ -72,10 +84,15 @@ export class ItemService {
           result = await this.list(command);
           break;
       }
-      try {
-        await this.dependencies.notePrivilegedActivity();
-      } catch {
-        // Activity scheduling is best-effort and cannot invalidate a completed operation.
+      // Only a change the user made counts as activity for the inactivity lock. Reads are
+      // issued automatically -- the list refreshes, live codes poll -- so counting them would
+      // keep an open vault tab unlocked indefinitely, which defeats the timer entirely.
+      if (MUTATING_COMMANDS.has(command.kind)) {
+        try {
+          await this.dependencies.notePrivilegedActivity();
+        } catch {
+          // Activity scheduling is best-effort and cannot invalidate a completed operation.
+        }
       }
       return result;
     } catch (error) {
@@ -189,6 +206,7 @@ export class ItemService {
     const merged = {
       ...current,
       ...(fields as Record<string, unknown>),
+      ...passwordHistoryFor(current, fields as Record<string, unknown>),
       id: current.id,
       kind: current.kind,
       schemaVersion: current.schemaVersion,
@@ -383,6 +401,27 @@ function firstIssue(error: { issues?: readonly { path?: readonly PropertyKey[]; 
   const path = (issue.path ?? []).map(String).join(".");
   const message = issue.message ?? "invalid";
   return (path === "" ? message : `${path}: ${message}`).slice(0, 256);
+}
+
+/**
+ * Rolls the outgoing password into history when a login's password changes. Kept here, on
+ * the background, so every client -- form, import, future autofill "update" prompt -- gets
+ * it for free and none can forget. A caller that supplies passwordHistory explicitly (e.g.
+ * restoring an old password) takes precedence.
+ */
+function passwordHistoryFor(
+  current: VaultItem,
+  fields: Record<string, unknown>,
+): { passwordHistory?: LoginItem["passwordHistory"] } {
+  if (current.kind !== "login" || "passwordHistory" in fields) return {};
+  const next = fields["password"];
+  if (typeof next !== "string" || next === current.password || current.password === "") return {};
+  return {
+    passwordHistory: [
+      { password: current.password, changedAt: current.updatedAt },
+      ...(current.passwordHistory ?? []),
+    ].slice(0, MAX_LOGIN_PASSWORD_HISTORY),
+  };
 }
 
 function invalid(): never {

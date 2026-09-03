@@ -7,6 +7,8 @@ export const MAX_CARD_NAME_LENGTH = 256;
 export const MAX_CARD_HOLDER_LENGTH = 256;
 export const MAX_CARD_NUMBER_LENGTH = 32;
 export const MAX_CARD_NOTES_LENGTH = 8192;
+export const CARD_BRANDS = ["visa", "mastercard", "amex", "discover", "jcb", "unionpay", "other"] as const;
+export type CardBrand = (typeof CARD_BRANDS)[number];
 
 const boundedString = (maximum: number) =>
   z.string().check(z.maxLength(maximum), UnicodeScalarTextCheck);
@@ -20,6 +22,7 @@ export const CardItemSchema = z.extend(ItemMetadataSchema, {
     UnicodeScalarTextCheck,
     z.refine((v) => v === v.trim(), { error: "Value must already be trimmed" }),
   ),
+  brand: z.optional(z.enum(CARD_BRANDS)),
   cardholderName: boundedString(MAX_CARD_HOLDER_LENGTH),
   number: boundedString(MAX_CARD_NUMBER_LENGTH),
   expMonth: boundedString(2),

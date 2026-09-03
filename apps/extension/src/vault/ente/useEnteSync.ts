@@ -21,6 +21,8 @@ export function clearSensitiveControl(ref: React.RefObject<HTMLInputElement | nu
 export function useEnteSync(input: { platform: EnteUiPlatform; active: boolean }) {
   const [state, setState] = useState<EnteSafeState>(initialState);
   const [error, setError] = useState(false);
+  /** The background's error code for the last failed request, for the UI to name. */
+  const [errorCode, setErrorCode] = useState<string | null>(null);
   const mounted = useRef(false);
   const ownership = useRef(0);
   const emailRef = useRef<HTMLInputElement>(null);
@@ -44,16 +46,19 @@ export function useEnteSync(input: { platform: EnteUiPlatform; active: boolean }
     ): Promise<EnteSafeState | null> => {
       const token = ++ownership.current;
       setError(false);
+      setErrorCode(null);
       try {
         const next = await platformRef.current.sendEnteMessage(request);
         if (!mounted.current || token !== ownership.current) return null;
         clearSensitive();
         setState(options.preserveResultBytes ? next : { ...next, authHandoffPublicKey: undefined });
         return next;
-      } catch {
+      } catch (failure) {
         if (mounted.current && token === ownership.current) {
           clearSensitive();
           setError(true);
+          const code = (failure as { code?: unknown })?.code;
+          setErrorCode(typeof code === "string" ? code : null);
         }
         return null;
       }
@@ -210,6 +215,7 @@ export function useEnteSync(input: { platform: EnteUiPlatform; active: boolean }
   return {
     state,
     error,
+    errorCode,
     emailRef,
     passwordRef,
     totpRef,

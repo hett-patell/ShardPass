@@ -662,3 +662,84 @@ describe("item.createMany", () => {
     expect(activity).toEqual(["noted"]);
   });
 });
+
+describe("password history on item.update", () => {
+  it("records the outgoing password with the time it stopped being current", async () => {
+    const { service, repository } = fixture([loginItem()]);
+    await service.handle(
+      request("item.update", { itemId: ids.login, expectedRevision: 1, fields: { password: "n3w" } }),
+      vaultSender,
+    );
+    const stored = repository.items.get(ids.login);
+    expect(stored?.kind === "login" && stored.password).toBe("n3w");
+    expect(stored?.kind === "login" && stored.passwordHistory).toEqual([
+      { password: "s3cret", changedAt: nowIso },
+    ]);
+  });
+
+  it("keeps the newest entries first and caps the list", async () => {
+    const seeded = loginItem({
+      passwordHistory: Array.from({ length: 10 }, (_, index) => ({
+        password: `old-${index}`,
+        changedAt: nowIso,
+      })),
+    });
+    const { service, repository } = fixture([seeded]);
+    await service.handle(
+      request("item.update", { itemId: ids.login, expectedRevision: 1, fields: { password: "n3w" } }),
+      vaultSender,
+    );
+    const stored = repository.items.get(ids.login);
+    const history = stored?.kind === "login" ? (stored.passwordHistory ?? []) : [];
+    expect(history).toHaveLength(10);
+    expect(history[0]).toEqual({ password: "s3cret", changedAt: nowIso });
+    expect(history.at(-1)?.password).toBe("old-8");
+  });
+
+  it("does not record an unchanged or empty outgoing password", async () => {
+    const { service, repository } = fixture([loginItem({ password: "" })]);
+    await service.handle(
+      request("item.update", { itemId: ids.login, expectedRevision: 1, fields: { password: "first" } }),
+      vaultSender,
+    );
+    expect(repository.items.get(ids.login)).not.toHaveProperty("passwordHistory");
+
+    const revision = repository.items.get(ids.login)?.revision ?? 1;
+    await service.handle(
+      request("item.update", { itemId: ids.login, expectedRevision: revision, fields: { username: "bob" } }),
+      vaultSender,
+    );
+    expect(repository.items.get(ids.login)).not.toHaveProperty("passwordHistory");
+  });
+
+  it("defers to an explicitly supplied history", async () => {
+    const { service, repository } = fixture([loginItem()]);
+    await service.handle(
+      request("item.update", {
+        itemId: ids.login,
+        expectedRevision: 1,
+        fields: { password: "n3w", passwordHistory: [] },
+      }),
+      vaultSender,
+    );
+    const stored = repository.items.get(ids.login);
+    expect(stored?.kind === "login" && stored.passwordHistory).toEqual([]);
+  });
+});
+
+describe("inactivity-lock activity", () => {
+  it("is noted for mutations but not for reads", async () => {
+    const { service, activity } = fixture([loginItem()]);
+    await service.handle(request("item.list"), popupSender);
+    await service.handle(request("item.query"), vaultSender);
+    await service.handle(request("item.get", { itemId: ids.login }), vaultSender);
+    // Reads are issued by views on their own schedule; they must not keep the vault open.
+    expect(activity).toEqual([]);
+
+    await service.handle(
+      request("item.update", { itemId: ids.login, expectedRevision: 1, fields: { notes: "x" } }),
+      vaultSender,
+    );
+    expect(activity).toEqual(["noted"]);
+  });
+});

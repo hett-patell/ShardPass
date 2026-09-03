@@ -3,6 +3,10 @@ import {
   IdentityItemSchema,
   LoginItemSchema,
   NoteItemSchema,
+  type CardBrand,
+  type LoginCustomField,
+  type LoginCustomFieldType,
+  type LoginUrlMatchMode,
 } from "@shardpass/domain";
 
 import { newItemBase } from "../common/item-base";
@@ -13,6 +17,28 @@ const BITWARDEN_TYPE_LOGIN = 1;
 const BITWARDEN_TYPE_NOTE = 2;
 const BITWARDEN_TYPE_CARD = 3;
 const BITWARDEN_TYPE_IDENTITY = 4;
+
+/** Bitwarden `uris[].match` values. Regex has no equivalent and falls back to domain. */
+const URI_MATCH: Record<number, LoginUrlMatchMode> = {
+  0: "domain",
+  1: "host",
+  2: "startsWith",
+  3: "exact",
+  5: "never",
+};
+/** Bitwarden `fields[].type`: 0 text, 1 hidden, 2 boolean, 3 linked. */
+const FIELD_TYPE: Record<number, LoginCustomFieldType> = { 0: "text", 1: "hidden", 2: "boolean", 3: "linked" };
+/** Bitwarden `fields[].linkedId` for logins: 100 username, 101 password. */
+const LINKED_ID: Record<number, "username" | "password"> = { 100: "username", 101: "password" };
+const CARD_BRAND: Record<string, CardBrand> = {
+  visa: "visa",
+  mastercard: "mastercard",
+  amex: "amex",
+  "american express": "amex",
+  discover: "discover",
+  jcb: "jcb",
+  unionpay: "unionpay",
+};
 
 /**
  * Imports a Bitwarden JSON vault export: `{ items: [{ type, name, login,
@@ -63,9 +89,19 @@ export function importBitwardenJson(text: string): ImportResult {
       case BITWARDEN_TYPE_LOGIN: {
         const login = isRecord(raw["login"]) ? raw["login"] : {};
         const uris = Array.isArray(login["uris"]) ? login["uris"] : [];
-        const urls = uris
-          .map((entry) => (isRecord(entry) ? asString(entry["uri"]) : ""))
-          .filter((uri) => uri.length > 0);
+        const kept = uris
+          .map((entry) =>
+            isRecord(entry)
+              ? { uri: asString(entry["uri"]), match: URI_MATCH[asNumber(entry["match"])] ?? "domain" }
+              : { uri: "", match: "domain" as const },
+          )
+          .filter((entry) => entry.uri.length > 0);
+        const urls = kept.map((entry) => entry.uri);
+        const urlMatches = kept.some((entry) => entry.match !== "domain")
+          ? kept.map((entry) => entry.match)
+          : undefined;
+        const totp = asString(login["totp"]);
+        const customFields = customFieldsOf(raw["fields"], warnings, label);
 
         const candidate = {
           ...base,
@@ -74,6 +110,9 @@ export function importBitwardenJson(text: string): ImportResult {
           username: asString(login["username"]),
           password: asString(login["password"]),
           urls,
+          ...(urlMatches === undefined ? {} : { urlMatches }),
+          ...(totp === "" ? {} : { totp }),
+          ...(customFields.length === 0 ? {} : { customFields }),
           notes,
         };
         const parsed = LoginItemSchema.safeParse(candidate);
@@ -105,6 +144,7 @@ export function importBitwardenJson(text: string): ImportResult {
           ...base,
           kind: "card" as const,
           name,
+          ...brandOf(asString(card["brand"])),
           cardholderName: asString(card["cardholderName"]),
           number: asString(card["number"]),
           expMonth: asString(card["expMonth"]),
@@ -123,22 +163,26 @@ export function importBitwardenJson(text: string): ImportResult {
       }
       case BITWARDEN_TYPE_IDENTITY: {
         const identity = isRecord(raw["identity"]) ? raw["identity"] : {};
-        const street = [asString(identity["address1"]), asString(identity["address2"])]
-          .filter((line) => line.length > 0)
-          .join(", ");
         const candidate = {
           ...base,
           kind: "identity" as const,
           name,
           firstName: asString(identity["firstName"]),
+          ...optional("middleName", asString(identity["middleName"])),
           lastName: asString(identity["lastName"]),
+          ...optional("company", asString(identity["company"])),
+          ...optional("username", asString(identity["username"])),
           email: asString(identity["email"]),
           phone: asString(identity["phone"]),
-          street,
+          street: asString(identity["address1"]),
+          ...optional("address2", asString(identity["address2"])),
           city: asString(identity["city"]),
           state: asString(identity["state"]),
           zip: asString(identity["postalCode"]),
           country: asString(identity["country"]),
+          ...optional("passportNumber", asString(identity["passportNumber"])),
+          ...optional("licenseNumber", asString(identity["licenseNumber"])),
+          ...optional("nationalId", asString(identity["ssn"])),
           notes,
         };
         const parsed = IdentityItemSchema.safeParse(candidate);
@@ -163,4 +207,46 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function asString(value: unknown): string {
   return typeof value === "string" ? value : "";
+}
+
+function asNumber(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : Number.NaN;
+}
+
+function optional<K extends string>(key: K, value: string): Partial<Record<K, string>> {
+  return value === "" ? {} : ({ [key]: value } as Record<K, string>);
+}
+
+function brandOf(raw: string): { brand?: CardBrand } {
+  const brand = CARD_BRAND[raw.trim().toLowerCase()];
+  return brand === undefined ? {} : { brand };
+}
+
+/** Bitwarden custom fields carry over one-to-one; only unknown types are dropped, and named. */
+function customFieldsOf(raw: unknown, warnings: string[], label: string): LoginCustomField[] {
+  if (!Array.isArray(raw)) return [];
+  const fields: LoginCustomField[] = [];
+  for (const entry of raw) {
+    if (!isRecord(entry)) continue;
+    const name = asString(entry["name"]).trim();
+    if (name === "") continue;
+    const type = FIELD_TYPE[asNumber(entry["type"])];
+    if (type === undefined) {
+      warnings.push(`"${label}": custom field "${name}" has an unsupported type and was skipped.`);
+      continue;
+    }
+    if (type === "linked") {
+      const linkedTo = LINKED_ID[asNumber(entry["linkedId"])];
+      if (linkedTo === undefined) continue;
+      fields.push({ name, type, value: "", linkedTo });
+      continue;
+    }
+    const value = entry["value"];
+    fields.push({
+      name,
+      type,
+      value: type === "boolean" ? (value === true || value === "true" ? "true" : "false") : asString(value),
+    });
+  }
+  return fields;
 }

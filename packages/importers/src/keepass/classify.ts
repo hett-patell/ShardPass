@@ -6,6 +6,9 @@ import {
   MAX_CARD_NOTES_LENGTH,
   MAX_CARD_NUMBER_LENGTH,
   MAX_IDENTITY_NOTES_LENGTH,
+  MAX_LOGIN_CUSTOM_FIELDS,
+  MAX_LOGIN_CUSTOM_FIELD_NAME_LENGTH,
+  MAX_LOGIN_CUSTOM_FIELD_VALUE_LENGTH,
   MAX_LOGIN_NAME_LENGTH,
   MAX_LOGIN_NOTES_LENGTH,
   MAX_LOGIN_PASSWORD_LENGTH,
@@ -20,6 +23,7 @@ import {
   NoteItemSchema,
   OtpItemSchema,
   SecretItemSchema,
+  type LoginCustomField,
   type VaultItem,
 } from "@shardpass/domain";
 
@@ -216,6 +220,22 @@ export function convertEntry(entry: KeePassEntry): ConversionOutcome {
     return finish(NoteItemSchema, candidate, items, warnings, label, "note");
   }
 
+  // Custom KeePass strings map onto login custom fields one-to-one -- protected values stay
+  // hidden -- so they remain individually copyable rather than flattened into notes.
+  const customFields: LoginCustomField[] = [];
+  for (const [key, fieldValue] of entry.custom) {
+    if (customFields.length >= MAX_LOGIN_CUSTOM_FIELDS) {
+      warnings.push(`"${label}": only the first ${MAX_LOGIN_CUSTOM_FIELDS} custom fields were kept.`);
+      break;
+    }
+    customFields.push({
+      name: clampText(key.trim() === "" ? "Field" : key.trim(), MAX_LOGIN_CUSTOM_FIELD_NAME_LENGTH, "field name", label, warnings),
+      type: entry.protectedKeys.has(key) ? "hidden" : "text",
+      value: clampText(fieldValue, MAX_LOGIN_CUSTOM_FIELD_VALUE_LENGTH, `field "${key}"`, label, warnings),
+    });
+  }
+  const groupNote = entry.path.length > 0 ? `KeePass group: ${entry.path.join(" / ")}` : "";
+  const loginNotes = entry.notes === "" ? groupNote : groupNote === "" ? entry.notes : `${entry.notes}\n\n${groupNote}`;
   const candidate = {
     ...base,
     kind: "login" as const,
@@ -223,7 +243,8 @@ export function convertEntry(entry: KeePassEntry): ConversionOutcome {
     username: clampText(entry.username, MAX_LOGIN_USERNAME_LENGTH, "username", label, warnings),
     password: entry.password,
     urls: splitUrls(entry.url).slice(0, MAX_LOGIN_URLS).map((url) => clampText(url, MAX_LOGIN_URL_LENGTH, "URL", label, warnings)),
-    notes: clampText(appendCustomFields(entry, entry.notes), MAX_LOGIN_NOTES_LENGTH, "notes", label, warnings),
+    ...(customFields.length === 0 ? {} : { customFields }),
+    notes: clampText(loginNotes, MAX_LOGIN_NOTES_LENGTH, "notes", label, warnings),
     ...(linkedOtpId === undefined ? {} : { linkedOtpId }),
   };
   return finish(LoginItemSchema, candidate, items, warnings, label, "login");

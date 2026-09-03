@@ -113,8 +113,10 @@ export function OtpDetail({ item, platform, onUpdate, onDeleted }: OtpDetailProp
       } else {
         setDeleteError(deleteUnavailable);
       }
-    } catch {
-      setDeleteError(deleteUnavailable);
+    } catch (failure) {
+      // Name the refusal: a bare "try again" hides conflicts and locks from the person fixing it.
+      const code = (failure as { code?: unknown })?.code;
+      setDeleteError(typeof code === "string" ? `${deleteUnavailable} (${code})` : deleteUnavailable);
     } finally {
       setSubmitting(false);
     }

@@ -173,6 +173,7 @@ export function createLoginFillController(
         version: 1,
         kind: "login.fillSuggestions",
         domain: domainFor(),
+        pageUrl: options.window.location.href,
       });
       if (!owns(candidate) || response.kind !== "login.fillSuggestionsResult") return;
       if (response.suggestions.length === 0) return;

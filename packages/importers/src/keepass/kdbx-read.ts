@@ -21,6 +21,8 @@ export type KeePassEntry = Readonly<{
   otp: string;
   /** Non-reserved string fields, protected ones already unmasked. */
   custom: ReadonlyMap<string, string>;
+  /** Keys of `custom` that KeePass stored as protected (masked) values. */
+  protectedKeys: ReadonlySet<string>;
   /** Group path from the root, e.g. ["Web", "Banking"]. */
   path: readonly string[];
   tags: readonly string[];
@@ -128,6 +130,7 @@ function findRecycleBinUuid(document: XmlNode): string {
 
 function readEntry(entry: XmlNode, path: readonly string[], cipher: InnerStreamCipher): KeePassEntry {
   const fields = new Map<string, string>();
+  const protectedKeys = new Set<string>();
   for (const field of childrenNamed(entry, "String")) {
     const key = childText(field, "Key");
     const valueNode = childNamed(field, "Value");
@@ -135,11 +138,9 @@ function readEntry(entry: XmlNode, path: readonly string[], cipher: InnerStreamC
       fields.set(key, "");
       continue;
     }
-    const protectedFlag = valueNode.attributes.get("Protected");
-    fields.set(
-      key,
-      protectedFlag === "True" ? cipher.unprotect(valueNode.text) : valueNode.text,
-    );
+    const isProtected = valueNode.attributes.get("Protected") === "True";
+    if (isProtected) protectedKeys.add(key);
+    fields.set(key, isProtected ? cipher.unprotect(valueNode.text) : valueNode.text);
   }
 
   const custom = new Map<string, string>();
@@ -159,6 +160,7 @@ function readEntry(entry: XmlNode, path: readonly string[], cipher: InnerStreamC
     notes: fields.get("Notes") ?? "",
     otp: fields.get("otp") ?? "",
     custom,
+    protectedKeys,
     path,
     tags,
   };

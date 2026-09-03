@@ -1,11 +1,20 @@
 import {
+  LOGIN_CUSTOM_FIELD_TYPES,
+  LOGIN_URL_MATCH_MODES,
   LoginItemSchema,
+  MAX_LOGIN_CUSTOM_FIELDS,
+  MAX_LOGIN_CUSTOM_FIELD_NAME_LENGTH,
+  MAX_LOGIN_CUSTOM_FIELD_VALUE_LENGTH,
   MAX_LOGIN_NAME_LENGTH,
   MAX_LOGIN_NOTES_LENGTH,
+  MAX_LOGIN_TOTP_LENGTH,
   MAX_LOGIN_URLS,
   MAX_LOGIN_URL_LENGTH,
   MAX_LOGIN_USERNAME_LENGTH,
+  type LoginCustomField,
+  type LoginCustomFieldType,
   type LoginItem,
+  type LoginUrlMatchMode,
   type OtpItem,
 } from "@shardpass/domain";
 import { Button, Field, IconButton } from "@shardpass/ui";
@@ -27,30 +36,70 @@ export interface LoginFormProps {
   onCancel: () => void;
 }
 
+interface CustomFieldDraft {
+  name: string;
+  type: LoginCustomFieldType;
+  value: string;
+  linkedTo: "username" | "password";
+}
+
 interface FormValue {
   name: string;
   username: string;
   password: string;
   urls: string[];
+  urlMatches: LoginUrlMatchMode[];
+  totp: string;
+  customFields: CustomFieldDraft[];
   linkedOtpId: string;
   notes: string;
   favorite: boolean;
   tags: string;
 }
 
-type Errors = Partial<Record<"name" | "form", string>>;
+type Errors = Partial<Record<"name" | "customFields" | "form", string>>;
+
+export const MATCH_MODE_LABELS: Record<LoginUrlMatchMode, string> = {
+  domain: "Base domain",
+  host: "Host only",
+  startsWith: "Starts with",
+  exact: "Exact URL",
+  never: "Never autofill",
+};
+
+const CUSTOM_FIELD_TYPE_LABELS: Record<LoginCustomFieldType, string> = {
+  text: "Text",
+  hidden: "Hidden",
+  boolean: "Checkbox",
+  linked: "Linked",
+};
 
 function initialValue(item?: LoginItem): FormValue {
+  const urls = item && item.urls.length > 0 ? [...item.urls] : [""];
   return {
     name: item?.name ?? "",
     username: item?.username ?? "",
     password: item?.password ?? "",
-    urls: item && item.urls.length > 0 ? [...item.urls] : [""],
+    urls,
+    urlMatches: urls.map((_, index) => item?.urlMatches?.[index] ?? "domain"),
+    totp: item?.totp ?? "",
+    customFields: (item?.customFields ?? []).map((field) => ({
+      name: field.name,
+      type: field.type,
+      value: field.value,
+      linkedTo: field.linkedTo ?? "username",
+    })),
     linkedOtpId: item?.linkedOtpId ?? "",
     notes: item?.notes ?? "",
     favorite: item?.favorite ?? false,
     tags: formatTags(item?.tags ?? []),
   };
+}
+
+function toCustomField(draft: CustomFieldDraft): LoginCustomField {
+  const name = draft.name.trim();
+  if (draft.type === "linked") return { name, type: "linked", value: "", linkedTo: draft.linkedTo };
+  return { name, type: draft.type, value: draft.value };
 }
 
 export function LoginForm({ item, platform, otpItems, onSaved, onCancel }: LoginFormProps) {
@@ -65,28 +114,84 @@ export function LoginForm({ item, platform, otpItems, onSaved, onCancel }: Login
       urls: current.urls.map((url, urlIndex) => (urlIndex === index ? next : url)),
     }));
   };
+  const updateMatch = (index: number, next: LoginUrlMatchMode) => {
+    setValue((current) => ({
+      ...current,
+      urlMatches: current.urlMatches.map((mode, i) => (i === index ? next : mode)),
+    }));
+  };
   const removeUrl = (index: number) => {
-    setValue((current) => ({ ...current, urls: current.urls.filter((_, i) => i !== index) }));
+    setValue((current) => ({
+      ...current,
+      urls: current.urls.filter((_, i) => i !== index),
+      urlMatches: current.urlMatches.filter((_, i) => i !== index),
+    }));
+  };
+  const addUrl = () => {
+    setValue((current) => ({
+      ...current,
+      urls: [...current.urls, ""],
+      urlMatches: [...current.urlMatches, "domain"],
+    }));
+  };
+
+  const updateCustomField = (index: number, patch: Partial<CustomFieldDraft>) => {
+    setValue((current) => ({
+      ...current,
+      customFields: current.customFields.map((field, i) =>
+        i === index ? { ...field, ...patch } : field,
+      ),
+    }));
+  };
+  const removeCustomField = (index: number) => {
+    setValue((current) => ({
+      ...current,
+      customFields: current.customFields.filter((_, i) => i !== index),
+    }));
+  };
+  const addCustomField = () => {
+    setValue((current) => ({
+      ...current,
+      customFields: [
+        ...current.customFields,
+        { name: "", type: "text", value: "", linkedTo: "username" },
+      ],
+    }));
   };
 
   const submit = async () => {
     const name = value.name.trim();
     const tags = parseTags(value.tags);
-    const urls = value.urls.map((url) => url.trim()).filter((url) => url.length > 0);
     const nextErrors: Errors = {};
     if (name.length === 0) nextErrors.name = "Enter a name.";
 
-    // linkedOtpId is always included explicitly (string id or undefined) rather than
-    // conditionally omitted: item.update merges `fields` into the stored item with a
-    // plain object spread, where an omitted key keeps the old value but an explicit
-    // `undefined` clears it — so clearing the selection must send `undefined`, not omit
-    // the key, or a previously linked OTP could never be unlinked.
+    // URLs and their match modes are kept aligned by index; blank URLs drop their mode too.
+    const kept = value.urls
+      .map((url, index) => ({ url: url.trim(), mode: value.urlMatches[index] ?? "domain" }))
+      .filter((entry) => entry.url.length > 0);
+    const urls = kept.map((entry) => entry.url);
+    const urlMatches = kept.some((entry) => entry.mode !== "domain")
+      ? kept.map((entry) => entry.mode)
+      : undefined;
+
+    if (value.customFields.some((field) => field.name.trim().length === 0))
+      nextErrors.customFields = "Every custom field needs a name.";
+    const customFields =
+      value.customFields.length > 0 ? value.customFields.map(toCustomField) : undefined;
+    const totp = value.totp.trim().length > 0 ? value.totp.trim() : undefined;
+
+    // Optional keys are always sent explicitly (value or undefined) rather than omitted:
+    // item.update merges `fields` with a plain spread, where an omitted key keeps the old
+    // value but an explicit `undefined` clears it. Clearing must therefore send undefined.
     const linkedOtpId = value.linkedOtpId.length > 0 ? value.linkedOtpId : undefined;
     const fields = {
       name,
       username: value.username,
       password: value.password,
       urls,
+      urlMatches,
+      totp,
+      customFields,
       linkedOtpId,
       notes: value.notes,
       favorite: value.favorite,
@@ -128,7 +233,6 @@ export function LoginForm({ item, platform, otpItems, onSaved, onCancel }: Login
       }}
     >
       <header className={styles.header}>
-        <p className={styles.eyebrow}>LOGIN</p>
         <h2 className={styles.title}>{item ? "Edit login" : "New login"}</h2>
       </header>
 
@@ -171,7 +275,7 @@ export function LoginForm({ item, platform, otpItems, onSaved, onCancel }: Login
       />
 
       <div className={styles.field}>
-        <span className={styles.label}>URLs</span>
+        <span className={styles.label}>Websites</span>
         {value.urls.map((url, index) => (
           <div key={index} className={styles.listRow}>
             <input
@@ -180,30 +284,47 @@ export function LoginForm({ item, platform, otpItems, onSaved, onCancel }: Login
               placeholder="https://example.com"
               maxLength={MAX_LOGIN_URL_LENGTH}
               value={url}
+              aria-label={`Website ${index + 1}`}
               onChange={(event) => updateUrl(index, event.target.value)}
             />
+            <select
+              className={styles.select}
+              aria-label={`Match rule for website ${index + 1}`}
+              value={value.urlMatches[index] ?? "domain"}
+              onChange={(event) => updateMatch(index, event.target.value as LoginUrlMatchMode)}
+            >
+              {LOGIN_URL_MATCH_MODES.map((mode) => (
+                <option key={mode} value={mode}>
+                  {MATCH_MODE_LABELS[mode]}
+                </option>
+              ))}
+            </select>
             {value.urls.length > 1 ? (
-              <IconButton aria-label="Remove URL" onClick={() => removeUrl(index)}>
+              <IconButton aria-label="Remove website" onClick={() => removeUrl(index)}>
                 <X size={16} />
               </IconButton>
             ) : null}
           </div>
         ))}
         {value.urls.length < MAX_LOGIN_URLS ? (
-          <button
-            type="button"
-            className={styles.linkButton}
-            onClick={() => setValue((current) => ({ ...current, urls: [...current.urls, ""] }))}
-          >
-            <Plus size={12} aria-hidden="true" /> Add URL
+          <button type="button" className={styles.linkButton} onClick={addUrl}>
+            <Plus size={12} aria-hidden="true" /> Add website
           </button>
         ) : null}
       </div>
 
+      <SensitiveField
+        label="One-time code secret"
+        help="Paste an otpauth:// link or the Base32 secret. Codes appear on the login."
+        value={value.totp}
+        maxLength={MAX_LOGIN_TOTP_LENGTH}
+        onChange={(next) => setValue({ ...value, totp: next })}
+      />
+
       {otpItems.length > 0 ? (
         <div className={styles.field}>
           <label className={styles.label} htmlFor="login-linked-otp">
-            Linked OTP
+            Linked authenticator entry
           </label>
           <select
             id="login-linked-otp"
@@ -220,6 +341,87 @@ export function LoginForm({ item, platform, otpItems, onSaved, onCancel }: Login
           </select>
         </div>
       ) : null}
+
+      <div className={styles.field}>
+        <span className={styles.label}>Custom fields</span>
+        {errors.customFields ? (
+          <p className={styles.fieldError} role="alert">
+            {errors.customFields}
+          </p>
+        ) : null}
+        {value.customFields.map((field, index) => (
+          <div key={index} className={styles.listRow}>
+            <input
+              className={styles.textInput}
+              placeholder="Field name"
+              maxLength={MAX_LOGIN_CUSTOM_FIELD_NAME_LENGTH}
+              value={field.name}
+              aria-label={`Custom field ${index + 1} name`}
+              onChange={(event) => updateCustomField(index, { name: event.target.value })}
+            />
+            <select
+              className={styles.select}
+              aria-label={`Custom field ${index + 1} type`}
+              value={field.type}
+              onChange={(event) =>
+                updateCustomField(index, { type: event.target.value as LoginCustomFieldType })
+              }
+            >
+              {LOGIN_CUSTOM_FIELD_TYPES.map((type) => (
+                <option key={type} value={type}>
+                  {CUSTOM_FIELD_TYPE_LABELS[type]}
+                </option>
+              ))}
+            </select>
+            {field.type === "boolean" ? (
+              <label className={styles.checkboxField}>
+                <input
+                  type="checkbox"
+                  checked={field.value === "true"}
+                  aria-label={`Custom field ${index + 1} value`}
+                  onChange={(event) =>
+                    updateCustomField(index, { value: event.target.checked ? "true" : "false" })
+                  }
+                />
+                On
+              </label>
+            ) : field.type === "linked" ? (
+              <select
+                className={styles.select}
+                aria-label={`Custom field ${index + 1} fills with`}
+                value={field.linkedTo}
+                onChange={(event) =>
+                  updateCustomField(index, {
+                    linkedTo: event.target.value as "username" | "password",
+                  })
+                }
+              >
+                <option value="username">Fills username</option>
+                <option value="password">Fills password</option>
+              </select>
+            ) : (
+              <input
+                className={styles.textInput}
+                type={field.type === "hidden" ? "password" : "text"}
+                placeholder="Value"
+                maxLength={MAX_LOGIN_CUSTOM_FIELD_VALUE_LENGTH}
+                value={field.value}
+                autoComplete="off"
+                aria-label={`Custom field ${index + 1} value`}
+                onChange={(event) => updateCustomField(index, { value: event.target.value })}
+              />
+            )}
+            <IconButton aria-label="Remove custom field" onClick={() => removeCustomField(index)}>
+              <X size={16} />
+            </IconButton>
+          </div>
+        ))}
+        {value.customFields.length < MAX_LOGIN_CUSTOM_FIELDS ? (
+          <button type="button" className={styles.linkButton} onClick={addCustomField}>
+            <Plus size={12} aria-hidden="true" /> Add custom field
+          </button>
+        ) : null}
+      </div>
 
       <div className={styles.field}>
         <label className={styles.label} htmlFor="login-notes">

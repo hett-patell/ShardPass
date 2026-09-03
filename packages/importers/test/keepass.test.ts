@@ -150,6 +150,7 @@ describe("KeePass classifier hardening", () => {
     notes: "",
     otp: "",
     custom: new Map<string, string>(),
+    protectedKeys: new Set<string>(),
     path: [],
     tags: [],
     ...overrides,
