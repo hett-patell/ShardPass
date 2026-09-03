@@ -30,6 +30,19 @@ const defaultDerive: DerivePageKey = async (password, parameters, salt) => {
   });
 };
 
+function backgroundErrorCode(response: unknown): string | undefined {
+  if (typeof response !== "object" || response === null) return undefined;
+  const envelope = response as { kind?: unknown; error?: { code?: unknown } };
+  if (envelope.kind !== "error") return undefined;
+  const code = envelope.error?.code;
+  return typeof code === "string" ? code : "unknown error";
+}
+
+function errorText(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.length > 0 ? message : "No response from background service.";
+}
+
 export function VaultAccess({
   platform,
   deriveKey = defaultDerive,
@@ -48,6 +61,7 @@ export function VaultAccess({
   const [working, setWorking] = useState(false);
   const [settings, setSettings] = useState({ autoLockMinutes: 15, lockOnScreenLock: true });
   const [loadingTimedOut, setLoadingTimedOut] = useState(false);
+  const [diagnostic, setDiagnostic] = useState("");
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [newConfirmation, setNewConfirmation] = useState("");
@@ -88,6 +102,17 @@ export function VaultAccess({
         return;
       }
       const parsed = VaultStateResponseSchema.safeParse(response);
+      if (!parsed.success) {
+        // The background answered, but not with a vault state — almost always an error
+        // envelope from a route that failed. Record why so the UI can say more than
+        // "loading" forever, instead of dropping the response on the floor.
+        const code = backgroundErrorCode(response);
+        if (active) {
+          if (response === undefined || response === null)
+            setDiagnostic("Background returned no response (message handler failed).");
+          else if (code !== undefined) setDiagnostic(`Background reported: ${code}`);
+        }
+      }
       if (!active || !parsed.success) return;
       const latest = latestStream.current;
       if (
@@ -99,6 +124,7 @@ export function VaultAccess({
       if (fromPort && !receivedPortState) receivedPortState = true;
       latestStream.current = { streamId: parsed.data.streamId, sequence: parsed.data.sequence };
       retries = 0;
+      setDiagnostic("");
       if (parsed.data.state !== "unlocked") clearFields();
       onUnlockedChange?.(parsed.data.state === "unlocked");
       setState(parsed.data.state);
@@ -110,8 +136,9 @@ export function VaultAccess({
     const query = async () => {
       try {
         accept(await platform.sendMessage({ version: 1, kind: "vault.getState" }), false);
-      } catch {
+      } catch (error) {
         if (active) {
+          setDiagnostic(errorText(error));
           onUnlockedChange?.(false);
           setState("loading");
         }
@@ -289,6 +316,7 @@ export function VaultAccess({
         {loadingTimedOut ? (
           <>
             <p className={styles.loadingError}>Could not connect to ShardPass background service.</p>
+            {diagnostic === "" ? null : <p className={styles.loadingDetail}>{diagnostic}</p>}
             <p>Check chrome://extensions for errors, then reload the extension.</p>
           </>
         ) : (

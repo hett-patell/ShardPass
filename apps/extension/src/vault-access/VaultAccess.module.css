@@ -86,6 +86,12 @@
 .loadingError {
   color: var(--danger);
 }
+.loadingDetail {
+  color: var(--text-secondary);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: var(--text-xs);
+  overflow-wrap: anywhere;
+}
 @media (max-width: 520px) {
   .panel {
     padding: var(--space-4);
