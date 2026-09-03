@@ -21,6 +21,13 @@ export function clearSensitiveControl(ref: React.RefObject<HTMLInputElement | nu
 export function useEnteSync(input: { platform: EnteUiPlatform; active: boolean }) {
   const [state, setState] = useState<EnteSafeState>(initialState);
   const [error, setError] = useState(false);
+  /** Names a failure for the panel: the background's code, else a bounded message. */
+  const reasonOf = (failure: unknown, fallback: string): string => {
+    const code = (failure as { code?: unknown } | null)?.code;
+    if (typeof code === "string") return code;
+    const message = failure instanceof Error ? failure.message.slice(0, 160) : "";
+    return message || fallback;
+  };
   /** The background's error code for the last failed request, for the UI to name. */
   const [errorCode, setErrorCode] = useState<string | null>(null);
   const mounted = useRef(false);
@@ -100,6 +107,7 @@ export function useEnteSync(input: { platform: EnteUiPlatform; active: boolean }
       emailUtf8.fill(0);
       passwordUtf8.fill(0);
       setError(true);
+      setErrorCode("Email and password are both required.");
       return;
     }
     authAbort.current?.abort();
@@ -109,6 +117,8 @@ export function useEnteSync(input: { platform: EnteUiPlatform; active: boolean }
     if (typeof Worker !== "function") {
       emailUtf8.fill(0);
       passwordUtf8.fill(0);
+      setError(true);
+      setErrorCode("This page cannot start a Web Worker.");
       return;
     }
     void platformRef.current
@@ -119,7 +129,7 @@ export function useEnteSync(input: { platform: EnteUiPlatform; active: boolean }
           challenge.authHandoffPublicKey === undefined ||
           challenge.authHandoffPublicKey.length !== 32
         )
-          throw new Error();
+          throw new Error("Auth challenge came back without a handoff key.");
         const worker = createEnteAuthWorker();
         authWorker.current = worker;
         return executeEnteAuthWorker({
@@ -139,7 +149,7 @@ export function useEnteSync(input: { platform: EnteUiPlatform; active: boolean }
       })
       .then(
         (result) => {
-          if (result === undefined) throw new Error();
+          if (result === undefined) throw new Error("Auth worker returned no result.");
           if (result.kind === "ente.auth.totp-required") {
             clearSensitive();
             setState((current) => ({
@@ -157,11 +167,12 @@ export function useEnteSync(input: { platform: EnteUiPlatform; active: boolean }
               ciphertext: [...result.ciphertext],
             });
         },
-        () => {
+        (failure: unknown) => {
           clearSensitive();
           authWorker.current?.terminate();
           authWorker.current = null;
           setError(true);
+          setErrorCode(reasonOf(failure, "Sign-in failed before reaching Ente."));
         },
       );
   }, [clearSensitive, send]);
@@ -173,6 +184,7 @@ export function useEnteSync(input: { platform: EnteUiPlatform; active: boolean }
     if (capability === undefined || !/^\d{6,10}$/u.test(new TextDecoder().decode(codeUtf8))) {
       codeUtf8.fill(0);
       setError(true);
+      setErrorCode("Enter the 6 to 10 digit code from your authenticator.");
       return;
     }
     const controller = new AbortController();
@@ -182,6 +194,7 @@ export function useEnteSync(input: { platform: EnteUiPlatform; active: boolean }
     if (worker === null) {
       codeUtf8.fill(0);
       setError(true);
+      setErrorCode("The sign-in session expired. Start again.");
       return;
     }
     void executeEnteAuthWorker({
@@ -198,11 +211,12 @@ export function useEnteSync(input: { platform: EnteUiPlatform; active: boolean }
             ciphertext: [...result.ciphertext],
           });
       },
-      () => {
+      (failure: unknown) => {
         clearSensitive();
         authWorker.current?.terminate();
         authWorker.current = null;
         setError(true);
+        setErrorCode(reasonOf(failure, "Two-factor step failed."));
       },
     );
   }, [clearSensitive, send, state.capability]);
