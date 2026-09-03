@@ -54,11 +54,16 @@ export function useEnteSync(input: { platform: EnteUiPlatform; active: boolean }
         setState(options.preserveResultBytes ? next : { ...next, authHandoffPublicKey: undefined });
         return next;
       } catch (failure) {
+        // A rejection without a code did not come from the background's error envelope; it
+        // was thrown on this page (worker load, SRP, key derivation). Nothing here may be
+        // logged -- this module is a credential boundary -- so the panel shows the code, or
+        // failing that a bounded message, and that is the whole diagnostic surface.
         if (mounted.current && token === ownership.current) {
           clearSensitive();
           setError(true);
           const code = (failure as { code?: unknown })?.code;
-          setErrorCode(typeof code === "string" ? code : null);
+          const message = failure instanceof Error ? failure.message.slice(0, 160) : "";
+          setErrorCode(typeof code === "string" ? code : message || null);
         }
         return null;
       }

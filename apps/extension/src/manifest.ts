@@ -10,7 +10,11 @@ export default defineManifest({
   // storage persists the encrypted vault and non-secret lock settings. alarms enforces
   // inactivity locking, and idle receives the operating-system locked state. No offscreen
   // permission is needed: trusted popup/vault pages run Argon2 in a dedicated local Worker.
-  permissions: ["storage", "alarms", "idle"],
+  // unlimitedStorage: the vault format writes a complete new generation on every commit and
+  // retains earlier ones for rollback, so a vault of a few hundred items crosses the default
+  // 10 MB storage.local quota quickly. Once it does, every write fails while reads keep
+  // working, which is how a quota error presents. Password managers universally hold this.
+  permissions: ["storage", "unlimitedStorage", "alarms", "idle"],
   host_permissions: ["https://api.ente.io/*"],
   action: {
     default_popup: "popup/index.html",

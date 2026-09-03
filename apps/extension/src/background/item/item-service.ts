@@ -443,5 +443,8 @@ function mapError(error: unknown): ItemServiceError {
   if (code === "VAULT_LOCKED") return new ItemServiceError("VAULT_LOCKED");
   if (code === "REVISION_CONFLICT") return new ItemServiceError("ITEM_CONFLICT");
   if (code === "VAULT_INVALID") return new ItemServiceError("ITEM_INVALID");
+  // Everything else is flattened to VAULT_UNAVAILABLE for the client, which is the right
+  // amount of detail for a UI and the wrong amount for a diagnosis. Keep the original here.
+  console.error("[ShardPass] item operation failed; reported as VAULT_UNAVAILABLE:", error);
   return new ItemServiceError("VAULT_UNAVAILABLE");
 }

@@ -24,7 +24,9 @@ function assertManifestPolicy(candidate: Record<string, unknown>): void {
   expect(Object.keys(candidate).sort()).toEqual([...allowedSourceManifestKeys].sort());
   expect(candidate.manifest_version).toBe(3);
   expect(candidate.minimum_chrome_version).toBe("110");
-  expect(candidate.permissions).toEqual(["storage", "alarms", "idle"]);
+  // unlimitedStorage: every commit writes a full generation; without it a real vault hits the
+  // 10 MB storage.local quota and every write fails while reads keep working.
+  expect(candidate.permissions).toEqual(["storage", "unlimitedStorage", "alarms", "idle"]);
   expect(candidate.permissions).not.toContain("downloads");
   expect(candidate.permissions).not.toContain("clipboardRead");
   expect(candidate.permissions).not.toContain("clipboardWrite");

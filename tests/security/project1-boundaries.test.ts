@@ -289,7 +289,7 @@ describe("Project 1 minimized responses and execution boundaries", () => {
       host_permissions: string[];
       content_security_policy: { extension_pages: string };
     };
-    expect(productionManifest.permissions).toEqual(["storage", "alarms", "idle"]);
+    expect(productionManifest.permissions).toEqual(["storage", "unlimitedStorage", "alarms", "idle"]);
     expect(productionManifest.host_permissions).toEqual(["https://api.ente.io/*"]);
     expect(productionManifest.content_security_policy.extension_pages).toBe(
       "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'; connect-src 'self' https://api.ente.io; img-src 'self' data:; media-src 'self'; font-src 'self'; style-src 'self'",

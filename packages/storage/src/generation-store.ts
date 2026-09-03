@@ -325,7 +325,58 @@ export class GenerationStore {
     if (canonicalJson(current) !== canonicalJson(staged.expectedRoot)) conflict();
     beforeActivation?.();
     await storageSet(this.storage, { [ACTIVE_ROOT_KEY]: asStorage(staged.root) });
+    // Reclaim the generations this activation just pushed out of the retained pair. The
+    // chain is linear (each root records its predecessor), so walking back from the old
+    // root's `previous` finds exactly the superseded ones and nothing else -- in particular
+    // never a generation another owner has staged but not yet activated, which a blanket
+    // sweep would destroy. Without this every commit stranded its predecessor's
+    // predecessor, and a vault imported one item at a time grew until storage.local refused
+    // further writes. Best-effort and bounded: the root is already durable, and anything
+    // left over is reclaimed by the next activation.
+    try {
+      await this.reclaimSuperseded(current?.previousGenerationId, staged.root);
+    } catch {
+      // Left for the next activation.
+    }
     return staged.root;
+  }
+
+  /** Upper bound on generations reclaimed per activation, so a long-leaked vault heals
+   *  across a few commits instead of stalling one. */
+  private static readonly RECLAIM_PER_ACTIVATION = 32;
+
+  private async reclaimSuperseded(start: string | undefined, root: VaultRoot): Promise<void> {
+    const preserve = new Set(
+      [root.activeGenerationId, root.previousGenerationId].filter(
+        (id): id is string => id !== undefined,
+      ),
+    );
+    let victim = start;
+    for (let count = 0; victim !== undefined && count < GenerationStore.RECLAIM_PER_ACTIVATION; count += 1) {
+      if (preserve.has(victim)) return;
+      const manifest = await this.readManifest(victim);
+      const next = manifest?.root.previousGenerationId;
+      await this.removeGeneration(victim);
+      victim = next;
+    }
+  }
+
+  private async removeGeneration(generationId: string): Promise<void> {
+    const prefix = `${GENERATION_PREFIX}${generationId}`;
+    let cursor: string | undefined;
+    const seenCursors = new Set<string>();
+    for (;;) {
+      const page = await storageListKeys(this.storage, prefix, cursor);
+      const removable = page.keys.filter(
+        (key) => classifyGenerationStorageKey(key)?.generationId === generationId,
+      );
+      for (let offset = 0; offset < removable.length; offset += STORAGE_BATCH_KEYS)
+        await storageRemove(this.storage, removable.slice(offset, offset + STORAGE_BATCH_KEYS));
+      if (page.complete) break;
+      if (page.nextCursor === undefined || seenCursors.has(page.nextCursor)) storageFailed();
+      seenCursors.add(page.nextCursor);
+      cursor = page.nextCursor;
+    }
   }
 
   async readReceipt(
@@ -447,11 +498,17 @@ export class GenerationStore {
   async collect(context: VaultCryptoContext): Promise<void> {
     const active = await this.readActive(context);
     if (active === null) return;
-    const preserve = new Set(
-      [active.root.activeGenerationId, active.root.previousGenerationId].filter(
-        (id): id is string => id !== undefined,
+    await this.sweep(
+      new Set(
+        [active.root.activeGenerationId, active.root.previousGenerationId].filter(
+          (id): id is string => id !== undefined,
+        ),
       ),
     );
+  }
+
+  /** Removes every generation key whose generation id is not in `preserve`. */
+  private async sweep(preserve: ReadonlySet<string>): Promise<void> {
     let cursor: string | undefined;
     const seenCursors = new Set<string>();
     for (;;) {
