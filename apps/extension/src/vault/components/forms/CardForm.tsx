@@ -1,9 +1,11 @@
 import {
+  CARD_BRANDS,
   CardItemSchema,
   MAX_CARD_HOLDER_LENGTH,
   MAX_CARD_NAME_LENGTH,
   MAX_CARD_NOTES_LENGTH,
   MAX_CARD_NUMBER_LENGTH,
+  type CardBrand,
   type CardItem,
 } from "@shardpass/domain";
 import { Button, Field } from "@shardpass/ui";
@@ -24,6 +26,7 @@ export interface CardFormProps {
 
 interface FormValue {
   name: string;
+  brand: CardBrand | "";
   cardholderName: string;
   number: string;
   expMonth: string;
@@ -37,9 +40,20 @@ interface FormValue {
 
 type Errors = Partial<Record<"name" | "expMonth" | "expYear" | "form", string>>;
 
+export const CARD_BRAND_LABELS: Record<CardBrand, string> = {
+  visa: "Visa",
+  mastercard: "Mastercard",
+  amex: "American Express",
+  discover: "Discover",
+  jcb: "JCB",
+  unionpay: "UnionPay",
+  other: "Other",
+};
+
 function initialValue(item?: CardItem): FormValue {
   return {
     name: item?.name ?? "",
+    brand: item?.brand ?? "",
     cardholderName: item?.cardholderName ?? "",
     number: item?.number ?? "",
     expMonth: item?.expMonth ?? "",
@@ -67,8 +81,11 @@ export function CardForm({ item, platform, onSaved, onCancel }: CardFormProps) {
     if (value.expYear.length > 0 && !/^\d{2,4}$/u.test(value.expYear))
       nextErrors.expYear = "Use a two- or four-digit year.";
 
+    // Sent explicitly (value or undefined): item.update merges with a spread, where an
+    // omitted key keeps the old value but undefined clears it.
     const fields = {
       name,
+      brand: value.brand === "" ? undefined : value.brand,
       cardholderName: value.cardholderName,
       number: value.number,
       expMonth: value.expMonth,
@@ -135,6 +152,25 @@ export function CardForm({ item, platform, onSaved, onCancel }: CardFormProps) {
           onChange: (event) => setValue({ ...value, name: event.target.value }),
         }}
       />
+
+      <div className={styles.field}>
+        <label className={styles.label} htmlFor="card-brand">
+          Brand
+        </label>
+        <select
+          id="card-brand"
+          className={styles.select}
+          value={value.brand}
+          onChange={(event) => setValue({ ...value, brand: event.target.value as CardBrand | "" })}
+        >
+          <option value="">Not set</option>
+          {CARD_BRANDS.map((brand) => (
+            <option key={brand} value={brand}>
+              {CARD_BRAND_LABELS[brand]}
+            </option>
+          ))}
+        </select>
+      </div>
 
       <Field
         label="Cardholder name"

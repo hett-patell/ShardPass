@@ -22,14 +22,22 @@ export interface IdentityFormProps {
 interface FormValue {
   name: string;
   firstName: string;
+  middleName: string;
   lastName: string;
+  company: string;
+  username: string;
+  birthDate: string;
   email: string;
   phone: string;
   street: string;
+  address2: string;
   city: string;
   state: string;
   zip: string;
   country: string;
+  passportNumber: string;
+  licenseNumber: string;
+  nationalId: string;
   notes: string;
   favorite: boolean;
   tags: string;
@@ -41,14 +49,22 @@ function initialValue(item?: IdentityItem): FormValue {
   return {
     name: item?.name ?? "",
     firstName: item?.firstName ?? "",
+    middleName: item?.middleName ?? "",
     lastName: item?.lastName ?? "",
+    company: item?.company ?? "",
+    username: item?.username ?? "",
+    birthDate: item?.birthDate ?? "",
     email: item?.email ?? "",
     phone: item?.phone ?? "",
     street: item?.street ?? "",
+    address2: item?.address2 ?? "",
     city: item?.city ?? "",
     state: item?.state ?? "",
     zip: item?.zip ?? "",
     country: item?.country ?? "",
+    passportNumber: item?.passportNumber ?? "",
+    licenseNumber: item?.licenseNumber ?? "",
+    nationalId: item?.nationalId ?? "",
     notes: item?.notes ?? "",
     favorite: item?.favorite ?? false,
     tags: formatTags(item?.tags ?? []),
@@ -66,17 +82,27 @@ export function IdentityForm({ item, platform, onSaved, onCancel }: IdentityForm
     const nextErrors: Errors = {};
     if (name.length === 0) nextErrors.name = "Enter a name.";
 
+    // Optional fields are sent as undefined when blank so item.update clears them.
+    const opt = (text: string) => (text.trim() === "" ? undefined : text);
     const fields = {
       name,
       firstName: value.firstName,
+      middleName: opt(value.middleName),
       lastName: value.lastName,
+      company: opt(value.company),
+      username: opt(value.username),
+      birthDate: opt(value.birthDate),
       email: value.email,
       phone: value.phone,
       street: value.street,
+      address2: opt(value.address2),
       city: value.city,
       state: value.state,
       zip: value.zip,
       country: value.country,
+      passportNumber: opt(value.passportNumber),
+      licenseNumber: opt(value.licenseNumber),
+      nationalId: opt(value.nationalId),
       notes: value.notes,
       favorite: value.favorite,
       tags,
@@ -149,11 +175,47 @@ export function IdentityForm({ item, platform, onSaved, onCancel }: IdentityForm
           }}
         />
         <Field
+          label="Middle name"
+          inputProps={{
+            value: value.middleName,
+            autoComplete: "additional-name",
+            onChange: (event) => setValue({ ...value, middleName: event.target.value }),
+          }}
+        />
+        <Field
           label="Last name"
           inputProps={{
             value: value.lastName,
             autoComplete: "family-name",
             onChange: (event) => setValue({ ...value, lastName: event.target.value }),
+          }}
+        />
+      </div>
+
+      <div className={styles.grid}>
+        <Field
+          label="Company"
+          inputProps={{
+            value: value.company,
+            autoComplete: "organization",
+            onChange: (event) => setValue({ ...value, company: event.target.value }),
+          }}
+        />
+        <Field
+          label="Username"
+          inputProps={{
+            value: value.username,
+            autoComplete: "username",
+            onChange: (event) => setValue({ ...value, username: event.target.value }),
+          }}
+        />
+        <Field
+          label="Date of birth"
+          inputProps={{
+            value: value.birthDate,
+            placeholder: "YYYY-MM-DD",
+            autoComplete: "bday",
+            onChange: (event) => setValue({ ...value, birthDate: event.target.value }),
           }}
         />
       </div>
@@ -183,8 +245,16 @@ export function IdentityForm({ item, platform, onSaved, onCancel }: IdentityForm
         label="Street"
         inputProps={{
           value: value.street,
-          autoComplete: "street-address",
+          autoComplete: "address-line1",
           onChange: (event) => setValue({ ...value, street: event.target.value }),
+        }}
+      />
+      <Field
+        label="Address line 2"
+        inputProps={{
+          value: value.address2,
+          autoComplete: "address-line2",
+          onChange: (event) => setValue({ ...value, address2: event.target.value }),
         }}
       />
 
@@ -222,6 +292,34 @@ export function IdentityForm({ item, platform, onSaved, onCancel }: IdentityForm
             value: value.country,
             autoComplete: "country-name",
             onChange: (event) => setValue({ ...value, country: event.target.value }),
+          }}
+        />
+      </div>
+
+      <div className={styles.grid}>
+        <Field
+          label="Passport number"
+          inputProps={{
+            value: value.passportNumber,
+            autoComplete: "off",
+            onChange: (event) => setValue({ ...value, passportNumber: event.target.value }),
+          }}
+        />
+        <Field
+          label="Driving licence"
+          inputProps={{
+            value: value.licenseNumber,
+            autoComplete: "off",
+            onChange: (event) => setValue({ ...value, licenseNumber: event.target.value }),
+          }}
+        />
+        <Field
+          label="National ID"
+          help="SSN, NI number, Aadhaar, and similar."
+          inputProps={{
+            value: value.nationalId,
+            autoComplete: "off",
+            onChange: (event) => setValue({ ...value, nationalId: event.target.value }),
           }}
         />
       </div>

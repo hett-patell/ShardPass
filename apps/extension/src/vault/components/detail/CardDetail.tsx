@@ -3,7 +3,7 @@ import { useState } from "react";
 
 import type { ExtensionPlatform } from "../../../platform/extension-platform";
 import { formatCardExpiry, maskCardNumber } from "../../item-support";
-import { CardForm } from "../forms/CardForm";
+import { CARD_BRAND_LABELS, CardForm } from "../forms/CardForm";
 import styles from "./Detail.module.css";
 import { DetailActions } from "./DetailActions";
 import { RevealField } from "./RevealField";
@@ -48,6 +48,13 @@ export function CardDetail({ item, platform, onUpdate, onDeleted }: CardDetailPr
               {tag}
             </span>
           ))}
+        </div>
+      ) : null}
+
+      {item.brand ? (
+        <div className={styles.fieldGroup}>
+          <span className={styles.label}>Brand</span>
+          <span className={styles.value}>{CARD_BRAND_LABELS[item.brand]}</span>
         </div>
       ) : null}
 

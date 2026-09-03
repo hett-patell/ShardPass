@@ -6,6 +6,7 @@ import { IdentityForm } from "../forms/IdentityForm";
 import { CopyButton } from "./CopyButton";
 import styles from "./Detail.module.css";
 import { DetailActions } from "./DetailActions";
+import { RevealField } from "./RevealField";
 
 export interface IdentityDetailProps {
   item: IdentityItem;
@@ -16,7 +17,21 @@ export interface IdentityDetailProps {
 
 function addressLines(item: IdentityItem): string[] {
   const cityLine = [item.city, item.state, item.zip].filter((part) => part.length > 0).join(", ");
-  return [item.street, cityLine, item.country].filter((line) => line.length > 0);
+  return [item.street, item.address2 ?? "", cityLine, item.country].filter((line) => line.length > 0);
+}
+
+/** A plain copyable row for a non-secret identity field; renders nothing when blank. */
+function PlainRow({ label, value }: { label: string; value: string | undefined }) {
+  if (!value) return null;
+  return (
+    <div className={styles.fieldGroup}>
+      <span className={styles.label}>{label}</span>
+      <div className={styles.row}>
+        <span className={styles.rowValue}>{value}</span>
+        <CopyButton label={`Copy ${label.toLowerCase()}`} value={value} />
+      </div>
+    </div>
+  );
 }
 
 export function IdentityDetail({ item, platform, onUpdate, onDeleted }: IdentityDetailProps) {
@@ -36,7 +51,9 @@ export function IdentityDetail({ item, platform, onUpdate, onDeleted }: Identity
     );
   }
 
-  const fullName = [item.firstName, item.lastName].filter((part) => part.length > 0).join(" ");
+  const fullName = [item.firstName, item.middleName ?? "", item.lastName]
+    .filter((part) => part.length > 0)
+    .join(" ");
   const address = addressLines(item);
 
   return (
@@ -56,6 +73,10 @@ export function IdentityDetail({ item, platform, onUpdate, onDeleted }: Identity
           ))}
         </div>
       ) : null}
+
+      <PlainRow label="Company" value={item.company} />
+      <PlainRow label="Username" value={item.username} />
+      <PlainRow label="Date of birth" value={item.birthDate} />
 
       {item.email ? (
         <div className={styles.fieldGroup}>
@@ -90,6 +111,10 @@ export function IdentityDetail({ item, platform, onUpdate, onDeleted }: Identity
           </div>
         </div>
       ) : null}
+
+      {item.passportNumber ? <RevealField label="Passport number" value={item.passportNumber} /> : null}
+      {item.licenseNumber ? <RevealField label="Driving licence" value={item.licenseNumber} /> : null}
+      {item.nationalId ? <RevealField label="National ID" value={item.nationalId} /> : null}
 
       {item.notes ? (
         <div className={styles.fieldGroup}>
