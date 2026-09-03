@@ -72,7 +72,8 @@ export type EnteOtpProjection = Readonly<{
   label: string;
   secretBase32: string;
   algorithm: "SHA1" | "SHA256" | "SHA512";
-  digits: 6 | 7 | 8;
+  /** 5 to 10; Steam codes are 5 digits. */
+  digits: number;
   period?: number;
   counter?: number;
   notes?: string;

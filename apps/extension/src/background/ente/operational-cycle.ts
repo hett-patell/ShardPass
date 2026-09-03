@@ -33,7 +33,8 @@ export interface EnteCycleCrypto {
   openProjection(envelope: string): Promise<EnteOtpProjection>;
   sealProjection(projection: EnteOtpProjection): Promise<string>;
   digestProjection(projection: EnteOtpProjection): Promise<string>;
-  decryptEntity(entity: RemoteOtpState, authKey: Uint8Array): EnteOtpProjection;
+  /** `null` for an entity that decrypts fine but is not a code to import (Ente "trashed"). */
+  decryptEntity(entity: RemoteOtpState, authKey: Uint8Array): EnteOtpProjection | null;
   encryptEntity(
     projection: EnteOtpProjection,
     authKey: Uint8Array,
@@ -96,7 +97,10 @@ async function pull(
     if (entity.isDeleted) projections.set(id, null);
     else {
       assertLive(entity);
-      projections.set(id, dependencies.crypto.decryptEntity(entity, authKey));
+      const projection = dependencies.crypto.decryptEntity(entity, authKey);
+      // A code Ente has trashed is still a live entity on the server; it is neither imported
+      // nor deleted here, exactly as the original client treated it.
+      if (projection !== null) projections.set(id, projection);
     }
   }
   return { ...result, projections };

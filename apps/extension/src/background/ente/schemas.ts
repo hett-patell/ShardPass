@@ -108,7 +108,7 @@ export const enteOtpProjectionSchema = strict({
   label: z.string(),
   secretBase32: z.string().check(z.regex(/^[A-Z2-7]+=*$/u)),
   algorithm: z.enum(["SHA1", "SHA256", "SHA512"]),
-  digits: z.union([z.literal(6), z.literal(7), z.literal(8)]),
+  digits: z.int().check(z.minimum(5), z.maximum(10)),
   period: z.optional(z.int().check(z.positive())),
   counter: z.optional(z.int().check(z.nonnegative())),
   notes: z.optional(z.string()),
