@@ -16,10 +16,13 @@ import type { EnteAuthWorkerResponse } from "./ente-auth-worker-protocol";
 const scope = self as DedicatedWorkerGlobalScope;
 const decoder = new TextDecoder("utf-8", { fatal: true });
 const encoder = new TextEncoder();
+// URL-safe Base64 with padding kept: libsodium's URLSAFE variant, which the official client
+// uses for the auth token, and what Ente's server decodes (Go's padded URLEncoding). A
+// 32-byte token pads with one "="; stripping it made every authenticated request 401.
 const base64Url = (bytes: Uint8Array) => {
   let binary = "";
   for (const byte of bytes) binary += String.fromCharCode(byte);
-  return btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/u, "");
+  return btoa(binary).replaceAll("+", "-").replaceAll("/", "_");
 };
 const randomCapability = () => {
   const bytes = crypto.getRandomValues(new Uint8Array(32));
