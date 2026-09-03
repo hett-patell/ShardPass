@@ -26,7 +26,11 @@ describe("EnteClient fixed transport", () => {
       credentials: "omit",
       cache: "no-store",
     });
-    expect(init.headers).toEqual({ Accept: "application/json", "X-Auth-Token": "synthetic-token" });
+    expect(init.headers).toEqual({
+      Accept: "application/json",
+      "X-Client-Package": "io.ente.auth.web",
+      "X-Auth-Token": "synthetic-token",
+    });
   });
 
   it("places auth only on authenticated methods and returns fixed safe errors", async () => {
@@ -40,7 +44,7 @@ describe("EnteClient fixed transport", () => {
       client.getSrpAttributes("phase2@example.invalid", new AbortController().signal),
     ).rejects.toMatchObject({ code: "ENTE_UNAVAILABLE", message: "Ente request failed" });
     const [, init] = fetch.mock.calls[0]!;
-    expect(init.headers).toEqual({ Accept: "application/json" });
+    expect(init.headers).toEqual({ Accept: "application/json", "X-Client-Package": "io.ente.auth.web" });
   });
 
   it("charges exact response bytes to one cycle budget before JSON decoding", async () => {

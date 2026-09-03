@@ -82,7 +82,9 @@ async function installStrictMock(
     memLimit,
     sodium.crypto_pwhash_ALG_ARGON2ID13,
   );
-  const loginKey = sodium.crypto_kdf_derive_from_key(16, 1, "loginctx", kek);
+  // Matches Ente: a 32-byte "loginctx" subkey, first 16 bytes. (A direct 16-byte derivation
+  // is a different key -- BLAKE2b output length is part of the hash parameters.)
+  const loginKey = sodium.crypto_kdf_derive_from_key(32, 1, "loginctx", kek).slice(0, 16);
   const verifier = srp.SRP.computeVerifier(
     srp.SRP.params[4096],
     srpSalt,

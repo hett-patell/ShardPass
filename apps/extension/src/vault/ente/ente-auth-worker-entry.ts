@@ -3,6 +3,7 @@
 import "../../background/ente/srp-compat/install-buffer-global";
 
 import { createEnteClient } from "../../background/ente/client";
+import { EnteProtocolError } from "../../background/ente/protocol";
 import {
   createEnteSodiumAdapter,
   type EnteSodiumAdapter,
@@ -200,7 +201,13 @@ installEnteAuthWorker(
           attributes.memLimit,
           32,
         );
-        const loginKey = sodium.deriveSubkey(kek, 16, 1, "loginctx");
+        // Ente derives a 32-byte "loginctx" subkey and uses its first 16 bytes as the SRP
+        // password. Deriving 16 bytes directly is a different key: crypto_kdf is BLAKE2b with
+        // the output length in its parameter block, so BLAKE2b-128(x) is not a prefix of
+        // BLAKE2b-256(x). The shorter derivation produced a wrong proof for every account.
+        const loginSubKey = sodium.deriveSubkey(kek, 32, 1, "loginctx");
+        const loginKey = loginSubKey.slice(0, 16);
+        loginSubKey.fill(0);
         const identity = encoder.encode(attributes.srpUserID);
         const srp = createEnteSrpClient({
           usernameUtf8: identity,
@@ -225,14 +232,25 @@ installEnteAuthWorker(
             token?: string;
             encryptedToken?: string;
             twoFactorSessionID?: string;
+            twoFactorSessionIDV2?: string;
+            passkeySessionID?: string;
             keyAttributes?: unknown;
           };
           srp.verifyServerProof(sodium.fromBase64(verified.srpM2));
           proof.sessionKey.fill(0);
-          if (verified.twoFactorSessionID !== undefined) {
+          // A passkey-protected account answers with a passkey session and no token. There is
+          // no passkey ceremony here, so say so rather than failing as a wrong password.
+          if (
+            verified.passkeySessionID !== undefined &&
+            verified.token === undefined &&
+            verified.encryptedToken === undefined
+          )
+            throw new EnteProtocolError("ENTE_SRP_UNSUPPORTED");
+          const twoFactorSessionId = verified.twoFactorSessionID ?? verified.twoFactorSessionIDV2;
+          if (twoFactorSessionId !== undefined) {
             const capability = randomCapability();
             continuations.set(capability, {
-              sessionId: verified.twoFactorSessionID,
+              sessionId: twoFactorSessionId,
               kek,
               handoffCapability: request.handoffCapability,
               handoffPublicKey: Uint8Array.from(request.handoffPublicKey),

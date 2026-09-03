@@ -92,12 +92,20 @@ export async function authenticateEnte(input: {
     const verified = (await input.client.verifySrpSession(
       { sessionID: session.sessionID, srpUserID: job.srpUserId, srpM1: proof.clientM1 },
       input.signal,
-    )) as { srpM2: string; token?: string; encryptedToken?: string; twoFactorSessionID?: string };
+    )) as {
+      srpM2: string;
+      token?: string;
+      encryptedToken?: string;
+      twoFactorSessionID?: string;
+      twoFactorSessionIDV2?: string;
+      passkeySessionID?: string;
+    };
     proof.verifyM2(verified.srpM2);
     const recovered = await proof.recoverCredential(verified);
-    if (verified.twoFactorSessionID !== undefined) {
+    const twoFactorSessionId = verified.twoFactorSessionID ?? verified.twoFactorSessionIDV2;
+    if (twoFactorSessionId !== undefined) {
       const challenge = input.challenges.issue({
-        sessionId: verified.twoFactorSessionID,
+        sessionId: twoFactorSessionId,
         credentialEnvelope: recovered.reusableCredentialEnvelope,
         maskedEmail: mask(input.email),
       });

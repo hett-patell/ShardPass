@@ -20,6 +20,9 @@ import {
   parseEnteProtocolResponse,
 } from "./protocol";
 
+/** Identifies this client to Ente; the value the official auth web client sends. */
+export const ENTE_CLIENT_PACKAGE = "io.ente.auth.web";
+
 export type EnteFetch = (url: string, init: RequestInit) => Promise<Response>;
 export interface EnteResponseBudget {
   readonly limitBytes: number;
@@ -174,7 +177,12 @@ export function createEnteClient(dependencies: { readonly fetch: EnteFetch }): E
     if (input.token !== undefined) validToken(input.token);
     input.budget?.assertAvailable(1);
     const linked = combineSignal(input.signal);
-    const headers: Record<string, string> = { Accept: "application/json" };
+    // Ente's server keys behaviour on the client package (which app, which token form);
+    // this is the value the official auth web client sends.
+    const headers: Record<string, string> = {
+      Accept: "application/json",
+      "X-Client-Package": ENTE_CLIENT_PACKAGE,
+    };
     if (input.body !== undefined) headers["Content-Type"] = "application/json";
     if (input.token !== undefined) headers["X-Auth-Token"] = input.token;
     try {
@@ -316,4 +324,5 @@ export function createEnteClient(dependencies: { readonly fetch: EnteFetch }): E
       });
     },
   };
+
 }

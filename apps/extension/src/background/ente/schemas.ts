@@ -47,6 +47,10 @@ export const verifySrpSessionResponseSchema = strict({
   token: z.optional(b64),
   encryptedToken: z.optional(b64),
   twoFactorSessionID: z.optional(uuid),
+  // Newer servers send the V2 id (alongside or instead of the original); a passkey-only
+  // account sends passkeySessionID and no token. Both are real responses, not drift.
+  twoFactorSessionIDV2: z.optional(uuid),
+  passkeySessionID: z.optional(uuid),
   keyAttributes: z.optional(z.unknown()),
 });
 export const totpTwoFactorVerifyRequestSchema = strict({
