@@ -101,8 +101,12 @@ export interface EnteClient {
 }
 
 const encoder = new TextEncoder();
-const fixedError = (code: ConstructorParameters<typeof EnteProtocolError>[0]) => {
-  const error = new EnteProtocolError(code);
+/**
+ * Errors are fixed: the message never derives from anything the server sent. `detail` is
+ * limited to our own request's method, path (query stripped) and the status code.
+ */
+const fixedError = (code: ConstructorParameters<typeof EnteProtocolError>[0], detail?: string) => {
+  const error = new EnteProtocolError(code, detail);
   error.message = "Ente request failed";
   return error;
 };
@@ -196,11 +200,14 @@ export function createEnteClient(dependencies: { readonly fetch: EnteFetch }): E
         cache: "no-store",
         referrerPolicy: "no-referrer",
       });
-      if (response.status === 401) throw fixedError("ENTE_REAUTH_REQUIRED");
+      // Detail names the request and status only; the path is stripped of its query, which
+      // for srp/attributes carries the email.
+      const where = `${input.method} ${input.path.split("?")[0]} -> ${response.status}`;
+      if (response.status === 401) throw fixedError("ENTE_REAUTH_REQUIRED", where);
       if (response.status === 404 && input.method === "GET" && input.path === "/authenticator/key")
         throw fixedError("ENTE_AUTH_KEY_MISSING");
       if (response.status < 200 || response.status >= 300)
-        throw fixedError(response.status >= 500 ? "ENTE_UNAVAILABLE" : "ENTE_AUTH_FAILED");
+        throw fixedError(response.status >= 500 ? "ENTE_UNAVAILABLE" : "ENTE_AUTH_FAILED", where);
       if (input.empty) {
         if (response.status !== 200 && response.status !== 204)
           throw fixedError("ENTE_PROTOCOL_DRIFT");
@@ -218,7 +225,12 @@ export function createEnteClient(dependencies: { readonly fetch: EnteFetch }): E
         : parseEnteProtocolResponse(input.schema as never, json);
     } catch (error) {
       if (error instanceof EnteProtocolError) throw error;
-      throw fixedError("ENTE_UNAVAILABLE");
+      // fetch itself rejected: no response at all (network, CSP, abort, timeout).
+      const cause = error instanceof Error ? error.name : "unknown";
+      throw fixedError(
+        "ENTE_UNAVAILABLE",
+        `${input.method} ${input.path.split("?")[0]} -> no response (${cause})`,
+      );
     } finally {
       linked.dispose();
     }

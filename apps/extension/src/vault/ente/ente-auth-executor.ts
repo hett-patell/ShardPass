@@ -39,16 +39,21 @@ export async function executeEnteAuthWorker(input: {
         const parsed = EnteAuthWorkerResponseSchema.parse(event.data);
         if (parsed.jobId !== input.request.jobId) throw new Error();
         cleanup(!(input.keepAliveOnTotp && parsed.kind === "ente.auth.totp-required"));
-        if (parsed.kind === "ente.auth.error") reject(new EnteProtocolError(parsed.code));
+        if (parsed.kind === "ente.auth.error") reject(new EnteProtocolError(parsed.code, parsed.detail));
         else resolve(parsed);
       } catch {
         cleanup();
         reject(new EnteProtocolError("ENTE_INVALID"));
       }
     };
-    input.worker.onerror = () => {
+    input.worker.onerror = (event) => {
       cleanup();
-      reject(new EnteProtocolError("ENTE_AUTH_FAILED"));
+      // The worker script itself failed to load or threw at top level -- a build or CSP
+      // problem, not a credential one. Name it so it is never read as a wrong password.
+      const message = typeof event === "object" && event !== null && "message" in event
+        ? String((event as { message?: unknown }).message ?? "")
+        : "";
+      reject(new EnteProtocolError("ENTE_UNAVAILABLE", `auth worker failed to start${message ? `: ${message}` : ""}`));
     };
     input.worker.postMessage(input.request, transferred);
   });

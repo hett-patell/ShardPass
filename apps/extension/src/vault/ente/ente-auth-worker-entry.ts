@@ -56,7 +56,7 @@ function recoverSession(
       }
     | undefined;
   if (attributes?.encryptedKey === undefined || attributes.keyDecryptionNonce === undefined)
-    throw new Error();
+    throw new Error("sign-in response has no key attributes");
   const masterKey = sodium.secretboxOpen(
     sodium.fromBase64(attributes.encryptedKey),
     sodium.fromBase64(attributes.keyDecryptionNonce),
@@ -70,7 +70,7 @@ function recoverSession(
     attributes.publicKey === undefined
   ) {
     masterKey.fill(0);
-    throw new Error();
+    throw new Error("key attributes are missing the account secret key");
   }
   const secretKey = sodium.secretboxOpen(
     sodium.fromBase64(attributes.encryptedSecretKey),
@@ -112,7 +112,7 @@ async function completeResult(
       header?: unknown;
     };
     if (typeof response.encryptedKey !== "string" || typeof response.header !== "string")
-      throw new Error();
+      throw new Error("authenticator key response is malformed");
     const encryptedAuthKey = sodium.fromBase64(response.encryptedKey);
     const authHeader = sodium.fromBase64(response.header);
     try {
@@ -155,7 +155,7 @@ installEnteAuthWorker(
       if (request.kind === "ente.auth.totp") {
         const continuation = continuations.get(request.capability);
         continuations.delete(request.capability);
-        if (continuation === undefined) throw new Error();
+        if (continuation === undefined) throw new Error("no pending sign-in for this code");
         try {
           const response = (await client.verifyTotp2fa(
             { code: decoder.decode(request.codeUtf8), sessionID: continuation.sessionId },

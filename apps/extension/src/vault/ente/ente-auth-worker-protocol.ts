@@ -1,6 +1,6 @@
 import { z } from "zod/mini";
 
-import { ENTE_SYNC_LIMITS } from "../../background/ente/protocol";
+import { ENTE_SYNC_LIMITS, MAX_ENTE_ERROR_DETAIL_LENGTH } from "../../background/ente/protocol";
 
 const bytes = (maximum: number) =>
   z.instanceof(Uint8Array).check(z.refine((value) => value.byteLength <= maximum));
@@ -43,7 +43,17 @@ export const EnteAuthWorkerResponseSchema = z.discriminatedUnion("kind", [
     version: z.literal(1),
     kind: z.literal("ente.auth.error"),
     jobId: z.uuid(),
-    code: z.enum(["ENTE_INVALID", "ENTE_UNAVAILABLE", "ENTE_AUTH_FAILED", "ENTE_SRP_UNSUPPORTED"]),
+    code: z.enum([
+      "ENTE_INVALID",
+      "ENTE_UNAVAILABLE",
+      "ENTE_AUTH_FAILED",
+      "ENTE_SRP_UNSUPPORTED",
+      "ENTE_PROTOCOL_DRIFT",
+      "ENTE_LIMIT_REACHED",
+      "ENTE_REAUTH_REQUIRED",
+    ]),
+    /** Which step or request failed; never a secret or a body. */
+    detail: z.optional(z.string().check(z.maxLength(MAX_ENTE_ERROR_DETAIL_LENGTH))),
   }),
 ]);
 export type EnteAuthWorkerRequest = z.infer<typeof EnteAuthWorkerRequestSchema>;

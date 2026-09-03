@@ -79,12 +79,20 @@ export type EnteOtpProjection = Readonly<{
   tags?: readonly string[];
 }>;
 
+export const MAX_ENTE_ERROR_DETAIL_LENGTH = 160;
+
 export class EnteProtocolError extends Error {
   readonly code: EnteErrorCode;
-  constructor(code: EnteErrorCode = "ENTE_PROTOCOL_DRIFT") {
+  /**
+   * Where it failed, for a person: a method and path with the query stripped, a status, or
+   * a step name. Never a credential, token, email or response body -- this crosses into UI.
+   */
+  readonly detail: string | undefined;
+  constructor(code: EnteErrorCode = "ENTE_PROTOCOL_DRIFT", detail?: string) {
     super("Ente protocol response rejected");
     this.name = "EnteProtocolError";
     this.code = code;
+    this.detail = detail === undefined ? undefined : detail.slice(0, MAX_ENTE_ERROR_DETAIL_LENGTH);
   }
 }
 

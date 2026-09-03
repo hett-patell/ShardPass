@@ -24,7 +24,9 @@ export function useEnteSync(input: { platform: EnteUiPlatform; active: boolean }
   /** Names a failure for the panel: the background's code, else a bounded message. */
   const reasonOf = (failure: unknown, fallback: string): string => {
     const code = (failure as { code?: unknown } | null)?.code;
-    if (typeof code === "string") return code;
+    const detail = (failure as { detail?: unknown } | null)?.detail;
+    if (typeof code === "string")
+      return typeof detail === "string" && detail !== "" ? `${code} — ${detail}` : code;
     const message = failure instanceof Error ? failure.message.slice(0, 160) : "";
     return message || fallback;
   };
