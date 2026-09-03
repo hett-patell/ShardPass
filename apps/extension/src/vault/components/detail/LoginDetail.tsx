@@ -1,4 +1,4 @@
-import type { LoginItem, OtpItem } from "@shardpass/domain";
+import type { LoginItem, OtpItem, Folder } from "@shardpass/domain";
 import { useState } from "react";
 
 import type { ExtensionPlatform } from "../../../platform/extension-platform";
@@ -14,6 +14,7 @@ export interface LoginDetailProps {
   item: LoginItem;
   platform: ExtensionPlatform;
   otpItems: readonly OtpItem[];
+  folders: readonly Folder[];
   onUpdate: () => void;
   onDeleted: () => void;
 }
@@ -27,7 +28,7 @@ function formatChangedAt(iso: string): string {
   return Number.isNaN(date.getTime()) ? iso : date.toLocaleString();
 }
 
-export function LoginDetail({ item, platform, otpItems, onUpdate, onDeleted }: LoginDetailProps) {
+export function LoginDetail({ item, platform, otpItems, folders, onUpdate, onDeleted }: LoginDetailProps) {
   const [editing, setEditing] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const linkedOtp =
@@ -217,8 +218,9 @@ export function LoginDetail({ item, platform, otpItems, onUpdate, onDeleted }: L
       ) : null}
 
       <DetailActions
-        itemId={item.id}
-        itemName={item.name}
+        item={item}
+        folders={folders}
+        onUpdate={onUpdate}
         platform={platform}
         onEdit={() => setEditing(true)}
         onDeleted={onDeleted}

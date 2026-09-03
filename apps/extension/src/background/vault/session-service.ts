@@ -198,6 +198,12 @@ export class SessionService {
       getItem: (itemId) => this.repositoryGetItem(itemId),
       createItem: (candidate) => this.repositoryCreateItem(candidate),
       createItems: (candidates) => this.repositoryCreateItems(candidates),
+      readFolders: () =>
+        this.#runRepositoryOperation((repository, context) => repository.readFolders(context)),
+      replaceFolders: (folders) =>
+        this.#runRepositoryOperation((repository, context) =>
+          repository.replaceFolders(folders, context),
+        ),
       updateItem: (candidate, expectedRevision) =>
         this.repositoryUpdateItem(candidate, expectedRevision),
       readGenerationMetadata: (name) =>

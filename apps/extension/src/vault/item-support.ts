@@ -1,4 +1,10 @@
-import { ITEM_SCHEMA_VERSION, type ItemMetadata, type SecretItem, type VaultItem } from "@shardpass/domain";
+import {
+  ITEM_SCHEMA_VERSION,
+  type Folder,
+  type ItemMetadata,
+  type SecretItem,
+  type VaultItem,
+} from "@shardpass/domain";
 
 /**
  * Builds fresh item metadata for a client-side create draft. `revision`/`createdAt`/
@@ -82,27 +88,74 @@ export function formatCardExpiry(expMonth: string, expYear: string): string {
   return `${month}/${year}`;
 }
 
-export interface FolderSummary {
-  id: string;
-  label: string;
-  count: number;
+/** Ids of `folderId` and every folder nested beneath it (the set a folder filter should match). */
+export function folderSubtreeIds(folders: readonly Folder[], folderId: string): ReadonlySet<string> {
+  const children = new Map<string, string[]>();
+  for (const folder of folders) {
+    if (folder.parentId === undefined) continue;
+    const siblings = children.get(folder.parentId) ?? [];
+    siblings.push(folder.id);
+    children.set(folder.parentId, siblings);
+  }
+  const ids = new Set<string>([folderId]);
+  const queue = [folderId];
+  while (queue.length > 0) {
+    const next = queue.pop()!;
+    for (const child of children.get(next) ?? []) {
+      if (ids.has(child)) continue;
+      ids.add(child);
+      queue.push(child);
+    }
+  }
+  return ids;
 }
 
-/**
- * Summarizes the folders referenced by the current item set. There is no folder
- * CRUD API yet (folders exist only as an optional `folderId` on each item), so
- * this derives a folder list purely from what items already reference, rather
- * than fetching folder records.
- */
-export function summarizeFolders(items: readonly VaultItem[]): FolderSummary[] {
+/** Items filed directly in each folder, keyed by folder id. */
+export function countItemsByFolder(items: readonly VaultItem[]): ReadonlyMap<string, number> {
   const counts = new Map<string, number>();
   for (const item of items) {
     if (item.folderId === undefined) continue;
     counts.set(item.folderId, (counts.get(item.folderId) ?? 0) + 1);
   }
-  return [...counts.entries()]
-    .sort(([left], [right]) => left.localeCompare(right))
-    .map(([id, count]) => ({ id, label: `Folder ${id.slice(0, 8)}`, count }));
+  return counts;
+}
+
+/** "Work / Clients" style path for a folder select; ids that no longer resolve are shown bare. */
+export function folderPath(folders: readonly Folder[], folderId: string): string {
+  const byId = new Map(folders.map((folder) => [folder.id, folder]));
+  const names: string[] = [];
+  let current = byId.get(folderId);
+  const seen = new Set<string>();
+  while (current !== undefined && !seen.has(current.id)) {
+    seen.add(current.id);
+    names.unshift(current.name);
+    current = current.parentId === undefined ? undefined : byId.get(current.parentId);
+  }
+  return names.length === 0 ? "Unknown folder" : names.join(" / ");
+}
+
+/** Depth-first order with each folder's depth, for indented tree rendering. */
+export function folderTree(folders: readonly Folder[]): readonly { folder: Folder; depth: number }[] {
+  const byParent = new Map<string | undefined, Folder[]>();
+  for (const folder of folders) {
+    const siblings = byParent.get(folder.parentId) ?? [];
+    siblings.push(folder);
+    byParent.set(folder.parentId, siblings);
+  }
+  for (const siblings of byParent.values())
+    siblings.sort((left, right) => left.name.localeCompare(right.name, undefined, { sensitivity: "base" }));
+  const rows: { folder: Folder; depth: number }[] = [];
+  const seen = new Set<string>();
+  const visit = (parentId: string | undefined, depth: number) => {
+    for (const folder of byParent.get(parentId) ?? []) {
+      if (seen.has(folder.id)) continue;
+      seen.add(folder.id);
+      rows.push({ folder, depth });
+      visit(folder.id, depth + 1);
+    }
+  };
+  visit(undefined, 0);
+  return rows;
 }
 
 export function secretTypeLabel(secretType: SecretItem["secretType"]): string {

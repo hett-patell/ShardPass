@@ -104,6 +104,10 @@ export class ItemService {
     command: Extract<ItemCrudRequest, { kind: "item.query" }>,
   ): Promise<ItemCrudResponse> {
     let items = await this.dependencies.repository.listAllItems();
+    // Archived items stay out of every ordinary view; the Archive view asks for them alone.
+    items = items.filter((item) =>
+      command.archived === true ? item.archivedAt !== undefined : item.archivedAt === undefined,
+    );
     if (command.itemKind !== undefined)
       items = items.filter((item) => item.kind === command.itemKind);
     if (command.folderId !== undefined)
@@ -124,6 +128,7 @@ export class ItemService {
     command: Extract<ItemCrudRequest, { kind: "item.list" }>,
   ): Promise<ItemCrudResponse> {
     let items = await this.dependencies.repository.listAllItems();
+    items = items.filter((item) => item.archivedAt === undefined);
     if (command.itemKind !== undefined)
       items = items.filter((item) => item.kind === command.itemKind);
     if (command.search !== undefined) {
@@ -203,10 +208,11 @@ export class ItemService {
     // (rather than trusting the caller) keeps the pre-validated candidate consistent with
     // what the repository will ultimately persist, instead of validating against a shape
     // the client tried to smuggle in (e.g. a different `kind`).
-    const merged = {
+    const patch = fields as Record<string, unknown>;
+    const merged: Record<string, unknown> = {
       ...current,
-      ...(fields as Record<string, unknown>),
-      ...passwordHistoryFor(current, fields as Record<string, unknown>),
+      ...patch,
+      ...passwordHistoryFor(current, patch),
       id: current.id,
       kind: current.kind,
       schemaVersion: current.schemaVersion,
@@ -214,6 +220,9 @@ export class ItemService {
       createdAt: current.createdAt,
       updatedAt: current.updatedAt,
     };
+    // `null` means "clear this field". The wire format drops `undefined` keys and a spread
+    // cannot remove one, so this is the only way a client can un-file or un-archive an item.
+    for (const [key, value] of Object.entries(patch)) if (value === null) delete merged[key];
     const parsed = VaultItemSchema.safeParse(merged);
     if (!parsed.success) invalid();
     const updated = await this.dependencies.repository.updateItem(parsed.data, expectedRevision);

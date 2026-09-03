@@ -1,16 +1,21 @@
+import type { Folder, VaultItem } from "@shardpass/domain";
 import { parseItemCrudResponseForRequest } from "@shardpass/messaging";
 import { Button } from "@shardpass/ui";
 import { useState } from "react";
 
 import type { ExtensionPlatform } from "../../../platform/extension-platform";
+import { itemDisplayName } from "../../item-support";
 import { DeleteItemDialog } from "../DeleteItemDialog";
 import styles from "./Detail.module.css";
+import { OrganizeControls } from "./OrganizeControls";
 
 export interface DetailActionsProps {
-  itemId: string;
-  itemName: string;
+  item: VaultItem;
+  folders: readonly Folder[];
   platform: Pick<ExtensionPlatform, "sendMessage">;
   onEdit: () => void;
+  /** After a move or archive change. */
+  onUpdate: () => void;
   onDeleted: () => void;
 }
 
@@ -36,11 +41,11 @@ function describeFailure(candidate: unknown): string {
 }
 
 /**
- * Shared Edit/Delete row for the non-OTP detail views. Deletes through the generic
- * item.delete message (OTP items keep their own otp.delete + DeleteOtpDialog flow,
- * since otp.delete additionally requires an expectedRevision).
+ * Shared folder/archive controls plus the Edit/Delete row for the non-OTP detail views.
+ * Deletes through the generic item.delete message (OTP items keep their own otp.delete +
+ * DeleteOtpDialog flow, since otp.delete additionally requires an expectedRevision).
  */
-export function DetailActions({ itemId, itemName, platform, onEdit, onDeleted }: DetailActionsProps) {
+export function DetailActions({ item, folders, platform, onEdit, onUpdate, onDeleted }: DetailActionsProps) {
   const [confirming, setConfirming] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState("");
@@ -48,7 +53,7 @@ export function DetailActions({ itemId, itemName, platform, onEdit, onDeleted }:
   const confirmDelete = () => {
     setDeleting(true);
     setError("");
-    const request = { version: 1 as const, kind: "item.delete" as const, itemId };
+    const request = { version: 1 as const, kind: "item.delete" as const, itemId: item.id };
     platform.sendMessage(request).then(
       (candidate) => {
         const parsed = parseItemCrudResponseForRequest(request, candidate);
@@ -68,26 +73,29 @@ export function DetailActions({ itemId, itemName, platform, onEdit, onDeleted }:
   };
 
   return (
-    <div className={styles.actions}>
-      <Button variant="secondary" onClick={onEdit}>
-        Edit
-      </Button>
-      <Button variant="destructive" onClick={() => setConfirming(true)}>
-        Delete
-      </Button>
-      {confirming ? (
-        <DeleteItemDialog
-          itemName={itemName}
-          submitting={deleting}
-          error={error}
-          onCancel={() => {
-            if (deleting) return;
-            setConfirming(false);
-            setError("");
-          }}
-          onConfirm={confirmDelete}
-        />
-      ) : null}
-    </div>
+    <>
+      <OrganizeControls item={item} folders={folders} platform={platform} onUpdate={onUpdate} />
+      <div className={styles.actions}>
+        <Button variant="secondary" onClick={onEdit}>
+          Edit
+        </Button>
+        <Button variant="destructive" onClick={() => setConfirming(true)}>
+          Delete
+        </Button>
+        {confirming ? (
+          <DeleteItemDialog
+            itemName={itemDisplayName(item)}
+            submitting={deleting}
+            error={error}
+            onCancel={() => {
+              if (deleting) return;
+              setConfirming(false);
+              setError("");
+            }}
+            onConfirm={confirmDelete}
+          />
+        ) : null}
+      </div>
+    </>
   );
 }

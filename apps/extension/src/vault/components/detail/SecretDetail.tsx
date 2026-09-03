@@ -1,4 +1,4 @@
-import type { SecretItem } from "@shardpass/domain";
+import type { SecretItem, Folder } from "@shardpass/domain";
 import { StatusBadge } from "@shardpass/ui";
 import { useState } from "react";
 
@@ -13,11 +13,12 @@ import { RevealField } from "./RevealField";
 export interface SecretDetailProps {
   item: SecretItem;
   platform: ExtensionPlatform;
+  folders: readonly Folder[];
   onUpdate: () => void;
   onDeleted: () => void;
 }
 
-export function SecretDetail({ item, platform, onUpdate, onDeleted }: SecretDetailProps) {
+export function SecretDetail({ item, platform, folders, onUpdate, onDeleted }: SecretDetailProps) {
   const [editing, setEditing] = useState(false);
 
   if (editing) {
@@ -76,8 +77,9 @@ export function SecretDetail({ item, platform, onUpdate, onDeleted }: SecretDeta
       ) : null}
 
       <DetailActions
-        itemId={item.id}
-        itemName={item.name}
+        item={item}
+        folders={folders}
+        onUpdate={onUpdate}
         platform={platform}
         onEdit={() => setEditing(true)}
         onDeleted={onDeleted}

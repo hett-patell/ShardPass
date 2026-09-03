@@ -65,10 +65,7 @@ function requireNumber(kdf: ReadonlyMap<string, VariantValue>, key: string): num
 }
 
 /** Stretches the composite key with the database's own KDF settings. */
-async function transformKey(
-  kdf: ReadonlyMap<string, VariantValue>,
-  key: Uint8Array,
-): Promise<Uint8Array> {
+function transformKey(kdf: ReadonlyMap<string, VariantValue>, key: Uint8Array): Uint8Array {
   const uuid = kdf.get("$UUID");
   const kdfId = uuid instanceof Uint8Array ? formatUuid(uuid) : "";
 
@@ -103,7 +100,7 @@ async function transformKey(
 export type KdbxKeys = Readonly<{ cipherKey: Uint8Array; hmacBase: Uint8Array }>;
 
 export async function deriveKeys(header: KdbxHeader, password: string): Promise<KdbxKeys> {
-  const transformed = await transformKey(header.kdf, await compositeKey(password));
+  const transformed = transformKey(header.kdf, await compositeKey(password));
   return {
     cipherKey: await sha256(concatBytes(header.masterSeed, transformed)),
     hmacBase: await sha512(concatBytes(header.masterSeed, transformed, Uint8Array.of(0x01))),

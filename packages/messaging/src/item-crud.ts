@@ -29,6 +29,8 @@ export const ItemQueryRequestSchema = z.strictObject({
   folderId: z.optional(z.uuid()),
   search: z.optional(z.string().check(z.maxLength(256))),
   favoritesOnly: z.optional(z.boolean()),
+  /** true: only archived items. Omitted or false: only unarchived items. */
+  archived: z.optional(z.boolean()),
 });
 
 // A read-only, secret-free projection of the vault item list, safe for the popup surface.

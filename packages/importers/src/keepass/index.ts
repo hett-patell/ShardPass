@@ -1,7 +1,6 @@
 import type { ImportResult } from "../common/import-result";
 import { IMPORT_LIMITS } from "../import-model";
 import { convertEntry } from "./classify";
-import { KdbxFormatError, KdbxPasswordError } from "./kdbx-binary";
 import { readKdbx } from "./kdbx-read";
 
 export { KdbxFormatError, KdbxPasswordError } from "./kdbx-binary";

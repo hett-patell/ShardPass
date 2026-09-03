@@ -24,6 +24,8 @@ export type SafeErrorCode =
   | "ITEM_INVALID"
   | "ITEM_NOT_FOUND"
   | "ITEM_CONFLICT"
+  | "FOLDER_INVALID"
+  | "FOLDER_NOT_FOUND"
   | "LOGIN_FILL_INVALID"
   | "LOGIN_FILL_UNAVAILABLE"
   | "LOGIN_FILL_NOT_FOUND"
@@ -88,6 +90,8 @@ const messages: Readonly<Record<SafeErrorCode, string>> = {
   ITEM_INVALID: "The item is invalid.",
   ITEM_NOT_FOUND: "The item was not found.",
   ITEM_CONFLICT: "This item changed. Review the latest version and try again.",
+  FOLDER_INVALID: "That folder name is already used here, or the folder is nested too deep.",
+  FOLDER_NOT_FOUND: "That folder no longer exists.",
   LOGIN_FILL_INVALID: "This fill request is invalid.",
   LOGIN_FILL_UNAVAILABLE: "Login fill is unavailable.",
   LOGIN_FILL_NOT_FOUND: "This saved login was not found.",

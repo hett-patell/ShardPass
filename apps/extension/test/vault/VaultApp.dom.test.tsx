@@ -79,6 +79,8 @@ const itemQueryResult = {
   items: [loginItem, noteItem],
 } as const;
 
+const noFolders = { version: 1, kind: "folder.listResult", folders: [] } as const;
+
 async function expectNoSeriousAxeViolations(container: HTMLElement): Promise<void> {
   const results = await axe.run(container, {
     resultTypes: ["violations"],
@@ -102,6 +104,8 @@ function readyUnlockedPlatform(): FakeExtensionPlatform {
   const platform = new FakeExtensionPlatform("vault-test-id");
   platform.queueSendResponse(foundationStatus);
   platform.queueSendResponse(unlockedVaultState(1));
+  // Once unlocked the folder list is requested before the items (hook declaration order).
+  platform.queueSendResponse(noFolders);
   platform.queueSendResponse(itemQueryResult);
   return platform;
 }
@@ -226,6 +230,42 @@ describe("VaultApp foundation shell", () => {
       expect(platform.sentMessages).toContainEqual({ version: 1, kind: "migration.inspect" }),
     );
     expect(await screen.findByRole("heading", { name: "Vault unlocked" })).toBeVisible();
+  });
+
+  it("creates a folder inline from the sidebar and shows it in the tree", async () => {
+    const platform = readyUnlockedPlatform();
+    render(<VaultApp platform={platform} />);
+    await screen.findByText("Example Login");
+
+    const created = { id: "20000000-0000-4000-8000-000000000001", name: "Work" };
+    platform.queueSendResponse({ version: 1, kind: "folder.listResult", folders: [created] });
+
+    fireEvent.click(screen.getByRole("button", { name: "New folder" }));
+    const input = screen.getByRole("textbox", { name: "New folder name" });
+    fireEvent.change(input, { target: { value: "Work" } });
+    fireEvent.submit(input.closest("form")!);
+
+    await waitFor(() =>
+      expect(platform.sentMessages).toContainEqual({ version: 1, kind: "folder.create", name: "Work" }),
+    );
+    const tree = await screen.findByRole("tree", { name: "Folders" });
+    expect(within(tree).getByText("Work")).toBeVisible();
+  });
+
+  it("opens the Archive as a separate query and offers no New button there", async () => {
+    const platform = readyUnlockedPlatform();
+    render(<VaultApp platform={platform} />);
+    await screen.findByText("Example Login");
+
+    platform.queueSendResponse({ version: 1, kind: "item.queryResult", items: [] });
+    fireEvent.click(screen.getByRole("button", { name: "Archive" }));
+
+    await waitFor(() =>
+      expect(platform.sentMessages).toContainEqual({ version: 1, kind: "item.query", archived: true }),
+    );
+    expect(await screen.findByText("Nothing archived")).toBeVisible();
+    expect(screen.queryByRole("button", { name: /New item|Add your first item|Add one/i })).toBeNull();
+    expect(screen.getByRole("button", { name: "Archive" })).toHaveAttribute("aria-current", "true");
   });
 });
 

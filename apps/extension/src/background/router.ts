@@ -7,6 +7,9 @@ import {
   foundationSenderPolicy,
   EnteRequestSchema,
   enteSenderPolicy,
+  FolderRequestSchema,
+  folderSenderPolicy,
+  parseFolderResponseForRequest,
   GeneratePasswordRequestSchema,
   GeneratePasswordResponseSchema,
   passwordGenSenderPolicy,
@@ -35,6 +38,8 @@ import {
   type BackupResponse,
   type FoundationResponse,
   type EnteSafeState,
+  type FolderRequest,
+  type FolderResponse,
   type GeneratePasswordRequest,
   type GeneratePasswordResponse,
   type ItemCrudRequest,
@@ -53,6 +58,7 @@ import {
 } from "@shardpass/messaging";
 import { toSafeError, type SafeError, type SafeErrorCode } from "@shardpass/security";
 
+import { FolderServiceError, type FolderServiceErrorCode } from "./folder/folder-service";
 import { ItemServiceError, type ItemServiceErrorCode } from "./item/item-service";
 import { LoginFillServiceError, type LoginFillServiceErrorCode } from "./login/login-fill-service";
 import { OtpFillServiceError, type OtpFillServiceErrorCode } from "./otp/otp-fill-service";
@@ -72,6 +78,7 @@ export type BackgroundErrorResponse = Readonly<{
 
 export type BackgroundResponse =
   | BackupResponse
+  | FolderResponse
   | FoundationResponse
   | GeneratePasswordResponse
   | ItemCrudResponse
@@ -110,6 +117,13 @@ const itemErrorCodes = {
   ITEM_NOT_FOUND: "ITEM_NOT_FOUND",
   ITEM_CONFLICT: "ITEM_CONFLICT",
 } satisfies Record<ItemServiceErrorCode, SafeErrorCode>;
+
+const folderErrorCodes = {
+  VAULT_LOCKED: "VAULT_LOCKED",
+  VAULT_UNAVAILABLE: "VAULT_UNAVAILABLE",
+  FOLDER_INVALID: "FOLDER_INVALID",
+  FOLDER_NOT_FOUND: "FOLDER_NOT_FOUND",
+} satisfies Record<FolderServiceErrorCode, SafeErrorCode>;
 
 const loginFillErrorCodes = {
   LOGIN_FILL_INVALID: "LOGIN_FILL_INVALID",
@@ -154,6 +168,9 @@ type LoginFillHandler = Readonly<{
 }>;
 type PasswordGenHandler = Readonly<{
   handle(request: GeneratePasswordRequest): Promise<unknown>;
+}>;
+type FolderHandler = Readonly<{
+  handle(request: FolderRequest, sender: SenderContext): Promise<unknown>;
 }>;
 
 function errorResponse(code: SafeErrorCode): BackgroundErrorResponse {
@@ -265,7 +282,25 @@ export function routeMessage(
   itemService?: ItemHandler,
   loginFillService?: LoginFillHandler,
   passwordGenService?: PasswordGenHandler,
+  folderService?: FolderHandler,
 ): Promise<BackgroundResponse> {
+  const folderRequest = FolderRequestSchema.safeParse(input);
+  if (folderRequest.success) {
+    const policy = folderSenderPolicy[folderRequest.data.kind];
+    if (!authorizeSender(senderContext, { extensionId: expectedExtensionId, ...policy }))
+      return Promise.resolve(errorResponse("UNAUTHORIZED_SENDER"));
+    if (folderService === undefined) return Promise.resolve(errorResponse("VAULT_UNAVAILABLE"));
+    return folderService
+      .handle(folderRequest.data, senderContext as SenderContext)
+      .then((candidate) => {
+        const parsed = parseFolderResponseForRequest(folderRequest.data, candidate);
+        return parsed.success ? parsed.data : errorResponse("VAULT_UNAVAILABLE");
+      })
+      .catch((error: unknown) =>
+        errorResponse(error instanceof FolderServiceError ? folderErrorCodes[error.code] : "UNEXPECTED"),
+      );
+  }
+
   const itemRequest = ItemCrudRequestSchema.safeParse(input);
   if (itemRequest.success) {
     const policy = itemCrudSenderPolicy[itemRequest.data.kind];

@@ -1,4 +1,4 @@
-import type { CardItem } from "@shardpass/domain";
+import type { CardItem, Folder } from "@shardpass/domain";
 import { useState } from "react";
 
 import type { ExtensionPlatform } from "../../../platform/extension-platform";
@@ -11,11 +11,12 @@ import { RevealField } from "./RevealField";
 export interface CardDetailProps {
   item: CardItem;
   platform: ExtensionPlatform;
+  folders: readonly Folder[];
   onUpdate: () => void;
   onDeleted: () => void;
 }
 
-export function CardDetail({ item, platform, onUpdate, onDeleted }: CardDetailProps) {
+export function CardDetail({ item, platform, folders, onUpdate, onDeleted }: CardDetailProps) {
   const [editing, setEditing] = useState(false);
 
   if (editing) {
@@ -80,8 +81,9 @@ export function CardDetail({ item, platform, onUpdate, onDeleted }: CardDetailPr
       ) : null}
 
       <DetailActions
-        itemId={item.id}
-        itemName={item.name}
+        item={item}
+        folders={folders}
+        onUpdate={onUpdate}
         platform={platform}
         onEdit={() => setEditing(true)}
         onDeleted={onDeleted}

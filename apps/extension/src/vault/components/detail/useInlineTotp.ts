@@ -74,7 +74,6 @@ export function useInlineTotp(login: LoginItem, active: boolean): InlineTotpStat
     };
     // `login` is read through `totp`/identity fields only; re-running on every object
     // identity change would restart the timer on each parent render.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active, totp, login.id]);
 
   return state;

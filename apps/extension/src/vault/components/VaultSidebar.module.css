@@ -110,3 +110,114 @@
   color: var(--accent);
   background: var(--accent-subtle);
 }
+
+.sectionHeading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-1);
+}
+.sectionHeading .sectionLabel {
+  margin: 0;
+}
+
+.folderRow {
+  display: flex;
+  align-items: center;
+  min-height: 32px;
+  border-radius: var(--radius-sm);
+}
+.folderRow:hover {
+  background: var(--bg-secondary);
+}
+.folderRow .folderItem {
+  min-height: 0;
+  padding-block: 6px;
+  padding-inline: 0 var(--space-1);
+  background: transparent;
+}
+.folderRow .folderItem:hover {
+  background: transparent;
+}
+.folderRowActive {
+  background: var(--accent-subtle);
+}
+.folderRowActive:hover {
+  background: var(--accent-subtle);
+}
+.folderRowActive .folderItem {
+  color: var(--accent);
+}
+
+.rowTools {
+  display: none;
+  align-items: center;
+  gap: 1px;
+  padding-inline-end: var(--space-1);
+}
+.folderRow:hover .rowTools,
+.folderRow:focus-within .rowTools {
+  display: inline-flex;
+}
+
+.iconButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  color: var(--text-tertiary);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.iconButton:hover:not(:disabled) {
+  color: var(--text-primary);
+  background: var(--bg-tertiary, var(--bg-secondary));
+}
+.iconButton:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.iconButton:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.iconButtonDanger:hover:not(:disabled) {
+  color: var(--danger);
+}
+
+.folderEditor {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 32px;
+  padding-inline-end: var(--space-1);
+  color: var(--text-secondary);
+}
+.folderInput {
+  flex: 1;
+  min-width: 0;
+  min-height: 26px;
+  padding: 2px var(--space-2);
+  color: var(--text-primary);
+  background: var(--bg-primary);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  font: inherit;
+  font-size: 13px;
+}
+.folderInput:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.folderError {
+  margin: var(--space-2) 0 0;
+  padding: 0 var(--space-2);
+  color: var(--danger);
+  font-size: var(--text-xs);
+  line-height: var(--line-body);
+}

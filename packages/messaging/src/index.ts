@@ -252,3 +252,15 @@ export type {
   ItemCrudResponseKind,
   ItemListItemProjection,
 } from "./item-crud";
+export {
+  FolderCreateRequestSchema,
+  FolderDeleteRequestSchema,
+  FolderListRequestSchema,
+  FolderListResultSchema,
+  FolderRenameRequestSchema,
+  FolderRequestSchema,
+  FolderResponseSchema,
+  folderSenderPolicy,
+  parseFolderResponseForRequest,
+} from "./folder";
+export type { FolderCommandKind, FolderRequest, FolderResponse } from "./folder";

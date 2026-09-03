@@ -1,4 +1,4 @@
-import type { OtpItem } from "@shardpass/domain";
+import type { Folder, OtpItem } from "@shardpass/domain";
 import type { OtpEditableInput, OtpResponse } from "@shardpass/messaging";
 import { Button, StatusBadge } from "@shardpass/ui";
 import { useRef, useState } from "react";
@@ -8,11 +8,13 @@ import { DeleteOtpDialog } from "../../otp/DeleteOtpDialog";
 import { OtpEditor } from "../../otp/OtpEditor";
 import { CopyButton } from "./CopyButton";
 import styles from "./Detail.module.css";
+import { OrganizeControls } from "./OrganizeControls";
 import { useOtpLiveCode } from "./useOtpLiveCode";
 
 export interface OtpDetailProps {
   item: OtpItem;
   platform: ExtensionPlatform;
+  folders: readonly Folder[];
   onUpdate: () => void;
   onDeleted: () => void;
 }
@@ -55,7 +57,7 @@ function errorCode(error: unknown): string | undefined {
  * useOtpVault hook. Live TOTP/Steam codes are fetched directly since HOTP counters
  * must never be advanced just by viewing an item.
  */
-export function OtpDetail({ item, platform, onUpdate, onDeleted }: OtpDetailProps) {
+export function OtpDetail({ item, platform, folders, onUpdate, onDeleted }: OtpDetailProps) {
   const [editing, setEditing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [conflict, setConflict] = useState(false);
@@ -188,6 +190,8 @@ export function OtpDetail({ item, platform, onUpdate, onDeleted }: OtpDetailProp
           <p className={styles.value}>{item.note}</p>
         </div>
       ) : null}
+
+      <OrganizeControls item={item} folders={folders} platform={platform} onUpdate={onUpdate} />
 
       <div className={styles.actions}>
         <Button variant="secondary" onClick={() => setEditing(true)}>

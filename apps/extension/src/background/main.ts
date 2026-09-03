@@ -25,6 +25,7 @@ import { EnteSyncScheduler } from "./ente/scheduler";
 import { EnteProtocolError } from "./ente/protocol";
 import { createProductionEnteRuntimeDependencies } from "./ente/production-runtime";
 import { createEnteRuntimeOwner, type EnteRuntimeDependencies } from "./ente/runtime";
+import { FolderService } from "./folder/folder-service";
 import { ItemService } from "./item/item-service";
 import { LoginFillService } from "./login/login-fill-service";
 import { createInternalHotpLifecycle } from "./otp/hotp-lifecycle";
@@ -139,6 +140,11 @@ export function installBackground(
   const unregisterImportCleanup = sessions.onLockOrDispose(() => otpImport.clearForSession());
   const item = new ItemService({
     repository: sessions.vaultRepository,
+    notePrivilegedActivity: () => settings.notePrivilegedActivity(),
+  });
+  const folder = new FolderService({
+    repository: sessions.vaultRepository,
+    nextId: () => crypto.randomUUID(),
     notePrivilegedActivity: () => settings.notePrivilegedActivity(),
   });
   const loginFill = new LoginFillService({
@@ -296,6 +302,7 @@ export function installBackground(
         item,
         loginFill,
         passwordGen,
+        folder,
       );
       if (parsedVault.success) {
         const state = await sessions.getState();

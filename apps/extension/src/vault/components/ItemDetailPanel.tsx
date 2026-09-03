@@ -1,4 +1,4 @@
-import type { OtpItem, VaultItem } from "@shardpass/domain";
+import type { Folder, OtpItem, VaultItem } from "@shardpass/domain";
 
 import type { ExtensionPlatform } from "../../platform/extension-platform";
 import { CardDetail } from "./detail/CardDetail";
@@ -13,12 +13,14 @@ export interface ItemDetailPanelProps {
   platform: ExtensionPlatform;
   /** Full OTP item set, used by LoginDetail to resolve and preview a linked OTP. */
   otpItems: readonly OtpItem[];
+  /** Vault folders, for the Move control on every detail view. */
+  folders: readonly Folder[];
   onUpdate: () => void;
   onDeleted: () => void;
 }
 
 /** Dispatches to the per-kind detail/edit surface for the selected vault item. */
-export function ItemDetailPanel({ item, platform, otpItems, onUpdate, onDeleted }: ItemDetailPanelProps) {
+export function ItemDetailPanel({ item, platform, otpItems, folders, onUpdate, onDeleted }: ItemDetailPanelProps) {
   switch (item.kind) {
     case "login":
       return (
@@ -26,19 +28,20 @@ export function ItemDetailPanel({ item, platform, otpItems, onUpdate, onDeleted 
           item={item}
           platform={platform}
           otpItems={otpItems}
+          folders={folders}
           onUpdate={onUpdate}
           onDeleted={onDeleted}
         />
       );
     case "otp":
-      return <OtpDetail item={item} platform={platform} onUpdate={onUpdate} onDeleted={onDeleted} />;
+      return <OtpDetail item={item} platform={platform} folders={folders} onUpdate={onUpdate} onDeleted={onDeleted} />;
     case "note":
-      return <NoteDetail item={item} platform={platform} onUpdate={onUpdate} onDeleted={onDeleted} />;
+      return <NoteDetail item={item} platform={platform} folders={folders} onUpdate={onUpdate} onDeleted={onDeleted} />;
     case "card":
-      return <CardDetail item={item} platform={platform} onUpdate={onUpdate} onDeleted={onDeleted} />;
+      return <CardDetail item={item} platform={platform} folders={folders} onUpdate={onUpdate} onDeleted={onDeleted} />;
     case "identity":
-      return <IdentityDetail item={item} platform={platform} onUpdate={onUpdate} onDeleted={onDeleted} />;
+      return <IdentityDetail item={item} platform={platform} folders={folders} onUpdate={onUpdate} onDeleted={onDeleted} />;
     case "secret":
-      return <SecretDetail item={item} platform={platform} onUpdate={onUpdate} onDeleted={onDeleted} />;
+      return <SecretDetail item={item} platform={platform} folders={folders} onUpdate={onUpdate} onDeleted={onDeleted} />;
   }
 }

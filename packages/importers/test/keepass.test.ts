@@ -2,13 +2,11 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 
-import {
-  KdbxFormatError,
+import {  KdbxFormatError,
   KdbxPasswordError,
   convertEntry,
   importKeePassKdbx,
-  readKdbx,
-} from "../src/keepass";
+  readKdbx, type KeePassEntry } from "../src/keepass";
 
 const PASSWORD = "fixture-master-password";
 const FIXTURES = path.join(__dirname, "fixtures", "keepass");
@@ -142,7 +140,7 @@ function nameOf(item: { kind: string; name?: string; issuer?: string }): string 
 }
 
 describe("KeePass classifier hardening", () => {
-  const entry = (overrides: Partial<import("../src/keepass").KeePassEntry> = {}) => ({
+  const entry = (overrides: Partial<KeePassEntry> = {}) => ({
     title: "Entry",
     username: "",
     password: "",

@@ -44,13 +44,13 @@ type AccessLevelCapableArea = chrome.storage.StorageArea & {
 
 /** Restricts an area to trusted contexts where the browser supports it; warns where it does not. */
 async function setTrustedAccess(area: chrome.storage.StorageArea, label: string): Promise<void> {
-  const { setAccessLevel } = area as AccessLevelCapableArea;
-  if (typeof setAccessLevel !== "function") {
+  const capable = area as AccessLevelCapableArea;
+  if (typeof capable.setAccessLevel !== "function") {
     console.warn(`[ShardPass] ${label}.setAccessLevel is unavailable; keeping default access.`);
     return;
   }
   try {
-    await setAccessLevel.call(area, { accessLevel: "TRUSTED_CONTEXTS" });
+    await capable.setAccessLevel({ accessLevel: "TRUSTED_CONTEXTS" });
   } catch (error) {
     console.warn(`[ShardPass] ${label}.setAccessLevel failed; keeping default access.`, error);
   }

@@ -117,6 +117,14 @@ class FakeRepository implements Omit<
     return Promise.resolve(structuredClone(created));
   }
 
+  readFolders() {
+    return Promise.resolve([]);
+  }
+
+  replaceFolders() {
+    return Promise.resolve();
+  }
+
   async createItems(candidates: readonly VaultItem[]) {
     const outcomes: { index: number; status: "created"; itemId: string }[] = [];
     for (const [index, candidate] of candidates.entries()) {

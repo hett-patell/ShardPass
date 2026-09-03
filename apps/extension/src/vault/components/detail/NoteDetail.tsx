@@ -1,4 +1,4 @@
-import type { NoteItem } from "@shardpass/domain";
+import type { NoteItem, Folder } from "@shardpass/domain";
 import { useState } from "react";
 
 import type { ExtensionPlatform } from "../../../platform/extension-platform";
@@ -9,11 +9,12 @@ import { DetailActions } from "./DetailActions";
 export interface NoteDetailProps {
   item: NoteItem;
   platform: ExtensionPlatform;
+  folders: readonly Folder[];
   onUpdate: () => void;
   onDeleted: () => void;
 }
 
-export function NoteDetail({ item, platform, onUpdate, onDeleted }: NoteDetailProps) {
+export function NoteDetail({ item, platform, folders, onUpdate, onDeleted }: NoteDetailProps) {
   const [editing, setEditing] = useState(false);
 
   if (editing) {
@@ -52,8 +53,9 @@ export function NoteDetail({ item, platform, onUpdate, onDeleted }: NoteDetailPr
       </div>
 
       <DetailActions
-        itemId={item.id}
-        itemName={item.name}
+        item={item}
+        folders={folders}
+        onUpdate={onUpdate}
         platform={platform}
         onEdit={() => setEditing(true)}
         onDeleted={onDeleted}

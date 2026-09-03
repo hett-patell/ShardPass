@@ -23,9 +23,10 @@ import { ItemListPanel } from "./components/ItemListPanel";
 import { NewItemMenu } from "./components/NewItemMenu";
 import { VaultSidebar, type VaultSidebarView } from "./components/VaultSidebar";
 import { EnteSettings } from "./ente/EnteSettings";
+import { useFolders } from "./hooks/useFolders";
 import { countByKind, useVaultState } from "./hooks/useVaultState";
 import { ImportDialog } from "./import/ImportDialog";
-import { summarizeFolders } from "./item-support";
+import { countItemsByFolder } from "./item-support";
 import { MigrationPanel } from "./migration/MigrationPanel";
 import { defaultOtpInput, OtpEditor } from "./otp/OtpEditor";
 import styles from "./VaultApp.module.css";
@@ -62,16 +63,37 @@ export function VaultApp({ platform }: VaultAppProps) {
   const [otpCreating, setOtpCreating] = useState(false);
   const [otpCreateError, setOtpCreateError] = useState("");
 
-  const vaultState = useVaultState(platform, vaultUnlocked);
+  const folderState = useFolders(platform, vaultUnlocked);
+  const vaultState = useVaultState(platform, vaultUnlocked, folderState.folders);
   const selectedItem =
     creatingKind === null ? (vaultState.items.find((item) => item.id === vaultState.selectedId) ?? null) : null;
   const otpItems = vaultState.allItems.filter((item): item is OtpItem => item.kind === "otp");
-  const folders = summarizeFolders(vaultState.allItems);
+  const folderCounts = countItemsByFolder(vaultState.allItems);
 
   const goToVaultView = useCallback(() => {
     setView("vault");
     setCreatingKind(null);
-  }, []);
+    vaultState.setArchived(false);
+  }, [vaultState]);
+
+  const openArchive = useCallback(() => {
+    setView("vault");
+    setCreatingKind(null);
+    vaultState.setSelectedId(null);
+    vaultState.setCategory("all");
+    vaultState.setFolderId(null);
+    vaultState.setArchived(true);
+  }, [vaultState]);
+
+  // Deleting a folder un-files its items in the background; the list must catch up.
+  const deleteFolder = useCallback(
+    async (id: string) => {
+      const ok = await folderState.remove(id);
+      if (ok) vaultState.refresh();
+      return ok;
+    },
+    [folderState, vaultState],
+  );
 
   const selectItem = useCallback(
     (id: string) => {
@@ -106,6 +128,7 @@ export function VaultApp({ platform }: VaultAppProps) {
   const startCreate = useCallback(
     (kind: VaultItemKind) => {
       setView("vault");
+      vaultState.setArchived(false);
       vaultState.setSelectedId(null);
       setOtpCreateError("");
       setCreatingKind(kind);
@@ -177,9 +200,16 @@ export function VaultApp({ platform }: VaultAppProps) {
                 category={vaultState.category}
                 onCategoryChange={handleCategoryChange}
                 itemCounts={countByKind(vaultState.allItems)}
-                folders={folders}
+                folders={folderState.folders}
+                folderCounts={folderCounts}
                 selectedFolderId={vaultState.folderId}
                 onFolderSelect={handleFolderSelect}
+                folderError={folderState.error}
+                onCreateFolder={folderState.create}
+                onRenameFolder={folderState.rename}
+                onDeleteFolder={deleteFolder}
+                archived={vaultState.archived}
+                onOpenArchive={openArchive}
                 view={view}
                 onOpenSettings={() => setView("settings")}
                 onOpenEnte={() => setView("ente")}
@@ -193,9 +223,9 @@ export function VaultApp({ platform }: VaultAppProps) {
                     <SearchBar
                       value={vaultState.search}
                       onChange={vaultState.setSearch}
-                      placeholder="Search vault"
+                      placeholder={vaultState.archived ? "Search archive" : "Search vault"}
                     />
-                    <NewItemMenu onSelect={startCreate} />
+                    {vaultState.archived ? null : <NewItemMenu onSelect={startCreate} />}
                   </div>
                   <div className={styles.listBody}>
                     <ItemListPanel
@@ -205,8 +235,9 @@ export function VaultApp({ platform }: VaultAppProps) {
                       status={vaultState.status}
                       search={vaultState.search}
                       category={vaultState.category}
+                      archived={vaultState.archived}
                       onRetry={vaultState.refresh}
-                      onCreate={() => startCreate("login")}
+                      {...(vaultState.archived ? {} : { onCreate: () => startCreate("login") })}
                     />
                   </div>
                 </div>
@@ -245,6 +276,7 @@ export function VaultApp({ platform }: VaultAppProps) {
                       item={selectedItem}
                       platform={platform}
                       otpItems={otpItems}
+                      folders={folderState.folders}
                       onUpdate={handleUpdate}
                       onDeleted={handleDeleted}
                     />

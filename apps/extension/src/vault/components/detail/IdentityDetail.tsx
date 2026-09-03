@@ -1,4 +1,4 @@
-import type { IdentityItem } from "@shardpass/domain";
+import type { IdentityItem, Folder } from "@shardpass/domain";
 import { useState } from "react";
 
 import type { ExtensionPlatform } from "../../../platform/extension-platform";
@@ -11,6 +11,7 @@ import { RevealField } from "./RevealField";
 export interface IdentityDetailProps {
   item: IdentityItem;
   platform: ExtensionPlatform;
+  folders: readonly Folder[];
   onUpdate: () => void;
   onDeleted: () => void;
 }
@@ -34,7 +35,7 @@ function PlainRow({ label, value }: { label: string; value: string | undefined }
   );
 }
 
-export function IdentityDetail({ item, platform, onUpdate, onDeleted }: IdentityDetailProps) {
+export function IdentityDetail({ item, platform, folders, onUpdate, onDeleted }: IdentityDetailProps) {
   const [editing, setEditing] = useState(false);
 
   if (editing) {
@@ -123,8 +124,9 @@ export function IdentityDetail({ item, platform, onUpdate, onDeleted }: Identity
       ) : null}
 
       <DetailActions
-        itemId={item.id}
-        itemName={item.name}
+        item={item}
+        folders={folders}
+        onUpdate={onUpdate}
         platform={platform}
         onEdit={() => setEditing(true)}
         onDeleted={onDeleted}

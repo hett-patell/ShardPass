@@ -13,13 +13,17 @@ export interface ItemListPanelProps {
   search?: string;
   /** The active category key; "all" means no category filter. */
   category?: string;
+  /** True when listing the archive; changes the empty-state copy. */
+  archived?: boolean;
   onRetry?: () => void;
   onCreate?: () => void;
 }
 
 const SKELETON_ROWS = 6;
 
-function emptyCopy(search: string, category: string): { title: string; body: string } {
+function emptyCopy(search: string, category: string, archived: boolean): { title: string; body: string } {
+  if (archived && search === "")
+    return { title: "Nothing archived", body: "Archive an item from its detail view to tuck it away without deleting it." };
   if (search.trim() !== "")
     return { title: `No results for “${search.trim()}”`, body: "Check the spelling, or search a different field." };
   if (category !== "all" && category !== "")
@@ -37,6 +41,7 @@ export function ItemListPanel({
   category = "all",
   onRetry,
   onCreate,
+  archived = false,
 }: ItemListPanelProps) {
   if (status === "loading" && items.length === 0) {
     return (
@@ -69,7 +74,7 @@ export function ItemListPanel({
   }
 
   if (items.length === 0) {
-    const copy = emptyCopy(search, category);
+    const copy = emptyCopy(search, category, archived);
     return (
       <div className={styles.stateBlock}>
         <strong>{copy.title}</strong>

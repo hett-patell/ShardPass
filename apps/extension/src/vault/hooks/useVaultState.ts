@@ -1,10 +1,10 @@
-import type { VaultItem } from "@shardpass/domain";
+import type { Folder, VaultItem } from "@shardpass/domain";
 import { parseItemCrudResponseForRequest } from "@shardpass/messaging";
 import type { CategoryKey } from "@shardpass/ui";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { ExtensionPlatform } from "../../platform/extension-platform";
-import { itemDisplayName } from "../item-support";
+import { folderSubtreeIds, itemDisplayName } from "../item-support";
 
 export type VaultStateStatus = "idle" | "loading" | "ready" | "error";
 
@@ -14,6 +14,8 @@ export interface UseVaultStateResult {
   /** `allItems` narrowed by the current category, folder, and search text. */
   items: readonly VaultItem[];
   status: VaultStateStatus;
+  archived: boolean;
+  setArchived: (archived: boolean) => void;
   category: CategoryKey;
   setCategory: (category: CategoryKey) => void;
   folderId: string | null;
@@ -27,7 +29,7 @@ export interface UseVaultStateResult {
 }
 
 const emptyItems: readonly VaultItem[] = [];
-const queryRequest = { version: 1 as const, kind: "item.query" as const };
+const noFolders: readonly Folder[] = Object.freeze([]);
 
 function normalizeSearch(value: string): string {
   return value.trim().normalize("NFKC").toLocaleLowerCase("en-US");
@@ -49,11 +51,21 @@ function matchesSearch(item: VaultItem, query: string): boolean {
 export function useVaultState(
   platform: Pick<ExtensionPlatform, "sendMessage">,
   active: boolean,
+  folders: readonly Folder[] = noFolders,
 ): UseVaultStateResult {
   const [allItems, setAllItems] = useState<readonly VaultItem[]>(emptyItems);
   const [status, setStatus] = useState<VaultStateStatus>(active ? "loading" : "idle");
   const [category, setCategory] = useState<CategoryKey>("all");
   const [folderId, setFolderId] = useState<string | null>(null);
+  // The Archive view is a separate query, not a client-side filter: the background keeps
+  // archived items out of every ordinary listing and only hands them over when asked.
+  const [archived, setArchived] = useState(false);
+  // Selecting a folder shows everything filed beneath it too, the way a file browser's
+  // scope works; a bare id match would hide items sitting in sub-folders.
+  const folderScope = useMemo(
+    () => (folderId === null ? new Set<string>() : folderSubtreeIds(folders, folderId)),
+    [folders, folderId],
+  );
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const generation = useRef(0);
@@ -61,6 +73,7 @@ export function useVaultState(
   const load = useCallback(() => {
     const token = ++generation.current;
     setStatus((current) => (current === "ready" ? current : "loading"));
+    const queryRequest = { version: 1 as const, kind: "item.query" as const, ...(archived ? { archived: true } : {}) };
     platform.sendMessage(queryRequest).then(
       (candidate) => {
         if (token !== generation.current) return;
@@ -79,7 +92,7 @@ export function useVaultState(
         setStatus("error");
       },
     );
-  }, [platform]);
+  }, [platform, archived]);
 
   useEffect(() => {
     if (!active) {
@@ -89,6 +102,7 @@ export function useVaultState(
       setSelectedId(null);
       setCategory("all");
       setFolderId(null);
+      setArchived(false);
       setSearch("");
       return;
     }
@@ -102,7 +116,8 @@ export function useVaultState(
   const query = normalizeSearch(search);
   const items = allItems.filter((item) => {
     if (category !== "all" && item.kind !== category) return false;
-    if (folderId !== null && item.folderId !== folderId) return false;
+    if (folderId !== null && (item.folderId === undefined || !folderScope.has(item.folderId)))
+      return false;
     return matchesSearch(item, query);
   });
 
@@ -119,6 +134,8 @@ export function useVaultState(
     selectedId,
     setSelectedId,
     refresh,
+    archived,
+    setArchived,
   };
 }
 

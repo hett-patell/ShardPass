@@ -170,11 +170,12 @@ class FakeRepository implements Pick<
     return Promise.resolve(value === undefined ? null : structuredClone(value));
   }
 
-  async createItems(candidates: readonly VaultItem[]) {
-    return candidates.map((item, index) => {
+  createItems(candidates: readonly VaultItem[]) {
+    const results = candidates.map((item, index) => {
       this.items.set(item.id, item);
       return { index, status: "created" as const, itemId: item.id };
     });
+    return Promise.resolve(results);
   }
 
   createItem(candidate: VaultItem): Promise<VaultItem> {
@@ -613,7 +614,7 @@ describe("item.createMany", () => {
       results: [
         // Same account as the stored login (name, username, host) under a new id.
         { index: 0, status: "duplicate" },
-        { index: 1, status: "invalid", reason: expect.any(String) },
+        { index: 1, status: "invalid", reason: expect.any(String) as unknown },
         { index: 2, status: "created", itemId: ids.created },
       ],
     });
@@ -741,5 +742,32 @@ describe("inactivity-lock activity", () => {
       vaultSender,
     );
     expect(activity).toEqual(["noted"]);
+  });
+});
+
+describe("archive", () => {
+  it("keeps archived items out of every ordinary listing and shows them only on request", async () => {
+    const archived = loginItem({ id: ids.created, name: "Old", archivedAt: nowIso });
+    const { service } = fixture([loginItem(), archived]);
+    const everyday = (await service.handle(request("item.query"), vaultSender)) as { items: { id: string }[] };
+    expect(everyday.items.map((item) => item.id)).toEqual([ids.login]);
+    const popup = (await service.handle(request("item.list"), popupSender)) as { items: { id: string }[] };
+    expect(popup.items.map((item) => item.id)).toEqual([ids.login]);
+    const shelf = (await service.handle(request("item.query", { archived: true }), vaultSender)) as { items: { id: string }[] };
+    expect(shelf.items.map((item) => item.id)).toEqual([ids.created]);
+  });
+});
+
+describe("update clears", () => {
+  it("treats a null field as a request to remove it, so un-filing survives the wire format", async () => {
+    const filed = loginItem({ folderId: "11111111-1111-4111-8111-111111111111", archivedAt: nowIso });
+    const { service, repository } = fixture([filed]);
+    const response = (await service.handle(
+      request("item.update", { itemId: filed.id, expectedRevision: filed.revision, fields: { folderId: null, archivedAt: null } }),
+      vaultSender,
+    )) as { item: Record<string, unknown> };
+    expect(response.item).not.toHaveProperty("folderId");
+    expect(response.item).not.toHaveProperty("archivedAt");
+    expect(await repository.getItem(filed.id)).not.toHaveProperty("folderId");
   });
 });

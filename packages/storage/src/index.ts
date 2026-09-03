@@ -117,3 +117,5 @@ export type {
   VaultRoot,
   WrappedVaultKey,
 } from "./vault-format";
+export { FoldersDocumentSchema, folderDepth, folderSubtree } from "./folders";
+export type { FoldersDocument } from "./folders";

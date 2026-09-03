@@ -71,12 +71,16 @@ export async function updateItem(
   expectedRevision: number,
   fields: Record<string, unknown>,
 ): Promise<SubmitItemResult> {
+  // Chrome's message serialization drops `undefined` keys, and the background merges with a
+  // spread, so "clear this field" must travel as `null` (which the service deletes).
   const request = {
     version: 1 as const,
     kind: "item.update" as const,
     itemId,
     expectedRevision,
-    fields,
+    fields: Object.fromEntries(
+      Object.entries(fields).map(([key, value]) => [key, value === undefined ? null : value]),
+    ),
   };
   try {
     const candidate = await platform.sendMessage(request);

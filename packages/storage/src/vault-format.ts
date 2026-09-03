@@ -23,6 +23,7 @@ export const GENERATION_METADATA_NAMES = Object.freeze([
   "lock-settings",
   "ente-otp-state",
   "hotp-pending-state",
+  "folders",
 ] as const);
 export const MAX_ENCRYPTED_RECORD_BYTES = 256 * 1024;
 export const MIN_ARGON2_MEMORY_KIB = 8_192;

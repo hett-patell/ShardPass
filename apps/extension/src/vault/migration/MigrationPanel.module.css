@@ -4,7 +4,9 @@
   color: var(--text-primary);
   background: var(--bg-secondary);
   border: 1px solid var(--border-hover);
-  border-left: 2px solid var(--accent);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius-md);
   border-radius: var(--radius-sm);
 }
 
@@ -32,7 +34,7 @@
   font-size: var(--text-xs);
   font-weight: 600;
   line-height: var(--line-compact);
-  letter-spacing: 0.07em;
+  letter-spacing: 0;
 }
 
 
@@ -107,7 +109,9 @@
 }
 
 .errorRegion {
-  border-left: 2px solid var(--danger);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--danger);
+  border-radius: var(--radius-md);
 }
 
 .errorRegion strong {

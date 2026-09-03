@@ -1,4 +1,4 @@
-import type { OtpItem, VaultItem } from "@shardpass/domain";
+import type { OtpItem, VaultItem, Folder } from "@shardpass/domain";
 import type {
   CreateManyOutcome,
   GenerationMetadataName,
@@ -58,6 +58,9 @@ export interface SessionVaultRepository {
   createItem(candidate: VaultItem): Promise<VaultItem>;
   /** Batch creation under one commit; see VaultRepository.createMany. */
   createItems(candidates: readonly VaultItem[]): Promise<readonly CreateManyOutcome[]>;
+  /** Vault-wide folder metadata (names, nesting). Encrypted alongside everything else. */
+  readFolders(): Promise<readonly Folder[]>;
+  replaceFolders(folders: readonly Folder[]): Promise<void>;
   /** Generic item update, any kind. The repository re-derives id/kind/schemaVersion/revision/timestamps. */
   updateItem(candidate: VaultItem, expectedRevision: number): Promise<VaultItem>;
   readPortableState(): Promise<PortableVaultState>;
@@ -113,6 +116,8 @@ type SessionVaultRepositoryOperations = Readonly<{
   getItem(itemId: string): Promise<VaultItem | null>;
   createItem(candidate: VaultItem): Promise<VaultItem>;
   createItems(candidates: readonly VaultItem[]): Promise<readonly CreateManyOutcome[]>;
+  readFolders(): Promise<readonly Folder[]>;
+  replaceFolders(folders: readonly Folder[]): Promise<void>;
   updateItem(candidate: VaultItem, expectedRevision: number): Promise<VaultItem>;
   readGenerationMetadata(name: GenerationMetadataName): Promise<Uint8Array | null>;
   readOtpItemsAndMetadata(
@@ -184,6 +189,8 @@ export function createSessionVaultRepository(
     getItem: (itemId) => operations.getItem(itemId),
     createItem: (candidate) => operations.createItem(candidate),
     createItems: (candidates) => operations.createItems(candidates),
+    readFolders: () => operations.readFolders(),
+    replaceFolders: (folders) => operations.replaceFolders(folders),
     updateItem: (candidate, expectedRevision) => operations.updateItem(candidate, expectedRevision),
     readGenerationMetadata: (name) => operations.readGenerationMetadata(name),
     readOtpItemsAndMetadata: (name) => operations.readOtpItemsAndMetadata(name),

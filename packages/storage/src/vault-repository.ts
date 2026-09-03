@@ -6,6 +6,7 @@ import {
   type OtpItem,
   type VaultItem,
   type VaultItemKind,
+  type Folder,
 } from "@shardpass/domain";
 
 import { ChangeJournal, MAX_JOURNAL_ENTRIES, type ChangeJournalEntry } from "./change-journal";
@@ -47,6 +48,8 @@ import {
 } from "./vault-format";
 
 const HOTP_RECEIPT_RETENTION_MS = 5 * 60_000;
+
+import { FoldersDocumentSchema } from "./folders";
 
 export interface VaultItemMetadata {
   readonly id: string;
@@ -493,6 +496,43 @@ export class VaultRepository {
         context,
       );
       return outcomes;
+    });
+  }
+
+  /** The vault's folders; an empty list when none have been created. */
+  async readFolders(context: VaultCryptoContext): Promise<readonly Folder[]> {
+    const loaded = await this.load(context);
+    const entry = loaded.metadata.find((candidate) => candidate.name === "folders");
+    if (entry === undefined) return [];
+    try {
+      const text = new TextDecoder("utf-8", { fatal: true }).decode(
+        await this.generations.decryptMetadata(entry, context),
+      );
+      const document = FoldersDocumentSchema.parse(JSON.parse(text));
+      if (canonicalJson(document) !== text) throw new Error("noncanonical folders");
+      return Object.freeze(document.folders.map((folder) => Object.freeze({ ...folder })));
+    } catch {
+      throw new StorageError("STORAGE_CORRUPT");
+    }
+  }
+
+  /** Replaces the folder list under one commit; records are untouched. */
+  async replaceFolders(folders: readonly Folder[], context: VaultCryptoContext): Promise<void> {
+    const parsed = FoldersDocumentSchema.safeParse({ version: 1, folders: [...folders] });
+    if (!parsed.success) throw new StorageError("VAULT_INVALID");
+    const plaintext = new TextEncoder().encode(canonicalJson(parsed.data));
+    return this.serialize(async () => {
+      const loaded = await this.load(context);
+      const metadata = await replaceMetadataEntry(loaded.metadata, "folders", plaintext, context, this.generations);
+      await this.commitPlaintextMetadata(
+        loaded.root,
+        loaded.records,
+        loaded.journal,
+        loaded.receipts,
+        metadata,
+        new Set(),
+        context,
+      );
     });
   }
 
@@ -1774,23 +1814,33 @@ async function replacePortableSettingsMetadata(
   context: VaultCryptoContext,
   generations: GenerationStore,
 ) {
+  return replaceMetadataEntry(
+    metadata,
+    "lock-settings",
+    new TextEncoder().encode(canonicalJson(settings)),
+    context,
+    generations,
+  );
+}
+
+/** Every other entry re-staged as plaintext, plus `name` set to `plaintext`. */
+async function replaceMetadataEntry(
+  metadata: readonly EncryptedGenerationMetadata[],
+  name: GenerationMetadataName,
+  plaintext: Uint8Array,
+  context: VaultCryptoContext,
+  generations: GenerationStore,
+) {
   const preserved = await Promise.all(
     metadata
-      .filter((entry) => entry.name !== "lock-settings")
+      .filter((entry) => entry.name !== name)
       .map(async (entry) => ({
         name: entry.name,
         schemaVersion: entry.schemaVersion,
         plaintext: await generations.decryptMetadata(entry, context),
       })),
   );
-  return [
-    ...preserved,
-    {
-      name: "lock-settings" as const,
-      schemaVersion: 1 as const,
-      plaintext: new TextEncoder().encode(canonicalJson(settings)),
-    },
-  ];
+  return [...preserved, { name, schemaVersion: 1 as const, plaintext }];
 }
 
 function validatePortableSettings(settings: PortableLockSettings): void {

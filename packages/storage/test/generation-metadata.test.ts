@@ -98,6 +98,7 @@ describe("authenticated generation v3 metadata", () => {
       "lock-settings",
       "ente-otp-state",
       "hotp-pending-state",
+      "folders",
     ]);
     const { storage, store, crypto, staged } = await stagedMetadata();
     expect(staged.manifest.formatVersion).toBe(3);

@@ -1505,3 +1505,38 @@ describe("createMany", () => {
   });
 });
 
+
+describe("folders metadata", () => {
+  it("round-trips folders through an encrypted metadata entry without touching records", async () => {
+    const storage = new FakeStoragePort();
+    const repository = new VaultRepository(storage, wrappedKey);
+    const context = cryptoContext();
+    await repository.create(loginItem(), context);
+    expect(await repository.readFolders(context)).toEqual([]);
+
+    const folders = [
+      { id: "11111111-1111-4111-8111-111111111111", name: "Work" },
+      { id: "22222222-2222-4222-8222-222222222222", name: "Clients", parentId: "11111111-1111-4111-8111-111111111111" },
+    ];
+    await repository.replaceFolders(folders, context);
+    expect(await repository.readFolders(context)).toEqual(folders);
+    expect((await repository.listItems(context)).map((item) => item.id)).toEqual([loginItem().id]);
+    // Reopened from storage, not from memory.
+    expect(await new VaultRepository(storage, wrappedKey).readFolders(context)).toEqual(folders);
+  });
+
+  it("rejects a cyclic or over-nested document", async () => {
+    const storage = new FakeStoragePort();
+    const repository = new VaultRepository(storage, wrappedKey);
+    const context = cryptoContext();
+    await expect(
+      repository.replaceFolders(
+        [
+          { id: "11111111-1111-4111-8111-111111111111", name: "a", parentId: "22222222-2222-4222-8222-222222222222" },
+          { id: "22222222-2222-4222-8222-222222222222", name: "b", parentId: "11111111-1111-4111-8111-111111111111" },
+        ],
+        context,
+      ),
+    ).rejects.toMatchObject({ code: "VAULT_INVALID" });
+  });
+});
