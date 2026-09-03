@@ -76,7 +76,7 @@ export function PopupApp({ platform }: PopupAppProps) {
 
   return (
     <div className={styles.popup}>
-      <div hidden={vaultUnlocked}>
+      <div className={styles.vaultAccessWrapper} hidden={vaultUnlocked}>
         <VaultAccess platform={platform} onUnlockedChange={setVaultUnlocked} />
       </div>
       {vaultUnlocked ? (

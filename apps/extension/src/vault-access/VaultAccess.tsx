@@ -47,6 +47,7 @@ export function VaultAccess({
   const [error, setError] = useState("");
   const [working, setWorking] = useState(false);
   const [settings, setSettings] = useState({ autoLockMinutes: 15, lockOnScreenLock: true });
+  const [loadingTimedOut, setLoadingTimedOut] = useState(false);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [newConfirmation, setNewConfirmation] = useState("");
@@ -273,8 +274,28 @@ export function VaultAccess({
     }
   }
 
+  useEffect(() => {
+    if (state !== "loading") {
+      setLoadingTimedOut(false);
+      return;
+    }
+    const timer = setTimeout(() => setLoadingTimedOut(true), 5_000);
+    return () => clearTimeout(timer);
+  }, [state]);
+
   if (state === "loading")
-    return <div className={styles.loading} role="status" aria-label="Loading vault state" />;
+    return (
+      <div className={styles.loading} role="status" aria-label="Loading vault state">
+        {loadingTimedOut ? (
+          <>
+            <p className={styles.loadingError}>Could not connect to ShardPass background service.</p>
+            <p>Check chrome://extensions for errors, then reload the extension.</p>
+          </>
+        ) : (
+          <p>Connecting to vault&hellip;</p>
+        )}
+      </div>
+    );
   if (state === "unlocked") {
     return (
       <section className={styles.panel}>

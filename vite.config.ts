@@ -1,6 +1,6 @@
 import { crx } from "@crxjs/vite-plugin";
 import path from "node:path";
-import { defineConfig } from "vite";
+import { defineConfig, type Plugin } from "vite";
 
 import manifest from "./apps/extension/src/manifest";
 import { ENTE_SRP_PRODUCTION_ENTRY, enteSrpVitePlugin } from "./tools/ente-srp-vite-plugin";
@@ -8,6 +8,17 @@ import { ENTE_SRP_PRODUCTION_ENTRY, enteSrpVitePlugin } from "./tools/ente-srp-v
 const workspaceRoot = import.meta.dirname;
 
 const outDir = process.env.SHARDPASS_OUT_DIR ?? "../../dist";
+
+function stripCrossOrigin(): Plugin {
+  return {
+    name: "strip-crossorigin",
+    enforce: "post",
+    transformIndexHtml(html) {
+      return html.replace(/ crossorigin/g, "");
+    },
+  };
+}
+
 
 export default defineConfig({
   root: "apps/extension",
@@ -20,6 +31,7 @@ export default defineConfig({
       ),
     }),
     crx({ manifest }),
+    stripCrossOrigin(),
   ],
   build: {
     target: "chrome110",

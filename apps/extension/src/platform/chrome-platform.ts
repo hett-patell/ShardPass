@@ -38,6 +38,24 @@ const AUTO_LOCK_ALARM = "shardpass:auto-lock";
 const ENTE_SYNC_ALARM = "shardpass:ente-otp-sync:v1";
 const VAULT_STATE_PORT = "shardpass:v1:vault-state";
 
+type AccessLevelCapableArea = chrome.storage.StorageArea & {
+  setAccessLevel?: (options: { accessLevel: "TRUSTED_CONTEXTS" }) => Promise<void>;
+};
+
+/** Restricts an area to trusted contexts where the browser supports it; warns where it does not. */
+async function setTrustedAccess(area: chrome.storage.StorageArea, label: string): Promise<void> {
+  const { setAccessLevel } = area as AccessLevelCapableArea;
+  if (typeof setAccessLevel !== "function") {
+    console.warn(`[ShardPass] ${label}.setAccessLevel is unavailable; keeping default access.`);
+    return;
+  }
+  try {
+    await setAccessLevel.call(area, { accessLevel: "TRUSTED_CONTEXTS" });
+  } catch (error) {
+    console.warn(`[ShardPass] ${label}.setAccessLevel failed; keeping default access.`, error);
+  }
+}
+
 function runtimeError(): Error | null {
   const message = chrome.runtime.lastError?.message;
   return message === undefined ? null : new Error(message);
@@ -143,14 +161,15 @@ export function createChromePlatform(): BackgroundExtensionPlatform &
     localStorage: createChromeStoragePort(chrome.storage.local),
     sessionStorage: createChromeStoragePort(chrome.storage.session),
 
+    // StorageArea.setAccessLevel() on chrome.storage.local only exists in Chromium >= 132;
+    // forks that lag upstream (Brave, Vivaldi, older Edge) do not expose it. Hardening is
+    // therefore best-effort rather than required: chrome.storage.local holds only encrypted
+    // records — the DEK lives in session storage and memory — and chrome.storage.session
+    // already defaults to TRUSTED_CONTEXTS. Throwing here would brick the whole service
+    // worker on those browsers, which is strictly worse than losing one layer of defence.
     async initializeTrustedStorage() {
-      const local = chrome.storage.local as chrome.storage.StorageArea & {
-        setAccessLevel?: (options: { accessLevel: "TRUSTED_CONTEXTS" }) => Promise<void>;
-      };
-      if (typeof local.setAccessLevel !== "function")
-        throw new Error("Trusted local storage access is unavailable.");
-      await local.setAccessLevel({ accessLevel: "TRUSTED_CONTEXTS" });
-      await chrome.storage.session.setAccessLevel({ accessLevel: "TRUSTED_CONTEXTS" });
+      await setTrustedAccess(chrome.storage.local, "chrome.storage.local");
+      await setTrustedAccess(chrome.storage.session, "chrome.storage.session");
     },
 
     async scheduleAutoLock(minutes) {

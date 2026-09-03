@@ -203,7 +203,10 @@ export function installBackground(
       await platform.initializeTrustedStorage();
       await settings.start();
       if (disposed) settings.dispose();
-    } catch {
+    } catch (error) {
+      // Logged rather than swallowed: a failure here disables every route behind
+      // awaitReady(), so a silent catch leaves the UI stuck with no diagnosable cause.
+      console.error("[ShardPass] Background startup failed; vault is unavailable.", error);
       readyFailed = true;
       await sessions.lock().catch(() => undefined);
     }
