@@ -12,8 +12,11 @@ import type { AuthEntityFrame, EnteSodiumAdapter } from "./sodium-adapter";
  * this module speaks that dialect exactly -- quirks included -- and keeps
  * {@link EnteOtpProjection} as the internal shape the sync engines work with.
  *
- * Plaintext that begins with "{" is the JSON projection an earlier build of this extension
- * wrote; it is still accepted so nothing already synced is lost, but never written again.
+ * On the wire the URI is a JSON string literal -- the app writes `JSON.stringify(uri)` and
+ * reads with `JSON.parse` -- so the plaintext is `"otpauth://..."` with the quotes. A bare
+ * URI is still read, leniently. A JSON object is the projection an earlier build of this
+ * extension wrote; it is still accepted so nothing already synced is lost, but never
+ * written again.
  */
 
 const encoder = new TextEncoder();
@@ -233,7 +236,7 @@ export function encryptEnteOtpEntity(
   authKey: Uint8Array,
   sodium: EnteSodiumAdapter,
 ): AuthEntityFrame {
-  const plaintext = encoder.encode(projectionToEnteUri(projection));
+  const plaintext = encoder.encode(JSON.stringify(projectionToEnteUri(projection)));
   if (plaintext.byteLength > ENTE_SYNC_LIMITS.maxDecryptedEntityBytes)
     throw new EnteProtocolError("ENTE_LIMIT_REACHED");
   try {
@@ -260,8 +263,15 @@ export function parseEnteOtpEntity(
     plaintext = sodium.decryptAuthEntity(entity, authKey);
     if (plaintext.byteLength > ENTE_SYNC_LIMITS.maxDecryptedEntityBytes) invalid();
     const text = decoder.decode(plaintext).trim();
-    if (text.startsWith("{")) return validateProjection(JSON.parse(text));
-    return projectionFromEnteUri(text);
+    let value: unknown = text;
+    try {
+      value = JSON.parse(text);
+    } catch {
+      // Not JSON: treat the raw text as a bare URI below.
+    }
+    if (typeof value === "string") return projectionFromEnteUri(value);
+    if (typeof value === "object" && value !== null) return validateProjection(value);
+    return invalid();
   } catch (error) {
     if (error instanceof EnteProtocolError) throw error;
     throw new EnteProtocolError("ENTE_INVALID");

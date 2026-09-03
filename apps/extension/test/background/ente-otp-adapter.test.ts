@@ -107,11 +107,21 @@ describe("Ente entity codec", () => {
     expect(url.searchParams.has("codeDisplay")).toBe(false);
   });
 
-  it("reads a URI as the Ente Auth app writes it", () => {
+  it("writes the URI as a JSON string, which is what the app stores", () => {
+    const key = sodium.randomBytes(32);
+    const encrypted = encryptEnteOtpEntity(projections[0], key, sodium);
+    const plaintext = new TextDecoder().decode(sodium.decryptAuthEntity(encrypted, key));
+    expect(plaintext.startsWith('"otpauth://totp/')).toBe(true);
+    expect(typeof JSON.parse(plaintext)).toBe("string");
+  });
+
+  it("reads a URI as the Ente Auth app writes it (a JSON string)", () => {
     const key = sodium.randomBytes(32);
     const parsed = parseEnteOtpEntity(
       frame(
-        "otpauth://totp/GitHub:octocat?secret=jbsw%20y3dp-ehpk3pxp&issuer=GitHub&algorithm=SHA1&digits=6&period=30",
+        JSON.stringify(
+          "otpauth://totp/GitHub:octocat?secret=jbsw%20y3dp-ehpk3pxp&issuer=GitHub&algorithm=SHA1&digits=6&period=30",
+        ),
         key,
       ),
       key,
@@ -164,10 +174,16 @@ describe("Ente entity codec", () => {
   it("treats a trashed code as not-a-code rather than an error", () => {
     const key = sodium.randomBytes(32);
     const trashed = frame(
-      'otpauth://totp/Acme:bob?secret=JBSWY3DPEHPK3PXP&codeDisplay={"trashed":true}',
+      JSON.stringify('otpauth://totp/Acme:bob?secret=JBSWY3DPEHPK3PXP&codeDisplay={"trashed":true}'),
       key,
     );
     expect(parseEnteOtpEntity(trashed, key, sodium)).toBeNull();
+  });
+
+  it("is lenient about a bare, unquoted URI", () => {
+    const key = sodium.randomBytes(32);
+    const bare = frame("otpauth://totp/Acme:bob?secret=JBSWY3DPEHPK3PXP", key);
+    expect(parseEnteOtpEntity(bare, key, sodium)).toMatchObject({ issuer: "Acme", label: "bob" });
   });
 
   it("still reads the JSON projection an earlier build wrote", () => {
