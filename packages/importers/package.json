@@ -21,8 +21,9 @@
   },
   "dependencies": {
     "@bufbuild/protobuf": "catalog:",
-    "@shardpass/crypto": "workspace:*",
+    "@noble/ciphers": "catalog:",
     "@noble/hashes": "catalog:",
+    "@shardpass/crypto": "workspace:*",
     "@shardpass/domain": "workspace:*",
     "@shardpass/otp": "workspace:*",
     "@shardpass/security": "workspace:*",

@@ -12,3 +12,12 @@ export * from "./legacy-v1";
 export * from "./onepassword";
 export * from "./otpauth";
 export * from "./qr";
+export {
+  importKeePassKdbx,
+  readKdbx,
+  classifyEntry,
+  convertEntry,
+  KdbxFormatError,
+  KdbxPasswordError,
+  type KeePassEntry,
+} from "./keepass";
