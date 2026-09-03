@@ -337,8 +337,18 @@ export function installBackground(
             shouldRefreshOtpState(response)))
       )
         publisher.publish();
+      if (response.kind === "error")
+        // Codes only, never payloads: this is the one place a failed request is named, so
+        // a report can say which route refused and why without opening every screen.
+        console.warn(
+          "[ShardPass] request refused:",
+          (payload as { kind?: unknown })?.kind,
+          "->",
+          response.error.code,
+        );
       return response;
-    } catch {
+    } catch (error) {
+      console.error("[ShardPass] request crashed:", (payload as { kind?: unknown })?.kind, error);
       return errorResponse("UNEXPECTED");
     }
   });

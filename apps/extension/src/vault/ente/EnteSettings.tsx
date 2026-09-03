@@ -72,8 +72,8 @@ export function EnteSettings({ platform, active }: EnteSettingsProps) {
       </p>
       {sync.error ? (
         <p className={styles.error} role="alert">
-          Ente sync could not complete. No partial result was applied.
-          {sync.errorCode ? <> Reason: <code>{sync.errorCode}</code>.</> : null}
+          Ente sync could not complete. No partial result was applied. Reason:{" "}
+          <code>{sync.errorCode ?? "not reported"}</code>.
         </p>
       ) : null}
 

@@ -61,6 +61,30 @@ export function VaultAccess({
   const [working, setWorking] = useState(false);
   const [settings, setSettings] = useState({ autoLockMinutes: 15, lockOnScreenLock: true });
   const [loadingTimedOut, setLoadingTimedOut] = useState(false);
+  const [settingsError, setSettingsError] = useState("");
+
+  // Optimistic, but honest: the control shows the new value immediately and rolls back with
+  // a named reason if the background refuses, instead of silently snapping back on the next
+  // state push -- which reads as "the setting doesn't save".
+  async function applyLockSettings(next: { autoLockMinutes: number; lockOnScreenLock: boolean }) {
+    const previous = settings;
+    setSettings(next);
+    setSettingsError("");
+    try {
+      const response = (await platform.sendMessage({
+        version: 1,
+        kind: "vault.updateLockSettings",
+        ...next,
+      })) as { kind?: unknown; error?: { code?: unknown } };
+      if (response?.kind === "vault.ok") return;
+      setSettings(previous);
+      const code = typeof response?.error?.code === "string" ? response.error.code : "no response";
+      setSettingsError(`Could not save this setting (${code}).`);
+    } catch (failure) {
+      setSettings(previous);
+      setSettingsError(`Could not save this setting (${errorText(failure)}).`);
+    }
+  }
   const [diagnostic, setDiagnostic] = useState("");
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -333,19 +357,18 @@ export function VaultAccess({
         {securityControls ? (
           <>
             <h3>Security settings</h3>
+            {settingsError !== "" ? (
+              <p className={styles.loadingError} role="alert">
+                {settingsError}
+              </p>
+            ) : null}
             <label>
               Auto-lock
               <select
                 value={settings.autoLockMinutes}
                 onChange={(event) => {
                   const autoLockMinutes = Number(event.target.value) as 0 | 5 | 15 | 30 | 60;
-                  const next = { ...settings, autoLockMinutes };
-                  setSettings(next);
-                  void platform.sendMessage({
-                    version: 1,
-                    kind: "vault.updateLockSettings",
-                    ...next,
-                  });
+                  void applyLockSettings({ ...settings, autoLockMinutes });
                 }}
               >
                 <option value={0}>Off</option>
@@ -360,13 +383,7 @@ export function VaultAccess({
                 type="checkbox"
                 checked={settings.lockOnScreenLock}
                 onChange={(event) => {
-                  const next = { ...settings, lockOnScreenLock: event.target.checked };
-                  setSettings(next);
-                  void platform.sendMessage({
-                    version: 1,
-                    kind: "vault.updateLockSettings",
-                    ...next,
-                  });
+                  void applyLockSettings({ ...settings, lockOnScreenLock: event.target.checked });
                 }}
               />
               Lock when the screen locks
