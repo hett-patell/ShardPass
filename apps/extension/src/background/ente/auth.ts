@@ -102,7 +102,9 @@ export async function authenticateEnte(input: {
     };
     proof.verifyM2(verified.srpM2);
     const recovered = await proof.recoverCredential(verified);
-    const twoFactorSessionId = verified.twoFactorSessionID ?? verified.twoFactorSessionIDV2;
+    // Empty strings are "absent": the server does not omit these fields.
+    const twoFactorSessionId =
+      verified.twoFactorSessionID || verified.twoFactorSessionIDV2 || undefined;
     if (twoFactorSessionId !== undefined) {
       const challenge = input.challenges.issue({
         sessionId: twoFactorSessionId,

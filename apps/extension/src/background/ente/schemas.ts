@@ -48,16 +48,20 @@ export const verifySrpSessionRequestSchema = strict({
   srpUserID: uuid,
   srpM1: b64,
 });
+const optionalSessionId = z.optional(z.union([uuid, z.literal("")]));
+
 export const verifySrpSessionResponseSchema = tolerant({
   srpM2: b64,
   id: safeTimestamp,
   token: z.optional(b64),
   encryptedToken: z.optional(b64),
-  twoFactorSessionID: z.optional(uuid),
+  // The Go server writes these session ids without omitempty, so an account that needs no
+  // second factor answers with "" rather than omitting the field. Empty means absent.
+  twoFactorSessionID: optionalSessionId,
   // Newer servers send the V2 id (alongside or instead of the original); a passkey-only
   // account sends passkeySessionID and no token. Both are real responses, not drift.
-  twoFactorSessionIDV2: z.optional(uuid),
-  passkeySessionID: z.optional(uuid),
+  twoFactorSessionIDV2: optionalSessionId,
+  passkeySessionID: optionalSessionId,
   keyAttributes: z.optional(z.unknown()),
 });
 export const totpTwoFactorVerifyRequestSchema = strict({

@@ -243,13 +243,11 @@ installEnteAuthWorker(
           proof.sessionKey.fill(0);
           // A passkey-protected account answers with a passkey session and no token. There is
           // no passkey ceremony here, so say so rather than failing as a wrong password.
-          if (
-            verified.passkeySessionID !== undefined &&
-            verified.token === undefined &&
-            verified.encryptedToken === undefined
-          )
+          // Empty strings are "absent": the server does not omit these fields.
+          if (verified.passkeySessionID && !verified.token && !verified.encryptedToken)
             throw new EnteProtocolError("ENTE_SRP_UNSUPPORTED");
-          const twoFactorSessionId = verified.twoFactorSessionID ?? verified.twoFactorSessionIDV2;
+          const twoFactorSessionId =
+            verified.twoFactorSessionID || verified.twoFactorSessionIDV2 || undefined;
           if (twoFactorSessionId !== undefined) {
             const capability = randomCapability();
             continuations.set(capability, {

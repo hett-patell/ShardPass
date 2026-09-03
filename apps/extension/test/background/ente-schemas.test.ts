@@ -9,6 +9,7 @@ import {
   authenticatorEntityDiffResponseSchema,
   authenticatorKeyResponseSchema,
   srpAttributesResponseSchema,
+  verifySrpSessionResponseSchema,
 } from "../../src/background/ente/schemas";
 import type { EnteOtpAdapterInput } from "../../src/background/ente/schemas";
 
@@ -103,5 +104,24 @@ describe("pinned strict Ente protocol schemas", () => {
     // @ts-expect-error Login/password entities are forbidden by the OTP-only adapter contract.
     const forbidden: EnteOtpAdapterInput = { type: "LoginItem", password: "synthetic-only" };
     expect((forbidden as unknown as { type: string }).type).toBe("LoginItem");
+  });
+});
+
+describe("verify-session response as the production server sends it", () => {
+  it("accepts empty session-id fields and extra keys for a password-only account", () => {
+    const response = {
+      id: 1580559962386438,
+      keyAttributes: { kekSalt: "AQ==", encryptedKey: "AQ==", keyDecryptionNonce: "AQ==" },
+      encryptedToken: "AQ==",
+      srpM2: "AQ==",
+      twoFactorSessionID: "",
+      passkeySessionID: "",
+      twoFactorSessionIDV2: "",
+      accountsUrl: "https://accounts.ente.io",
+    };
+    const parsed = parseEnteProtocolResponse(verifySrpSessionResponseSchema, response);
+    expect(parsed.twoFactorSessionID).toBe("");
+    expect(parsed.srpM2).toBe("AQ==");
+    expect("accountsUrl" in parsed).toBe(false);
   });
 });
