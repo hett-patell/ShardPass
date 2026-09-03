@@ -9,7 +9,12 @@ const HEADER_BYTES = 8;
 const KEY_BYTES = 32;
 const MAX_TOKEN_BYTES = 4_096;
 const MAX_CIPHERTEXT_BYTES = MAX_TOKEN_BYTES + KEY_BYTES * 3 + HEADER_BYTES + 48;
-const TTL_MS = 60_000;
+// The capability is issued before the sign-in worker starts and consumed after it ends, so
+// this window has to cover the whole sign-in: Argon2id at Ente's default "sensitive" setting
+// (1 GiB, tens of seconds in wasm on a laptop), SRP, four round trips, and on a 2FA account
+// the time it takes a person to type a code. One minute failed real sign-ins as "auth failed".
+// The capability is single-use, 256-bit, bound to the sender document and the vault root.
+const TTL_MS = 10 * 60_000;
 
 export type EnteSessionPayload = Readonly<{
   token: Uint8Array;
@@ -142,13 +147,12 @@ export class EnteSessionHandoffStore {
     try {
       const snapshot = await this.repository.readOtpItemsAndMetadata("ente-otp-state");
       snapshot.metadata?.fill(0);
-      if (
-        entry.expiresAt < this.dependencies.now() ||
-        !sameSender(entry.sender, sender) ||
-        snapshot.sessionEpoch !== entry.sessionEpoch ||
-        (await this.dependencies.rootDigest(snapshot.sessionEpoch)) !== entry.rootDigest
-      )
-        reject();
+      if (entry.expiresAt < this.dependencies.now())
+        reject("sign-in took longer than the handoff allows; try again");
+      if (!sameSender(entry.sender, sender)) reject("handoff used from a different page");
+      if (snapshot.sessionEpoch !== entry.sessionEpoch) reject("vault changed during sign-in");
+      if ((await this.dependencies.rootDigest(snapshot.sessionEpoch)) !== entry.rootDigest)
+        reject("vault changed during sign-in");
       const plaintext = this.dependencies.sodium.sealedBoxOpen(
         ciphertext,
         entry.publicKey,

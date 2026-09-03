@@ -99,9 +99,31 @@ describe("one-use Ente session handoff", () => {
     await expect(store.consume(stale.capability, empty, sender)).rejects.toThrow();
 
     root = "root-a";
+    // A slow sign-in (Argon2id at Ente's 1 GiB setting, SRP, a 2FA code typed by hand) can
+    // take minutes; the capability issued before it started must still be good afterwards.
+    const slow = await store.issue(sender);
+    const slowPlaintext = encodeEnteSessionPayload({
+      token: new TextEncoder().encode("slow-token"),
+      masterKey: new Uint8Array(32).fill(4),
+      authKey: new Uint8Array(32).fill(5),
+      accountFingerprint: new Uint8Array(32).fill(6),
+    });
+    const slowCiphertext = sodium.sealedBoxSeal(slowPlaintext, slow.publicKey);
+    slowPlaintext.fill(0);
+    now += 5 * 60_000;
+    const slowOpened = await store.consume(slow.capability, slowCiphertext, sender);
+    expect(new TextDecoder().decode(slowOpened.token)).toBe("slow-token");
+    slowOpened.token.fill(0);
+    slowOpened.masterKey.fill(0);
+    slowOpened.authKey.fill(0);
+    slowOpened.accountFingerprint.fill(0);
+
     const expired = await store.issue(sender);
-    now += 60_001;
-    await expect(store.consume(expired.capability, empty, sender)).rejects.toThrow();
+    now += 10 * 60_000 + 1;
+    await expect(store.consume(expired.capability, empty, sender)).rejects.toMatchObject({
+      code: "ENTE_AUTH_FAILED",
+      detail: expect.stringContaining("longer than the handoff allows") as unknown,
+    });
 
     store.clear();
     sodium.dispose();
