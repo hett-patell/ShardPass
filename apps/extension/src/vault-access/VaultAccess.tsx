@@ -351,7 +351,6 @@ export function VaultAccess({
   if (state === "unlocked") {
     return (
       <section className={styles.panel}>
-        <p className={styles.kicker}>SESSION / ACTIVE</p>
         <h2>Vault unlocked</h2>
         <p>Your vault data key is held only by the background session.</p>
         {securityControls ? (
@@ -438,7 +437,6 @@ export function VaultAccess({
   const setup = state === "unconfigured";
   return (
     <section className={styles.panel}>
-      <p className={styles.kicker}>{setup ? "SETUP / LOCAL VAULT" : "SESSION / LOCKED"}</p>
       <h2>{setup ? "Create your vault" : "Unlock ShardPass"}</h2>
       <p>
         {setup

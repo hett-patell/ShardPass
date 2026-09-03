@@ -2,6 +2,8 @@ import { IconButton } from "@shardpass/ui";
 import { Check, Copy } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
+import { copyWithAutoClear } from "./clipboard";
+
 const COPIED_RESET_MS = 1_500;
 
 export interface CopyButtonProps {
@@ -19,7 +21,7 @@ export function CopyButton({ label, value }: CopyButtonProps) {
   useEffect(() => () => clearTimeout(resetTimer.current), []);
 
   const onClick = () => {
-    void navigator.clipboard.writeText(value).then(() => {
+    void copyWithAutoClear(value).then(() => {
       setCopied(true);
       clearTimeout(resetTimer.current);
       resetTimer.current = setTimeout(() => setCopied(false), COPIED_RESET_MS);

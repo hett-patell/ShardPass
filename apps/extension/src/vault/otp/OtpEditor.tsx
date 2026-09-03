@@ -42,7 +42,6 @@ function validate(value: FormValue): Errors {
 export function OtpEditor({
   mode,
   value,
-  revision,
   submitting,
   conflict = false,
   onSubmit,
@@ -115,9 +114,6 @@ export function OtpEditor({
     >
       <header className={styles.editorHeader}>
         <div>
-          <p className={styles.kicker}>
-            OTP / {mode === "create" ? "NEW" : `REVISION ${revision ?? "—"}`}
-          </p>
           <h3>{mode === "create" ? "Create OTP" : "Edit OTP"}</h3>
         </div>
         {mode === "edit" && onDelete ? (

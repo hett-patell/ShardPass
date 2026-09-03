@@ -143,7 +143,6 @@ export function IdentityForm({ item, platform, onSaved, onCancel }: IdentityForm
       }}
     >
       <header className={styles.header}>
-        <p className={styles.eyebrow}>IDENTITY</p>
         <h2 className={styles.title}>{item ? "Edit identity" : "New identity"}</h2>
       </header>
 

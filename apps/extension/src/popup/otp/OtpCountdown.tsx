@@ -1,4 +1,4 @@
-import styles from "./OtpList.module.css";
+import styles from "./OtpCountdown.module.css";
 
 export interface OtpCountdownProps {
   remaining: number;

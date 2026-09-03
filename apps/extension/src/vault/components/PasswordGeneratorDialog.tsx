@@ -8,6 +8,7 @@ import { createPortal } from "react-dom";
 import type { ExtensionPlatform } from "../../platform/extension-platform";
 import { CopyButton } from "./detail/CopyButton";
 import styles from "./PasswordGeneratorDialog.module.css";
+import { useModalDialog } from "./useModalDialog";
 
 export interface PasswordGeneratorDialogProps {
   platform: Pick<ExtensionPlatform, "sendMessage">;
@@ -52,7 +53,8 @@ export function PasswordGeneratorDialog({ platform, onUse, onClose }: PasswordGe
   const [entropyBits, setEntropyBits] = useState(0);
   const [error, setError] = useState("");
   const generation = useRef(0);
-  const dialogRef = useRef<HTMLDivElement>(null);
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  useModalDialog(dialogRef, { onCancel: onClose });
   const closeButtonRef = useRef<HTMLButtonElement>(null);
 
   const buildRequest = useCallback((): GeneratePasswordRequest => {
@@ -117,20 +119,13 @@ export function PasswordGeneratorDialog({ platform, onUse, onClose }: PasswordGe
   };
 
   return createPortal(
-    <div className={styles.backdrop}>
-      <div
-        ref={dialogRef}
-        className={styles.dialog}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="password-generator-heading"
-        onKeyDown={(event) => {
-          if (event.key === "Escape") {
-            event.preventDefault();
-            onClose();
-          }
-        }}
-      >
+    <dialog
+      ref={dialogRef}
+      className={styles.dialog}
+      aria-labelledby="password-generator-heading"
+      // Nothing destructive here: clicking outside is a fine way to dismiss it.
+      {...({ closedby: "any" } as Record<string, string>)}
+    >
         <h3 id="password-generator-heading">Generate password</h3>
 
         <div className={styles.tabs} role="tablist" aria-label="Generator mode">
@@ -287,8 +282,7 @@ export function PasswordGeneratorDialog({ platform, onUse, onClose }: PasswordGe
             Use password
           </Button>
         </div>
-      </div>
-    </div>,
+    </dialog>,
     document.body,
   );
 }

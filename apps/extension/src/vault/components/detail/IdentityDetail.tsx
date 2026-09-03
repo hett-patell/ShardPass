@@ -59,7 +59,6 @@ export function IdentityDetail({ item, platform, onUpdate, onDeleted }: Identity
   return (
     <div className={styles.detail}>
       <header className={styles.header}>
-        <p className={styles.eyebrow}>IDENTITY</p>
         <h2 className={styles.title}>{fullName || item.name}</h2>
         {fullName ? <p className={styles.valueMuted}>{item.name}</p> : null}
       </header>

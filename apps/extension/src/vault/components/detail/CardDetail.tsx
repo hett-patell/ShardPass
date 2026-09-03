@@ -37,7 +37,6 @@ export function CardDetail({ item, platform, onUpdate, onDeleted }: CardDetailPr
   return (
     <div className={styles.detail}>
       <header className={styles.header}>
-        <p className={styles.eyebrow}>CARD</p>
         <h2 className={styles.title}>{item.name}</h2>
       </header>
 

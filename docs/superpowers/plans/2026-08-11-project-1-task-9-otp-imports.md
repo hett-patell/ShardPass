@@ -99,7 +99,7 @@
 - `apps/extension/src/background/router.ts`, `apps/extension/test/background/router.test.ts` — authorize, route, reparse, and safely map import responses/errors.
 - `apps/extension/src/background/main.ts`, `apps/extension/test/background/background-runtime.integration.test.ts` — construct/dispose import service, clear snapshots on lock, and publish after successful import only.
 - `apps/extension/src/platform/extension-platform.ts`, `apps/extension/src/platform/chrome-platform.ts`, `apps/extension/test/platform/chrome-platform.test.ts` — typed `sendOtpImportMessage` with response revalidation; no added browser authority.
-- `apps/extension/src/vault/otp/OtpVaultView.tsx`, `apps/extension/src/vault/otp/OtpVaultView.module.css`, `apps/extension/test/vault/OtpVaultView.dom.test.tsx` — integrate import mode and refresh the existing list.
+- `apps/extension/src/vault/otp/OtpVaultView.tsx`, `apps/extension/src/vault/otp/OtpVaultView.module.css`, `apps/extension/test/vault/VaultApp.dom.test.tsx` — integrate import mode and refresh the existing list.
 - `apps/extension/src/vault/VaultApp.tsx`, `apps/extension/test/vault/VaultApp.dom.test.tsx`, `apps/extension/test/vault/VaultApp.styles.test.ts` — preserve CRUD and `MigrationPanel` while exposing import only when unlocked.
 - `apps/extension/src/manifest.ts`, `tests/security/manifest.test.ts`, `tests/security/csp.test.ts`, `tests/security/output/manifest.output.ts` — assert unchanged permissions/CSP and packaged local worker authority.
 - `scripts/scan-build.mjs`, `tests/security/build-scan.test.ts` — reject import network/camera/dynamic-code/log/secret leakage in built output.
@@ -543,7 +543,7 @@ export type ImportOtpBatchResult = Readonly<{
 - Create: `apps/extension/test/vault/OtpImportView.dom.test.tsx`
 - Modify: `apps/extension/src/vault/otp/OtpVaultView.tsx`
 - Modify: `apps/extension/src/vault/otp/OtpVaultView.module.css`
-- Modify: `apps/extension/test/vault/OtpVaultView.dom.test.tsx`
+- Modify: `apps/extension/test/vault/VaultApp.dom.test.tsx`
 - Modify: `apps/extension/src/vault/VaultApp.tsx`
 - Modify: `apps/extension/test/vault/VaultApp.dom.test.tsx`
 - Modify: `apps/extension/test/vault/VaultApp.styles.test.ts`
@@ -560,7 +560,7 @@ export type ImportOtpBatchResult = Readonly<{
 
 - [ ] **Step 2: Run RED**
 
-  Run: `pnpm exec vitest run apps/extension/test/vault/OtpImportView.dom.test.tsx apps/extension/test/vault/OtpVaultView.dom.test.tsx apps/extension/test/vault/VaultApp.dom.test.tsx apps/extension/test/vault/VaultApp.styles.test.ts`
+  Run: `pnpm exec vitest run apps/extension/test/vault/OtpImportView.dom.test.tsx apps/extension/test/vault/VaultApp.dom.test.tsx apps/extension/test/vault/VaultApp.dom.test.tsx apps/extension/test/vault/VaultApp.styles.test.ts`
 
   Expected: FAIL because import UI/integration does not exist.
 
@@ -578,7 +578,7 @@ export type ImportOtpBatchResult = Readonly<{
 
 - [ ] **Step 6: Run GREEN and accessibility checks**
 
-  Run: `pnpm exec vitest run apps/extension/test/vault/OtpImportView.dom.test.tsx apps/extension/test/vault/OtpVaultView.dom.test.tsx apps/extension/test/vault/VaultApp.dom.test.tsx apps/extension/test/vault/VaultApp.styles.test.ts`
+  Run: `pnpm exec vitest run apps/extension/test/vault/OtpImportView.dom.test.tsx apps/extension/test/vault/VaultApp.dom.test.tsx apps/extension/test/vault/VaultApp.dom.test.tsx apps/extension/test/vault/VaultApp.styles.test.ts`
 
   Expected: PASS with no serious axe violation in the import states and no secret/raw projection.
 

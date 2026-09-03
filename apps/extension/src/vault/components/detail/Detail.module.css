@@ -11,15 +11,6 @@
   gap: var(--space-1);
 }
 
-.eyebrow {
-  margin: 0;
-  color: var(--text-tertiary);
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
 
 .title {
   margin: 0;
@@ -220,28 +211,25 @@
   border-top: 1px solid var(--border);
 }
 
-.dialogBackdrop {
-  position: fixed;
-  inset: 0;
-  z-index: var(--z-modal-backdrop);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: var(--space-4);
-  background: rgb(0 0 0 / 45%);
-}
-
+/* A native <dialog>: the element centres itself and paints the page behind it inert. */
 .dialog {
-  z-index: var(--z-modal);
-  display: flex;
-  width: min(420px, 100%);
-  flex-direction: column;
-  gap: var(--space-3);
+  width: min(420px, calc(100vw - 2 * var(--space-4)));
+  max-height: calc(100vh - 2 * var(--space-4));
+  margin: auto;
   padding: var(--space-5);
+  color: var(--text-primary);
   background: var(--bg-elevated);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-md);
+}
+.dialog[open] {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.dialog::backdrop {
+  background: var(--backdrop);
 }
 
 .dialog h3 {

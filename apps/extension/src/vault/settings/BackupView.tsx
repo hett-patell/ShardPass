@@ -44,7 +44,6 @@ export function BackupView({
     >
       <header className={styles.header}>
         <div>
-          <p className={styles.kicker}>LOCAL / PORTABLE</p>
           <h3 id="backup-heading">Encrypted backups</h3>
         </div>
         <span className={styles.scope}>ONE-TIME CODES</span>

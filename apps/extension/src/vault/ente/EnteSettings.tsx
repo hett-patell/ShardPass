@@ -59,7 +59,6 @@ export function EnteSettings({ platform, active }: EnteSettingsProps) {
     >
       <header className={styles.header}>
         <div>
-          <p className={styles.kicker}>ENTE / OTP ONLY</p>
           <h3 id="ente-settings-heading">Ente Authenticator sync</h3>
         </div>
         <span className={styles.scope}>{state.connected ? "CONNECTED" : "DISCONNECTED"}</span>

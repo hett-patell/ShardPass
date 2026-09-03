@@ -22,7 +22,6 @@
   margin: 0;
 }
 
-.kicker,
 .phase,
 .summaryHeader span,
 .counts dt,
@@ -35,7 +34,6 @@
   letter-spacing: 0.07em;
 }
 
-.kicker,
 .summaryHeader span,
 .inputControls span {
   color: var(--text-secondary);
@@ -74,7 +72,7 @@
   resize: vertical;
   padding: var(--space-3);
   color: var(--text-primary);
-  background: #09090b;
+  background: var(--bg-primary);
   border: 1px solid var(--border-hover);
   border-radius: var(--radius-sm);
   font-family: var(--font-mono);
@@ -84,7 +82,7 @@
 .textInput textarea[data-concealed="true"] {
   color: transparent;
   caret-color: var(--accent);
-  text-shadow: 0 0 8px rgb(244 114 94 / 38%);
+  text-shadow: 0 0 8px var(--accent-subtle);
 }
 
 .textInput textarea:focus-visible,
@@ -100,8 +98,8 @@
   align-items: baseline;
   gap: var(--space-2);
   padding: var(--space-2) var(--space-3);
-  color: #ffd1c8;
-  background: rgb(244 114 94 / 8%);
+  color: var(--warning);
+  background: var(--warning-subtle);
   border-left: 2px solid var(--accent);
 }
 
@@ -130,7 +128,7 @@
   gap: var(--space-2);
   padding: var(--space-5);
   color: var(--text-primary);
-  background: #0c0c0e;
+  background: var(--bg-secondary);
   border: 1px dashed var(--border-hover);
   border-radius: var(--radius-sm);
   font: inherit;
@@ -176,11 +174,11 @@
 }
 
 .counts div:first-child {
-  border-left-color: #4ade80;
+  border-left-color: var(--success);
 }
 
 .counts div[data-status="duplicate"] {
-  border-left-color: #fbbf24;
+  border-left-color: var(--warning);
 }
 
 .counts div[data-status="rejected"] {
@@ -223,11 +221,11 @@
   padding: var(--space-2) var(--space-3);
   overflow: hidden;
   border-bottom: 1px solid var(--border);
-  border-left: 2px solid #4ade80;
+  border-left: 2px solid var(--success);
 }
 
 .row[data-status="duplicate"] {
-  border-left-color: #fbbf24;
+  border-left-color: var(--warning);
 }
 .row[data-status="rejected"] {
   border-left-color: var(--accent);
@@ -281,7 +279,7 @@
 }
 
 .confirmRail[data-confirmed="true"] {
-  background: rgb(244 114 94 / 7%);
+  background: var(--accent-subtle);
   border-left-color: var(--accent);
 }
 
@@ -292,14 +290,14 @@
 
 .complete {
   padding: var(--space-4);
-  border-left: 2px solid #4ade80;
+  border-left: 2px solid var(--success);
 }
 
 .error {
   margin: 0;
   padding: var(--space-3);
-  color: #ffd1c8;
-  background: rgb(244 114 94 / 8%);
+  color: var(--warning);
+  background: var(--warning-subtle);
   border-left: 2px solid var(--accent);
 }
 

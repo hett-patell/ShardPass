@@ -149,7 +149,6 @@ export function OtpDetail({ item, platform, onUpdate, onDeleted }: OtpDetailProp
   return (
     <div className={styles.detail}>
       <header className={styles.header}>
-        <p className={styles.eyebrow}>OTP</p>
         <h2 className={styles.title}>{name}</h2>
         {item.issuer ? <p className={styles.valueMuted}>{item.label}</p> : null}
       </header>

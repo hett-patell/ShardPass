@@ -139,7 +139,6 @@ export function SecretForm({ item, platform, onSaved, onCancel }: SecretFormProp
       }}
     >
       <header className={styles.header}>
-        <p className={styles.eyebrow}>SECRET</p>
         <h2 className={styles.title}>{item ? "Edit secret" : "New secret"}</h2>
       </header>
 

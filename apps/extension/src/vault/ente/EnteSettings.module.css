@@ -23,7 +23,6 @@
     text-wrap: balance;
   }
 }
-.kicker,
 .scope {
   margin: 0 0 var(--space-1);
   color: var(--text-secondary);

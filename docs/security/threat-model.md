@@ -160,7 +160,7 @@ The final canonical status is `PASS-PROJECT1-RELEASE` only when all nodes verify
 **Trust boundary:** Trusted popup/vault action to browser clipboard and operating system.  
 **Implemented mitigation:** Only one generated code is copied after explicit user action; seeds and full records never enter clipboard or logs.  
 **Residual risk:** Clipboard values are visible to the browser, OS, and authorized applications; clearing cannot be guaranteed.  
-**Evidence:** `apps/extension/test/platform/chrome-platform.test.ts`; `apps/extension/test/popup/OtpList.dom.test.tsx`.
+**Evidence:** `apps/extension/test/platform/chrome-platform.test.ts`; `apps/extension/test/popup/PopupApp.dom.test.tsx`.
 
 ### Hostile-page fill and HOTP races
 

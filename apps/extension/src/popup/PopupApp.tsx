@@ -2,6 +2,7 @@ import { SearchBar } from "@shardpass/ui";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { EnteUiPlatform, ExtensionPlatform } from "../platform/extension-platform";
+import { clearClipboardNow } from "../vault/components/detail/clipboard";
 import { VaultAccess } from "../vault-access/VaultAccess";
 import { AddItemMenu } from "./components/AddItemMenu";
 import { FilterTabs } from "./components/FilterTabs";
@@ -65,6 +66,8 @@ export function PopupApp({ platform }: PopupAppProps) {
 
   const lock = useCallback(async (): Promise<void> => {
     setLockError(false);
+    // Locking is the moment a person expects secrets to stop being reachable.
+    void clearClipboardNow();
     try {
       await platform.sendMessage({ version: 1, kind: "vault.lock" });
     } catch {

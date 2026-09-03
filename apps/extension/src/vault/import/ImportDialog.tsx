@@ -350,7 +350,6 @@ export function ImportDialog({ platform, active, onImported }: ImportDialogProps
     <section className={styles.region} aria-labelledby="import-dialog-heading">
       <header className={styles.header}>
         <div>
-          <p className={styles.kicker}>LOCAL INPUT / SAFE PREVIEW</p>
           <h3 id="import-dialog-heading">Import items</h3>
         </div>
       </header>

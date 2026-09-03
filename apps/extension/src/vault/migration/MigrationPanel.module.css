@@ -2,7 +2,7 @@
   width: min(100%, 680px);
   padding: var(--space-5);
   color: var(--text-primary);
-  background: #18181b;
+  background: var(--bg-secondary);
   border: 1px solid var(--border-hover);
   border-left: 2px solid var(--accent);
   border-radius: var(--radius-sm);
@@ -25,7 +25,6 @@
   white-space: normal;
 }
 
-.kicker,
 .phase,
 .steps,
 .compatibility dt {
@@ -36,10 +35,6 @@
   letter-spacing: 0.07em;
 }
 
-.kicker {
-  margin: 0;
-  color: var(--text-secondary);
-}
 
 .phase {
   color: var(--accent-hover);
@@ -80,8 +75,8 @@
 .steps li {
   min-width: 0;
   padding: var(--space-2);
-  color: #a1a1aa;
-  background: #0c0c0d;
+  color: var(--text-secondary);
+  background: var(--bg-primary);
   text-align: center;
 }
 
@@ -97,7 +92,7 @@
   gap: var(--space-1);
   padding: var(--space-3);
   margin-bottom: var(--space-4);
-  background: #0c0c0d;
+  background: var(--bg-primary);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
 }
@@ -116,7 +111,7 @@
 }
 
 .errorRegion strong {
-  color: #fca5a5;
+  color: var(--danger);
 }
 
 .form {

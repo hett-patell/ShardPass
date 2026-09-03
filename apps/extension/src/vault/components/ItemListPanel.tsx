@@ -1,5 +1,5 @@
 import type { VaultItem } from "@shardpass/domain";
-import { ItemRow } from "@shardpass/ui";
+import { Button, ItemRow } from "@shardpass/ui";
 
 import { itemDisplayName, itemDisplaySubtitle } from "../item-support";
 import styles from "./ItemListPanel.module.css";
@@ -8,12 +8,79 @@ export interface ItemListPanelProps {
   items: readonly VaultItem[];
   selectedId: string | null;
   onSelect: (id: string) => void;
+  status?: "idle" | "loading" | "ready" | "error";
+  /** The active search text; decides which empty state applies. */
+  search?: string;
+  /** The active category key; "all" means no category filter. */
+  category?: string;
+  onRetry?: () => void;
+  onCreate?: () => void;
 }
 
-/** Renders the filtered item set as ItemRow entries, highlighting the active selection. */
-export function ItemListPanel({ items, selectedId, onSelect }: ItemListPanelProps) {
+const SKELETON_ROWS = 6;
+
+function emptyCopy(search: string, category: string): { title: string; body: string } {
+  if (search.trim() !== "")
+    return { title: `No results for “${search.trim()}”`, body: "Check the spelling, or search a different field." };
+  if (category !== "all" && category !== "")
+    return { title: "Nothing in this category yet", body: "Add one from the New button, or import from another manager." };
+  return { title: "Your vault is empty", body: "Add your first item, or import from a browser, KeePass, Bitwarden or 1Password." };
+}
+
+/** The item list, with honest loading, error and empty states. */
+export function ItemListPanel({
+  items,
+  selectedId,
+  onSelect,
+  status = "ready",
+  search = "",
+  category = "all",
+  onRetry,
+  onCreate,
+}: ItemListPanelProps) {
+  if (status === "loading" && items.length === 0) {
+    return (
+      <div className={styles.skeleton} role="status" aria-label="Loading items">
+        {Array.from({ length: SKELETON_ROWS }, (_, index) => (
+          <div key={index} className={styles.skeletonRow} aria-hidden="true">
+            <span className={styles.skeletonIcon} />
+            <span className={styles.skeletonLines}>
+              <span className={styles.skeletonLine} />
+              <span className={`${styles.skeletonLine} ${styles.skeletonLineShort}`} />
+            </span>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  if (status === "error" && items.length === 0) {
+    return (
+      <div className={styles.stateBlock} role="alert">
+        <strong>Couldn’t load your items</strong>
+        <span>The background service didn’t answer. It may be restarting.</span>
+        {onRetry ? (
+          <Button variant="secondary" onClick={onRetry}>
+            Try again
+          </Button>
+        ) : null}
+      </div>
+    );
+  }
+
   if (items.length === 0) {
-    return <p className={styles.empty}>No items match the current filters.</p>;
+    const copy = emptyCopy(search, category);
+    return (
+      <div className={styles.stateBlock}>
+        <strong>{copy.title}</strong>
+        <span>{copy.body}</span>
+        {onCreate && search.trim() === "" ? (
+          <Button variant="secondary" onClick={onCreate}>
+            New item
+          </Button>
+        ) : null}
+      </div>
+    );
   }
 
   return (

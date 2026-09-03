@@ -79,7 +79,7 @@
 }
 
 .destructive {
-  color: #ffffff;
+  color: var(--danger-text);
   background: var(--danger);
   border-color: var(--danger);
 }

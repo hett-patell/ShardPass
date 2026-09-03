@@ -18,3 +18,11 @@ export { ItemRow } from "./components/ItemRow";
 export type { ItemRowProps } from "./components/ItemRow";
 export { SearchBar } from "./components/SearchBar";
 export type { SearchBarProps } from "./components/SearchBar";
+export { ThemeToggle } from "./components/ThemeToggle";
+export {
+  applyThemePreference,
+  getThemePreference,
+  nextThemePreference,
+  setThemePreference,
+  type ThemePreference,
+} from "./theme";

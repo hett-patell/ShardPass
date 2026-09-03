@@ -33,7 +33,6 @@ export function NoteDetail({ item, platform, onUpdate, onDeleted }: NoteDetailPr
   return (
     <div className={styles.detail}>
       <header className={styles.header}>
-        <p className={styles.eyebrow}>NOTE</p>
         <h2 className={styles.title}>{item.name}</h2>
       </header>
 

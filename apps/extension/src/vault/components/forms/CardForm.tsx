@@ -132,7 +132,6 @@ export function CardForm({ item, platform, onSaved, onCancel }: CardFormProps) {
       }}
     >
       <header className={styles.header}>
-        <p className={styles.eyebrow}>CARD</p>
         <h2 className={styles.title}>{item ? "Edit card" : "New card"}</h2>
       </header>
 

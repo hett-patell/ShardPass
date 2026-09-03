@@ -1,31 +1,27 @@
 :host {
-  /* Neutral palette, matched to @shardpass/ui's shared design tokens
-     (packages/ui/src/styles/tokens.css, dark palette) so the in-page
-     picker reads as part of the same system instead of carrying its own
-     brand color. Duplicated here (rather than importing tokens.css)
-     because this stylesheet is injected into an isolated shadow root on
-     arbitrary third-party pages, which never define ShardPass's tokens
-     on their own document. */
-  --color-bg: #111113;
-  --color-surface: #1a1a1e;
-  --color-elevated: #232328;
-  --color-text: #ededef;
-  --color-text-muted: #8e8e96;
-  --color-border: #27272a;
-  --color-border-strong: #3f3f46;
-  --color-accent: #3b82f6;
-  --color-accent-hover: #60a5fa;
-  --color-focus: #93c5fd;
-  --font-sans: "Inter Tight", "Arial Narrow", Arial, sans-serif;
-  --font-mono: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
+  /* The same neutral system as @shardpass/ui's tokens, duplicated here because this sheet
+     is injected into an isolated shadow root on third-party pages that never define the
+     extension's tokens. Light by default, dark when the page's user prefers it. */
+  --color-bg: #ffffff;
+  --color-surface: #f7f7f8;
+  --color-elevated: #ffffff;
+  --color-text: #111113;
+  --color-text-muted: #6e6e76;
+  --color-border: #e4e4e7;
+  --color-border-strong: #d4d4d8;
+  --color-accent: #2563eb;
+  --color-accent-hover: #1d4ed8;
+  --color-focus: #2563eb;
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --font-mono: "SF Mono", "Cascadia Code", "Fira Code", monospace;
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
   --space-4: 16px;
-  --radius-xs: 1px;
-  --radius-sm: 2px;
+  --radius-xs: 4px;
+  --radius-sm: 6px;
   --control-height-sm: 32px;
-  --elevation-picker: 0 1px 0 #000000, 0 8px 24px rgb(0 0 0 / 44%);
+  --elevation-picker: 0 1px 2px rgb(0 0 0 / 8%), 0 8px 24px rgb(0 0 0 / 16%);
   --z-picker: 600;
   --motion-fast: 150ms;
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
@@ -100,7 +96,6 @@
   border-bottom: 1px solid var(--color-border);
 }
 
-.eyebrow,
 .title,
 .status {
   margin: 0;
@@ -110,7 +105,6 @@
   min-width: 0;
 }
 
-.eyebrow,
 .originLabel {
   color: var(--color-text-muted);
   font-family: var(--font-mono);
@@ -119,9 +113,6 @@
   letter-spacing: 0.08em;
 }
 
-.eyebrow {
-  overflow-wrap: anywhere;
-}
 
 .title {
   margin-top: 2px;
@@ -207,5 +198,21 @@
 @media (prefers-reduced-motion: reduce) {
   .closeButton {
     transition-duration: 1ms;
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  :host {
+    --color-bg: #111113;
+    --color-surface: #1a1a1e;
+    --color-elevated: #232328;
+    --color-text: #ededef;
+    --color-text-muted: #8e8e96;
+    --color-border: #27272a;
+    --color-border-strong: #3f3f46;
+    --color-accent: #3b82f6;
+    --color-accent-hover: #60a5fa;
+    --color-focus: #93c5fd;
+    --elevation-picker: 0 1px 0 #000000, 0 8px 24px rgb(0 0 0 / 44%);
   }
 }

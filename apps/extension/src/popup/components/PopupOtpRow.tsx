@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { ExtensionPlatform } from "../../platform/extension-platform";
 import { OtpCountdown } from "../otp/OtpCountdown";
+import { scheduleClipboardClear } from "../../vault/components/detail/clipboard";
 import styles from "./PopupOtpRow.module.css";
 
 export interface PopupOtpRowProps {
@@ -84,7 +85,10 @@ export function PopupOtpRow({ item, now = Date.now, onFeedback, platform }: Popu
       rejectPayload = reject;
     });
     void authoritativePayload.catch(() => undefined);
-    const clipboardOperation = platform.writeAuthoritativeClipboardText(authoritativePayload);
+    const clipboardOperation = platform
+      .writeAuthoritativeClipboardText(authoritativePayload)
+      // A one-time code is stale within a minute anyway; do not leave it on the clipboard.
+      .then(() => scheduleClipboardClear());
     void platform
       .sendOtpMessage({
         version: 1,

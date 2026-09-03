@@ -14,14 +14,6 @@
   font-size: var(--text-lg);
 }
 
-.kicker {
-  margin: 0;
-  color: var(--text-secondary);
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
-  font-weight: 700;
-  letter-spacing: 0.07em;
-}
 
 .sourceSelector {
   display: flex;

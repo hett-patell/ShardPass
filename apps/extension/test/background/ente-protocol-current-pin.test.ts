@@ -68,7 +68,8 @@ describe("current-pin Ente protocol", () => {
     expect(
       totpTwoFactorVerifyRequestSchema.parse({ code: "123456", sessionID: uuid }),
     ).toBeTruthy();
-    expect(() => srpAttributesResponseSchema.parse({ ...attrs, extra: true })).toThrow();
+    // Responses tolerate fields the server adds later; they are stripped, not fatal.
+    expect(srpAttributesResponseSchema.parse({ ...attrs, extra: true })).toEqual(attrs);
   });
 
   it("enforces canonical entities, tombstones, requests, and query values", () => {
@@ -90,7 +91,8 @@ describe("current-pin Ente protocol", () => {
       authenticatorKeyResponseSchema.parse({ encryptedKey: "AA==", header: "AQ==" }),
     ).toBeTruthy();
     expect(createEntityRequestSchema.parse({ encryptedData: "AA==", header: "AQ==" })).toBeTruthy();
-    expect(createEntityResponseSchema.parse(live)).toEqual(live);
+    // Only the id of a create reply is meaningful; the rest is stripped.
+    expect(createEntityResponseSchema.parse(live)).toEqual({ id: live.id });
     expect(
       updateEntityRequestSchema.parse({ id: uuid, encryptedData: "AA==", header: "AQ==" }),
     ).toBeTruthy();

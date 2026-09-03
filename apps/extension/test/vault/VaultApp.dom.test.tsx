@@ -146,10 +146,10 @@ describe("VaultApp foundation shell", () => {
     const alert = await screen.findByRole("alert");
 
     expect(alert).toHaveTextContent(
-      "ShardPass couldn’t confirm its foundation status. Reload the vault to try again.",
+      "ShardPass can’t reach its background service. Reload the extension and try again.",
     );
     expect(alert).not.toHaveTextContent(/secret backend stack|payload/i);
-    expect(screen.getByRole("status")).toHaveTextContent("Foundation unavailable");
+    expect(screen.getByRole("status")).toHaveTextContent("Background unavailable");
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
 
     await expectNoSeriousAxeViolations(container);

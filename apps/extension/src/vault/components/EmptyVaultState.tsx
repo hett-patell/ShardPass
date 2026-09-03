@@ -6,21 +6,18 @@ export interface EmptyVaultStateProps {
 }
 
 const safeFoundationError =
-  "ShardPass couldn’t confirm its foundation status. Reload the vault to try again.";
+  "ShardPass can’t reach its background service. Reload the extension and try again.";
 
 /** Shown while the extension's foundation status is loading or unavailable, before the vault can be reached at all. */
 export function EmptyVaultState({ foundation }: EmptyVaultStateProps) {
   return (
     <div className={styles.state}>
-      <p className={styles.eyebrow}>Foundation</p>
       <h2>
-        {foundation.state === "loading"
-          ? "Checking the vault foundation…"
-          : "The vault foundation is unavailable."}
+        {foundation.state === "loading" ? "Starting up…" : "The background service is unavailable."}
       </h2>
       <p>
-        ShardPass verifies its runtime foundation before the encrypted vault can be unlocked. No
-        vault items are stored, listed, or decrypted during this check.
+        ShardPass checks that its background service is running before the vault can be unlocked.
+        Nothing is decrypted during this check.
       </p>
       {foundation.state === "error" ? (
         <p className={styles.error} role="alert">

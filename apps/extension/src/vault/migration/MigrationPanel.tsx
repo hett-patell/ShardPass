@@ -40,7 +40,6 @@ export function MigrationPanel({
     <section className={styles.panel} aria-labelledby="migration-heading">
       <header className={styles.header}>
         <div>
-          <p className={styles.kicker}>IMPORT / LEGACY V1</p>
           <h3 id="migration-heading">Migrate legacy vault</h3>
         </div>
         <span className={styles.phase}>{phaseLabel(state.phase)}</span>

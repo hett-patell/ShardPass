@@ -93,7 +93,6 @@ export function NoteForm({ item, platform, onSaved, onCancel }: NoteFormProps) {
       }}
     >
       <header className={styles.header}>
-        <p className={styles.eyebrow}>NOTE</p>
         <h2 className={styles.title}>{item ? "Edit note" : "New note"}</h2>
       </header>
 

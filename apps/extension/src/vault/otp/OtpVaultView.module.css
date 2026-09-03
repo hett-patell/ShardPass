@@ -34,7 +34,6 @@
   }
 }
 
-.kicker,
 .indexHeader span,
 .itemMeta {
   margin: 0 0 var(--space-1);
@@ -305,16 +304,6 @@
   justify-content: flex-end;
   padding-top: var(--space-3);
   border-top: 1px solid var(--border);
-}
-
-.dialogBackdrop {
-  position: fixed;
-  z-index: var(--z-modal-backdrop);
-  inset: 0;
-  display: grid;
-  place-items: center;
-  padding: var(--space-4);
-  background: rgb(0 0 0 / 45%);
 }
 
 .dialog {

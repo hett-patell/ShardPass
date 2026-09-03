@@ -61,7 +61,6 @@ export function OtpImportView(props: OtpImportViewProps) {
     >
       <header className={styles.header}>
         <div>
-          <p className={styles.kicker}>LOCAL INPUT / SAFE PREVIEW</p>
           <h3 id="otp-import-heading">Import OTP items</h3>
         </div>
         {preview === null ? (

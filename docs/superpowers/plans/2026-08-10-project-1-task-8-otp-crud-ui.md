@@ -60,11 +60,11 @@
 - `apps/extension/src/popup/otp/OtpRow.tsx` — compact issuer/label/code row with explicit copy and edit-in-vault actions.
 - `apps/extension/src/popup/otp/OtpList.tsx` — popup loading, locked, empty, list, rollover, copy feedback, and vault navigation behavior.
 - `apps/extension/src/popup/otp/OtpList.module.css` — compact popup OTP visuals and reduced-motion behavior.
-- `apps/extension/test/popup/OtpList.dom.test.tsx` — popup list/countdown/copy/navigation/accessibility tests.
+- `apps/extension/test/popup/PopupApp.dom.test.tsx` — popup list/countdown/copy/navigation/accessibility tests.
 - `apps/extension/src/vault/otp/OtpVaultView.tsx` — full-page searchable list/detail orchestration, selection, conflict refresh, and delete confirmation.
 - `apps/extension/src/vault/otp/OtpEditor.tsx` — vault-only create/edit form and concealed-by-default secret control.
 - `apps/extension/src/vault/otp/OtpVaultView.module.css` — responsive list/editor split view and compact mode.
-- `apps/extension/test/vault/OtpVaultView.dom.test.tsx` — search, create, edit, delete, conflict, focus, and MigrationPanel coexistence tests.
+- `apps/extension/test/vault/VaultApp.dom.test.tsx` — search, create, edit, delete, conflict, focus, and MigrationPanel coexistence tests.
 - `tests/browser/project1-otp-crud.spec.ts` — packaged-extension setup, unlock, create/search/edit/delete, popup code/copy, rollover, conflict-safe behavior, lock redaction, and accessibility E2E.
 - `.sdd/project1-task8-execution-ledger.md` — Task 8-only command and review evidence, created when Task 1 records its first RED result.
 
@@ -616,7 +616,7 @@ Expected: PASS; setup/unlock/lock/settings/migration routing remains passing and
 - Create: `apps/extension/src/popup/otp/OtpRow.tsx`
 - Create: `apps/extension/src/popup/otp/OtpList.tsx`
 - Create: `apps/extension/src/popup/otp/OtpList.module.css`
-- Create: `apps/extension/test/popup/OtpList.dom.test.tsx`
+- Create: `apps/extension/test/popup/PopupApp.dom.test.tsx`
 - Modify: `apps/extension/src/popup/PopupApp.tsx`
 - Modify: `apps/extension/src/popup/PopupApp.module.css`
 - Modify: `apps/extension/test/popup/PopupApp.dom.test.tsx`
@@ -673,7 +673,7 @@ Cover locked redaction (no metadata), loading/empty/error, Steam display, HOTP u
 
 - [ ] **Step 2: Run RED tests**
 
-Run: `pnpm exec vitest run apps/extension/test/popup/OtpList.dom.test.tsx apps/extension/test/popup/PopupApp.dom.test.tsx`
+Run: `pnpm exec vitest run apps/extension/test/popup/PopupApp.dom.test.tsx apps/extension/test/popup/PopupApp.dom.test.tsx`
 
 Expected: FAIL because popup OTP components do not exist and `PopupApp` still renders foundation-only content.
 
@@ -698,7 +698,7 @@ Expected: PASS; locked popup shows no account metadata, copy is gesture-bound, c
 - Create: `apps/extension/src/vault/otp/OtpVaultView.tsx`
 - Create: `apps/extension/src/vault/otp/OtpEditor.tsx`
 - Create: `apps/extension/src/vault/otp/OtpVaultView.module.css`
-- Create: `apps/extension/test/vault/OtpVaultView.dom.test.tsx`
+- Create: `apps/extension/test/vault/VaultApp.dom.test.tsx`
 - Modify: `apps/extension/src/vault/VaultApp.tsx`
 - Modify: `apps/extension/src/vault/VaultApp.module.css`
 - Modify: `apps/extension/test/vault/VaultApp.dom.test.tsx`
@@ -760,7 +760,7 @@ Cover NFKC search request, empty/no-result state, selection, TOTP/HOTP/Steam con
 
 - [ ] **Step 2: Run RED tests**
 
-Run: `pnpm exec vitest run apps/extension/test/vault/OtpVaultView.dom.test.tsx apps/extension/test/vault/VaultApp.dom.test.tsx apps/extension/test/vault/VaultApp.styles.test.ts`
+Run: `pnpm exec vitest run apps/extension/test/vault/VaultApp.dom.test.tsx apps/extension/test/vault/VaultApp.dom.test.tsx apps/extension/test/vault/VaultApp.styles.test.ts`
 
 Expected: FAIL because the vault OTP view/editor do not exist and current search/create controls are disabled.
 

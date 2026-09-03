@@ -1,6 +1,6 @@
 import type { OtpItem, VaultItemKind } from "@shardpass/domain";
 import type { OtpEditableInput, OtpResponse } from "@shardpass/messaging";
-import { AppHeader, SearchBar, StatusBadge, type CategoryKey, type Status } from "@shardpass/ui";
+import { AppHeader, SearchBar, StatusBadge, ThemeToggle, type CategoryKey, type Status } from "@shardpass/ui";
 import { useCallback, useState } from "react";
 
 import { useFoundationStatus } from "../foundation/useFoundationStatus";
@@ -43,11 +43,11 @@ function statusPresentation(state: "loading" | "ready" | "error"): {
 } {
   switch (state) {
     case "loading":
-      return { label: "Checking foundation", status: "neutral" };
+      return { label: "Connecting", status: "neutral" };
     case "ready":
-      return { label: "Foundation ready", status: "success" };
+      return { label: "Ready", status: "success" };
     case "error":
-      return { label: "Foundation unavailable", status: "error" };
+      return { label: "Background unavailable", status: "error" };
   }
 }
 
@@ -159,7 +159,6 @@ export function VaultApp({ platform }: VaultAppProps) {
       </a>
 
       <AppHeader
-        eyebrow="ENCRYPTED VAULT"
         title="ShardPass"
         actions={<StatusBadge status={presentation.status}>{presentation.label}</StatusBadge>}
       />
@@ -203,6 +202,11 @@ export function VaultApp({ platform }: VaultAppProps) {
                       items={vaultState.items}
                       selectedId={creatingKind === null ? vaultState.selectedId : null}
                       onSelect={selectItem}
+                      status={vaultState.status}
+                      search={vaultState.search}
+                      category={vaultState.category}
+                      onRetry={vaultState.refresh}
+                      onCreate={() => startCreate("login")}
                     />
                   </div>
                 </div>
@@ -253,6 +257,12 @@ export function VaultApp({ platform }: VaultAppProps) {
               <div className={styles.settingsPanel}>
                 {view === "settings" ? (
                   <>
+                    <section className={styles.settingsCard} aria-labelledby="appearance-heading">
+                      <h3 id="appearance-heading" className={styles.settingsCardTitle}>
+                        Appearance
+                      </h3>
+                      <ThemeToggle />
+                    </section>
                     <VaultAccess platform={platform} securityControls onUnlockedChange={setVaultUnlocked} />
                     <MigrationPanel platform={platform} active onCompleted={handleUpdate} />
                     <ImportDialog platform={platform} active onImported={handleUpdate} />
