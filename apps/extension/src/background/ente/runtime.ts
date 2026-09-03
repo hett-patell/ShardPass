@@ -122,7 +122,17 @@ export function createEnteRuntimeOwner(
         ciphertext.fill(0);
       }
     },
-    cycle: createEnteOperationalCycle(operational),
+    // libsodium finishes compiling asynchronously after the worker starts. A cycle that ran
+    // before it was ready found `sodium` undefined and reported ENTE_UNAVAILABLE -- which
+    // is exactly what happens when the user's action is what woke a lazy MV3 worker.
+    // Gate every cycle on readiness instead of checking it synchronously mid-cycle.
+    cycle: (() => {
+      const run = createEnteOperationalCycle(operational);
+      return async (trigger: EnteSyncTrigger, signal: AbortSignal) => {
+        await dependencies.sodiumReady;
+        return run(trigger, signal);
+      };
+    })(),
     preview: (sender: SenderContext) => resolver.preview(sender),
     resolve: async (capability, choice, sender) => {
       await resolver.resolve(capability, choice, sender);

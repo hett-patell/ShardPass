@@ -220,9 +220,17 @@ export function createEnteClient(dependencies: { readonly fetch: EnteFetch }): E
         return undefined as T;
       }
       const json = await boundedJson(response, input.budget ?? createEnteResponseBudget());
-      return input.schema === undefined
-        ? (json as T)
-        : parseEnteProtocolResponse(input.schema as never, json);
+      if (input.schema === undefined) return json as T;
+      try {
+        return parseEnteProtocolResponse(input.schema as never, json);
+      } catch (error) {
+        if (!(error instanceof EnteProtocolError)) throw error;
+        // Name the request whose shape drifted; the body itself is never surfaced.
+        throw fixedError(
+          error.code,
+          `${input.method} ${input.path.split("?")[0]} -> unexpected response shape`,
+        );
+      }
     } catch (error) {
       if (error instanceof EnteProtocolError) throw error;
       // fetch itself rejected: no response at all (network, CSP, abort, timeout).

@@ -3,6 +3,13 @@ import { z } from "zod/mini";
 import { ENTE_SYNC_LIMITS, type EnteOtpProjection } from "./protocol";
 
 const strict = z.strictObject;
+/**
+ * Responses are parsed tolerantly: unknown keys are stripped, never fatal. The server adds
+ * fields as the API evolves (userID and createdAt on the key, more on entities), and a
+ * client that treats a new field as protocol drift stops syncing on every such release.
+ * Requests we send remain strict -- those we control.
+ */
+const tolerant = z.object;
 const canonicalBase64 = (max: number) =>
   z.string().check(
     z.maxLength(max),
@@ -24,8 +31,8 @@ const b64 = canonicalBase64(ENTE_SYNC_LIMITS.maxBase64TextBytes);
 const ciphertext = canonicalBase64(ENTE_SYNC_LIMITS.maxCiphertextBytes);
 const header = canonicalBase64(ENTE_SYNC_LIMITS.maxHeaderBytes);
 
-export const srpAttributesResponseSchema = strict({
-  attributes: strict({
+export const srpAttributesResponseSchema = tolerant({
+  attributes: tolerant({
     srpUserID: uuid,
     srpSalt: b64,
     memLimit: positiveBounded,
@@ -35,13 +42,13 @@ export const srpAttributesResponseSchema = strict({
   }),
 });
 export const createSrpSessionRequestSchema = strict({ srpUserID: uuid, srpA: b64 });
-export const createSrpSessionResponseSchema = strict({ sessionID: uuid, srpB: b64 });
+export const createSrpSessionResponseSchema = tolerant({ sessionID: uuid, srpB: b64 });
 export const verifySrpSessionRequestSchema = strict({
   sessionID: uuid,
   srpUserID: uuid,
   srpM1: b64,
 });
-export const verifySrpSessionResponseSchema = strict({
+export const verifySrpSessionResponseSchema = tolerant({
   srpM2: b64,
   id: safeTimestamp,
   token: z.optional(b64),
@@ -57,34 +64,34 @@ export const totpTwoFactorVerifyRequestSchema = strict({
   code: z.string().check(z.regex(/^\d{6,10}$/u)),
   sessionID: uuid,
 });
-export const totpTwoFactorVerifyResponseSchema = strict({
+export const totpTwoFactorVerifyResponseSchema = tolerant({
   id: safeTimestamp,
   encryptedToken: b64,
   keyAttributes: z.unknown(),
 });
-export const authenticatorKeyResponseSchema = strict({ encryptedKey: ciphertext, header });
+export const authenticatorKeyResponseSchema = tolerant({ encryptedKey: ciphertext, header });
 
-const liveEntity = strict({
+const liveEntity = tolerant({
   id: uuid,
   encryptedData: ciphertext,
   header,
   isDeleted: z.literal(false),
-  createdAt: safeTimestamp,
+  createdAt: z.optional(safeTimestamp),
   updatedAt: safeTimestamp,
 });
-const deletedEntity = strict({
+const deletedEntity = tolerant({
   id: uuid,
-  encryptedData: z.null(),
-  header: z.null(),
+  encryptedData: z.nullish(ciphertext),
+  header: z.nullish(header),
   isDeleted: z.literal(true),
-  createdAt: safeTimestamp,
+  createdAt: z.optional(safeTimestamp),
   updatedAt: safeTimestamp,
 });
 export const authenticatorEntitySchema = z.discriminatedUnion("isDeleted", [
   liveEntity,
   deletedEntity,
 ]);
-export const authenticatorEntityDiffResponseSchema = strict({
+export const authenticatorEntityDiffResponseSchema = tolerant({
   diff: z.array(authenticatorEntitySchema).check(z.maxLength(ENTE_SYNC_LIMITS.pageSize)),
   timestamp: z.nullish(safeTimestamp),
 });
