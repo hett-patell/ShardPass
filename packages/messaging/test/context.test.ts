@@ -23,18 +23,24 @@ const invalidIdentityValues: ReadonlyArray<readonly [string, unknown]> = [
 ];
 
 describe("sender context normalization", () => {
+  // Superseded: an extension page without a browser-supplied document identity is now
+  // admitted with a substituted per-URL one, because some Chromium browsers never send
+  // documentId for popup/vault senders. See the dedicated describe block below.
   it.each([
     ["popup", `/popup/index.html`],
     ["vault", `/vault/index.html`],
   ] as const)(
-    "rejects the approved %s extension page without document identity",
-    (_contextKind, path) => {
-      const input: unknown = {
-        extensionId,
-        senderUrl: `chrome-extension://${extensionId}${path}`,
-      };
+    "admits the approved %s extension page without a browser document identity",
+    (contextKind, path) => {
+      const senderUrl = `chrome-extension://${extensionId}${path}`;
+      const input: unknown = { extensionId, senderUrl };
 
-      expect(normalizeSenderContext(input, extensionId)).toBeNull();
+      expect(normalizeSenderContext(input, extensionId)).toEqual({
+        extensionId,
+        contextKind,
+        senderUrl,
+        documentId: `page:${senderUrl}`,
+      });
     },
   );
 
@@ -159,5 +165,51 @@ describe("sender context normalization", () => {
     const normalized = normalizeSenderContext(contentMetadata, extensionId);
     expect(SenderContextSchema.safeParse(normalized).success).toBe(true);
     expectTypeOf<SenderContext>().toEqualTypeOf<NonNullable<typeof normalized>>();
+  });
+});
+
+describe("extension pages on browsers that omit MessageSender.documentId", () => {
+  // Brave supplies only extensionId and senderUrl for popup/vault senders. Every
+  // capability-binding service downstream needs a document identity, so normalization
+  // substitutes a per-URL one rather than rejecting the sender outright.
+  const popupUrl = `chrome-extension://${extensionId}/popup/index.html`;
+  const vaultUrl = `chrome-extension://${extensionId}/vault/index.html`;
+
+  it.each([
+    ["popup", popupUrl],
+    ["vault", vaultUrl],
+  ] as const)("accepts the %s page and substitutes a document identity", (contextKind, senderUrl) => {
+    const normalized = normalizeSenderContext({ extensionId, senderUrl }, extensionId);
+    expect(normalized).toEqual({
+      extensionId,
+      contextKind,
+      senderUrl,
+      documentId: `page:${senderUrl}`,
+    });
+    expect(SenderContextSchema.safeParse(normalized).success).toBe(true);
+  });
+
+  it("prefers a browser-supplied documentId over the substitute", () => {
+    const normalized = normalizeSenderContext(
+      { extensionId, senderUrl: popupUrl, documentId: "real-document-id" },
+      extensionId,
+    );
+    expect(normalized?.documentId).toBe("real-document-id");
+  });
+
+  it("keeps popup and vault in separate binding scopes", () => {
+    const popup = normalizeSenderContext({ extensionId, senderUrl: popupUrl }, extensionId);
+    const vault = normalizeSenderContext({ extensionId, senderUrl: vaultUrl }, extensionId);
+    expect(popup?.documentId).not.toBe(vault?.documentId);
+  });
+
+  it("still rejects a foreign extension id and a non-extension URL", () => {
+    expect(normalizeSenderContext({ extensionId, senderUrl: popupUrl }, "other-id")).toBeNull();
+    expect(
+      normalizeSenderContext(
+        { extensionId, senderUrl: `chrome-extension://${extensionId}/evil.html` },
+        extensionId,
+      ),
+    ).toBeNull();
   });
 });

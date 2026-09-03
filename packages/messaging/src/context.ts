@@ -50,6 +50,23 @@ function extensionPageUrl(extensionId: string, contextKind: "popup" | "vault"): 
   return `chrome-extension://${extensionId}/${contextKind}/index.html`;
 }
 
+// Chromium has exposed MessageSender.documentId since M106, but not every Chromium
+// browser populates it for extension-page senders — Brave omits it for the popup and
+// vault pages, supplying only the extension id and URL. Downstream services bind
+// capabilities to this value (KDF challenges, backup authorities, OTP-fill sessions,
+// migration credentials), so an absent id would reject every request outright.
+//
+// Substitute a synthetic per-URL id in that case. Authenticity is unchanged: it still
+// rests on the extension id plus an exact extension-page URL match, neither of which a
+// web page or another extension can forge. The single concession is that two documents
+// sharing one URL (two vault tabs) also share a binding scope rather than being isolated
+// from one another. Popup and vault keep separate scopes, as their URLs differ. Where
+// the browser does supply a real documentId it is always preferred, so Chromium >= 106
+// keeps exact per-document isolation.
+function syntheticDocumentId(senderUrl: string): string {
+  return `page:${senderUrl}`;
+}
+
 function isHttpSenderUrl(senderUrl: string): boolean {
   try {
     const protocol = new URL(senderUrl).protocol;
@@ -84,15 +101,12 @@ export function normalizeSenderContext(
 
   const metadata = parsed.data;
   for (const contextKind of ["popup", "vault"] as const) {
-    if (
-      metadata.senderUrl === extensionPageUrl(expectedExtensionId, contextKind) &&
-      metadata.documentId !== undefined
-    ) {
+    if (metadata.senderUrl === extensionPageUrl(expectedExtensionId, contextKind)) {
       return {
         extensionId: expectedExtensionId,
         contextKind,
         senderUrl: metadata.senderUrl,
-        documentId: metadata.documentId,
+        documentId: metadata.documentId ?? syntheticDocumentId(metadata.senderUrl),
         ...(metadata.tabId === undefined ? {} : { tabId: metadata.tabId }),
         ...(metadata.frameId === undefined ? {} : { frameId: metadata.frameId }),
       };

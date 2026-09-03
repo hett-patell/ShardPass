@@ -246,8 +246,13 @@ export function installBackground(
     void (async () => {
       if (!(await awaitReady()) || !active) return;
       const sender = normalizeSenderContext(rawSenderMetadata, platform.extensionId);
-      if (sender === null || sender.contextKind === "content" || sender.documentId === undefined)
+      if (sender === null || sender.contextKind === "content" || sender.documentId === undefined) {
+        console.warn(
+          "[ShardPass] Vault-state port rejected. Raw metadata:",
+          JSON.stringify(rawSenderMetadata),
+        );
         return;
+      }
       unsubscribe = publisher.subscribe(send);
     })();
     return () => {
@@ -259,6 +264,16 @@ export function installBackground(
     if (!(await awaitReady())) return errorResponse("VAULT_UNAVAILABLE");
     try {
       const senderContext = normalizeSenderContext(rawSenderMetadata, platform.extensionId);
+      if (senderContext === null)
+        // A rejected sender is otherwise indistinguishable from a dead worker at the
+        // call site, so name the metadata that failed normalization. Browser-supplied
+        // routing fields only — no message payload, no vault data.
+        console.warn(
+          "[ShardPass] Sender rejected (UNAUTHORIZED_SENDER). Raw metadata:",
+          JSON.stringify(rawSenderMetadata),
+          "expected extensionId:",
+          platform.extensionId,
+        );
       const parsedBackup = BackupRequestSchema.safeParse(payload);
       const parsedVault = VaultRequestSchema.safeParse(payload);
       const parsedMigration = MigrationRequestSchema.safeParse(payload);
