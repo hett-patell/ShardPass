@@ -18,8 +18,8 @@ export type EnteSessionPayload = Readonly<{
   accountFingerprint: Uint8Array;
 }>;
 
-function reject(): never {
-  throw new EnteProtocolError("ENTE_AUTH_FAILED");
+function reject(reason = "session handoff rejected"): never {
+  throw new EnteProtocolError("ENTE_AUTH_FAILED", reason);
 }
 
 export function encodeEnteSessionPayload(input: EnteSessionPayload): Uint8Array {

@@ -25,24 +25,28 @@ export type EnteEncryptedOtpEntity = AuthEntityFrame & Readonly<{ version: 1 }>;
 
 const MAX_FIELD_LENGTH = 1024;
 
-function invalid(): never {
-  throw new EnteProtocolError("ENTE_INVALID");
+/** `reason` says which rule an entity broke; it never quotes the entity itself. */
+function invalid(reason: string): never {
+  throw new EnteProtocolError("ENTE_INVALID", reason);
 }
 
 function validateProjection(input: unknown): EnteOtpProjection {
   const result = enteOtpProjectionSchema.safeParse(input);
-  if (!result.success) invalid();
+  if (!result.success)
+    invalid(`code failed validation (${result.error.issues[0]?.path.join(".") || "shape"})`);
   const value = result.data;
   if (
     !value.label ||
     encoder.encode(value.issuer).length > MAX_FIELD_LENGTH ||
     encoder.encode(value.label).length > MAX_FIELD_LENGTH
   )
-    invalid();
+    invalid("code has an empty label or an over-long issuer/label");
   if (value.otpType === "hotp") {
-    if (value.counter === undefined || value.period !== undefined) invalid();
-  } else if (value.counter !== undefined) invalid();
-  if (value.otpType === "steam" && (value.algorithm !== "SHA1" || value.digits !== 5)) invalid();
+    if (value.counter === undefined || value.period !== undefined)
+      invalid("HOTP code without a counter, or with a period");
+  } else if (value.counter !== undefined) invalid("time-based code with a counter");
+  if (value.otpType === "steam" && (value.algorithm !== "SHA1" || value.digits !== 5))
+    invalid("Steam code that is not SHA1 with 5 digits");
   return {
     version: 1,
     kind: "otp",
@@ -103,7 +107,7 @@ function parsePathname(url: URL): { type: EnteOtpProjection["otpType"]; path: st
   if (lowered.startsWith("//totp")) return { type: "totp", path: url.pathname.slice(6) };
   if (lowered.startsWith("//hotp")) return { type: "hotp", path: url.pathname.slice(6) };
   if (lowered.startsWith("//steam")) return { type: "steam", path: url.pathname.slice(7) };
-  return invalid();
+  return invalid("otpauth URI with an unsupported code type");
 }
 
 function decodePath(rawPath: string): string {
@@ -172,10 +176,10 @@ function positiveInt(raw: string | null): number | undefined {
 /** Parses an Ente Auth URI into the internal projection; `null` when the code is trashed. */
 export function projectionFromEnteUri(uri: string): EnteOtpProjection | null {
   const url = safeUrl(uri);
-  if (url.protocol !== "otpauth:") invalid();
+  if (url.protocol !== "otpauth:") invalid("plaintext is not an otpauth URI");
   const { type, path } = parsePathname(url);
   const secret = url.searchParams.get("secret");
-  if (!secret) invalid();
+  if (!secret) invalid("otpauth URI without a secret");
   const display = parseCodeDisplay(url);
   if (display?.trashed) return null;
 
@@ -242,7 +246,7 @@ export function encryptEnteOtpEntity(
   try {
     return sodium.encryptAuthEntity(plaintext, authKey);
   } catch {
-    throw new EnteProtocolError("ENTE_INVALID");
+    throw new EnteProtocolError("ENTE_INVALID", "entity could not be encrypted");
   } finally {
     plaintext.fill(0);
   }
@@ -257,11 +261,12 @@ export function parseEnteOtpEntity(
   authKey: Uint8Array,
   sodium: EnteSodiumAdapter,
 ): EnteOtpProjection | null {
-  if (entity.version !== 1) throw new EnteProtocolError("ENTE_INVALID");
+  if (entity.version !== 1) invalid("unsupported entity frame version");
   let plaintext: Uint8Array | undefined;
   try {
     plaintext = sodium.decryptAuthEntity(entity, authKey);
-    if (plaintext.byteLength > ENTE_SYNC_LIMITS.maxDecryptedEntityBytes) invalid();
+    if (plaintext.byteLength > ENTE_SYNC_LIMITS.maxDecryptedEntityBytes)
+      invalid("decrypted entity is larger than the sync accepts");
     const text = decoder.decode(plaintext).trim();
     let value: unknown = text;
     try {
@@ -271,10 +276,11 @@ export function parseEnteOtpEntity(
     }
     if (typeof value === "string") return projectionFromEnteUri(value);
     if (typeof value === "object" && value !== null) return validateProjection(value);
-    return invalid();
+    return invalid("decrypted entity is neither a URI nor a code object");
   } catch (error) {
     if (error instanceof EnteProtocolError) throw error;
-    throw new EnteProtocolError("ENTE_INVALID");
+    // Wrong key, corrupt ciphertext, or bytes that are not UTF-8: the entity is unreadable.
+    throw new EnteProtocolError("ENTE_INVALID", "entity could not be decrypted");
   } finally {
     plaintext?.fill(0);
   }

@@ -9,6 +9,11 @@ type Entity = z.infer<typeof authenticatorEntitySchema>;
 export type RemoteOtpState = Entity;
 type Observation = Readonly<{ updatedAt: number; digest: string; entity: Entity }>;
 
+/** Names the check that failed and the page it failed on; ids are not secrets. */
+function ambiguous(page: number, reason: string): EnteProtocolError {
+  return new EnteProtocolError("ENTE_TIMESTAMP_AMBIGUOUS", `diff page ${page + 1}: ${reason}`);
+}
+
 function observationDigest(entity: Entity): string {
   return canonicalJson({
     isDeleted: entity.isDeleted,
@@ -42,7 +47,7 @@ export async function readRemoteState(input: {
         : ENTE_SYNC_LIMITS.maxPagesPerIncremental;
 
     for (let page = 0; page < maxPages; page += 1) {
-      if (input.signal.aborted) throw new EnteProtocolError("ENTE_UNAVAILABLE");
+      if (input.signal.aborted) throw new EnteProtocolError("ENTE_UNAVAILABLE", "sync cancelled");
       const requested = cursor;
       const response =
         input.budget === undefined
@@ -50,14 +55,14 @@ export async function readRemoteState(input: {
           : await input.client.getEntityDiff(input.token, requested, input.signal, input.budget);
       total += response.diff.length;
       if (total > ENTE_SYNC_LIMITS.maxRemoteChanges)
-        throw new EnteProtocolError("ENTE_LIMIT_REACHED");
+        throw new EnteProtocolError("ENTE_LIMIT_REACHED", "more remote changes than the sync accepts");
 
       let maximum = requested;
       let maximumCount = 0;
       for (const entity of response.diff) {
         if (entity.updatedAt <= requested && mode === "incremental")
-          throw new EnteProtocolError("ENTE_TIMESTAMP_AMBIGUOUS");
-        if (entity.updatedAt < requested) throw new EnteProtocolError("ENTE_TIMESTAMP_AMBIGUOUS");
+          throw ambiguous(page, "an entity is not newer than the cursor");
+        if (entity.updatedAt < requested) throw ambiguous(page, "an entity is older than the cursor");
         if (entity.updatedAt > maximum) {
           maximum = entity.updatedAt;
           maximumCount = 1;
@@ -67,9 +72,9 @@ export async function readRemoteState(input: {
         const previous = observations.get(entity.id);
         if (previous !== undefined) {
           if (entity.updatedAt < previous.updatedAt)
-            throw new EnteProtocolError("ENTE_TIMESTAMP_AMBIGUOUS");
+            throw ambiguous(page, "an entity went backwards in time");
           if (entity.updatedAt === previous.updatedAt && digest !== previous.digest)
-            throw new EnteProtocolError("ENTE_TIMESTAMP_AMBIGUOUS");
+            throw ambiguous(page, "one entity, one timestamp, two contents");
           if (entity.updatedAt === previous.updatedAt) continue;
         }
         observations.set(entity.id, { updatedAt: entity.updatedAt, digest, entity });
@@ -79,17 +84,17 @@ export async function readRemoteState(input: {
 
       const serverTimestamp = response.timestamp ?? maximum;
       if (serverTimestamp < requested || serverTimestamp < maximum)
-        throw new EnteProtocolError("ENTE_TIMESTAMP_AMBIGUOUS");
+        throw ambiguous(page, "the server's timestamp is behind the entities it sent");
 
       let liveEntityCount = 0;
       for (const entity of entities.values()) if (!entity.isDeleted) liveEntityCount += 1;
       if (liveEntityCount > ENTE_SYNC_LIMITS.maxLiveRemoteEntities)
-        throw new EnteProtocolError("ENTE_LIMIT_REACHED");
+        throw new EnteProtocolError("ENTE_LIMIT_REACHED", "more live remote codes than the sync accepts");
 
       const full = response.diff.length === ENTE_SYNC_LIMITS.pageSize;
       if (full) {
         if (maximum <= requested || maximumCount > 1)
-          throw new EnteProtocolError("ENTE_TIMESTAMP_AMBIGUOUS");
+          throw ambiguous(page, "a full page cannot be continued from a unique timestamp");
         cursor = maximum;
         continue;
       }
@@ -102,7 +107,7 @@ export async function readRemoteState(input: {
         nextCursor: cursor,
       };
     }
-    throw new EnteProtocolError("ENTE_LIMIT_REACHED");
+    throw new EnteProtocolError("ENTE_LIMIT_REACHED", `more than ${maxPages} diff pages`);
   };
 
   if (input.forceSnapshot) return attempt(0, "snapshot");
@@ -119,7 +124,10 @@ export async function readRemoteState(input: {
         snapshotError.code !== "ENTE_TIMESTAMP_AMBIGUOUS"
       )
         throw snapshotError;
-      throw new EnteProtocolError("ENTE_TIMESTAMP_AMBIGUOUS");
+      throw new EnteProtocolError(
+        "ENTE_TIMESTAMP_AMBIGUOUS",
+        "incremental and snapshot reads both failed",
+      );
     }
   }
 }

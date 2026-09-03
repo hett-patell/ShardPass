@@ -42,6 +42,14 @@ type AccessLevelCapableArea = chrome.storage.StorageArea & {
   setAccessLevel?: (options: { accessLevel: "TRUSTED_CONTEXTS" }) => Promise<void>;
 };
 
+/** An Ente failure for the panel: `code` names it, `detail` (when known) says where. */
+function enteFailure(code: string, detail?: string): Error & { code: string; detail?: string } {
+  const error = new Error("Ente request failed") as Error & { code: string; detail?: string };
+  error.code = code;
+  if (detail !== undefined) error.detail = detail;
+  return error;
+}
+
 /** Restricts an area to trusted contexts where the browser supports it; warns where it does not. */
 async function setTrustedAccess(area: chrome.storage.StorageArea, label: string): Promise<void> {
   const capable = area as AccessLevelCapableArea;
@@ -315,12 +323,23 @@ export function createChromePlatform(): BackgroundExtensionPlatform &
       let candidate: unknown;
       try {
         candidate = await this.sendMessage(request);
-      } catch {
-        throw new Error("Ente request unavailable");
+      } catch (failure) {
+        // No reply at all: the port closed, or the worker was gone. Chrome's own wording
+        // ("The message port closed before a response was received.") is the useful part.
+        const why = failure instanceof Error ? failure.message.slice(0, 120) : "";
+        throw enteFailure("ENTE_UNAVAILABLE", `no reply from the background${why ? ` (${why})` : ""}`);
       }
       const parsed = EnteSafeStateSchema.safeParse(candidate);
       if (parsed.success) return parsed.data;
-      throw new Error("Ente request unavailable");
+      // The background's error envelope. Its code and detail are the whole diagnosis of a
+      // failed cycle; flattening them to "unavailable" left every sync failure unreadable.
+      const envelope = candidate as { kind?: unknown; error?: { code?: unknown; detail?: unknown } } | null;
+      if (envelope?.kind === "error" && typeof envelope.error?.code === "string")
+        throw enteFailure(
+          envelope.error.code,
+          typeof envelope.error.detail === "string" ? envelope.error.detail : undefined,
+        );
+      throw enteFailure("ENTE_UNAVAILABLE", "unexpected reply shape from the background");
     },
 
     async sendBackupMessage(request: BackupRequest): Promise<BackupResponse> {

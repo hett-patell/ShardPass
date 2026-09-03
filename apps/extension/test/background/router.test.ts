@@ -104,6 +104,22 @@ function routePasswordGen(input: unknown, sender: unknown, service?: unknown) {
   );
 }
 
+function routeEnte(input: unknown, sender: unknown, service?: unknown) {
+  return routeMessage(
+    input,
+    sender,
+    extensionId,
+    undefined, // vaultService
+    undefined, // getState
+    undefined, // migrationHandler
+    undefined, // otpService
+    undefined, // otpImportService
+    undefined, // backupService
+    undefined, // otpFillService
+    service as never, // enteService
+  );
+}
+
 const contentMetadata = {
   extensionId,
   senderUrl: "https://example.test/login",
@@ -1167,5 +1183,39 @@ describe("background installation", () => {
 
     expect(platform.sentMessages).toEqual([{ version: 1, kind: "foundation.getStatus" }]);
     expect(platform.openVaultPageCallCount).toBe(1);
+  });
+});
+
+describe("Ente route error envelopes", () => {
+  it("keeps the failing request in `detail` for Ente protocol errors, and only for those", async () => {
+    const drift = {
+      handle: vi.fn(() =>
+        Promise.reject(
+          new EnteProtocolError(
+            "ENTE_PROTOCOL_DRIFT",
+            "GET /authenticator/entity/diff -> unexpected response shape",
+          ),
+        ),
+      ),
+    };
+    await expect(
+      routeEnte({ version: 1, kind: "ente.manualSync" }, vaultSender(), drift),
+    ).resolves.toMatchObject({
+      kind: "error",
+      error: {
+        code: "ENTE_PROTOCOL_DRIFT",
+        detail: "GET /authenticator/entity/diff -> unexpected response shape",
+      },
+    });
+
+    const bare = { handle: vi.fn(() => Promise.reject(new EnteProtocolError("ENTE_CONFLICT"))) };
+    const response = await routeEnte({ version: 1, kind: "ente.manualSync" }, vaultSender(), bare);
+    expect(response).toMatchObject({ kind: "error", error: { code: "ENTE_CONFLICT" } });
+    expect((response as { error: Record<string, unknown> }).error).not.toHaveProperty("detail");
+
+    const foreign = { handle: vi.fn(() => Promise.reject(new Error("secret stack"))) };
+    const unavailable = await routeEnte({ version: 1, kind: "ente.manualSync" }, vaultSender(), foreign);
+    expect(unavailable).toMatchObject({ kind: "error", error: { code: "ENTE_UNAVAILABLE" } });
+    expect(JSON.stringify(unavailable)).not.toContain("secret stack");
   });
 });

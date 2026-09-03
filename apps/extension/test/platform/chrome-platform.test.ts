@@ -430,6 +430,43 @@ describe("Chrome extension platform", () => {
     });
   });
 
+  it("keeps the code and detail of a background Ente failure, and names a lost reply", async () => {
+    const platform = createChromePlatform();
+    const request = { version: 1, kind: "ente.manualSync" } as const;
+
+    sendMessage.mockImplementationOnce((_payload: unknown, callback: (value: unknown) => void) => {
+      callback({
+        version: 1,
+        kind: "error",
+        error: {
+          code: "ENTE_PROTOCOL_DRIFT",
+          message: "fixed copy",
+          detail: "GET /authenticator/entity/diff -> unexpected response shape",
+        },
+      });
+    });
+    await expect(platform.sendEnteMessage(request)).rejects.toMatchObject({
+      code: "ENTE_PROTOCOL_DRIFT",
+      detail: "GET /authenticator/entity/diff -> unexpected response shape",
+    });
+
+    sendMessage.mockImplementationOnce(() => {
+      throw new Error("The message port closed before a response was received.");
+    });
+    await expect(platform.sendEnteMessage(request)).rejects.toMatchObject({
+      code: "ENTE_UNAVAILABLE",
+      detail: expect.stringContaining("no reply from the background") as unknown,
+    });
+
+    sendMessage.mockImplementationOnce((_payload: unknown, callback: (value: unknown) => void) => {
+      callback({ version: 1, kind: "ente.state", state: "idle" });
+    });
+    await expect(platform.sendEnteMessage(request)).rejects.toMatchObject({
+      code: "ENTE_UNAVAILABLE",
+      detail: "unexpected reply shape from the background",
+    });
+  });
+
   it("sends typed backup messages with exact response pairing and fixed failures", async () => {
     const platform = createChromePlatform();
     const request: BackupRequest = { version: 1, kind: "backup.beginExportStepUp" };

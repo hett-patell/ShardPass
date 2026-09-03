@@ -6,6 +6,7 @@ import {
   type EnteCycleRepository,
   type EnteCycleSnapshot,
 } from "../../src/background/ente/operational-cycle";
+import type { RemoteOtpState } from "../../src/background/ente/read-engine";
 import type { EnteOtpSyncState } from "../../src/background/ente/sync-state";
 
 const localId = "00000000-0000-4000-8000-000000000001";
@@ -117,6 +118,52 @@ describe("operational Ente coordinator cycle", () => {
     expect(repo.current().items).toEqual([{ localId, projection }]);
     expect(repo.current().state.mappings).toEqual([{ localId, remoteId }]);
     expect(repo.current().state.cursor).toBe(1);
+  });
+
+  it("skips an entity it cannot read and still syncs the rest, touching nothing remote", async () => {
+    const unreadableId = "7c9e6679-7425-40de-944b-e07fc1f90ae9";
+    const repo = repository(snapshot());
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const decryptEntity = vi.fn((entity: RemoteOtpState): EnteOtpProjection | null => {
+      if (entity.header === "Ag==") return projection;
+      throw new EnteProtocolError("ENTE_INVALID", "otpauth URI without a secret");
+    });
+    const client = {
+      getAuthenticatorKey: vi.fn(() => Promise.resolve({ encryptedKey: "AQ==", header: "Ag==" })),
+      getEntityDiff: vi.fn(() =>
+        Promise.resolve({
+          diff: [
+            { id: remoteId, encryptedData: "AQ==", header: "Ag==", isDeleted: false as const, createdAt: 1, updatedAt: 1 },
+            { id: unreadableId, encryptedData: "AQ==", header: "Aw==", isDeleted: false as const, createdAt: 2, updatedAt: 2 },
+          ],
+          timestamp: 2,
+        }),
+      ),
+      createEntity: vi.fn(),
+      updateEntity: vi.fn(),
+      deleteEntity: vi.fn(),
+    };
+    try {
+      const cycle = createEnteOperationalCycle({
+        repository: repo,
+        client,
+        crypto: { ...crypto, decryptEntity },
+        now: () => 10,
+        nextId: () => localId,
+      });
+      await cycle("manual", new AbortController().signal);
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining(unreadableId));
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining("otpauth URI without a secret"));
+    } finally {
+      warn.mockRestore();
+    }
+
+    expect(repo.current().items).toEqual([{ localId, projection }]);
+    expect(repo.current().state.mappings).toEqual([{ localId, remoteId }]);
+    expect(repo.current().state.cursor).toBe(2);
+    expect(client.createEntity).not.toHaveBeenCalled();
+    expect(client.updateEntity).not.toHaveBeenCalled();
+    expect(client.deleteEntity).not.toHaveBeenCalled();
   });
 
   it("fails closed with ENTE_AUTH_KEY_MISSING and never POSTs when the key is absent", async () => {

@@ -73,7 +73,11 @@ import { EnteProtocolError } from "./ente/protocol";
 export type BackgroundErrorResponse = Readonly<{
   version: 1;
   kind: "error";
-  error: SafeError;
+  /**
+   * `detail` is set for Ente errors only: the background names the request or step that
+   * failed (never a body, token or email) so the panel can show where, not just what.
+   */
+  error: SafeError & Readonly<{ detail?: string }>;
 }>;
 
 export type BackgroundResponse =
@@ -179,6 +183,13 @@ function errorResponse(code: SafeErrorCode): BackgroundErrorResponse {
     kind: "error",
     error: toSafeError(undefined, code),
   };
+}
+
+function enteErrorResponse(error: unknown): BackgroundErrorResponse {
+  if (!(error instanceof EnteProtocolError)) return errorResponse("ENTE_UNAVAILABLE");
+  const base = errorResponse(error.code);
+  if (error.detail === undefined) return base;
+  return { ...base, error: { ...base.error, detail: error.detail } };
 }
 
 function projectOtpImportResponse(
@@ -370,9 +381,7 @@ export function routeMessage(
     if (enteService === undefined) return Promise.resolve(errorResponse("VAULT_UNAVAILABLE"));
     return enteService
       .handle(enteRequest.data, senderContext as SenderContext)
-      .catch((error: unknown) =>
-        errorResponse(error instanceof EnteProtocolError ? error.code : "ENTE_UNAVAILABLE"),
-      );
+      .catch((error: unknown) => enteErrorResponse(error));
   }
 
   const fillRequest = OtpFillRequestSchema.safeParse(input);

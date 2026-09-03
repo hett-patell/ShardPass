@@ -57,7 +57,8 @@ type Pulled = Awaited<ReturnType<typeof pull>>;
 function assertLive(
   entity: RemoteOtpState,
 ): asserts entity is Extract<RemoteOtpState, { isDeleted: false }> {
-  if (entity.isDeleted) throw new EnteProtocolError("ENTE_INVALID");
+  if (entity.isDeleted)
+    throw new EnteProtocolError("ENTE_INVALID", "a deleted entity where a live one was expected");
 }
 function liveProjection(pulled: Pulled, remoteId: string): EnteOtpProjection | null {
   return pulled.projections.get(remoteId) ?? null;
@@ -93,16 +94,31 @@ async function pull(
     budget,
   });
   const projections = new Map<string, EnteOtpProjection | null>();
+  let unreadable = 0;
   for (const [id, entity] of result.entities) {
     if (entity.isDeleted) projections.set(id, null);
     else {
       assertLive(entity);
-      const projection = dependencies.crypto.decryptEntity(entity, authKey);
+      let projection: EnteOtpProjection | null;
+      try {
+        projection = dependencies.crypto.decryptEntity(entity, authKey);
+      } catch (error) {
+        // One entity this build cannot read (another client's format, a corrupt record)
+        // must not stop every other code from syncing. Leaving it out of the remote map
+        // makes the planner treat it as unchanged: never imported, never deleted, and a
+        // local edit of a mapped one still pushes. The original client skipped these too.
+        if (!(error instanceof EnteProtocolError) || error.code !== "ENTE_INVALID") throw error;
+        unreadable += 1;
+        console.warn(`[ShardPass] Ente entity ${id} skipped: ${error.detail ?? "unreadable"}`);
+        continue;
+      }
       // A code Ente has trashed is still a live entity on the server; it is neither imported
       // nor deleted here, exactly as the original client treated it.
       if (projection !== null) projections.set(id, projection);
     }
   }
+  if (unreadable > 0)
+    console.warn(`[ShardPass] Ente sync skipped ${unreadable} unreadable ${unreadable === 1 ? "entity" : "entities"}.`);
   return { ...result, projections };
 }
 
