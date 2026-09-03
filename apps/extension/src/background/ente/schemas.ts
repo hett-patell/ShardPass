@@ -96,7 +96,10 @@ export const authenticatorEntityDiffResponseSchema = tolerant({
   timestamp: z.nullish(safeTimestamp),
 });
 export const createEntityRequestSchema = strict({ encryptedData: ciphertext, header });
-export const createEntityResponseSchema = liveEntity;
+// Only the id is ever used (and the write engine does not even read that today); the
+// server's reply may or may not echo the encrypted body. Requiring the full live entity here
+// turned an omitted field into a failed upload.
+export const createEntityResponseSchema = tolerant({ id: uuid });
 export const updateEntityRequestSchema = strict({ id: uuid, encryptedData: ciphertext, header });
 export const deleteEntityQuerySchema = strict({ id: uuid });
 

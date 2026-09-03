@@ -121,11 +121,25 @@ describe("EnteClient fixed transport", () => {
               budget,
             );
       await expect(invoke()).resolves.toBeUndefined();
-      await expect(invoke()).rejects.toMatchObject({ code: "ENTE_PROTOCOL_DRIFT" });
+      // A body on an "empty" reply is read, charged, and discarded -- not treated as drift.
+      // The original client checks only res.ok here, and the server is free to echo.
+      await expect(invoke()).resolves.toBeUndefined();
       expect(arrayBuffer).toHaveBeenCalledTimes(2);
       expect(budget.usedBytes).toBe(1);
     },
   );
+
+  it("treats a 404 on delete as success, like the original client", async () => {
+    const fetch = vi.fn(() => Promise.resolve(new Response(null, { status: 404 })));
+    const client = createEnteClient({ fetch });
+    await expect(
+      client.deleteEntity(
+        "synthetic-token",
+        "00000000-0000-4000-8000-000000000001",
+        new AbortController().signal,
+      ),
+    ).resolves.toBeUndefined();
+  });
 
   it("rejects oversized or drifting empty response declarations before reading the body", async () => {
     const arrayBuffer = vi.fn();

@@ -175,6 +175,8 @@ export function createEnteClient(dependencies: { readonly fetch: EnteFetch }): E
     signal: AbortSignal;
     schema?: { parse(value: unknown): T };
     empty?: boolean;
+    /** A 404 is a success for this call (deleting something already gone). */
+    acceptNotFound?: boolean;
     budget?: EnteResponseBudget;
   }): Promise<T> => {
     if (!input.path.startsWith("/")) throw fixedError("ENTE_INVALID");
@@ -204,19 +206,18 @@ export function createEnteClient(dependencies: { readonly fetch: EnteFetch }): E
       // for srp/attributes carries the email.
       const where = `${input.method} ${input.path.split("?")[0]} -> ${response.status}`;
       if (response.status === 401) throw fixedError("ENTE_REAUTH_REQUIRED", where);
+      if (response.status === 404 && input.acceptNotFound) return undefined as T;
       if (response.status === 404 && input.method === "GET" && input.path === "/authenticator/key")
         throw fixedError("ENTE_AUTH_KEY_MISSING");
       if (response.status < 200 || response.status >= 300)
         throw fixedError(response.status >= 500 ? "ENTE_UNAVAILABLE" : "ENTE_AUTH_FAILED", where);
       if (input.empty) {
         if (response.status !== 200 && response.status !== 204)
-          throw fixedError("ENTE_PROTOCOL_DRIFT");
+          throw fixedError("ENTE_PROTOCOL_DRIFT", `${input.method} ${input.path.split("?")[0]} -> ${response.status}`);
+        // The reply is not needed. Read it (bounded, so it is still charged to the budget)
+        // and discard it rather than failing if the server chooses to echo something.
         const bytes = await boundedBytes(response, input.budget ?? createEnteResponseBudget());
-        try {
-          if (bytes.byteLength !== 0) throw fixedError("ENTE_PROTOCOL_DRIFT");
-        } finally {
-          bytes.fill(0);
-        }
+        bytes.fill(0);
         return undefined as T;
       }
       const json = await boundedJson(response, input.budget ?? createEnteResponseBudget());
@@ -341,6 +342,9 @@ export function createEnteClient(dependencies: { readonly fetch: EnteFetch }): E
         signal,
         ...(budget === undefined ? {} : { budget }),
         empty: true,
+        // Already deleted on the server is the outcome we wanted; the original client
+        // treats it the same way.
+        acceptNotFound: true,
       });
     },
   };
