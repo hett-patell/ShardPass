@@ -367,6 +367,14 @@ describe("item routing", () => {
       { version: 1, kind: "item.mutationResult", item: loginItemFixture },
     ],
     [
+      { version: 1, kind: "item.createMany", items: [loginItemFixture] },
+      {
+        version: 1,
+        kind: "item.createManyResult",
+        results: [{ index: 0, status: "created", itemId: loginItemFixture.id }],
+      },
+    ],
+    [
       {
         version: 1,
         kind: "item.update",

@@ -50,6 +50,7 @@ export {
   VaultRepository,
 } from "./vault-repository";
 export type {
+  CreateManyOutcome,
   HotpReservationCommitRequest,
   HotpReservationCommitResult,
   ImportOtpItemsResult,

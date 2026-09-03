@@ -2,12 +2,28 @@ import {
   CardItemSchema,
   IdentityItemSchema,
   LoginItemSchema,
+  MAX_CARD_HOLDER_LENGTH,
+  MAX_CARD_NOTES_LENGTH,
+  MAX_CARD_NUMBER_LENGTH,
+  MAX_IDENTITY_NOTES_LENGTH,
+  MAX_LOGIN_NAME_LENGTH,
+  MAX_LOGIN_NOTES_LENGTH,
+  MAX_LOGIN_PASSWORD_LENGTH,
+  MAX_LOGIN_URL_LENGTH,
+  MAX_LOGIN_URLS,
+  MAX_LOGIN_USERNAME_LENGTH,
+  MAX_NOTE_CONTENT_LENGTH,
+  MAX_OTP_ISSUER_LENGTH,
+  MAX_OTP_LABEL_LENGTH,
+  MAX_SECRET_NOTES_LENGTH,
+  MAX_SECRET_VALUE_LENGTH,
   NoteItemSchema,
   OtpItemSchema,
   SecretItemSchema,
   type VaultItem,
 } from "@shardpass/domain";
 
+import { clampText, looksLikeKeyMaterial, normalizeTags } from "../common/clamp";
 import { newItemBase } from "../common/item-base";
 import { parseOtpAuthUri } from "../otpauth";
 import type { KeePassEntry } from "./kdbx-read";
@@ -64,6 +80,10 @@ export function classifyEntry(entry: KeePassEntry): ClassifiedKind {
   if (hasFieldHint(entry, IDENTITY_FIELD_HINTS) || hasTitleHint(entry, IDENTITY_TITLE_HINTS))
     return "identity";
 
+  // A key pasted into the Password field is common in KeePass; as a login it would exceed
+  // the password ceiling and be rejected outright, so it is routed to a secret instead.
+  if (looksLikeKeyMaterial(entry.password)) return "secret";
+  if (Array.from(entry.password).length > MAX_LOGIN_PASSWORD_LENGTH) return "secret";
   const secretish = [...entry.custom.values()].some((value) => value.includes(SSH_KEY_MARKER));
   if (secretish || entry.notes.includes(SSH_KEY_MARKER)) return "secret";
   if (hasFieldHint(entry, API_FIELD_HINTS) || hasFieldHint(entry, TOKEN_FIELD_HINTS)) return "secret";
@@ -73,8 +93,16 @@ export function classifyEntry(entry: KeePassEntry): ClassifiedKind {
   return "login";
 }
 
+/** KeePass keeps one URL field, but users routinely paste several separated by whitespace. */
+function splitUrls(value: string): string[] {
+  return value
+    .split(/\s+/u)
+    .map((url) => url.trim())
+    .filter((url) => url !== "");
+}
+
 function secretTypeFor(entry: KeePassEntry): "api_key" | "ssh_key" | "token" | "other" {
-  const blob = `${entry.notes}\n${[...entry.custom.values()].join("\n")}`;
+  const blob = `${entry.password}\n${entry.notes}\n${[...entry.custom.values()].join("\n")}`;
   if (blob.includes(SSH_KEY_MARKER)) return "ssh_key";
   if (hasFieldHint(entry, API_FIELD_HINTS)) return "api_key";
   if (hasFieldHint(entry, TOKEN_FIELD_HINTS)) return "token";
@@ -104,8 +132,14 @@ export function convertEntry(entry: KeePassEntry): ConversionOutcome {
   const items: VaultItem[] = [];
   const warnings: string[] = [];
   const label = entry.title.trim() === "" ? "(untitled)" : entry.title.trim();
-  const name = entry.title.trim() === "" ? "Imported item" : entry.title.trim();
-  const tags = [...entry.tags];
+  const name = clampText(
+    entry.title.trim() === "" ? "Imported item" : entry.title.trim(),
+    MAX_LOGIN_NAME_LENGTH,
+    "name",
+    label,
+    warnings,
+  );
+  const tags = normalizeTags(entry.tags, label, warnings);
 
   let linkedOtpId: string | undefined;
   if (entry.otp !== "") {
@@ -124,13 +158,13 @@ export function convertEntry(entry: KeePassEntry): ConversionOutcome {
       ...base,
       kind: "card" as const,
       name,
-      cardholderName: findField(entry, "cardholder", "name on card"),
-      number: findField(entry, "card number", "cardnumber", "number"),
-      expMonth: findField(entry, "expiry month", "exp month", "expmonth"),
-      expYear: findField(entry, "expiry year", "exp year", "expyear"),
-      cvv: findField(entry, "cvv", "cvc", "security code"),
-      pin: findField(entry, "pin"),
-      notes: appendCustomFields(entry, entry.notes),
+      cardholderName: clampText(findField(entry, "cardholder", "name on card"), MAX_CARD_HOLDER_LENGTH, "cardholder name", label, warnings),
+      number: clampText(findField(entry, "card number", "cardnumber", "number"), MAX_CARD_NUMBER_LENGTH, "card number", label, warnings),
+      expMonth: findField(entry, "expiry month", "exp month", "expmonth").slice(0, 2),
+      expYear: findField(entry, "expiry year", "exp year", "expyear").slice(0, 4),
+      cvv: findField(entry, "cvv", "cvc", "security code").slice(0, 8),
+      pin: findField(entry, "pin").slice(0, 16),
+      notes: clampText(appendCustomFields(entry, entry.notes), MAX_CARD_NOTES_LENGTH, "notes", label, warnings),
     };
     return finish(CardItemSchema, candidate, items, warnings, label, "card");
   }
@@ -149,7 +183,7 @@ export function convertEntry(entry: KeePassEntry): ConversionOutcome {
       state: findField(entry, "state", "province"),
       zip: findField(entry, "zip", "postal"),
       country: findField(entry, "country"),
-      notes: appendCustomFields(entry, entry.notes),
+      notes: clampText(appendCustomFields(entry, entry.notes), MAX_IDENTITY_NOTES_LENGTH, "notes", label, warnings),
     };
     return finish(IdentityItemSchema, candidate, items, warnings, label, "identity");
   }
@@ -165,9 +199,9 @@ export function convertEntry(entry: KeePassEntry): ConversionOutcome {
       kind: "secret" as const,
       name,
       secretType,
-      value: value === "" ? entry.password : value,
+      value: clampText(value === "" ? entry.password : value, MAX_SECRET_VALUE_LENGTH, "value", label, warnings),
       metadata: {},
-      notes: appendCustomFields(entry, entry.notes),
+      notes: clampText(appendCustomFields(entry, entry.notes), MAX_SECRET_NOTES_LENGTH, "notes", label, warnings),
     };
     return finish(SecretItemSchema, candidate, items, warnings, label, "secret");
   }
@@ -177,7 +211,7 @@ export function convertEntry(entry: KeePassEntry): ConversionOutcome {
       ...base,
       kind: "note" as const,
       name,
-      content: appendCustomFields(entry, entry.notes),
+      content: clampText(appendCustomFields(entry, entry.notes), MAX_NOTE_CONTENT_LENGTH, "content", label, warnings),
     };
     return finish(NoteItemSchema, candidate, items, warnings, label, "note");
   }
@@ -186,10 +220,10 @@ export function convertEntry(entry: KeePassEntry): ConversionOutcome {
     ...base,
     kind: "login" as const,
     name,
-    username: entry.username,
+    username: clampText(entry.username, MAX_LOGIN_USERNAME_LENGTH, "username", label, warnings),
     password: entry.password,
-    urls: entry.url === "" ? [] : [entry.url],
-    notes: appendCustomFields(entry, entry.notes),
+    urls: splitUrls(entry.url).slice(0, MAX_LOGIN_URLS).map((url) => clampText(url, MAX_LOGIN_URL_LENGTH, "URL", label, warnings)),
+    notes: clampText(appendCustomFields(entry, entry.notes), MAX_LOGIN_NOTES_LENGTH, "notes", label, warnings),
     ...(linkedOtpId === undefined ? {} : { linkedOtpId }),
   };
   return finish(LoginItemSchema, candidate, items, warnings, label, "login");
@@ -208,8 +242,14 @@ function buildOtpItem(
       ...newItemBase(),
       tags: [...tags],
       kind: "otp" as const,
-      issuer: parsed.issuer === "" ? name : parsed.issuer,
-      label: parsed.label === "" ? (entry.username === "" ? name : entry.username) : parsed.label,
+      issuer: clampText(parsed.issuer === "" ? name : parsed.issuer, MAX_OTP_ISSUER_LENGTH, "issuer", label, warnings),
+      label: clampText(
+        parsed.label === "" ? (entry.username === "" ? name : entry.username) : parsed.label,
+        MAX_OTP_LABEL_LENGTH,
+        "label",
+        label,
+        warnings,
+      ),
       secret: parsed.secret,
       otpType: parsed.otpType,
       algorithm: parsed.algorithm,

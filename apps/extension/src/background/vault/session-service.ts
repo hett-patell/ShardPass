@@ -16,6 +16,7 @@ import type {
   VaultState,
 } from "@shardpass/messaging";
 import type {
+  CreateManyOutcome,
   PortableOtpImportStatus,
   TombstoneResult,
   VaultItemMetadata,
@@ -196,6 +197,7 @@ export class SessionService {
       listAllItems: () => this.repositoryListAllItems(),
       getItem: (itemId) => this.repositoryGetItem(itemId),
       createItem: (candidate) => this.repositoryCreateItem(candidate),
+      createItems: (candidates) => this.repositoryCreateItems(candidates),
       updateItem: (candidate, expectedRevision) =>
         this.repositoryUpdateItem(candidate, expectedRevision),
       readGenerationMetadata: (name) =>
@@ -1071,6 +1073,14 @@ export class SessionService {
   private repositoryCreateItem(candidate: VaultItem): Promise<VaultItem> {
     return this.#runRepositoryOperation((repository, context) =>
       repository.create(candidate, context),
+    );
+  }
+
+  private repositoryCreateItems(
+    candidates: readonly VaultItem[],
+  ): Promise<readonly CreateManyOutcome[]> {
+    return this.#runRepositoryOperation((repository, context) =>
+      repository.createMany(candidates, context),
     );
   }
 

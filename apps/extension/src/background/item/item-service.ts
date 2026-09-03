@@ -3,6 +3,7 @@ import {
   ItemCrudRequestSchema,
   ItemCrudResponseSchema,
   MAX_ITEM_QUERY_RESULTS,
+  type ItemCreateManyEntry,
   type ItemCrudRequest,
   type ItemCrudResponse,
   type ItemListItemProjection,
@@ -15,7 +16,7 @@ const MAX_ITEM_LIST_PREVIEW_LENGTH = 120;
 
 type ItemRepository = Pick<
   SessionVaultRepository,
-  "listAllItems" | "getItem" | "createItem" | "updateItem" | "tombstone"
+  "listAllItems" | "getItem" | "createItem" | "createItems" | "updateItem" | "tombstone"
 >;
 
 export type ItemServiceErrorCode =
@@ -54,6 +55,10 @@ export class ItemService {
         case "item.create":
           this.assertVaultSender(sender);
           result = await this.create(command.item);
+          break;
+        case "item.createMany":
+          this.assertVaultSender(sender);
+          result = await this.createMany(command.items);
           break;
         case "item.update":
           this.assertVaultSender(sender);
@@ -124,6 +129,47 @@ export class ItemService {
     if (!parsed.success) invalid();
     const created = await this.dependencies.repository.createItem(parsed.data);
     return response({ version: 1, kind: "item.mutationResult", item: created });
+  }
+
+  /**
+   * Batch create for imports. Each candidate is validated here and checked against what the
+   * vault already holds, so the caller learns per item whether it was created, skipped as a
+   * duplicate, or rejected and why. Only the survivors go to the repository, which commits
+   * them under a single write.
+   */
+  private async createMany(rawItems: readonly unknown[]): Promise<ItemCrudResponse> {
+    const existing = await this.dependencies.repository.listAllItems();
+    const seen = new Set(existing.map(duplicateKey));
+    const results: ItemCreateManyEntry[] = [];
+    const survivors: { index: number; item: VaultItem }[] = [];
+
+    rawItems.forEach((raw, index) => {
+      const parsed = VaultItemSchema.safeParse(raw);
+      if (!parsed.success) {
+        results[index] = { index, status: "invalid", reason: firstIssue(parsed.error) };
+        return;
+      }
+      const key = duplicateKey(parsed.data);
+      if (seen.has(key)) {
+        results[index] = { index, status: "duplicate" };
+        return;
+      }
+      seen.add(key);
+      survivors.push({ index, item: parsed.data });
+    });
+
+    const outcomes =
+      survivors.length === 0
+        ? []
+        : await this.dependencies.repository.createItems(survivors.map((entry) => entry.item));
+    outcomes.forEach((outcome, position) => {
+      const index = survivors[position]!.index;
+      results[index] =
+        outcome.status === "created"
+          ? { index, status: "created", itemId: outcome.itemId }
+          : { index, status: outcome.status };
+    });
+    return response({ version: 1, kind: "item.createManyResult", results });
   }
 
   private async update(
@@ -220,6 +266,9 @@ function deepFreezeResponse(value: ItemCrudResponse): ItemCrudResponse {
   } else if (value.kind === "item.listResult") {
     for (const projection of value.items) freezeProjection(projection);
     Object.freeze(value.items);
+  } else if (value.kind === "item.createManyResult") {
+    for (const entry of value.results) Object.freeze(entry);
+    Object.freeze(value.results);
   }
   return Object.freeze(value);
 }
@@ -295,6 +344,45 @@ function secretTypeLabel(secretType: SecretItem["secretType"]): string {
     case "other":
       return "Secret";
   }
+}
+
+/**
+ * What makes two items "the same" for import purposes. Deliberately coarse and explainable:
+ * a login is the same account when name, username and site host match; an OTP when it is the
+ * same secret for the same issuer/label; a card when name and last four digits match.
+ */
+function duplicateKey(item: VaultItem): string {
+  const norm = normalizeItemSearch;
+  switch (item.kind) {
+    case "login":
+      return ["login", norm(item.name), norm(item.username), hostOf(item.urls[0] ?? "")].join("\u0000");
+    case "otp":
+      return ["otp", norm(item.issuer), norm(item.label), item.secret].join("\u0000");
+    case "note":
+      return ["note", norm(item.name), norm(item.content.slice(0, 256))].join("\u0000");
+    case "card":
+      return ["card", norm(item.name), item.number.replaceAll(/\D/gu, "").slice(-4)].join("\u0000");
+    case "identity":
+      return ["identity", norm(item.name), norm(item.email)].join("\u0000");
+    case "secret":
+      return ["secret", norm(item.name), item.secretType].join("\u0000");
+  }
+}
+
+function hostOf(url: string): string {
+  try {
+    return new URL(url).host.toLocaleLowerCase("en-US");
+  } catch {
+    return normalizeItemSearch(url);
+  }
+}
+
+function firstIssue(error: { issues?: readonly { path?: readonly PropertyKey[]; message?: string }[] }): string {
+  const issue = error.issues?.[0];
+  if (issue === undefined) return "Did not match the item schema.";
+  const path = (issue.path ?? []).map(String).join(".");
+  const message = issue.message ?? "invalid";
+  return (path === "" ? message : `${path}: ${message}`).slice(0, 256);
 }
 
 function invalid(): never {

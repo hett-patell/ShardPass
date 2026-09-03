@@ -132,6 +132,7 @@ describe("SessionVaultRepository", () => {
       "commitHotpReservation",
       "create",
       "createItem",
+      "createItems",
       "get",
       "getItem",
       "importOtpBatch",

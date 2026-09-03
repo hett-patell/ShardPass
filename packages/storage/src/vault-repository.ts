@@ -89,6 +89,11 @@ export type OtpImportCandidate = Readonly<{
   note: string;
 }>;
 export type PortableOtpImportStatus = "accepted" | "duplicate" | "conflict";
+
+/** Per-candidate result of {@link VaultRepository.createMany}, positionally indexed. */
+export type CreateManyOutcome =
+  | Readonly<{ index: number; status: "created"; itemId: string }>
+  | Readonly<{ index: number; status: "invalid" | "conflict" }>;
 export type PortableLockSettings = Readonly<{
   autoLockMinutes: 0 | 5 | 15 | 30 | 60;
   lockOnScreenLock: boolean;
@@ -419,6 +424,75 @@ export class VaultRepository {
         context,
       );
       return item;
+    });
+  }
+
+  /**
+   * Creates many items under one generation commit.
+   *
+   * Each candidate is validated and id-checked on its own, so one malformed entry never
+   * aborts the rest; the accepted set is then encrypted and committed together, so it is
+   * atomic -- all of it lands or none of it does. An import of N items costs one load and
+   * one write this way instead of N of each, which is the difference between seconds and
+   * minutes for a real vault, and it cannot leave a half-written import behind.
+   */
+  async createMany(
+    candidates: readonly unknown[],
+    context: VaultCryptoContext,
+  ): Promise<readonly CreateManyOutcome[]> {
+    return this.serialize(async () => {
+      const loaded = await this.load(context);
+      const taken = new Set(loaded.records.map((record) => record.itemId));
+      const now = context.clock.now();
+      const outcomes: CreateManyOutcome[] = [];
+      const accepted: VaultItem[] = [];
+
+      for (const [index, candidate] of candidates.entries()) {
+        let item: VaultItem;
+        try {
+          item = parseCandidate({
+            ...(typeof candidate === "object" && candidate !== null ? candidate : {}),
+            revision: 1,
+            createdAt: now,
+            updatedAt: now,
+            deletedAt: undefined,
+          });
+        } catch {
+          outcomes.push({ index, status: "invalid" });
+          continue;
+        }
+        if (taken.has(item.id)) {
+          outcomes.push({ index, status: "conflict" });
+          continue;
+        }
+        taken.add(item.id);
+        accepted.push(item);
+        outcomes.push({ index, status: "created", itemId: item.id });
+      }
+      if (accepted.length === 0) return outcomes;
+
+      const records = await Promise.all(accepted.map((item) => encryptVaultRecord(item, context)));
+      const newNonces = new Set(records.map((record) => record.nonce));
+      let journal = loaded.journal;
+      for (const item of accepted) {
+        journal = await this.changes.append(
+          journal,
+          journalEntry(item, "create", now),
+          context.dek,
+          context.random,
+        );
+        newNonces.add(journal.at(-1)!.nonce);
+      }
+      await this.commit(
+        loaded.root,
+        [...loaded.records, ...records],
+        compact(journal, this.limits.maxJournalEntries),
+        newNonces,
+        loaded.receipts,
+        loaded.metadata,
+        context,
+      );
+      return outcomes;
     });
   }
 

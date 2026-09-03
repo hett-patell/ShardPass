@@ -1,5 +1,6 @@
 import type { OtpItem, VaultItem } from "@shardpass/domain";
 import type {
+  CreateManyOutcome,
   GenerationMetadataName,
   HotpReservationCommitResult,
   PendingHotpReservation,
@@ -55,6 +56,8 @@ export interface SessionVaultRepository {
   getItem(itemId: string): Promise<VaultItem | null>;
   /** Generic item creation, any kind. */
   createItem(candidate: VaultItem): Promise<VaultItem>;
+  /** Batch creation under one commit; see VaultRepository.createMany. */
+  createItems(candidates: readonly VaultItem[]): Promise<readonly CreateManyOutcome[]>;
   /** Generic item update, any kind. The repository re-derives id/kind/schemaVersion/revision/timestamps. */
   updateItem(candidate: VaultItem, expectedRevision: number): Promise<VaultItem>;
   readPortableState(): Promise<PortableVaultState>;
@@ -109,6 +112,7 @@ type SessionVaultRepositoryOperations = Readonly<{
   listAllItems(): Promise<readonly VaultItem[]>;
   getItem(itemId: string): Promise<VaultItem | null>;
   createItem(candidate: VaultItem): Promise<VaultItem>;
+  createItems(candidates: readonly VaultItem[]): Promise<readonly CreateManyOutcome[]>;
   updateItem(candidate: VaultItem, expectedRevision: number): Promise<VaultItem>;
   readGenerationMetadata(name: GenerationMetadataName): Promise<Uint8Array | null>;
   readOtpItemsAndMetadata(
@@ -179,6 +183,7 @@ export function createSessionVaultRepository(
     listAllItems: () => operations.listAllItems(),
     getItem: (itemId) => operations.getItem(itemId),
     createItem: (candidate) => operations.createItem(candidate),
+    createItems: (candidates) => operations.createItems(candidates),
     updateItem: (candidate, expectedRevision) => operations.updateItem(candidate, expectedRevision),
     readGenerationMetadata: (name) => operations.readGenerationMetadata(name),
     readOtpItemsAndMetadata: (name) => operations.readOtpItemsAndMetadata(name),

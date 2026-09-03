@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import {
   KdbxFormatError,
   KdbxPasswordError,
+  convertEntry,
   importKeePassKdbx,
   readKdbx,
 } from "../src/keepass";
@@ -139,3 +140,53 @@ describe("KeePass import classification", () => {
 function nameOf(item: { kind: string; name?: string; issuer?: string }): string {
   return item.kind === "otp" ? (item.issuer ?? "") : (item.name ?? "");
 }
+
+describe("KeePass classifier hardening", () => {
+  const entry = (overrides: Partial<import("../src/keepass").KeePassEntry> = {}) => ({
+    title: "Entry",
+    username: "",
+    password: "",
+    url: "",
+    notes: "",
+    otp: "",
+    custom: new Map<string, string>(),
+    path: [],
+    tags: [],
+    ...overrides,
+  });
+
+  it("routes a PEM key pasted into the Password field to a secret", () => {
+    const { items, warnings } = convertEntry(
+      entry({ title: "deploy key", password: "-----BEGIN OPENSSH PRIVATE KEY-----\nabc\n-----END OPENSSH PRIVATE KEY-----" }),
+    );
+    expect(items[0]?.kind).toBe("secret");
+    expect(items[0]?.kind === "secret" && items[0].secretType).toBe("ssh_key");
+    expect(warnings).toEqual([]);
+  });
+
+  it("routes a password the login schema cannot hold to a secret instead of dropping it", () => {
+    const { items } = convertEntry(entry({ password: "x".repeat(5000) }));
+    expect(items[0]?.kind).toBe("secret");
+  });
+
+  it("collapses tags that differ only by case", () => {
+    const { items } = convertEntry(entry({ password: "p", tags: ["Work", "work", "WORK", "home"] }));
+    expect(items[0]?.tags).toEqual(["Work", "home"]);
+  });
+
+  it("truncates over-long notes and says so rather than rejecting the item", () => {
+    const { items, warnings } = convertEntry(entry({ password: "p", notes: "n".repeat(9000) }));
+    expect(items[0]?.kind).toBe("login");
+    expect(items[0]?.kind === "login" && items[0].notes.length).toBeLessThanOrEqual(8192);
+    expect(warnings.some((warning) => warning.includes("truncated"))).toBe(true);
+  });
+
+  it("splits a URL field holding several addresses", () => {
+    const { items } = convertEntry(entry({ password: "p", url: "https://a.test\nhttps://b.test https://c.test" }));
+    expect(items[0]?.kind === "login" && items[0].urls).toEqual([
+      "https://a.test",
+      "https://b.test",
+      "https://c.test",
+    ]);
+  });
+});

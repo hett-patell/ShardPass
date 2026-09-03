@@ -14,7 +14,7 @@ import type {
   ExtensionPlatform,
   OtpImportUiExtensionPlatform,
 } from "../../platform/extension-platform";
-import { createItem } from "../components/forms/submit-item";
+import { createItems } from "../components/forms/submit-item";
 import { itemDisplayName, itemDisplaySubtitle } from "../item-support";
 import { OtpImportView } from "../otp/import/OtpImportView";
 import { runKeePassImport } from "../keepass/keepass-executor";
@@ -24,6 +24,8 @@ import styles from "./ImportDialog.module.css";
 /** Local file read cap for a third-party export: generous for thousands of rows, still bounded. */
 const MAX_THIRD_PARTY_IMPORT_BYTES = 4 * 1024 * 1024;
 const MAX_VISIBLE_WARNINGS = 20;
+/** Rows per item.createMany call: bounds message size and gives the progress bar steps. */
+const IMPORT_BATCH_SIZE = 100;
 
 type ThirdPartySourceId = "chrome" | "firefox" | "bitwarden" | "onepassword" | "keepass";
 type SourceId = "otp" | "backup" | ThirdPartySourceId;
@@ -96,6 +98,13 @@ const SOURCE_OPTIONS: readonly Readonly<{ id: SourceId; label: string }>[] = Obj
 ]);
 
 type Row = Readonly<{ id: string; item: VaultItem; selected: boolean }>;
+/** One row that did not become a vault item, and why. */
+type ImportOutcome = Readonly<{
+  name: string;
+  kind: VaultItem["kind"];
+  status: "duplicate" | "invalid" | "conflict";
+  reason?: string;
+}>;
 type ThirdPartyState = Readonly<{
   phase: "pick" | "reading" | "password" | "unlocking" | "preview" | "importing" | "done";
   rows: readonly Row[];
@@ -103,6 +112,9 @@ type ThirdPartyState = Readonly<{
   error: string | null;
   imported: number;
   failed: number;
+  duplicates: number;
+  outcomes: readonly ImportOutcome[];
+  progress: Readonly<{ done: number; total: number }> | null;
 }>;
 
 const INITIAL_THIRD_PARTY_STATE: ThirdPartyState = Object.freeze({
@@ -112,7 +124,24 @@ const INITIAL_THIRD_PARTY_STATE: ThirdPartyState = Object.freeze({
   error: null,
   imported: 0,
   failed: 0,
+  duplicates: 0,
+  outcomes: [],
+  progress: null,
 });
+
+/** Turns a batch outcome into a sentence a person can act on. */
+function describeOutcome(outcome: ImportOutcome): string {
+  switch (outcome.status) {
+    case "duplicate":
+      return "Skipped: an equivalent item is already in your vault.";
+    case "conflict":
+      return "Skipped: an item with the same identifier already exists.";
+    case "invalid":
+      return outcome.reason === undefined
+        ? "Rejected: did not pass validation."
+        : `Rejected: ${outcome.reason}`;
+  }
+}
 
 export interface ImportDialogProps {
   platform: OtpImportUiExtensionPlatform &
@@ -205,6 +234,9 @@ export function ImportDialog({ platform, active, onImported }: ImportDialogProps
             result.items.length === 0 ? "No importable entries were found in this file." : null,
           imported: 0,
           failed: 0,
+          duplicates: 0,
+          outcomes: [],
+          progress: null,
         });
       },
       () => {
@@ -233,6 +265,9 @@ export function ImportDialog({ platform, active, onImported }: ImportDialogProps
         error: outcome.items.length === 0 ? "No importable entries were found in this database." : null,
         imported: 0,
         failed: 0,
+        duplicates: 0,
+        outcomes: [],
+        progress: null,
       });
     } catch (error) {
       if (owner !== ownerRef.current) return;
@@ -258,14 +293,43 @@ export function ImportDialog({ platform, active, onImported }: ImportDialogProps
   const confirmImport = async () => {
     const owner = ++ownerRef.current;
     const selected = state.rows.filter((row) => row.selected);
-    setState((current) => ({ ...current, phase: "importing" }));
+    setState((current) => ({
+      ...current,
+      phase: "importing",
+      progress: { done: 0, total: selected.length },
+    }));
     let imported = 0;
+    let duplicates = 0;
     let failed = 0;
-    for (const row of selected) {
-      const result = await createItem(platform, row.item);
+    const outcomes: ImportOutcome[] = [];
+    // Batched: each call is one vault commit, so a large import is seconds rather than
+    // minutes and cannot be left half-written. Chunking keeps messages bounded and gives
+    // the progress bar something to show.
+    for (let start = 0; start < selected.length; start += IMPORT_BATCH_SIZE) {
+      const chunk = selected.slice(start, start + IMPORT_BATCH_SIZE);
+      const results = await createItems(
+        platform,
+        chunk.map((row) => row.item),
+      );
       if (owner !== ownerRef.current) return;
-      if (result.status === "saved") imported += 1;
-      else failed += 1;
+      for (const entry of results) {
+        const row = chunk[entry.index];
+        if (row === undefined) continue;
+        if (entry.status === "created") {
+          imported += 1;
+          continue;
+        }
+        if (entry.status === "duplicate") duplicates += 1;
+        else failed += 1;
+        outcomes.push({
+          name: itemDisplayName(row.item),
+          kind: row.item.kind,
+          status: entry.status,
+          ...(entry.status === "invalid" && entry.reason !== undefined ? { reason: entry.reason } : {}),
+        });
+      }
+      const done = Math.min(start + chunk.length, selected.length);
+      setState((current) => ({ ...current, progress: { done, total: selected.length } }));
     }
     if (owner !== ownerRef.current) return;
     setState({
@@ -275,6 +339,9 @@ export function ImportDialog({ platform, active, onImported }: ImportDialogProps
       error: failed > 0 ? `${failed} item(s) could not be imported.` : null,
       imported,
       failed,
+      duplicates,
+      outcomes,
+      progress: null,
     });
     if (imported > 0) onImported();
   };
@@ -383,8 +450,26 @@ export function ImportDialog({ platform, active, onImported }: ImportDialogProps
               <span>
                 {state.imported.toLocaleString("en-US")}{" "}
                 {state.imported === 1 ? "item" : "items"} imported
+                {state.duplicates > 0
+                  ? `, ${state.duplicates} already in your vault`
+                  : ""}
                 {state.failed > 0 ? `, ${state.failed} failed` : ""}.
               </span>
+              {state.outcomes.length > 0 ? (
+                <ul className={styles.outcomes} aria-label="Items that were not imported">
+                  {state.outcomes.slice(0, MAX_VISIBLE_WARNINGS).map((outcome, index) => (
+                    <li key={`${outcome.name}-${index}`}>
+                      <span className={styles.outcomeName}>{outcome.name}</span>
+                      <span className={styles.outcomeReason}>{describeOutcome(outcome)}</span>
+                    </li>
+                  ))}
+                  {state.outcomes.length > MAX_VISIBLE_WARNINGS ? (
+                    <li className={styles.outcomeMore}>
+                      and {state.outcomes.length - MAX_VISIBLE_WARNINGS} more
+                    </li>
+                  ) : null}
+                </ul>
+              ) : null}
               <Button variant="secondary" onClick={resetThirdParty}>
                 Import more
               </Button>
@@ -419,6 +504,20 @@ export function ImportDialog({ platform, active, onImported }: ImportDialogProps
                   </Button>
                 </div>
               </div>
+
+              {state.phase === "importing" && state.progress !== null ? (
+                <div className={styles.progress} role="status" aria-live="polite">
+                  <progress
+                    className={styles.progressBar}
+                    value={state.progress.done}
+                    max={Math.max(state.progress.total, 1)}
+                  />
+                  <span>
+                    Importing {state.progress.done.toLocaleString("en-US")} of{" "}
+                    {state.progress.total.toLocaleString("en-US")}…
+                  </span>
+                </div>
+              ) : null}
 
               {state.warnings.length > 0 ? (
                 <details className={styles.warnings}>

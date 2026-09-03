@@ -218,6 +218,9 @@ export type {
   PasswordGenCommandKind,
 } from "./password-gen";
 export {
+  ItemCreateManyEntrySchema,
+  ItemCreateManyRequestSchema,
+  ItemCreateManyResultSchema,
   ItemCreateRequestSchema,
   ItemCrudRequestSchema,
   ItemCrudResponseSchema,
@@ -234,12 +237,15 @@ export {
   ItemUpdateRequestSchema,
   itemCrudResponseKindByRequest,
   itemCrudSenderPolicy,
+  MAX_ITEM_CREATE_MANY,
+  MAX_ITEM_CREATE_MANY_REASON_LENGTH,
   MAX_ITEM_LIST_NAME_LENGTH,
   MAX_ITEM_LIST_SUBTITLE_LENGTH,
   MAX_ITEM_QUERY_RESULTS,
   parseItemCrudResponseForRequest,
 } from "./item-crud";
 export type {
+  ItemCreateManyEntry,
   ItemCrudCommandKind,
   ItemCrudRequest,
   ItemCrudResponse,

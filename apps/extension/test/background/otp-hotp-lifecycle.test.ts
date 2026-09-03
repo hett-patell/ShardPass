@@ -108,6 +108,15 @@ class Repository implements Omit<
     this.current = structuredClone(candidate);
     return Promise.resolve(structuredClone(candidate));
   }
+  async createItems(candidates: readonly VaultItem[]) {
+    const outcomes: { index: number; status: "created"; itemId: string }[] = [];
+    for (const [index, candidate] of candidates.entries()) {
+      const created = await this.createItem(candidate);
+      outcomes.push({ index, status: "created", itemId: created.id });
+    }
+    return outcomes;
+  }
+
   createItem(candidate: VaultItem): Promise<VaultItem> {
     return this.create(candidate as OtpItem);
   }

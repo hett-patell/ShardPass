@@ -32,8 +32,17 @@ function createPlatform(sendMessage?: (payload: unknown) => Promise<unknown>): {
     openVaultPage: () => Promise.resolve(),
     sendMessage: (payload: unknown) => {
       const request = payload as ItemCrudRequest;
-      if (request.kind === "item.create") createRequests.push(structuredClone(request));
+      if (request.kind === "item.create" || request.kind === "item.createMany")
+        createRequests.push(structuredClone(request));
       if (sendMessage !== undefined) return sendMessage(payload);
+      if (request.kind === "item.createMany") {
+        const items = (request as { items: readonly { id: string }[] }).items;
+        return Promise.resolve({
+          version: 1,
+          kind: "item.createManyResult",
+          results: items.map((entry, index) => ({ index, status: "created", itemId: entry.id })),
+        });
+      }
       return Promise.resolve({
         version: 1,
         kind: "item.mutationResult",
@@ -101,8 +110,8 @@ describe("ImportDialog", () => {
     fireEvent.click(screen.getByRole("button", { name: "Import selected" }));
 
     await waitFor(() => expect(createRequests).toHaveLength(1));
-    expect(createRequests[0]?.kind).toBe("item.create");
-    const item = (createRequests[0] as { item: { kind: string; name: string } }).item;
+    expect(createRequests[0]?.kind).toBe("item.createMany");
+    const item = (createRequests[0] as { items: { kind: string; name: string }[] }).items[0]!;
     expect(item.kind).toBe("login");
     expect(item.name).toBe("Example Site");
     await waitFor(() => expect(onImported).toHaveBeenCalledTimes(1));

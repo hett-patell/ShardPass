@@ -150,7 +150,7 @@ function secretItem(overrides: Partial<SecretItem> = {}): SecretItem {
 
 class FakeRepository implements Pick<
   SessionVaultRepository,
-  "listAllItems" | "getItem" | "createItem" | "updateItem" | "tombstone"
+  "listAllItems" | "getItem" | "createItem" | "createItems" | "updateItem" | "tombstone"
 > {
   readonly items = new Map<string, VaultItem>();
   tombstoneCalls = 0;
@@ -168,6 +168,13 @@ class FakeRepository implements Pick<
   getItem(itemId: string): Promise<VaultItem | null> {
     const value = this.items.get(itemId);
     return Promise.resolve(value === undefined ? null : structuredClone(value));
+  }
+
+  async createItems(candidates: readonly VaultItem[]) {
+    return candidates.map((item, index) => {
+      this.items.set(item.id, item);
+      return { index, status: "created" as const, itemId: item.id };
+    });
   }
 
   createItem(candidate: VaultItem): Promise<VaultItem> {
@@ -580,5 +587,78 @@ describe("ItemService", () => {
       if (result.kind === "item.listResult")
         expect(Object.isFrozen(result.items[0]?.tags)).toBe(true);
     });
+  });
+});
+
+describe("item.createMany", () => {
+  it("creates new items, skips duplicates of stored ones, and names why an entry is invalid", async () => {
+    const { service, repository } = fixture([loginItem()]);
+    const fresh = loginItem({
+      id: ids.created,
+      name: "Other",
+      username: "bob",
+      urls: ["https://other.test"],
+    });
+
+    const response = await service.handle(
+      request("item.createMany", {
+        items: [loginItem({ id: ids.missing }), { kind: "login" }, fresh],
+      }),
+      vaultSender,
+    );
+
+    expect(response).toEqual({
+      version: 1,
+      kind: "item.createManyResult",
+      results: [
+        // Same account as the stored login (name, username, host) under a new id.
+        { index: 0, status: "duplicate" },
+        { index: 1, status: "invalid", reason: expect.any(String) },
+        { index: 2, status: "created", itemId: ids.created },
+      ],
+    });
+    expect(repository.items.has(ids.created)).toBe(true);
+    expect(repository.items.has(ids.missing)).toBe(false);
+  });
+
+  it("deduplicates within the batch itself", async () => {
+    const { service } = fixture();
+    const response = await service.handle(
+      request("item.createMany", {
+        items: [loginItem({ id: ids.login }), loginItem({ id: ids.created })],
+      }),
+      vaultSender,
+    );
+    expect(response).toMatchObject({
+      results: [
+        { index: 0, status: "created", itemId: ids.login },
+        { index: 1, status: "duplicate" },
+      ],
+    });
+  });
+
+  it("treats a login on a different host as a different account", async () => {
+    const { service } = fixture([loginItem()]);
+    const response = await service.handle(
+      request("item.createMany", {
+        items: [loginItem({ id: ids.created, urls: ["https://elsewhere.test"] })],
+      }),
+      vaultSender,
+    );
+    expect(response).toMatchObject({ results: [{ index: 0, status: "created" }] });
+  });
+
+  it("is vault-only", async () => {
+    const { service } = fixture();
+    await expect(
+      service.handle(request("item.createMany", { items: [] }), popupSender),
+    ).rejects.toMatchObject({ code: "ITEM_INVALID" });
+  });
+
+  it("returns an empty result for an empty batch without touching the repository", async () => {
+    const { service, activity } = fixture();
+    const response = await service.handle(request("item.createMany", { items: [] }), vaultSender);
+    expect(response).toEqual({ version: 1, kind: "item.createManyResult", results: [] });
+    expect(activity).toEqual(["noted"]);
   });
 });

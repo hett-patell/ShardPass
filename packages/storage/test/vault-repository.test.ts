@@ -1438,3 +1438,69 @@ describe("VaultRepository with non-OTP items", () => {
     ).resolves.toBeNull();
   });
 });
+
+describe("createMany", () => {
+  it("judges each candidate on its own and commits the accepted ones together", async () => {
+    const storage = new FakeStoragePort();
+    const repository = new VaultRepository(storage, wrappedKey);
+    const context = cryptoContext();
+
+    const outcomes = await repository.createMany(
+      [loginItem(), { kind: "login" }, noteItem(), loginItem()],
+      context,
+    );
+
+    expect(outcomes).toEqual([
+      { index: 0, status: "created", itemId: loginItem().id },
+      { index: 1, status: "invalid" },
+      { index: 2, status: "created", itemId: noteItem().id },
+      // Same id as the first candidate: rejected within the batch, not after it.
+      { index: 3, status: "conflict" },
+    ]);
+    const stored = (await repository.listItems(context)).map((item) => item.id).sort();
+    expect(stored).toEqual([loginItem().id, noteItem().id].sort());
+  });
+
+  it("rejects an id the vault already holds without disturbing the rest", async () => {
+    const storage = new FakeStoragePort();
+    const repository = new VaultRepository(storage, wrappedKey);
+    const context = cryptoContext();
+    await repository.create(loginItem(), context);
+
+    const outcomes = await repository.createMany([loginItem(), noteItem()], context);
+
+    expect(outcomes).toEqual([
+      { index: 0, status: "conflict" },
+      { index: 1, status: "created", itemId: noteItem().id },
+    ]);
+    expect((await repository.listItems(context)).map((item) => item.id).sort()).toEqual(
+      [loginItem().id, noteItem().id].sort(),
+    );
+  });
+
+  it("re-derives revision and timestamps rather than trusting the candidate", async () => {
+    const storage = new FakeStoragePort();
+    const repository = new VaultRepository(storage, wrappedKey);
+    const context = cryptoContext();
+
+    await repository.createMany([loginItem({ revision: 9 })], context);
+
+    const [stored] = await repository.listItems(context);
+    expect(stored?.revision).toBe(1);
+    expect(stored?.createdAt).toBe(stored?.updatedAt);
+  });
+
+  it("writes nothing when no candidate is acceptable", async () => {
+    const storage = new FakeStoragePort();
+    const repository = new VaultRepository(storage, wrappedKey);
+    const context = cryptoContext();
+
+    const outcomes = await repository.createMany([{ kind: "login" }, null], context);
+
+    expect(outcomes).toEqual([
+      { index: 0, status: "invalid" },
+      { index: 1, status: "invalid" },
+    ]);
+    expect(await repository.listItems(context)).toEqual([]);
+  });
+});

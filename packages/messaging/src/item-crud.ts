@@ -10,6 +10,9 @@ import type { CommandSenderPolicy } from "./context";
 import { MESSAGE_VERSION } from "./envelope";
 
 export const MAX_ITEM_QUERY_RESULTS = 10_000;
+/** Matches the importer entry cap: one import never needs more than one batch. */
+export const MAX_ITEM_CREATE_MANY = 1_000;
+export const MAX_ITEM_CREATE_MANY_REASON_LENGTH = 256;
 export const MAX_ITEM_LIST_NAME_LENGTH = 1_024;
 export const MAX_ITEM_LIST_SUBTITLE_LENGTH = 512;
 
@@ -63,6 +66,29 @@ export const ItemCreateRequestSchema = z.strictObject({
   item: z.unknown(),
 });
 
+// Batch creation for imports. Each candidate is judged on its own -- one malformed entry
+// never aborts the rest -- while every accepted entry lands under a single vault commit,
+// so a large import costs one load and one write instead of one of each per item.
+export const ItemCreateManyRequestSchema = z.strictObject({
+  version: z.literal(MESSAGE_VERSION),
+  kind: z.literal("item.createMany"),
+  items: z.array(z.unknown()).check(z.maxLength(MAX_ITEM_CREATE_MANY)),
+});
+
+const batchIndex = z.int().check(z.nonnegative(), z.maximum(MAX_ITEM_CREATE_MANY));
+export const ItemCreateManyEntrySchema = z.discriminatedUnion("status", [
+  z.strictObject({ index: batchIndex, status: z.literal("created"), itemId }),
+  // Something equivalent is already in the vault; the candidate was not written.
+  z.strictObject({ index: batchIndex, status: z.literal("duplicate") }),
+  // The candidate's own id is already taken.
+  z.strictObject({ index: batchIndex, status: z.literal("conflict") }),
+  z.strictObject({
+    index: batchIndex,
+    status: z.literal("invalid"),
+    reason: z.optional(z.string().check(z.maxLength(MAX_ITEM_CREATE_MANY_REASON_LENGTH))),
+  }),
+]);
+
 export const ItemUpdateRequestSchema = z.strictObject({
   version: z.literal(MESSAGE_VERSION),
   kind: z.literal("item.update"),
@@ -81,6 +107,7 @@ export const ItemCrudRequestSchema = z.discriminatedUnion("kind", [
   ItemQueryRequestSchema,
   ItemGetRequestSchema,
   ItemCreateRequestSchema,
+  ItemCreateManyRequestSchema,
   ItemUpdateRequestSchema,
   ItemDeleteRequestSchema,
   ItemListRequestSchema,
@@ -110,6 +137,12 @@ export const ItemMutationResultSchema = z.strictObject({
   item: VaultItemSchema,
 });
 
+export const ItemCreateManyResultSchema = z.strictObject({
+  version: z.literal(MESSAGE_VERSION),
+  kind: z.literal("item.createManyResult"),
+  results: z.array(ItemCreateManyEntrySchema).check(z.maxLength(MAX_ITEM_CREATE_MANY)),
+});
+
 export const ItemDeleteResultSchema = z.strictObject({
   version: z.literal(MESSAGE_VERSION),
   kind: z.literal("item.deleteResult"),
@@ -121,6 +154,7 @@ export const ItemCrudResponseSchema = z.discriminatedUnion("kind", [
   ItemQueryResultSchema,
   ItemGetResultSchema,
   ItemMutationResultSchema,
+  ItemCreateManyResultSchema,
   ItemDeleteResultSchema,
   ItemListResultSchema,
 ]);
@@ -130,11 +164,13 @@ export type ItemCrudResponse = z.infer<typeof ItemCrudResponseSchema>;
 export type ItemCrudCommandKind = ItemCrudRequest["kind"];
 export type ItemCrudResponseKind = ItemCrudResponse["kind"];
 export type ItemListItemProjection = z.infer<typeof ItemListItemProjectionSchema>;
+export type ItemCreateManyEntry = z.infer<typeof ItemCreateManyEntrySchema>;
 
 export const itemCrudResponseKindByRequest = {
   "item.query": "item.queryResult",
   "item.get": "item.getResult",
   "item.create": "item.mutationResult",
+  "item.createMany": "item.createManyResult",
   "item.update": "item.mutationResult",
   "item.delete": "item.deleteResult",
   "item.list": "item.listResult",
@@ -162,6 +198,7 @@ export const itemCrudSenderPolicy = {
   "item.query": vaultOnly,
   "item.get": vaultOnly,
   "item.create": vaultOnly,
+  "item.createMany": vaultOnly,
   "item.update": vaultOnly,
   "item.delete": vaultOnly,
   "item.list": popupAndVault,
