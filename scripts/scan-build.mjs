@@ -14,7 +14,9 @@ const executableRemoteUrl = /^(?:https?:)?\/\//iu;
 const sourceMapReference = /(?:\/\/[#@]|\/\*[#@])\s*sourceMappingURL\s*=/u;
 const forbiddenConsoleMethod =
   /\bconsole\s*(?:\.\s*(?:log|debug|info)\b|\[\s*["'](?:log|debug|info)["']\s*\])/u;
-const rawConsoleReference = /\bconsole\b(?!\s*(?:\.|\[))/u;
+// A bare `console` identifier, but not the word inside a string literal: the passphrase
+// wordlist bundled with the password generator contains "console".
+const rawConsoleReference = /(?<!["'`])\bconsole\b(?!\s*(?:\.|\[|["'`]))/u;
 const legacyName =
   /(?:_commonjsHelpers-BNVkcQi_|detect-GJf8O2wT|format-BF4VSr4S|index\.html-XjjvDkko|index\.ts-BbWVF1-a|index\.ts-DTcWtSwh|index\.ts-loader-BWnrBa67|index-wA3AHzJ-|log-B-C8fiGH)/u;
 const testArtifactPath =
@@ -56,7 +58,7 @@ const executableManifestFields = new Set([
 const nestedManifestKeys = {
   action: new Set(["default_popup", "default_title"]),
   background: new Set(["service_worker", "type"]),
-  content_script: new Set(["all_frames", "js", "matches", "run_at"]),
+  content_script: new Set(["all_frames", "js", "matches", "run_at", "world"]),
   content_security_policy: new Set(["extension_pages"]),
   web_accessible_resource: new Set(["matches", "resources", "use_dynamic_url"]),
 };
@@ -473,7 +475,27 @@ export async function scanBuild(directory, options = {}) {
         checkNestedKeys(entry, nestedManifestKeys.content_script);
     }
 
-    const contentScripts = manifest.content_scripts;
+    // Two entries are expected: the isolated-world content script and the passkey page
+    // script, which runs in the page's main world and is held to an exact shape below.
+    const allContentScripts = Array.isArray(manifest.content_scripts) ? manifest.content_scripts : [];
+    const isPasskeyPageEntry = (entry) =>
+      entry !== null &&
+      typeof entry === "object" &&
+      !Array.isArray(entry) &&
+      Object.keys(entry).sort().join(",") === "all_frames,js,matches,run_at,world" &&
+      Array.isArray(entry.matches) &&
+      entry.matches.length === 1 &&
+      entry.matches[0] === "<all_urls>" &&
+      Array.isArray(entry.js) &&
+      entry.js.length === 1 &&
+      entry.js[0] === "assets/passkey-page.js" &&
+      entry.run_at === "document_start" &&
+      entry.all_frames === true &&
+      entry.world === "MAIN";
+    const passkeyEntries = allContentScripts.filter(isPasskeyPageEntry);
+    if (passkeyEntries.length > 1 || allContentScripts.some((entry) => entry?.world !== undefined && !isPasskeyPageEntry(entry)))
+      add(violations, dist, manifestFile, "generated-content-contract");
+    const contentScripts = allContentScripts.filter((entry) => !isPasskeyPageEntry(entry));
     const contentEntry =
       Array.isArray(contentScripts) && contentScripts.length === 1 ? contentScripts[0] : null;
     const contentJs =
@@ -576,8 +598,8 @@ export async function scanBuild(directory, options = {}) {
 
     const sourceContract = {
       manifest_version: 3,
-      minimum_chrome_version: "110",
-      permissions: ["storage", "alarms", "idle"],
+      minimum_chrome_version: "111",
+      permissions: ["storage", "unlimitedStorage", "alarms", "idle", "activeTab"],
       host_permissions: ["https://api.ente.io/*"],
       content_security_policy: {
         extension_pages:

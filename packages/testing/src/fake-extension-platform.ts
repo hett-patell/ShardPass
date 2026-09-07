@@ -133,6 +133,10 @@ export class FakeExtensionPlatform {
     return this.sendMessage(request) as Promise<T>;
   }
 
+  sendPasskeyMessage<T>(request: unknown): Promise<T> {
+    return this.sendMessage(request) as Promise<T>;
+  }
+
   sendOtpImportMessage<T>(request: unknown): Promise<T> {
     return this.sendMessage(request) as Promise<T>;
   }

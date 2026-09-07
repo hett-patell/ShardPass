@@ -12,6 +12,7 @@
     "@shardpass/messaging": "workspace:*",
     "@shardpass/otp": "workspace:*",
     "@shardpass/otp-storage": "workspace:*",
+    "@shardpass/passkeys": "workspace:*",
     "@shardpass/security": "workspace:*",
     "@shardpass/storage": "workspace:*",
     "@shardpass/ui": "workspace:*",

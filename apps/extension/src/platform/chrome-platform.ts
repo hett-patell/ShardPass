@@ -4,6 +4,7 @@ import {
   EnteSafeStateSchema,
   parseBackupResponseForRequest,
   parseLoginFillResponseForRequest,
+  parsePasskeyResponseForRequest,
   parseOtpFillResponseForRequest,
   parseOtpImportResponseForRequest,
   parseOtpResponseForRequest,
@@ -12,6 +13,8 @@ import {
   type EnteRequest,
   type EnteSafeState,
   type LoginFillRequest,
+  type PasskeyRequest,
+  type PasskeyResponse,
   type LoginFillResponse,
   type OtpFillRequest,
   type OtpFillResponse,
@@ -33,7 +36,9 @@ import type {
   OtpFillContentPlatform,
   OtpImportUiExtensionPlatform,
   OtpUiExtensionPlatform,
+  PasskeyContentPlatform,
 } from "./extension-platform";
+import { diagnostics } from "./diagnostics";
 
 const AUTO_LOCK_ALARM = "shardpass:auto-lock";
 const ENTE_SYNC_ALARM = "shardpass:ente-otp-sync:v1";
@@ -55,13 +60,13 @@ function enteFailure(code: string, detail?: string): Error & { code: string; det
 async function setTrustedAccess(area: chrome.storage.StorageArea, label: string): Promise<void> {
   const capable = area as AccessLevelCapableArea;
   if (typeof capable.setAccessLevel !== "function") {
-    console.warn(`[ShardPass] ${label}.setAccessLevel is unavailable; keeping default access.`);
+    diagnostics.warn(`[ShardPass] ${label}.setAccessLevel is unavailable; keeping default access.`);
     return;
   }
   try {
     await capable.setAccessLevel({ accessLevel: "TRUSTED_CONTEXTS" });
   } catch (error) {
-    console.warn(`[ShardPass] ${label}.setAccessLevel failed; keeping default access.`, error);
+    diagnostics.warn(`[ShardPass] ${label}.setAccessLevel failed; keeping default access.`, error);
   }
 }
 
@@ -163,6 +168,7 @@ export function createChromePlatform(): BackgroundExtensionPlatform &
   OtpImportUiExtensionPlatform &
   OtpFillContentPlatform &
   LoginFillContentPlatform &
+  PasskeyContentPlatform &
   ExtensionPlatform {
   const activePorts = new Set<chrome.runtime.Port>();
   const portDisposers = new Map<chrome.runtime.Port, () => void>();
@@ -390,6 +396,18 @@ export function createChromePlatform(): BackgroundExtensionPlatform &
       const parsed = parseLoginFillResponseForRequest(request, candidate);
       if (parsed.success) return parsed.data;
       throw safeUiFailure(candidate, "LOGIN_FILL_UNAVAILABLE");
+    },
+
+    async sendPasskeyMessage(request: PasskeyRequest): Promise<PasskeyResponse> {
+      let candidate: unknown;
+      try {
+        candidate = await this.sendMessage({ ...request });
+      } catch {
+        throw safeUiFailure(undefined, "PASSKEY_INVALID");
+      }
+      const parsed = parsePasskeyResponseForRequest(request, candidate);
+      if (parsed.success) return parsed.data;
+      throw safeUiFailure(candidate, "PASSKEY_INVALID");
     },
 
     sendOtpImportMessage(request: OtpImportRequest): Promise<OtpImportResponse> {

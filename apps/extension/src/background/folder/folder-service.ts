@@ -9,6 +9,7 @@ import {
 import { folderDepth, folderSubtree } from "@shardpass/storage";
 
 import type { SessionVaultRepository } from "../vault/session-vault-repository";
+import { diagnostics } from "../../platform/diagnostics";
 
 type FolderRepository = Pick<
   SessionVaultRepository,
@@ -146,6 +147,6 @@ function mapError(error: unknown): FolderServiceError {
   const code = (error as { code?: unknown } | null)?.code;
   if (code === "VAULT_LOCKED") return new FolderServiceError("VAULT_LOCKED");
   if (code === "VAULT_INVALID") return new FolderServiceError("FOLDER_INVALID");
-  console.error("[ShardPass] folder operation failed; reported as VAULT_UNAVAILABLE:", error);
+  diagnostics.error("[ShardPass] folder operation failed; reported as VAULT_UNAVAILABLE:", error);
   return new FolderServiceError("VAULT_UNAVAILABLE");
 }

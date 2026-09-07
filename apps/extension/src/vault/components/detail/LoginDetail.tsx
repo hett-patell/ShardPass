@@ -3,6 +3,7 @@ import { useState } from "react";
 
 import type { ExtensionPlatform } from "../../../platform/extension-platform";
 import { LoginForm, MATCH_MODE_LABELS } from "../forms/LoginForm";
+import { updateItem } from "../forms/submit-item";
 import { CopyButton } from "./CopyButton";
 import styles from "./Detail.module.css";
 import { DetailActions } from "./DetailActions";
@@ -206,6 +207,40 @@ export function LoginDetail({ item, platform, otpItems, folders, onUpdate, onDel
                 <CopyButton label="Copy code" value={code.code} />
               </div>
             )}
+          </div>
+        </div>
+      ) : null}
+
+      {(item.passkeys ?? []).length > 0 ? (
+        <div className={styles.fieldGroup}>
+          <span className={styles.label}>Passkeys</span>
+          <div className={styles.section}>
+            {(item.passkeys ?? []).map((passkey) => (
+              <div key={passkey.credentialId} className={styles.row}>
+                <span className={styles.rowValue}>
+                  <span className={styles.value}>{passkey.rpName ?? passkey.rpId}</span>{" "}
+                  <span className={styles.valueMuted}>
+                    {passkey.userName} · created {new Date(passkey.createdAt).toLocaleDateString()}
+                    {passkey.lastUsedAt ? ` · used ${new Date(passkey.lastUsedAt).toLocaleDateString()}` : ""}
+                  </span>
+                </span>
+                <button
+                  type="button"
+                  className={styles.link}
+                  aria-label={`Remove passkey for ${passkey.rpId}`}
+                  onClick={() => {
+                    const remaining = (item.passkeys ?? []).filter((candidate) => candidate.credentialId !== passkey.credentialId);
+                    void updateItem(platform, item.id, item.revision, { passkeys: remaining.length === 0 ? undefined : remaining }).then(
+                      (result) => {
+                        if (result.status === "saved") onUpdate();
+                      },
+                    );
+                  }}
+                >
+                  Remove
+                </button>
+              </div>
+            ))}
           </div>
         </div>
       ) : null}

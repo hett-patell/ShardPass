@@ -26,6 +26,7 @@ import { EnteProtocolError } from "./ente/protocol";
 import { createProductionEnteRuntimeDependencies } from "./ente/production-runtime";
 import { createEnteRuntimeOwner, type EnteRuntimeDependencies } from "./ente/runtime";
 import { FolderService } from "./folder/folder-service";
+import { PasskeyService } from "./passkey/passkey-service";
 import { ItemService } from "./item/item-service";
 import { LoginFillService } from "./login/login-fill-service";
 import { createInternalHotpLifecycle } from "./otp/hotp-lifecycle";
@@ -42,6 +43,7 @@ import { MigrationService } from "./vault/migration-service";
 import { SessionService } from "./vault/session-service";
 import { SettingsService } from "./vault/settings-service";
 import { VaultService } from "./vault/vault-service";
+import { diagnostics } from "../platform/diagnostics";
 
 function errorResponse(code: "UNEXPECTED" | "VAULT_UNAVAILABLE"): BackgroundErrorResponse {
   return { version: 1, kind: "error", error: toSafeError(undefined, code) };
@@ -150,6 +152,11 @@ export function installBackground(
     nextId: () => crypto.randomUUID(),
     notePrivilegedActivity: () => settings.notePrivilegedActivity(),
   });
+  const passkey = new PasskeyService({
+    repository: sessions.vaultRepository,
+    now: () => Date.now(),
+    notePrivilegedActivity: () => settings.notePrivilegedActivity(),
+  });
   const loginFill = new LoginFillService({
     repository: sessions.vaultRepository,
     now: () => Date.now(),
@@ -240,7 +247,7 @@ export function installBackground(
     } catch (error) {
       // Logged rather than swallowed: a failure here disables every route behind
       // awaitReady(), so a silent catch leaves the UI stuck with no diagnosable cause.
-      console.error("[ShardPass] Background startup failed; vault is unavailable.", error);
+      diagnostics.error("[ShardPass] Background startup failed; vault is unavailable.", error);
       readyFailed = true;
       await sessions.lock().catch(() => undefined);
     }
@@ -293,7 +300,7 @@ export function installBackground(
       if (!(await awaitReady()) || !active) return;
       const sender = normalizeSenderContext(rawSenderMetadata, platform.extensionId);
       if (sender === null || sender.contextKind === "content" || sender.documentId === undefined) {
-        console.warn(
+        diagnostics.warn(
           "[ShardPass] Vault-state port rejected. Raw metadata:",
           JSON.stringify(rawSenderMetadata),
         );
@@ -314,7 +321,7 @@ export function installBackground(
         // A rejected sender is otherwise indistinguishable from a dead worker at the
         // call site, so name the metadata that failed normalization. Browser-supplied
         // routing fields only — no message payload, no vault data.
-        console.warn(
+        diagnostics.warn(
           "[ShardPass] Sender rejected (UNAUTHORIZED_SENDER). Raw metadata:",
           JSON.stringify(rawSenderMetadata),
           "expected extensionId:",
@@ -343,6 +350,7 @@ export function installBackground(
         loginFill,
         passwordGen,
         folder,
+        passkey,
       );
       if (parsedVault.success) {
         const state = await sessions.getState();
@@ -386,7 +394,7 @@ export function installBackground(
       if (response.kind === "error")
         // Codes only, never payloads: this is the one place a failed request is named, so
         // a report can say which route refused and why without opening every screen.
-        console.warn(
+        diagnostics.warn(
           "[ShardPass] request refused:",
           (payload as { kind?: unknown })?.kind,
           "->",
@@ -394,7 +402,7 @@ export function installBackground(
         );
       return response;
     } catch (error) {
-      console.error("[ShardPass] request crashed:", (payload as { kind?: unknown })?.kind, error);
+      diagnostics.error("[ShardPass] request crashed:", (payload as { kind?: unknown })?.kind, error);
       return errorResponse("UNEXPECTED");
     }
   });

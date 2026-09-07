@@ -18,6 +18,7 @@ import {
 } from "@shardpass/messaging";
 
 import type { SessionVaultRepository } from "../vault/session-vault-repository";
+import { diagnostics } from "../../platform/diagnostics";
 
 const MAX_ITEM_LIST_PREVIEW_LENGTH = 120;
 const MUTATING_COMMANDS: ReadonlySet<ItemCrudRequest["kind"]> = new Set([
@@ -460,6 +461,6 @@ function mapError(error: unknown): ItemServiceError {
   if (code === "VAULT_INVALID") return new ItemServiceError("ITEM_INVALID");
   // Everything else is flattened to VAULT_UNAVAILABLE for the client, which is the right
   // amount of detail for a UI and the wrong amount for a diagnosis. Keep the original here.
-  console.error("[ShardPass] item operation failed; reported as VAULT_UNAVAILABLE:", error);
+  diagnostics.error("[ShardPass] item operation failed; reported as VAULT_UNAVAILABLE:", error);
   return new ItemServiceError("VAULT_UNAVAILABLE");
 }

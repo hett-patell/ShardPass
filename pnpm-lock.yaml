@@ -164,6 +164,9 @@ importers:
       '@shardpass/otp-storage':
         specifier: workspace:*
         version: link:../../packages/otp-storage
+      '@shardpass/passkeys':
+        specifier: workspace:*
+        version: link:../../packages/passkeys
       '@shardpass/security':
         specifier: workspace:*
         version: link:../../packages/security
@@ -317,6 +320,8 @@ importers:
       '@shardpass/domain':
         specifier: workspace:*
         version: link:../domain
+
+  packages/passkeys: {}
 
   packages/security: {}
 

@@ -268,3 +268,18 @@ export {
   parseFolderResponseForRequest,
 } from "./folder";
 export type { FolderCommandKind, FolderRequest, FolderResponse } from "./folder";
+export {
+  PasskeyAssertRequestSchema,
+  PasskeyAssertResultSchema,
+  PasskeyCandidatesRequestSchema,
+  PasskeyCandidatesResultSchema,
+  PasskeyPreviewRequestSchema,
+  PasskeyPreviewResultSchema,
+  PasskeyRegisterRequestSchema,
+  PasskeyRegisterResultSchema,
+  PasskeyRequestSchema,
+  PasskeyResponseSchema,
+  parsePasskeyResponseForRequest,
+  passkeySenderPolicy,
+} from "./passkey";
+export type { PasskeyCandidate, PasskeyCommandKind, PasskeyRequest, PasskeyResponse } from "./passkey";

@@ -164,6 +164,15 @@ function LoginFields({
       {item.urls.map((url, index) => (
         <TextField key={`${url}-${index}`} label={index === 0 ? "Website" : `Website ${index + 1}`} value={url} onCopy={onCopy} />
       ))}
+      {(item.passkeys ?? []).length > 0 ? (
+        <Field label="Passkeys">
+          {(item.passkeys ?? []).map((passkey) => (
+            <span key={passkey.credentialId} className={styles.value}>
+              {passkey.rpName ?? passkey.rpId} · {passkey.userName}
+            </span>
+          ))}
+        </Field>
+      ) : null}
       {(item.customFields ?? []).map((field, index) =>
         field.type === "hidden" ? (
           <SecretField key={`${field.name}-${index}`} label={field.name} value={field.value} onCopy={onCopy} />

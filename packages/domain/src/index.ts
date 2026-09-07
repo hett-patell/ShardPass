@@ -38,15 +38,13 @@ export {
   MAX_LOGIN_PASSWORD_LENGTH,
   MAX_LOGIN_URL_LENGTH,
   MAX_LOGIN_URLS,
-  MAX_LOGIN_USERNAME_LENGTH,
-} from "./login-item";
+  MAX_LOGIN_USERNAME_LENGTH, MAX_LOGIN_PASSKEYS } from "./login-item";
 export type {
   LoginCustomField,
   LoginCustomFieldType,
   LoginItem,
   LoginPasswordHistoryEntry,
-  LoginUrlMatchMode,
-} from "./login-item";
+  LoginUrlMatchMode, LoginPasskey } from "./login-item";
 
 export { MAX_NOTE_CONTENT_LENGTH, MAX_NOTE_NAME_LENGTH, NoteItemSchema } from "./note-item";
 export type { NoteItem } from "./note-item";

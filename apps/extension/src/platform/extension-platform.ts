@@ -15,6 +15,8 @@ import type {
   OtpImportResponse,
   OtpRequest,
   OtpResponse,
+  PasskeyRequest,
+  PasskeyResponse,
 } from "@shardpass/messaging";
 import type { StoragePort } from "@shardpass/storage";
 
@@ -58,6 +60,10 @@ export interface ItemUiPlatform extends RuntimeExtensionPlatform {
 
 export interface LoginFillContentPlatform extends RuntimeExtensionPlatform {
   sendLoginFillMessage(request: LoginFillRequest): Promise<LoginFillResponse>;
+}
+
+export interface PasskeyContentPlatform extends RuntimeExtensionPlatform {
+  sendPasskeyMessage(request: PasskeyRequest): Promise<PasskeyResponse>;
 }
 
 export interface PasswordGenUiPlatform extends RuntimeExtensionPlatform {

@@ -47,7 +47,10 @@
       "packageJsonSha256": "5b105ac0abbf5985cbe62ad28a34032d85c7ef623e0eb01f39441b0feb419004",
       "licenseFile": "LICENSE",
       "licenseSha256": "06bafa45fdad2579ba0e43b0c9b2c6290287c99c4203c300254a462b38a307f6",
-      "dependencies": ["base64-js@1.5.1", "ieee754@1.2.1"],
+      "dependencies": [
+        "base64-js@1.5.1",
+        "ieee754@1.2.1"
+      ],
       "sourceGraph": [
         {
           "path": "index.js",
@@ -154,7 +157,13 @@
   "output": {
     "productionEntry": "ente-srp-worker-entry",
     "inventoryManifest": "dist/.ente-srp-production-graph.json",
-    "forbidden": ["randomBytes", "node-externals", "dynamic-code", "network", "transcripts"]
+    "forbidden": [
+      "randomBytes",
+      "node-externals",
+      "dynamic-code",
+      "network",
+      "transcripts"
+    ]
   },
   "replays": {
     "legacy": {
@@ -164,7 +173,7 @@
       "disposition": "derived-pass:a789f6c7b0a1bfe6e87408a5a199490d523d075ad822dcc0ffb68add2d9aac92"
     }
   },
-  "disposition": "derived-pass:733be3133db75d907e10051f9a3bf7924b34088d041c0e8a63a851ebf54cf133",
+  "disposition": "derived-pass:c279e790c9c63f0ad877add8f88d464f33ba5f68e354b4ac580beaaaf251a7f6",
   "evidence": {
     "reference": {
       "path": "scripts/replay-ente-srp-reference.mjs",
@@ -188,7 +197,7 @@
     },
     "outputScanner": {
       "path": "scripts/scan-build.mjs",
-      "sha256": "bd5549d4c9653b7b0eaf1858744a96693aa63f4fdb424c3feb31ae3e2450356b"
+      "sha256": "8ade6d32d6acd9bf4957c6c31bd5faa13e4a0e7cc8e8e185f2abbb59d636e6cb"
     }
   }
 }

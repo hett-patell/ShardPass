@@ -558,7 +558,8 @@ describe("ItemService", () => {
         subtitle: "•••• 1234",
       });
       expect(byId.get(ids.identity)).toMatchObject({ kind: "identity", name: "Primary Identity" });
-      expect(byId.get(ids.identity)?.subtitle).toBeUndefined();
+      // The popup pins the person's identity at the top and shows the email beneath the name.
+      expect(byId.get(ids.identity)?.subtitle).toBe(identityItem().email);
       expect(byId.get(ids.secret)).toMatchObject({
         kind: "secret",
         name: "Deploy token",

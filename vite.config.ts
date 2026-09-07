@@ -4,6 +4,7 @@ import { defineConfig, type Plugin } from "vite";
 
 import manifest from "./apps/extension/src/manifest";
 import { ENTE_SRP_PRODUCTION_ENTRY, enteSrpVitePlugin } from "./tools/ente-srp-vite-plugin";
+import { passkeyPagePlugin } from "./tools/passkey-page-plugin";
 
 const workspaceRoot = import.meta.dirname;
 
@@ -32,6 +33,9 @@ export default defineConfig({
     }),
     crx({ manifest }),
     stripCrossOrigin(),
+    passkeyPagePlugin({
+      source: path.resolve(workspaceRoot, "apps/extension/src/content/passkey/page-script.ts"),
+    }),
   ],
   build: {
     target: "chrome110",

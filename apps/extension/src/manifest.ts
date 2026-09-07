@@ -5,7 +5,8 @@ export default defineManifest({
   name: "ShardPass",
   short_name: "ShardPass",
   version: "2.0.0.0",
-  minimum_chrome_version: "110",
+  // 111: content scripts may run in the page's main world, which passkey support needs.
+  minimum_chrome_version: "111",
   description: "Local-first password manager foundation.",
   // storage persists the encrypted vault and non-secret lock settings. alarms enforces
   // inactivity locking, and idle receives the operating-system locked state. No offscreen

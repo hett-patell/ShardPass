@@ -32,6 +32,9 @@ import {
   OtpRequestSchema,
   parseOtpResponseForRequest,
   otpSenderPolicy,
+  PasskeyRequestSchema,
+  parsePasskeyResponseForRequest,
+  passkeySenderPolicy,
   VaultRequestSchema,
   vaultSenderPolicy,
   type BackupRequest,
@@ -53,6 +56,8 @@ import {
   type OtpImportRequest,
   type OtpImportResponse,
   type OtpResponse,
+  type PasskeyRequest,
+  type PasskeyResponse,
   type SenderContext,
   type VaultResponse,
 } from "@shardpass/messaging";
@@ -63,6 +68,7 @@ import { ItemServiceError, type ItemServiceErrorCode } from "./item/item-service
 import { LoginFillServiceError, type LoginFillServiceErrorCode } from "./login/login-fill-service";
 import { OtpFillServiceError, type OtpFillServiceErrorCode } from "./otp/otp-fill-service";
 import { OtpServiceError, type OtpService, type OtpServiceErrorCode } from "./otp/otp-service";
+import { PasskeyServiceError, type PasskeyServiceErrorCode } from "./passkey/passkey-service";
 import { PasswordGenServiceError, type PasswordGenServiceErrorCode } from "./password/password-gen-service";
 import { BackupServiceError, type BackupServiceErrorCode } from "./vault/backup-service";
 import { VaultSessionError } from "./vault/session-service";
@@ -91,6 +97,7 @@ export type BackgroundResponse =
   | OtpFillResponse
   | OtpImportResponse
   | OtpResponse
+  | PasskeyResponse
   | VaultResponse
   | EnteSafeState
   | BackgroundErrorResponse;
@@ -128,6 +135,15 @@ const folderErrorCodes = {
   FOLDER_INVALID: "FOLDER_INVALID",
   FOLDER_NOT_FOUND: "FOLDER_NOT_FOUND",
 } satisfies Record<FolderServiceErrorCode, SafeErrorCode>;
+
+const passkeyErrorCodes = {
+  VAULT_LOCKED: "VAULT_LOCKED",
+  VAULT_UNAVAILABLE: "VAULT_UNAVAILABLE",
+  PASSKEY_INVALID: "PASSKEY_INVALID",
+  PASSKEY_NOT_FOUND: "PASSKEY_NOT_FOUND",
+  PASSKEY_EXISTS: "PASSKEY_EXISTS",
+  PASSKEY_UNSUPPORTED: "PASSKEY_UNSUPPORTED",
+} satisfies Record<PasskeyServiceErrorCode, SafeErrorCode>;
 
 const loginFillErrorCodes = {
   LOGIN_FILL_INVALID: "LOGIN_FILL_INVALID",
@@ -175,6 +191,9 @@ type PasswordGenHandler = Readonly<{
 }>;
 type FolderHandler = Readonly<{
   handle(request: FolderRequest, sender: SenderContext): Promise<unknown>;
+}>;
+type PasskeyHandler = Readonly<{
+  handle(request: PasskeyRequest, sender: SenderContext): Promise<unknown>;
 }>;
 
 function errorResponse(code: SafeErrorCode): BackgroundErrorResponse {
@@ -294,7 +313,25 @@ export function routeMessage(
   loginFillService?: LoginFillHandler,
   passwordGenService?: PasswordGenHandler,
   folderService?: FolderHandler,
+  passkeyService?: PasskeyHandler,
 ): Promise<BackgroundResponse> {
+  const passkeyRequest = PasskeyRequestSchema.safeParse(input);
+  if (passkeyRequest.success) {
+    const policy = passkeySenderPolicy[passkeyRequest.data.kind];
+    if (!authorizeSender(senderContext, { extensionId: expectedExtensionId, ...policy }))
+      return Promise.resolve(errorResponse("UNAUTHORIZED_SENDER"));
+    if (passkeyService === undefined) return Promise.resolve(errorResponse("VAULT_UNAVAILABLE"));
+    return passkeyService
+      .handle(passkeyRequest.data, senderContext as SenderContext)
+      .then((candidate) => {
+        const parsed = parsePasskeyResponseForRequest(passkeyRequest.data, candidate);
+        return parsed.success ? parsed.data : errorResponse("VAULT_UNAVAILABLE");
+      })
+      .catch((error: unknown) =>
+        errorResponse(error instanceof PasskeyServiceError ? passkeyErrorCodes[error.code] : "UNEXPECTED"),
+      );
+  }
+
   const folderRequest = FolderRequestSchema.safeParse(input);
   if (folderRequest.success) {
     const policy = folderSenderPolicy[folderRequest.data.kind];

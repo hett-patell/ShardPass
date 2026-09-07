@@ -7,6 +7,7 @@ import {
   type EnteOtpSyncState,
   type EntePendingOperation,
 } from "./sync-state";
+import { diagnostics } from "../../platform/diagnostics";
 
 export type EnteSyncTrigger = "connected" | "restart" | "unlock" | "manual" | "alarm";
 export type EnteCycleItem = Readonly<{ localId: string; projection: EnteOtpProjection }>;
@@ -109,7 +110,7 @@ async function pull(
         // local edit of a mapped one still pushes. The original client skipped these too.
         if (!(error instanceof EnteProtocolError) || error.code !== "ENTE_INVALID") throw error;
         unreadable += 1;
-        console.warn(`[ShardPass] Ente entity ${id} skipped: ${error.detail ?? "unreadable"}`);
+        diagnostics.warn(`[ShardPass] Ente entity ${id} skipped: ${error.detail ?? "unreadable"}`);
         continue;
       }
       // A code Ente has trashed is still a live entity on the server; it is neither imported
@@ -118,7 +119,7 @@ async function pull(
     }
   }
   if (unreadable > 0)
-    console.warn(`[ShardPass] Ente sync skipped ${unreadable} unreadable ${unreadable === 1 ? "entity" : "entities"}.`);
+    diagnostics.warn(`[ShardPass] Ente sync skipped ${unreadable} unreadable ${unreadable === 1 ? "entity" : "entities"}.`);
   return { ...result, projections };
 }
 

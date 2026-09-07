@@ -62,6 +62,29 @@ const customFieldSchema = z
     ),
   );
 
+export const MAX_LOGIN_PASSKEYS = 5;
+const base64url = (max: number) => z.string().check(z.maxLength(max), z.regex(/^[A-Za-z0-9_-]*$/u));
+
+/**
+ * A passkey the vault holds for this login (WebAuthn discoverable credential). The private
+ * key is PKCS#8 DER; the public key is a COSE_Key; both base64url. Kept on the login so the
+ * passkey lives with the account it signs in to, the way 1Password keeps them.
+ */
+const passkeySchema = z.strictObject({
+  credentialId: base64url(128),
+  rpId: z.string().check(z.minLength(1), z.maxLength(253)),
+  rpName: z.optional(boundedString(256)),
+  userHandle: base64url(128),
+  userName: boundedString(256),
+  userDisplayName: z.optional(boundedString(256)),
+  algorithm: z.literal(-7),
+  privateKey: base64url(4096),
+  publicKey: base64url(1024),
+  counter: z.int().check(z.nonnegative()),
+  createdAt: ItemTimestampSchema,
+  lastUsedAt: z.optional(ItemTimestampSchema),
+});
+
 const passwordHistoryEntrySchema = z.strictObject({
   password: boundedString(MAX_LOGIN_PASSWORD_LENGTH),
   /** When this password stopped being current. */
@@ -91,9 +114,11 @@ export const LoginItemSchema = z.extend(ItemMetadataSchema, {
   passwordHistory: z.optional(
     z.array(passwordHistoryEntrySchema).check(z.maxLength(MAX_LOGIN_PASSWORD_HISTORY)),
   ),
+  passkeys: z.optional(z.array(passkeySchema).check(z.maxLength(MAX_LOGIN_PASSKEYS))),
   notes: boundedString(MAX_LOGIN_NOTES_LENGTH),
 });
 
 export type LoginItem = z.infer<typeof LoginItemSchema>;
 export type LoginCustomField = z.infer<typeof customFieldSchema>;
 export type LoginPasswordHistoryEntry = z.infer<typeof passwordHistoryEntrySchema>;
+export type LoginPasskey = z.infer<typeof passkeySchema>;

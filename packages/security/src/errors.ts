@@ -26,6 +26,10 @@ export type SafeErrorCode =
   | "ITEM_CONFLICT"
   | "FOLDER_INVALID"
   | "FOLDER_NOT_FOUND"
+  | "PASSKEY_INVALID"
+  | "PASSKEY_NOT_FOUND"
+  | "PASSKEY_EXISTS"
+  | "PASSKEY_UNSUPPORTED"
   | "LOGIN_FILL_INVALID"
   | "LOGIN_FILL_UNAVAILABLE"
   | "LOGIN_FILL_NOT_FOUND"
@@ -92,6 +96,10 @@ const messages: Readonly<Record<SafeErrorCode, string>> = {
   ITEM_CONFLICT: "This item changed. Review the latest version and try again.",
   FOLDER_INVALID: "That folder name is already used here, or the folder is nested too deep.",
   FOLDER_NOT_FOUND: "That folder no longer exists.",
+  PASSKEY_INVALID: "This site's passkey request could not be honoured.",
+  PASSKEY_NOT_FOUND: "No passkey for this site is saved in ShardPass.",
+  PASSKEY_EXISTS: "A passkey for this account already exists in ShardPass.",
+  PASSKEY_UNSUPPORTED: "This site asks for a passkey type ShardPass cannot create.",
   LOGIN_FILL_INVALID: "This fill request is invalid.",
   LOGIN_FILL_UNAVAILABLE: "Login fill is unavailable.",
   LOGIN_FILL_NOT_FOUND: "This saved login was not found.",
