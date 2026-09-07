@@ -1,4 +1,3 @@
-import { useEffect, useRef } from "react";
 import type { OtpFillResponse } from "@shardpass/messaging";
 
 import type { OtpFillContentPlatform } from "../../platform/extension-platform";
@@ -49,25 +48,6 @@ function OtpTrigger({ onActivate }: Readonly<{ onActivate: () => void }>) {
     >
       <span aria-hidden="true">SP</span>
     </button>
-  );
-}
-
-function FocusedOtpPicker(
-  props: Readonly<{
-    suggestions: readonly OtpPickerSuggestion[];
-    state: "busy" | "ready" | "empty" | "error";
-    onClose: () => void;
-    onSelect: (suggestion: OtpPickerSuggestion) => void;
-  }>,
-) {
-  const container = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    container.current?.querySelector<HTMLInputElement>('input[type="search"]')?.focus();
-  }, [props.state]);
-  return (
-    <div ref={container}>
-      <OtpPicker {...props} />
-    </div>
   );
 }
 
@@ -174,8 +154,10 @@ export function createOtpFillController(
     if (!owns(candidate)) return;
     host = createPickerHost(candidate.input, {
       positionToAnchor: true,
+      fit: "anchor",
+      onRequestClose: () => invalidate(true),
       content: (
-        <FocusedOtpPicker
+        <OtpPicker
           suggestions={suggestions}
           state={state}
           onClose={() => invalidate(true)}

@@ -271,4 +271,37 @@ describe("native OTP field fill primitive", () => {
     expect(click).not.toHaveBeenCalled();
     expect(keydown).not.toHaveBeenCalled();
   });
+
+  it("spreads a code over the boxes of a segmented widget, one character each", () => {
+    const wrap = document.createElement("div");
+    const boxes = Array.from({ length: 6 }, () => {
+      const box = document.createElement("input");
+      box.setAttribute("maxlength", "1");
+      box.setAttribute("inputmode", "numeric");
+      vi.spyOn(box, "getBoundingClientRect").mockReturnValue({
+        x: 1, y: 1, top: 1, left: 1, right: 40, bottom: 30, width: 39, height: 29, toJSON: () => ({}),
+      });
+      return box;
+    });
+    wrap.append(...boxes);
+    document.body.append(wrap);
+    const registry = createOtpFieldHandleRegistry();
+    const first = boxes[0]!;
+    const handle = registry.activate(first);
+    const result = fillOtpField({
+      input: first,
+      fieldHandle: handle,
+      registry,
+      eligibility: createOtpFieldEligibility(window),
+      code: "246810",
+      expiresAt: Date.now() + 5_000,
+      expectedUrl: window.location.href,
+      expectedOrigin: window.location.origin,
+      now: () => Date.now(),
+      attempt: createOtpFillAttempt(),
+    });
+    expect(result).toEqual({ status: "filled" });
+    expect(boxes.map((box) => box.value)).toEqual(["2", "4", "6", "8", "1", "0"]);
+    expect(document.activeElement).toBe(boxes[5]);
+  });
 });

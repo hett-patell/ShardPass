@@ -1,4 +1,4 @@
-import type { OtpFieldEligibility } from "./field-eligibility";
+import { segmentedGroupOf, type OtpFieldEligibility } from "./field-eligibility";
 import type { OtpFieldHandleRegistry } from "./field-handles";
 
 export type OtpFillPrimitiveResult = Readonly<{
@@ -102,23 +102,35 @@ export function fillOtpField(options: FillOtpFieldOptions): OtpFillPrimitiveResu
     "value",
   );
   if (descriptor?.set === undefined) return { status: "setter-failed" };
-  try {
-    descriptor.set.call(options.input, options.code);
-  } catch {
-    return { status: "setter-failed" };
+
+  // A segmented widget takes one character per box, each focused and told about its input
+  // the way typing would, so the widget's own "advance to the next box" logic runs.
+  const group = segmentedGroupOf(options.input);
+  const targets: Array<Readonly<{ box: HTMLInputElement; value: string }>> =
+    group === null
+      ? [{ box: options.input, value: options.code }]
+      : group.map((box, index) => ({ box, value: options.code.charAt(index) }));
+  for (const { box, value } of targets) {
+    try {
+      if (box !== options.input) box.focus({ preventScroll: true });
+      descriptor.set.call(box, value);
+    } catch {
+      return { status: "setter-failed" };
+    }
+    try {
+      box.dispatchEvent(new ownerWindow.Event("input", { bubbles: true, composed: true }));
+      box.dispatchEvent(new ownerWindow.Event("change", { bubbles: true, composed: true }));
+    } catch {
+      return { status: "event-failed" };
+    }
   }
 
-  try {
-    options.input.dispatchEvent(new ownerWindow.Event("input", { bubbles: true, composed: true }));
-    options.input.dispatchEvent(new ownerWindow.Event("change", { bubbles: true, composed: true }));
-  } catch {
-    return { status: "event-failed" };
-  }
-
+  const written = targets.map(({ box }) => box.value).join("");
+  const expected = group === null ? options.code : options.code.slice(0, group.length);
   if (
     options.registry.resolveActive(options.fieldHandle) !== options.input ||
     !options.input.isConnected ||
-    options.input.value !== options.code
+    written !== expected
   )
     return { status: "verification-failed" };
   return { status: "filled" };

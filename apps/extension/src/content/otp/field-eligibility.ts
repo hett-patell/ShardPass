@@ -1,6 +1,13 @@
 const OTP_CONTEXT =
-  /\b(?:otp|one[\s-]?time(?:\s+(?:pass(?:word|code)?|code))?|verification\s+(?:code|token)|authentication\s+(?:code|token)|2fa(?:\s+(?:code|token))?|mfa(?:\s+(?:code|token))?)\b/i;
-const VERIFICATION_CONTEXT = /\b(?:verification|verify|authentication|2fa|mfa)\b/i;
+  /\b(?:otp|one[\s-]?time(?:\s+(?:pass(?:word|code)?|code))?|verification\s+(?:code|token)|authentication\s+(?:code|token)|2fa(?:\s+(?:code|token))?|mfa(?:\s+(?:code|token)?)?)\b/i;
+/** Wording that can only mean a second factor; it wins over a weak negative such as "pin". */
+const HARD_CONTEXT = /\b(?:otp|totp|hotp|2fa|mfa|one[\s-]?time|two[\s-]?(?:factor|step)|authenticator)\b/i;
+/** Wording that usually means a second factor, unless a negative says otherwise ("PIN verification code"). */
+const MEDIUM_CONTEXT =
+  /\b(?:passcode|auth(?:entication)?[\s-]?(?:code|token)|security[\s-]?code|verification[\s-]?(?:code|token))\b/i;
+/** A card's security code is never a second factor. */
+const CARD_CONTEXT = /\b(?:cvv|cvc|cvv2|card|credit|debit|expiry|expiration)\b/i;
+const VERIFICATION_CONTEXT = /\b(?:verification|verify|authentication|2fa|mfa|code|digit|token)\b/i;
 const NEGATIVE_CONTEXT =
   /\b(?:pin|postal|zip|cvv|cvc|card\s+security|phone|telephone|account\s+(?:number|no)|quantity|search|coupon|promo|date|year)\b/i;
 const SUPPORTED_TYPES = new Set(["", "text", "tel", "number", "password"]);
@@ -42,7 +49,33 @@ function contextFor(input: HTMLInputElement): string {
       parts.push(labels.item(index)?.textContent);
     }
   }
-  return boundedText(parts.map(boundedText).join(" ")).replace(/[_-]+/g, " ");
+  // The form's own heading ("Two-factor authentication", "Enter the code we sent") counts too.
+  const scope = input.form ?? input.closest("fieldset, [role='dialog'], main, section");
+  const heading = scope?.querySelector("h1, h2, h3, legend");
+  if (heading !== null && heading !== undefined) parts.push((heading.textContent ?? "").slice(0, 200));
+  // "totpPin" reads as "totp Pin": camel case is split before the words are judged.
+  return boundedText(parts.map(boundedText).join(" "))
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/[_-]+/g, " ");
+}
+
+const SEGMENT_TYPES = new Set(["", "text", "tel", "number", "password"]);
+
+/**
+ * The boxes of a segmented code widget (one character each, four to eight of them under one
+ * parent or form), in order -- or null when `input` is not one of them.
+ */
+export function segmentedGroupOf(input: HTMLInputElement): HTMLInputElement[] | null {
+  if (input.maxLength !== 1) return null;
+  let scope: Element | null = input.parentElement;
+  for (let depth = 0; scope !== null && depth < 3; depth += 1) {
+    const boxes = Array.from(scope.querySelectorAll<HTMLInputElement>('input[maxlength="1"]')).filter(
+      (box) => SEGMENT_TYPES.has(box.getAttribute("type")?.toLowerCase() ?? "") && !box.disabled,
+    );
+    if (boxes.length >= 4 && boxes.length <= 8 && boxes.includes(input)) return boxes;
+    scope = scope.parentElement;
+  }
+  return null;
 }
 
 function isVisible(input: HTMLInputElement, ownerWindow: Window): boolean {
@@ -109,10 +142,17 @@ export function createOtpFieldEligibility(ownerWindow: Window): OtpFieldEligibil
 
       if (input.autocomplete.toLowerCase().split(/\s+/).includes("one-time-code")) return true;
       const context = contextFor(input);
+      if (CARD_CONTEXT.test(context)) return false;
+      if (HARD_CONTEXT.test(context)) return true;
       if (NEGATIVE_CONTEXT.test(context)) return false;
+      if (MEDIUM_CONTEXT.test(context)) return true;
+      if (segmentedGroupOf(input) !== null) return true;
       const maximum = input.maxLength;
-      const numericShape = input.inputMode === "numeric" && maximum >= 4 && maximum <= 8;
-      if (numericShape) return VERIFICATION_CONTEXT.test(context);
+      const type = input.getAttribute("type")?.toLowerCase() ?? "";
+      const numericShape =
+        (input.inputMode === "numeric" || type === "tel" || type === "number" || /\\d|\[0-9\]/.test(input.pattern)) &&
+        (maximum === -1 || (maximum >= 4 && maximum <= 8));
+      if (numericShape && VERIFICATION_CONTEXT.test(context)) return true;
       return OTP_CONTEXT.test(context);
     },
   };

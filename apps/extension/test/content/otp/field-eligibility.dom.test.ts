@@ -229,4 +229,35 @@ describe("OTP field eligibility", () => {
     });
     expect(createOtpFieldEligibility(frameWindow).isEligible(element)).toBe(true);
   });
+
+  it("reads Google's totpPin as a code field: the strong word wins over the weak negative", () => {
+    expect(eligibility().isEligible(input({ id: "totpPin", name: "totpPin", type: "tel", "aria-label": "Enter code" }))).toBe(true);
+  });
+
+  it("accepts a plain numeric code box, and a tel box under a two-factor heading", () => {
+    expect(eligibility().isEligible(input({ name: "code", inputmode: "numeric", maxlength: "6" }))).toBe(true);
+    const form = document.createElement("form");
+    const heading = document.createElement("h2");
+    heading.textContent = "Two-factor authentication";
+    const element = input({ type: "tel", name: "token" });
+    form.append(heading, element);
+    document.body.append(form);
+    expect(eligibility().isEligible(element)).toBe(true);
+  });
+
+  it("treats four to eight single-character boxes as one code widget", () => {
+    const wrap = document.createElement("div");
+    const boxes = Array.from({ length: 6 }, () => input({ maxlength: "1", inputmode: "numeric" }));
+    wrap.append(...boxes);
+    document.body.append(wrap);
+    for (const box of boxes) expect(eligibility().isEligible(box)).toBe(true);
+    wrap.remove();
+    const lone = input({ maxlength: "1", inputmode: "numeric" });
+    expect(eligibility().isEligible(lone)).toBe(false);
+  });
+
+  it("never mistakes a card's security code for a second factor", () => {
+    expect(eligibility().isEligible(labeled("Card security code", { maxlength: "4", inputmode: "numeric" }))).toBe(false);
+    expect(eligibility().isEligible(input({ name: "cvv", inputmode: "numeric", maxlength: "4" }))).toBe(false);
+  });
 });

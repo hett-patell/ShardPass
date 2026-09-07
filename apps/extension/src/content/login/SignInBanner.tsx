@@ -4,6 +4,8 @@ export interface SignInBannerProps {
   /** How many other saved logins fit this page. */
   readonly otherCount: number;
   readonly busy: boolean;
+  /** "Sign in" for a form with a password; "Continue" for a username-only first step. */
+  readonly action: "Sign in" | "Continue";
   readonly onSignIn: () => void;
   readonly onOtherOptions: () => void;
   readonly onClose: () => void;
@@ -14,7 +16,7 @@ export interface SignInBannerProps {
  * a Sign in button that fills and submits. Other logins are a click away; the close is final
  * for this page load.
  */
-export function SignInBanner({ name, username, otherCount, busy, onSignIn, onOtherOptions, onClose }: SignInBannerProps) {
+export function SignInBanner({ name, username, otherCount, busy, action, onSignIn, onOtherOptions, onClose }: SignInBannerProps) {
   return (
     <div className="signIn" role="region" aria-label="ShardPass sign-in">
       <div className="signInRow">
@@ -26,7 +28,7 @@ export function SignInBanner({ name, username, otherCount, busy, onSignIn, onOth
           <span className="signInUser">{username}</span>
         </span>
         <button className="signInButton" type="button" disabled={busy} onClick={onSignIn}>
-          {busy ? "Signing in" : "Sign in"}
+          {busy ? "Working" : action}
         </button>
         <button className="signInClose" type="button" aria-label="Dismiss ShardPass sign-in" onClick={onClose}>
           <span aria-hidden="true">×</span>

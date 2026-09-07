@@ -45,15 +45,12 @@ describe("metadata-only OTP picker shell", () => {
     ).toBeNull();
   });
 
-  it("searches issuer, label, and safe tags locally", () => {
+  it("has no search box of its own, so the page's field keeps focus", () => {
     render(
       <OtpPicker suggestions={suggestions} state="ready" onClose={vi.fn()} onSelect={vi.fn()} />,
     );
-    fireEvent.change(screen.getByRole("searchbox", { name: "Search OTP accounts" }), {
-      target: { value: "games" },
-    });
-    expect(screen.getByText("Personal")).toBeInTheDocument();
-    expect(screen.queryByText("Work")).not.toBeInTheDocument();
+    expect(screen.queryByRole("searchbox")).toBeNull();
+    expect(screen.getByRole("button", { name: "Close ShardPass picker" })).toBeInTheDocument();
   });
 
   it("supports keyboard selection and Escape close", () => {

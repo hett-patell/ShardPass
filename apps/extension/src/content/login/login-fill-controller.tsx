@@ -123,7 +123,8 @@ export function createLoginFillController(
   // or used. Only the top frame offers it, so a page with login iframes shows one.
   let bannerHost: PickerHandle | null = null;
   let bannerFor: HTMLInputElement | null = null;
-  let bannerDismissed = false;
+  /** Closed by the person (gone for this page load) or by a fill (a later step may offer again). */
+  let bannerDismissedBy: "user" | "fill" | null = null;
   let bannerBusy = false;
   let bannerRender: (() => ReactNode) | null = null;
   const bannerAsked = new WeakSet<HTMLInputElement>();
@@ -400,7 +401,7 @@ export function createLoginFillController(
       // Focus first: a focusin on a chip-less owner would bring the chip straight back.
       candidate.input.focus({ preventScroll: true });
       closeHost();
-      bannerDismissed = true;
+      if (bannerDismissedBy === null) bannerDismissedBy = "fill";
       closeBanner();
       await sendConfirm(suggestion.itemId);
       if (mode.submit) submitForm(candidate.fieldSet);
@@ -432,6 +433,8 @@ export function createLoginFillController(
       invalidate(false);
       return;
     }
+    // A form that appeared without a DOM change (a modal shown by a class flip) is noticed here.
+    maybeOfferSignIn();
     if (owner?.input === input) {
       // Back on the same field after Escape closed its chip: offer it again.
       if ((host === null || host.status !== "open") && chipAvailable()) showChip(owner);
@@ -453,12 +456,14 @@ export function createLoginFillController(
 
   const onPageInvalidated = (): void => invalidate(false);
 
-  const topFrame = (): boolean => {
+  /** The top frame, or a frame with room for the banner (a bank's login iframe, say). */
+  const frameCanHostBanner = (): boolean => {
     try {
-      return options.window.top === options.window;
+      if (options.window.top === options.window) return true;
     } catch {
-      return false;
+      // Cross-origin parent: fall through to the size check.
     }
+    return options.window.innerWidth >= 360 && options.window.innerHeight >= 160;
   };
 
   const bestSuggestion = (fieldSet: LoginFieldSet, suggestions: readonly LoginPickerSuggestion[]) => {
@@ -491,7 +496,7 @@ export function createLoginFillController(
   };
 
   const otherOptions = (fieldSet: LoginFieldSet): void => {
-    bannerDismissed = true;
+    bannerDismissedBy = "user";
     closeBanner();
     const input = fieldSet.usernameField ?? fieldSet.passwordField;
     if (input === null) return;
@@ -502,23 +507,26 @@ export function createLoginFillController(
 
   const showBanner = (fieldSet: LoginFieldSet, suggestions: readonly LoginPickerSuggestion[]): void => {
     const best = bestSuggestion(fieldSet, suggestions);
-    if (best === null || fieldSet.passwordField === null || !options.document.body.isConnected) return;
+    const anchor = fieldSet.passwordField ?? fieldSet.usernameField;
+    if (best === null || anchor === null || !options.document.body.isConnected) return;
     const render = () => (
       <SignInBanner
         name={best.name}
         username={best.username}
         otherCount={suggestions.length - 1}
         busy={bannerBusy}
+        // A username-only first step only gets the name in; the password step follows.
+        action={fieldSet.passwordField === null ? "Continue" : "Sign in"}
         onSignIn={() => void signInFromBanner(fieldSet, best)}
         onOtherOptions={() => otherOptions(fieldSet)}
         onClose={() => {
-          bannerDismissed = true;
+          bannerDismissedBy = "user";
           closeBanner();
         }}
       />
     );
     bannerRender = render;
-    bannerFor = fieldSet.passwordField;
+    bannerFor = anchor;
     bannerHost = createPickerHost(options.document.body, {
       positionToAnchor: false,
       slot: "signin",
@@ -533,14 +541,22 @@ export function createLoginFillController(
    * the field already explains that.
    */
   function maybeOfferSignIn(): void {
-    if (disposed || bannerDismissed || bannerHost !== null || !topFrame()) return;
-    const fieldSet = fieldSets.find((candidate) => candidate.passwordField !== null && isRendered(candidate)) ?? null;
-    const field = fieldSet?.passwordField ?? null;
+    if (disposed || bannerDismissedBy === "user" || bannerHost !== null || !frameCanHostBanner()) return;
+    // A shown form with a password first; failing that, a shown username-only first step.
+    const fieldSet =
+      fieldSets.find((candidate) => candidate.passwordField !== null && isRendered(candidate)) ??
+      fieldSets.find((candidate) => candidate.usernameField !== null && isRendered(candidate)) ??
+      null;
+    const field = fieldSet === null ? null : (fieldSet.passwordField ?? fieldSet.usernameField);
     if (fieldSet === null || field === null || bannerAsked.has(field)) return;
     bannerAsked.add(field);
     void fetchSuggestions().then((result) => {
-      if (disposed || bannerDismissed || bannerHost !== null || result.state !== "ready") return;
-      if (!field.isConnected || !isRendered(fieldSet)) return;
+      if (disposed || bannerDismissedBy === "user" || bannerHost !== null) return;
+      if (result.state !== "ready" || !field.isConnected || !isRendered(fieldSet)) {
+        // Not now (locked, or the form went away before the answer): ask again on the next look.
+        bannerAsked.delete(field);
+        return;
+      }
       showBanner(fieldSet, result.suggestions);
     });
   }
@@ -639,7 +655,7 @@ export function createLoginFillController(
       }
       fillLoginFields(fieldSet, response.username, response.password);
       invalidate(false);
-      bannerDismissed = true;
+      if (bannerDismissedBy === null) bannerDismissedBy = "fill";
       closeBanner();
       await sendConfirm(itemId);
       // Answer first so the popup can close; the code offer waits for focus on its own.

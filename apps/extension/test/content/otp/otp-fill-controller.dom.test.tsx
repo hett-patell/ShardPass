@@ -209,9 +209,7 @@ describe("OTP fill controller", () => {
     expect(pickerRoot.textContent).not.toMatch(
       /246810|release_0123456789abcdef|capability_0123456789abcdef/u,
     );
-    fireEvent.change(within(pickerRoot).getByRole("searchbox", { name: "Search OTP accounts" }), {
-      target: { value: "team" },
-    });
+    expect(within(pickerRoot).queryByRole("searchbox")).toBeNull();
     expect(within(pickerRoot).getByRole("button", { name: /Secondary Member/u })).toBeVisible();
     await clickAndFlush(within(pickerRoot).getByRole("button", { name: /Secondary Member/u }));
 

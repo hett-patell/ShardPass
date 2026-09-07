@@ -204,6 +204,72 @@ describe("Login fill controller", () => {
     expect(submitted).not.toHaveBeenCalled();
   });
 
+  it("offers Continue on a username-only first step, then Sign in again once the password step appears", async () => {
+    const roots = captureClosedRoots();
+    const form = document.createElement("form");
+    const username = document.createElement("input");
+    username.type = "email";
+    username.name = "email";
+    username.getClientRects = () => [{} as DOMRect] as unknown as DOMRectList;
+    const next = document.createElement("button");
+    next.type = "submit";
+    form.append(username, next);
+    document.body.append(form);
+    const submitted = vi.fn((event: Event) => event.preventDefault());
+    form.addEventListener("submit", submitted);
+    const candidate = platform((request) => {
+      if (request.kind === "login.fillSuggestions")
+        return { version: 1, kind: "login.fillSuggestionsResult", suggestions: [account] };
+      if (request.kind === "login.fillSelect") return release;
+      return undefined;
+    });
+    start(candidate);
+    await flush();
+
+    const first = roots.find((root) => root.querySelector(".signIn"));
+    await clickAndFlush(within(first as unknown as HTMLElement).getByRole("button", { name: "Continue" }));
+    expect(username.value).toBe("user@example.test");
+    expect(submitted).toHaveBeenCalledTimes(1);
+    expect(first?.querySelector(".signIn")).toBeNull();
+
+    // The site's second step arrives without a navigation.
+    const password = document.createElement("input");
+    password.type = "password";
+    password.name = "password";
+    password.getClientRects = () => [{} as DOMRect] as unknown as DOMRectList;
+    await act(async () => {
+      form.append(password);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    await flush();
+    const second = roots.filter((root) => root.querySelector(".signIn")).at(-1);
+    expect(second).toBeDefined();
+    await clickAndFlush(within(second as unknown as HTMLElement).getByRole("button", { name: "Sign in" }));
+    expect(password.value).toBe("s3cret!");
+    expect(submitted).toHaveBeenCalledTimes(2);
+  });
+
+  it("looks for a sign-in form again when a field gains focus, so a modal shown by a class flip is offered", async () => {
+    const roots = captureClosedRoots();
+    const { username, password } = loginForm();
+    const candidate = platform((request) => {
+      if (request.kind === "login.fillSuggestions")
+        return { version: 1, kind: "login.fillSuggestionsResult", suggestions: [account] };
+      return undefined;
+    });
+    start(candidate);
+    await flush();
+    expect(roots.some((root) => root.querySelector(".signIn"))).toBe(false);
+
+    // The modal opens: the same fields, now laid out, and the person clicks into one.
+    password.getClientRects = () => [{} as DOMRect] as unknown as DOMRectList;
+    focusField(username);
+    await flush();
+    expect(roots.some((root) => root.querySelector(".signIn"))).toBe(true);
+  });
+
   it("dismisses the sign-in banner for the rest of the page load", async () => {
     const roots = captureClosedRoots();
     const { password } = loginForm();
