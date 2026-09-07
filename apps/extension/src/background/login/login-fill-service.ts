@@ -10,6 +10,8 @@ import {
 } from "@shardpass/messaging";
 import { generateOtp, inlineTotpItem } from "@shardpass/otp";
 
+import type { StoragePort, StorageValue } from "@shardpass/storage";
+
 import type { SessionVaultRepository } from "../vault/session-vault-repository";
 
 type LoginFillRepository = Pick<
@@ -60,18 +62,74 @@ type LoginFillServiceDependencies = Readonly<{
   notePrivilegedActivity(): Promise<void>;
   /** 32 hex characters; the offer id the page names later. */
   nextOfferId?(): string;
+  /**
+   * Session-scoped storage for offers still waiting on the page (memory-only in Chrome, the
+   * same place the session key lives), so a save banner survives the worker's idle teardown.
+   */
+  offerStore?: StoragePort;
 }>;
+
+const OFFERS_KEY = "shardpass:v1:save-offers";
+const MUTATING_KINDS = new Set(["login.saveOffer", "login.saveConfirm", "login.saveDismiss", "login.pendingOffer"]);
 
 export class LoginFillService {
   private readonly offers = new Map<string, SaveOffer>();
+  private loaded: Promise<void> | null = null;
 
   constructor(private readonly dependencies: LoginFillServiceDependencies) {}
+
+  /** Offers a previous worker instance left in the session store, read once per instance. */
+  private ensureLoaded(): Promise<void> {
+    if (this.loaded !== null) return this.loaded;
+    this.loaded = (async () => {
+      const store = this.dependencies.offerStore;
+      if (store === undefined) return;
+      try {
+        const stored = (await store.get([OFFERS_KEY]))[OFFERS_KEY] as { version?: unknown; offers?: unknown } | undefined;
+        if (stored?.version !== 1 || !Array.isArray(stored.offers)) return;
+        const now = this.dependencies.now();
+        for (const entry of stored.offers as unknown[]) {
+          const record = entry as ({ id?: unknown } & SaveOffer) | null;
+          if (typeof record?.id !== "string") continue;
+          const { id, ...offer } = record;
+          if (typeof offer.expiresAt !== "number" || offer.expiresAt <= now || this.offers.has(id)) continue;
+          this.offers.set(id, offer);
+        }
+      } catch {
+        // Nothing to reopen; the page will simply ask again on its next submit.
+      }
+    })();
+    return this.loaded;
+  }
+
+  private async persist(): Promise<void> {
+    const store = this.dependencies.offerStore;
+    if (store === undefined) return;
+    try {
+      if (this.offers.size === 0) await store.remove([OFFERS_KEY]);
+      else {
+        const offers = [...this.offers].map(([id, offer]) => ({ id, ...offer }));
+        await store.set({ [OFFERS_KEY]: { version: 1, offers } as unknown as StorageValue });
+      }
+    } catch {
+      // The offer still lives in memory for this instance.
+    }
+  }
 
   // The router already authorizes the sender per command kind before dispatching here
   // (content-script only for every login.fill* command). The sender is still consulted:
   // a page is only ever handed a login saved for it, and save offers belong to the tab
   // that made them so the landing page after a sign-in can pick the prompt up again.
   async handle(request: LoginFillRequest, sender: SenderContext): Promise<LoginFillResponse> {
+    await this.ensureLoaded();
+    try {
+      return await this.dispatch(request, sender);
+    } finally {
+      if (MUTATING_KINDS.has((request as { kind?: string }).kind ?? "")) await this.persist();
+    }
+  }
+
+  private async dispatch(request: LoginFillRequest, sender: SenderContext): Promise<LoginFillResponse> {
     try {
       const parsed = LoginFillRequestSchema.safeParse(request);
       if (!parsed.success) throw new LoginFillServiceError("LOGIN_FILL_INVALID");

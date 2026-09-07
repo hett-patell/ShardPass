@@ -1,6 +1,7 @@
 import type { LoginItem, OtpItem, VaultItem } from "@shardpass/domain";
 import type { LoginFillRequest, SenderContext } from "@shardpass/messaging";
 import { LoginFillResponseSchema } from "@shardpass/messaging";
+import { FakeStoragePort } from "@shardpass/testing/fake-storage-port";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -118,7 +119,7 @@ const sender: SenderContext = {
   senderUrl: "https://example.test/login",
 };
 
-function fixture(values: readonly VaultItem[] = [], now = 15_000) {
+function fixture(values: readonly VaultItem[] = [], now = 15_000, offerStore?: FakeStoragePort) {
   const repository = new FakeRepository(values);
   const activity: string[] = [];
   const service = new LoginFillService({
@@ -128,6 +129,7 @@ function fixture(values: readonly VaultItem[] = [], now = 15_000) {
       activity.push("noted");
       return Promise.resolve();
     },
+    ...(offerStore === undefined ? {} : { offerStore }),
   });
   return { activity, repository, service };
 }
@@ -199,6 +201,25 @@ describe("LoginFillService", () => {
     const after = await service.handle(request("login.fillSuggestions", { domain: "example.test" }), sender);
     if (after.kind !== "login.fillSuggestionsResult") throw new Error("expected suggestions");
     expect(after.suggestions.map((item) => item.name)).toEqual(["Older", "Newer"]);
+  });
+
+  it("keeps a pending save offer across a worker restart, and forgets it once dismissed", async () => {
+    const store = new FakeStoragePort();
+    const first = fixture([], 15_000, store);
+    const offered = await first.service.handle(
+      request("login.saveOffer", { domain: "example.test", username: "alice", password: "pw-1" }),
+      sender,
+    );
+    if (offered.kind !== "login.saveOfferResult") throw new Error("expected an offer");
+
+    const second = fixture([], 16_000, store);
+    const pending = await second.service.handle(request("login.pendingOffer", {}), sender);
+    expect(pending).toMatchObject({ kind: "login.pendingOfferResult", offer: { offerId: offered.offerId, username: "alice" } });
+    expect(JSON.stringify(pending)).not.toContain("pw-1");
+
+    await second.service.handle(request("login.saveDismiss", { offerId: offered.offerId }), sender);
+    const third = fixture([], 17_000, store);
+    await expect(third.service.handle(request("login.pendingOffer", {}), sender)).resolves.toMatchObject({ offer: null });
   });
 
   it("reports hasLinkedOtp without dereferencing the linked item", async () => {

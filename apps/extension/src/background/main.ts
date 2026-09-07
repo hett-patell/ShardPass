@@ -163,6 +163,7 @@ export function installBackground(
     repository: sessions.vaultRepository,
     now: () => Date.now(),
     notePrivilegedActivity: () => settings.notePrivilegedActivity(),
+    offerStore: platform.sessionStorage,
   });
   const passwordGen = new PasswordGenService();
   const ente = new EnteOtpMetadataStore();
