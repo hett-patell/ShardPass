@@ -38,6 +38,7 @@ import {
   type GenerationManifest,
   type GenerationMetadataName,
   type LegacyUnsignedGenerationManifest,
+  type ManifestEntry,
   type ReceiptUnsignedGenerationManifest,
   type UnsignedGenerationManifest,
   type VaultRoot,
@@ -186,9 +187,16 @@ export class GenerationStore {
     if ([...newEnvelopeNonces].some((nonce) => !candidateNonces.has(nonce))) corrupt();
     rejectRetainedNonceReuse(newEnvelopeNonces, retainedNonces);
 
-    for (const record of records) {
-      await validateVaultRecord(record, input.context.dek);
-      await storageSet(this.storage, { [keys.record(record.itemId)]: record });
+    // Every record is authenticated before anything is written, then written in batches:
+    // each key is immutable and content-addressed by the manifest, so a batch loses no
+    // atomicity (the manifest still lands last and activation is unchanged) while a large
+    // vault no longer costs one storage round-trip per record.
+    for (const record of records) await validateVaultRecord(record, input.context.dek);
+    for (let offset = 0; offset < records.length; offset += STORAGE_BATCH_KEYS) {
+      const batch: Record<string, StorageValue> = {};
+      for (const record of records.slice(offset, offset + STORAGE_BATCH_KEYS))
+        batch[keys.record(record.itemId)] = record;
+      await storageSet(this.storage, batch);
     }
     for (const entry of journal) {
       await decryptAndValidateJournalRecord(entry, input.context.dek);
@@ -352,16 +360,48 @@ export class GenerationStore {
       ),
     );
     let victim = start;
-    for (let count = 0; victim !== undefined && count < GenerationStore.RECLAIM_PER_ACTIVATION; count += 1) {
+    for (
+      let count = 0;
+      victim !== undefined && count < GenerationStore.RECLAIM_PER_ACTIVATION;
+      count += 1
+    ) {
       if (preserve.has(victim)) return;
-      const manifest = await this.readManifest(victim);
+      const manifest = await this.readOwnManifestLenient(victim);
       const next = manifest?.root.previousGenerationId;
-      await this.removeGeneration(victim);
+      await this.removeGeneration(victim, manifest);
       victim = next;
     }
   }
 
-  private async removeGeneration(generationId: string): Promise<void> {
+  /**
+   * Deletes one generation. Its manifest already lists every key it owns, so a readable
+   * manifest turns the deletion into a handful of batched removes; only a missing or
+   * unreadable manifest falls back to enumerating storage, which on Chrome means reading the
+   * whole area once per page. The manifest itself goes last so an interrupted deletion can be
+   * finished the cheap way next time. Keys are deleted only if they classify to this
+   * generation, whatever a manifest claims.
+   */
+  private async removeGeneration(
+    generationId: string,
+    manifest: GenerationManifest | null,
+  ): Promise<void> {
+    if (manifest === null) {
+      await this.removeGenerationByListing(generationId);
+      return;
+    }
+    const keys = generationKeys(generationId);
+    const owned = new Set<string>();
+    for (const entry of manifestEntries(manifest))
+      if (classifyGenerationStorageKey(entry.key)?.generationId === generationId)
+        owned.add(entry.key);
+    owned.delete(keys.manifest);
+    owned.add(keys.verified);
+    const removable = [...owned, keys.manifest];
+    for (let offset = 0; offset < removable.length; offset += STORAGE_BATCH_KEYS)
+      await storageRemove(this.storage, removable.slice(offset, offset + STORAGE_BATCH_KEYS));
+  }
+
+  private async removeGenerationByListing(generationId: string): Promise<void> {
     const prefix = `${GENERATION_PREFIX}${generationId}`;
     let cursor: string | undefined;
     const seenCursors = new Set<string>();
@@ -376,6 +416,21 @@ export class GenerationStore {
       if (page.nextCursor === undefined || seenCursors.has(page.nextCursor)) storageFailed();
       seenCursors.add(page.nextCursor);
       cursor = page.nextCursor;
+    }
+  }
+
+  /**
+   * The manifest stored for `generationId`, or null when it is missing, does not parse, or
+   * describes some other generation -- the cases where it cannot be trusted to drive
+   * deletion. Storage failures still propagate.
+   */
+  private async readOwnManifestLenient(generationId: string): Promise<GenerationManifest | null> {
+    try {
+      const manifest = await this.readManifest(generationId);
+      return manifest !== null && manifest.generation.id === generationId ? manifest : null;
+    } catch (error) {
+      if (error instanceof StorageError && error.code === "STORAGE_CORRUPT") return null;
+      throw error;
     }
   }
 
@@ -507,6 +562,83 @@ export class GenerationStore {
     );
   }
 
+  /**
+   * Reclaims generations that are neither the active one nor its direct predecessor: what a
+   * staging that never activated leaves behind (a failed verify or activate, a worker that
+   * died mid-commit). Unlike {@link collect} it needs no key, works from an already
+   * authenticated root, and is bounded like {@link reclaimSuperseded} so a long-leaked vault
+   * heals across several calls instead of stalling one. Two guards keep it from destroying
+   * work in flight: `exclude` names generations the caller is still staging, and a generation
+   * whose readable manifest was created at or after `olderThan` (ISO-8601) is kept -- a
+   * staged-but-uncommitted migration another worker instance left behind must survive until
+   * its owner resumes it. A generation without a readable manifest can never be resumed and
+   * is reclaimed regardless. Returns the number of generations removed.
+   */
+  async collectOrphans(
+    root: VaultRoot,
+    options: Readonly<{
+      exclude?: ReadonlySet<string>;
+      olderThan?: string;
+      limit?: number;
+    }> = {},
+  ): Promise<number> {
+    const preserve = new Set(
+      [root.activeGenerationId, root.previousGenerationId].filter(
+        (id): id is string => id !== undefined,
+      ),
+    );
+    const limit = options.limit ?? GenerationStore.RECLAIM_PER_ACTIVATION;
+    const olderThan = options.olderThan === undefined ? undefined : Date.parse(options.olderThan);
+    if (olderThan !== undefined && Number.isNaN(olderThan)) storageFailed();
+    let removed = 0;
+    let pending: { generationId: string; keys: string[] } | null = null;
+    const flush = async (): Promise<void> => {
+      if (pending === null) return;
+      const { generationId, keys } = pending;
+      pending = null;
+      const manifestKey = generationKeys(generationId).manifest;
+      if (olderThan !== undefined && keys.includes(manifestKey)) {
+        const manifest = await this.readOwnManifestLenient(generationId);
+        if (manifest !== null) {
+          const createdAt = Date.parse(manifest.generation.createdAt);
+          if (Number.isNaN(createdAt) || createdAt >= olderThan) return;
+        }
+      }
+      const removable = [...keys.filter((key) => key !== manifestKey), manifestKey];
+      for (let offset = 0; offset < removable.length; offset += STORAGE_BATCH_KEYS)
+        await storageRemove(this.storage, removable.slice(offset, offset + STORAGE_BATCH_KEYS));
+      removed += 1;
+    };
+    let cursor: string | undefined;
+    const seenCursors = new Set<string>();
+    for (;;) {
+      const page = await storageListKeys(this.storage, GENERATION_PREFIX, cursor);
+      for (const key of page.keys) {
+        const classified = classifyGenerationStorageKey(key);
+        if (
+          classified === null ||
+          preserve.has(classified.generationId) ||
+          options.exclude?.has(classified.generationId) === true
+        )
+          continue;
+        // Keys are listed in order and every key of one generation shares its prefix, so a
+        // generation's keys arrive contiguously (possibly across a page boundary).
+        if (pending !== null && pending.generationId !== classified.generationId) {
+          await flush();
+          if (removed >= limit) return removed;
+        }
+        pending ??= { generationId: classified.generationId, keys: [] };
+        pending.keys.push(key);
+      }
+      if (page.complete) break;
+      if (page.nextCursor === undefined || seenCursors.has(page.nextCursor)) storageFailed();
+      seenCursors.add(page.nextCursor);
+      cursor = page.nextCursor;
+    }
+    if (removed < limit) await flush();
+    return removed;
+  }
+
   /** Removes every generation key whose generation id is not in `preserve`. */
   private async sweep(preserve: ReadonlySet<string>): Promise<void> {
     let cursor: string | undefined;
@@ -559,12 +691,7 @@ export class GenerationStore {
     const marker = requireMarker ? await this.authenticateMarker(manifest, context.dek) : null;
     const receiptEntries = manifest.formatVersion === 1 ? [] : manifest.receiptEntries;
     const metadataEntries = manifest.formatVersion === 3 ? manifest.metadataEntries : [];
-    const entries = [
-      ...manifest.recordEntries,
-      ...manifest.journalEntries,
-      ...receiptEntries,
-      ...metadataEntries,
-    ];
+    const entries = manifestEntries(manifest);
     const values: Record<string, StorageValue> = {};
     for (let offset = 0; offset < entries.length; offset += STORAGE_BATCH_KEYS) {
       Object.assign(
@@ -807,6 +934,15 @@ function unsignedManifest(
 }
 function entryFor(key: string, value: StorageValue) {
   return { key, hash: hashCanonical(value) };
+}
+/** Every storage entry a manifest lists, whatever its format version. */
+function manifestEntries(manifest: GenerationManifest): readonly ManifestEntry[] {
+  return [
+    ...manifest.recordEntries,
+    ...manifest.journalEntries,
+    ...(manifest.formatVersion === 1 ? [] : manifest.receiptEntries),
+    ...(manifest.formatVersion === 3 ? manifest.metadataEntries : []),
+  ];
 }
 function hashCanonical(value: unknown): string {
   return encodeBase64(sha256(canonicalBytes(value)));

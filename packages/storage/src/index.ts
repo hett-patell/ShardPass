@@ -33,6 +33,7 @@ export {
   MAX_STORAGE_KEYS_PER_OPERATION,
   MAX_STORAGE_KEY_CHARACTERS,
   MAX_STORAGE_VALUE_BYTES,
+  STORAGE_BATCH_KEYS,
   STORAGE_LIST_PAGE_KEYS,
   StorageError,
 } from "./storage-port";
@@ -55,6 +56,9 @@ export type {
   HotpReservationCommitResult,
   ImportOtpItemsResult,
   ImportPortableOtpItemsResult,
+  ImportPortableStateResult,
+  PortableFolderOutcome,
+  PortableItemKindCounts,
   OtpImportCandidate,
   PortableImportDescriptor,
   PortableImportPreview,
