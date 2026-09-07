@@ -2,6 +2,8 @@ import type { VaultLockSettings } from "@shardpass/messaging";
 import type { StoragePort } from "@shardpass/storage";
 
 const SETTINGS_KEY = "shardpass:v1:lock-settings";
+/** When the vault was last used on purpose; session-scoped, so it dies with the browser. */
+const ACTIVITY_KEY = "shardpass:v1:last-activity";
 const DEFAULT_SETTINGS: VaultLockSettings = {
   autoLockMinutes: 15,
   lockOnScreenLock: true,
@@ -9,6 +11,8 @@ const DEFAULT_SETTINGS: VaultLockSettings = {
 
 export interface LockPlatform {
   scheduleAutoLock(minutes: number | null): Promise<void>;
+  /** Whether the auto-lock alarm is still armed from an earlier worker instance. */
+  autoLockPending?(): Promise<boolean>;
   onUserActivity(handler: () => void): () => void;
   onIdleStateChanged(handler: (state: "active" | "idle" | "locked") => void): () => void;
 }
@@ -22,6 +26,7 @@ export class SettingsService {
     private readonly storage: StoragePort,
     private readonly platform: LockPlatform,
     private readonly lock: () => Promise<void>,
+    private readonly options: Readonly<{ activityStore?: StoragePort; now?: () => number }> = {},
   ) {}
 
   async load(): Promise<VaultLockSettings> {
@@ -64,7 +69,13 @@ export class SettingsService {
     const disposers = [
       this.platform.onUserActivity(() => void this.resetAlarm()),
       this.platform.onIdleStateChanged((state) => {
-        if (state === "locked" && this.settings.lockOnScreenLock) void this.lock();
+        if (state !== "locked") return;
+        // The event may be what woke the worker: decide from the stored settings, not the
+        // defaults that stand in until they are loaded.
+        void (this.startPromise ?? this.start()).then(() => {
+          if (this.settings.lockOnScreenLock) return this.lock();
+          return undefined;
+        });
       }),
     ];
     let disposed = false;
@@ -91,8 +102,46 @@ export class SettingsService {
     this.disposeStarted?.();
   }
 
-  notePrivilegedActivity(): Promise<void> {
-    return this.resetAlarm();
+  async notePrivilegedActivity(): Promise<void> {
+    await this.resetAlarm();
+    try {
+      await this.options.activityStore?.set({ [ACTIVITY_KEY]: this.now() });
+    } catch {
+      // The alarm still counts down; only the restart bookkeeping is missing.
+    }
+  }
+
+  /**
+   * After a worker restart with a session to reopen: the countdown continues rather than
+   * starting over. Chrome keeps the alarm across restarts; when it is gone, the remaining
+   * time is computed from the last real activity, and "expired" tells the caller to lock.
+   */
+  async resumeCountdown(): Promise<"kept" | "expired"> {
+    const minutes = this.settings.autoLockMinutes;
+    if (minutes === 0) {
+      await this.cancelAutoLock();
+      return "kept";
+    }
+    if ((await this.platform.autoLockPending?.().catch(() => false)) === true) return "kept";
+    let last: unknown;
+    try {
+      last = (await this.options.activityStore?.get([ACTIVITY_KEY]))?.[ACTIVITY_KEY];
+    } catch {
+      last = undefined;
+    }
+    if (typeof last !== "number" || !Number.isFinite(last)) {
+      // Nothing recorded (an older worker, a cleared session): one full period, once.
+      await this.notePrivilegedActivity();
+      return "kept";
+    }
+    const remainingMs = minutes * 60_000 - (this.now() - last);
+    if (remainingMs <= 0) return "expired";
+    await this.platform.scheduleAutoLock(Math.max(1, Math.ceil(remainingMs / 60_000)));
+    return "kept";
+  }
+
+  private now(): number {
+    return this.options.now?.() ?? Date.now();
   }
 
   cancelAutoLock(): Promise<void> {

@@ -94,7 +94,9 @@ export function installBackground(
     nextId: () => crypto.randomUUID(),
   });
   let lockTransition = () => sessions.lock();
-  const settings = new SettingsService(platform.localStorage, platform, () => lockTransition());
+  const settings = new SettingsService(platform.localStorage, platform, () => lockTransition(), {
+    activityStore: platform.sessionStorage,
+  });
   // Synchronously, before any await: the idle listener has to exist in the worker's first
   // turn or Chrome will not wake the worker to lock on screen lock.
   settings.listen();
@@ -238,8 +240,12 @@ export function installBackground(
       // A session a previous worker instance left behind is reopened here, so a teardown of
       // the worker is invisible to the person. The countdown continues only when it did.
       const restored = await sessions.restoreSession();
-      if (restored === "restored") {
-        await settings.notePrivilegedActivity();
+      // Reopening the session is not activity: the countdown continues where it was, and a
+      // countdown that ran out while the worker was asleep locks now.
+      if (restored === "restored" && (await settings.resumeCountdown()) === "expired") {
+        await sessions.lock();
+        await settings.cancelAutoLock();
+      } else if (restored === "restored") {
         enteUnlocked = true;
         void kickEnte("restart");
       } else await settings.cancelAutoLock();
@@ -248,8 +254,9 @@ export function installBackground(
       // Logged rather than swallowed: a failure here disables every route behind
       // awaitReady(), so a silent catch leaves the UI stuck with no diagnosable cause.
       diagnostics.error("[ShardPass] Background startup failed; vault is unavailable.", error);
+      // Not a lock: that would throw away the saved session over a transient storage error.
+      // The next worker instance simply tries again.
       readyFailed = true;
-      await sessions.lock().catch(() => undefined);
     }
   })();
 

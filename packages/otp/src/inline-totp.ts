@@ -14,9 +14,13 @@ export function inlineTotpItem(
 ): OtpItem | null {
   const raw = login.totp?.trim() ?? "";
   if (raw === "") return null;
-  const uri = BASE32.test(raw)
-    ? `otpauth://totp/${encodeURIComponent(login.name)}?secret=${raw.replace(/=+$/u, "").toUpperCase()}`
-    : raw;
+  // Bitwarden writes Steam Guard secrets as "steam://SECRET"; that is a Steam code, not a URI.
+  const steam = /^steam:\/\/([A-Z2-7=]+)$/iu.exec(raw);
+  const uri = steam?.[1] !== undefined
+    ? `otpauth://steam/Steam?secret=${steam[1].replace(/=+$/u, "").toUpperCase()}&issuer=Steam`
+    : BASE32.test(raw)
+      ? `otpauth://totp/${encodeURIComponent(login.name)}?secret=${raw.replace(/=+$/u, "").toUpperCase()}`
+      : raw;
   try {
     return parseOtpAuthUri(uri, {
       id: login.id,

@@ -139,7 +139,8 @@ export function useMigration({
           },
           abortController.signal,
         );
-        if (request !== generation.current || derivedKey.byteLength !== 32) return;
+        if (request !== generation.current) return;
+        if (derivedKey.byteLength !== 32) throw new Error("MIGRATION_KEY_INVALID");
         const authorization = MigrationCredentialAuthorizedResponseSchema.parse(
           await platform.sendMessage({
             version: 1,
@@ -170,8 +171,9 @@ export function useMigration({
         const status = MigrationStatusResponseSchema.parse(raw);
         if (request === generation.current) await continueFrom(status, request);
       } catch {
+        // The count survives a failure: "3 items" still describes what is waiting.
         if (request === generation.current && !abortController.signal.aborted)
-          setState({ phase: "failed", itemCount: 0 });
+          setState((current) => ({ phase: "failed", itemCount: "itemCount" in current ? current.itemCount : 0 }));
       } finally {
         passwordBytes?.fill(0);
         saltBytes?.fill(0);

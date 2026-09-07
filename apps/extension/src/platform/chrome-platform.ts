@@ -240,6 +240,12 @@ export function createChromePlatform(): BackgroundExtensionPlatform &
         await chrome.alarms.create(AUTO_LOCK_ALARM, { delayInMinutes: minutes });
     },
 
+    async autoLockPending() {
+      if (typeof chrome.alarms.get !== "function") return false;
+      const alarm = await chrome.alarms.get(AUTO_LOCK_ALARM);
+      return alarm !== undefined && alarm !== null;
+    },
+
     onAutoLock(handler) {
       const listener = (alarm: chrome.alarms.Alarm) => {
         if (alarm.name === AUTO_LOCK_ALARM) handler();

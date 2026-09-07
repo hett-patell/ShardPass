@@ -649,6 +649,25 @@ describe("item.createMany", () => {
     });
   });
 
+  it("keeps a login that differs only by password or folder: same name is not the same item", async () => {
+    const { service } = fixture([loginItem()]);
+    const response = await service.handle(
+      request("item.createMany", {
+        items: [
+          loginItem({ id: ids.created, password: "another-password" }),
+          loginItem({ id: ids.missing, folderId: "30000000-0000-4000-8000-000000000001" }),
+        ],
+      }),
+      vaultSender,
+    );
+    expect(response).toMatchObject({
+      results: [
+        { index: 0, status: "created" },
+        { index: 1, status: "created" },
+      ],
+    });
+  });
+
   it("treats a login on a different host as a different account", async () => {
     const { service } = fixture([loginItem()]);
     const response = await service.handle(

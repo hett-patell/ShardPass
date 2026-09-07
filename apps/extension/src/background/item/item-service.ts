@@ -381,25 +381,28 @@ function secretTypeLabel(secretType: SecretItem["secretType"]): string {
 }
 
 /**
- * What makes two items "the same" for import purposes. Deliberately coarse and explainable:
- * a login is the same account when name, username and site host match; an OTP when it is the
- * same secret for the same issuer/label; a card when name and last four digits match.
+ * What makes two items "the same" for import purposes: the same account in the same place
+ * with the same secret. A login is a duplicate only when name, username, site host, folder
+ * and password all match, so "Router / admin" in Home and in Work with different passwords
+ * are two items, as are two SSH keys with the same title. The key lives only in memory for
+ * the length of one request and is never logged.
  */
 function duplicateKey(item: VaultItem): string {
   const norm = normalizeItemSearch;
+  const folder = item.folderId ?? "";
   switch (item.kind) {
     case "login":
-      return ["login", norm(item.name), norm(item.username), hostOf(item.urls[0] ?? "")].join("\u0000");
+      return ["login", norm(item.name), norm(item.username), hostOf(item.urls[0] ?? ""), folder, item.password].join("\u0000");
     case "otp":
       return ["otp", norm(item.issuer), norm(item.label), item.secret].join("\u0000");
     case "note":
-      return ["note", norm(item.name), norm(item.content.slice(0, 256))].join("\u0000");
+      return ["note", norm(item.name), folder, item.content].join("\u0000");
     case "card":
-      return ["card", norm(item.name), item.number.replaceAll(/\D/gu, "").slice(-4)].join("\u0000");
+      return ["card", norm(item.name), folder, item.number.replaceAll(/\D/gu, "")].join("\u0000");
     case "identity":
-      return ["identity", norm(item.name), norm(item.email)].join("\u0000");
+      return ["identity", norm(item.name), norm(item.email), folder].join("\u0000");
     case "secret":
-      return ["secret", norm(item.name), item.secretType].join("\u0000");
+      return ["secret", norm(item.name), item.secretType, folder, item.value].join("\u0000");
   }
 }
 

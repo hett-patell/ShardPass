@@ -86,6 +86,8 @@ export interface BackgroundExtensionPlatform extends RuntimeExtensionPlatform {
   readonly sessionStorage: StoragePort;
   initializeTrustedStorage(): Promise<void>;
   scheduleAutoLock(minutes: number | null): Promise<void>;
+  /** Whether the auto-lock alarm is still armed (Chrome keeps alarms across worker restarts). */
+  autoLockPending?(): Promise<boolean>;
   onAutoLock(handler: () => void): () => void;
   scheduleEnteSync?(minutes: 15 | null): Promise<void>;
   onEnteSyncAlarm?(handler: () => void): () => void;

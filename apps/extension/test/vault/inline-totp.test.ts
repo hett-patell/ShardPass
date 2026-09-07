@@ -56,4 +56,9 @@ describe("inlineTotpItem", () => {
   it("returns null for a secret that is neither Base32 nor a URI", () => {
     expect(inlineTotpItem(login("not a secret!"))).toBeNull();
   });
+
+  it("reads Bitwarden's steam://SECRET form as a Steam Guard code", () => {
+    const item = inlineTotpItem(login("steam://JBSWY3DPEHPK3PXP"));
+    expect(item).toMatchObject({ otpType: "steam", issuer: "Steam", digits: 5 });
+  });
 });
