@@ -81,3 +81,4 @@ export type { SecretItem } from "./secret-item";
 
 export const VAULT_ITEM_KINDS = ["otp", "login", "note", "card", "identity", "secret"] as const;
 export type VaultItemKind = (typeof VAULT_ITEM_KINDS)[number];
+export { searchableText } from "./search";

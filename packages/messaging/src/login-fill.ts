@@ -44,6 +44,17 @@ export const LoginFillReleaseResponseSchema = z.strictObject({
   linkedOtpCode: z.optional(z.string()),
 });
 
+/**
+ * The popup's copy action: the same release as fillSelect, but from an extension page
+ * rather than a content script, so it is a deliberate act by the person, not a page.
+ */
+export const LoginRevealRequestSchema = z.strictObject({
+  version: z.literal(MESSAGE_VERSION),
+  kind: z.literal("login.reveal"),
+  itemId: z.uuid(),
+  expectedRevision: z.int().check(z.positive()),
+});
+
 export const LoginFillConfirmRequestSchema = z.strictObject({
   version: z.literal(MESSAGE_VERSION),
   kind: z.literal("login.fillConfirm"),
@@ -67,6 +78,7 @@ export const SaveLoginOfferRequestSchema = z.strictObject({
 export const LoginFillRequestSchema = z.discriminatedUnion("kind", [
   LoginFillSuggestionsRequestSchema,
   LoginFillSelectRequestSchema,
+  LoginRevealRequestSchema,
   LoginFillConfirmRequestSchema,
   LoginFillCancelRequestSchema,
   SaveLoginOfferRequestSchema,
@@ -93,6 +105,7 @@ export type LoginFillResponseKind = LoginFillResponse["kind"];
 export const loginFillResponseKindByRequest = {
   "login.fillSuggestions": "login.fillSuggestionsResult",
   "login.fillSelect": "login.fillRelease",
+  "login.reveal": "login.fillRelease",
   "login.fillConfirm": "login.fillAck",
   "login.fillCancel": "login.fillAck",
   "login.saveOffer": "login.fillAck",
@@ -113,9 +126,12 @@ const contentOnly = {
   requireDocument: true,
 } as const;
 
+const extensionPage = { allowedContexts: ["popup", "vault"], requireDocument: true } as const;
+
 export const loginFillSenderPolicy = {
   "login.fillSuggestions": contentOnly,
   "login.fillSelect": contentOnly,
+  "login.reveal": extensionPage,
   "login.fillConfirm": contentOnly,
   "login.fillCancel": contentOnly,
   "login.saveOffer": contentOnly,

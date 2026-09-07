@@ -11,6 +11,8 @@ import {
   LoginFillSuggestionsRequestSchema,
   LoginFillSuggestionsResponseSchema,
   SaveLoginOfferRequestSchema,
+  loginFillSenderPolicy,
+  parseLoginFillResponseForRequest,
 } from "../src/login-fill";
 
 const itemId = "01234567-89ab-4def-8123-456789abcdef";
@@ -102,6 +104,35 @@ describe("login fill messaging", () => {
         ...responses[0],
         suggestions: Array.from({ length: 10_001 }, () => suggestion),
       }).success,
+    ).toBe(false);
+  });
+});
+
+describe("login.reveal", () => {
+  it("is an extension-page command paired with the release response, unlike fillSelect", () => {
+    expect(loginFillSenderPolicy["login.reveal"]).toEqual({
+      allowedContexts: ["popup", "vault"],
+      requireDocument: true,
+    });
+    expect(loginFillSenderPolicy["login.fillSelect"].allowedContexts).toEqual(["content"]);
+    const request = {
+      version: 1 as const,
+      kind: "login.reveal" as const,
+      itemId: "11111111-1111-4111-8111-111111111111",
+      expectedRevision: 3,
+    };
+    expect(LoginFillRequestSchema.safeParse(request).success).toBe(true);
+    expect(
+      parseLoginFillResponseForRequest(request, {
+        version: 1,
+        kind: "login.fillRelease",
+        username: "u",
+        password: "p",
+      }).success,
+    ).toBe(true);
+    expect(
+      parseLoginFillResponseForRequest(request, { version: 1, kind: "login.fillAck", ok: true })
+        .success,
     ).toBe(false);
   });
 });

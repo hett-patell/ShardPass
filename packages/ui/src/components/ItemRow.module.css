@@ -69,3 +69,33 @@
   align-items: center;
   color: var(--text-tertiary);
 }
+
+/* A row with sibling actions: the hover surface covers both, the button stays the row. */
+.shell {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  border-radius: var(--radius-sm);
+  transition: background 80ms;
+}
+.shell .row {
+  flex: 1;
+  min-width: 0;
+}
+.shell:hover {
+  background: var(--bg-secondary);
+}
+.shell:hover .row,
+.shell .row:hover {
+  background: transparent;
+}
+.shellActive,
+.shellActive:hover {
+  background: var(--accent-subtle);
+}
+.actions {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  padding-right: 8px;
+}

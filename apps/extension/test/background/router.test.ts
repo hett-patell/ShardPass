@@ -1219,3 +1219,26 @@ describe("Ente route error envelopes", () => {
     expect(JSON.stringify(unavailable)).not.toContain("secret stack");
   });
 });
+
+describe("login.reveal routing", () => {
+  const release = { version: 1, kind: "login.fillRelease", username: "u", password: "p" };
+  const request = {
+    version: 1,
+    kind: "login.reveal",
+    itemId: "11111111-1111-4111-8111-111111111111",
+    expectedRevision: 1,
+  };
+
+  it("lets the popup and the vault page reveal a login, and refuses a content script", async () => {
+    const service = { handle: vi.fn(() => Promise.resolve(release)) };
+    await expect(routeLoginFill(request, popupSender(), service)).resolves.toEqual(release);
+    await expect(routeLoginFill(request, vaultSender(), service)).resolves.toEqual(release);
+    expect(service.handle).toHaveBeenCalledTimes(2);
+    const content = normalizeSenderContext(contentMetadata, extensionId);
+    await expect(routeLoginFill(request, content, service)).resolves.toMatchObject({
+      kind: "error",
+      error: { code: "UNAUTHORIZED_SENDER" },
+    });
+    expect(service.handle).toHaveBeenCalledTimes(2);
+  });
+});

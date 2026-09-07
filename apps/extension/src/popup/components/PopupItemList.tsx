@@ -13,7 +13,7 @@ export interface PopupItemListProps {
   items: readonly ItemListItemProjection[];
   platform: Pick<
     ExtensionPlatform,
-    "openVaultPage" | "sendOtpMessage" | "writeAuthoritativeClipboardText"
+    "openVaultPage" | "sendMessage" | "sendOtpMessage" | "writeAuthoritativeClipboardText"
   >;
   status: VaultItemsStatus;
 }
@@ -46,7 +46,7 @@ export function PopupItemList({ items, platform, status }: PopupItemListProps) {
               {item.kind === "otp" ? (
                 <PopupOtpRow item={item} platform={platform} onFeedback={setFeedback} />
               ) : item.kind === "login" ? (
-                <PopupLoginRow item={item} platform={platform} />
+                <PopupLoginRow item={item} platform={platform} onFeedback={setFeedback} />
               ) : (
                 <ItemRow
                   kind={item.kind}

@@ -18,6 +18,7 @@ import { IdentityForm } from "./components/forms/IdentityForm";
 import { LoginForm } from "./components/forms/LoginForm";
 import { NoteForm } from "./components/forms/NoteForm";
 import { SecretForm } from "./components/forms/SecretForm";
+import { updateItem } from "./components/forms/submit-item";
 import { ItemDetailPanel } from "./components/ItemDetailPanel";
 import { ItemListPanel } from "./components/ItemListPanel";
 import { NewItemMenu } from "./components/NewItemMenu";
@@ -141,14 +142,22 @@ export function VaultApp({ platform }: VaultAppProps) {
   // Shared by every non-OTP create form: only `id` is needed to select the new item,
   // and every VaultItem kind carries one, so this is safe to reuse across kinds.
   const handleCreated = useCallback(
-    (item: { id: string }) => {
+    (item: { id: string; revision: number }) => {
+      // Created while browsing a folder: file it there, the way a file manager saves into
+      // the open directory. The forms know nothing about folders, so it is one update.
+      const folderId = vaultState.folderId;
       setCreatingKind(null);
       vaultState.setCategory("all");
-      vaultState.setFolderId(null);
-      vaultState.refresh();
-      vaultState.setSelectedId(item.id);
+      const filed =
+        folderId === null
+          ? Promise.resolve()
+          : updateItem(platform, item.id, item.revision, { folderId }).then(() => undefined);
+      void filed.finally(() => {
+        vaultState.refresh();
+        vaultState.setSelectedId(item.id);
+      });
     },
-    [vaultState],
+    [platform, vaultState],
   );
 
   const submitOtpCreate = useCallback(

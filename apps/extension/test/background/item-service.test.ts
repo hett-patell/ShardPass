@@ -771,3 +771,23 @@ describe("update clears", () => {
     expect(await repository.getItem(filed.id)).not.toHaveProperty("folderId");
   });
 });
+
+describe("search", () => {
+  it("finds a login by username or site host from the popup's list, not only by name", async () => {
+    const github = loginItem({
+      id: ids.created,
+      name: "Code host",
+      username: "octocat",
+      urls: ["https://github.com/login"],
+    });
+    const { service } = fixture([loginItem(), github]);
+    const byUser = (await service.handle(request("item.list", { search: "octo" }), popupSender)) as {
+      items: { id: string }[];
+    };
+    expect(byUser.items.map((item) => item.id)).toEqual([ids.created]);
+    const byHost = (await service.handle(request("item.list", { search: "github" }), popupSender)) as {
+      items: { id: string }[];
+    };
+    expect(byHost.items.map((item) => item.id)).toEqual([ids.created]);
+  });
+});

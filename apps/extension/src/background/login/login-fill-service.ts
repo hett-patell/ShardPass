@@ -48,6 +48,7 @@ export class LoginFillService {
         case "login.fillSuggestions":
           return validated(await this.suggestions(command.pageUrl ?? command.domain));
         case "login.fillSelect":
+        case "login.reveal":
           return validated(await this.select(command.itemId, command.expectedRevision));
         case "login.fillConfirm":
         case "login.fillCancel":

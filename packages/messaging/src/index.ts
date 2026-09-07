@@ -192,6 +192,7 @@ export {
   LoginFillRequestSchema,
   LoginFillResponseSchema,
   LoginFillSelectRequestSchema,
+  LoginRevealRequestSchema,
   LoginFillSuggestionSchema,
   LoginFillSuggestionsRequestSchema,
   LoginFillSuggestionsResponseSchema,

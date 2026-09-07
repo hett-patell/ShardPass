@@ -1,5 +1,6 @@
 import {
   MAX_LOGIN_PASSWORD_HISTORY,
+  searchableText,
   VaultItemSchema,
   type LoginItem,
   type SecretItem,
@@ -250,14 +251,8 @@ export function normalizeItemSearch(value: string): string {
   return value.trim().normalize("NFKC").toLocaleLowerCase("en-US");
 }
 
-function searchableFields(item: VaultItem): readonly string[] {
-  return item.kind === "otp" ? [item.issuer, item.label] : [item.name];
-}
-
 function matchesSearch(item: VaultItem, query: string): boolean {
-  return [...searchableFields(item), ...item.tags].some((value) =>
-    normalizeItemSearch(value).includes(query),
-  );
+  return searchableText(item).some((value) => normalizeItemSearch(value).includes(query));
 }
 
 function primaryLabel(item: VaultItem): string {

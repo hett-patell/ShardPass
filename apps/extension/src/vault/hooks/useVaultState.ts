@@ -1,10 +1,10 @@
-import type { Folder, VaultItem } from "@shardpass/domain";
+import { searchableText, type Folder, type VaultItem } from "@shardpass/domain";
 import { parseItemCrudResponseForRequest } from "@shardpass/messaging";
 import type { CategoryKey } from "@shardpass/ui";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { ExtensionPlatform } from "../../platform/extension-platform";
-import { folderSubtreeIds, itemDisplayName } from "../item-support";
+import { folderSubtreeIds } from "../item-support";
 
 export type VaultStateStatus = "idle" | "loading" | "ready" | "error";
 
@@ -37,8 +37,7 @@ function normalizeSearch(value: string): string {
 
 function matchesSearch(item: VaultItem, query: string): boolean {
   if (query.length === 0) return true;
-  const haystacks = [itemDisplayName(item), ...item.tags];
-  return haystacks.some((value) => normalizeSearch(value).includes(query));
+  return searchableText(item).some((value) => normalizeSearch(value).includes(query));
 }
 
 /**

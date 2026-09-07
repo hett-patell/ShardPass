@@ -1,0 +1,32 @@
+.actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  color: var(--text-tertiary);
+}
+
+.action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  color: var(--text-secondary);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.action:hover:not(:disabled) {
+  color: var(--text-primary);
+  background: var(--bg-tertiary, var(--bg-secondary));
+}
+.action:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.action:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
