@@ -1,4 +1,4 @@
-import { searchableText, type Folder, type VaultItem } from "@shardpass/domain";
+import { compareItems, matchesQuery, parseQuery, type Folder, type VaultItem, type VaultSort } from "@shardpass/domain";
 import { parseItemCrudResponseForRequest } from "@shardpass/messaging";
 import type { CategoryKey } from "@shardpass/ui";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -24,6 +24,10 @@ export interface UseVaultStateResult {
   setFolderId: (folderId: string | null) => void;
   search: string;
   setSearch: (search: string) => void;
+  sort: VaultSort;
+  setSort: (value: VaultSort) => void;
+  /** Every tag in the vault, for suggestions; case-insensitively unique, sorted. */
+  tagVocabulary: readonly string[];
   selectedId: string | null;
   setSelectedId: (id: string | null) => void;
   /** Re-fetches the full item list, e.g. after a create/update/delete. */
@@ -32,15 +36,6 @@ export interface UseVaultStateResult {
 
 const emptyItems: readonly VaultItem[] = [];
 const noFolders: readonly Folder[] = Object.freeze([]);
-
-function normalizeSearch(value: string): string {
-  return value.trim().normalize("NFKC").toLocaleLowerCase("en-US");
-}
-
-function matchesSearch(item: VaultItem, query: string): boolean {
-  if (query.length === 0) return true;
-  return searchableText(item).some((value) => normalizeSearch(value).includes(query));
-}
 
 /**
  * Loads the full vault item set via `item.query` (vault-only, full secrets included)
@@ -72,6 +67,7 @@ export function useVaultState(
     [folders, folderId],
   );
   const [search, setSearch] = useState("");
+  const [sort, setSort] = useState<VaultSort>("name");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const generation = useRef(0);
 
@@ -124,17 +120,28 @@ export function useVaultState(
     if (active) load();
   }, [active, load]);
 
-  const query = normalizeSearch(search);
+  const query = useMemo(() => parseQuery(search), [search]);
   const items = useMemo(
     () =>
-      allItems.filter((item) => {
-        if (category !== "all" && item.kind !== category) return false;
-        if (folderId !== null && (item.folderId === undefined || !folderScope.has(item.folderId)))
-          return false;
-        return matchesSearch(item, query);
-      }),
-    [allItems, category, folderId, folderScope, query],
+      allItems
+        .filter((item) => {
+          if (category !== "all" && item.kind !== category) return false;
+          if (folderId !== null && (item.folderId === undefined || !folderScope.has(item.folderId)))
+            return false;
+          return matchesQuery(item, query);
+        })
+        .sort(compareItems(sort)),
+    [allItems, category, folderId, folderScope, query, sort],
   );
+  const tagVocabulary = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const item of liveItems)
+      for (const tag of item.tags) {
+        const key = tag.toLocaleLowerCase("en-US");
+        if (!seen.has(key)) seen.set(key, tag);
+      }
+    return [...seen.values()].sort((left, right) => left.localeCompare(right));
+  }, [liveItems]);
 
   // One stable object per change: callers hang useCallback/useEffect dependencies on it,
   // and a fresh literal every render would re-run those on every keystroke.
@@ -150,13 +157,16 @@ export function useVaultState(
       setFolderId,
       search,
       setSearch,
+      sort,
+      setSort,
+      tagVocabulary,
       selectedId,
       setSelectedId,
       refresh,
       archived,
       setArchived,
     }),
-    [allItems, liveItems, items, status, category, folderId, search, selectedId, refresh, archived],
+    [allItems, liveItems, items, status, category, folderId, search, sort, tagVocabulary, selectedId, refresh, archived],
   );
 }
 

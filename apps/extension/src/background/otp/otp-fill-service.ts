@@ -587,7 +587,7 @@ type Site = Readonly<{ host: string; domain: string; brand: string }>;
 
 /** The page's host, its registrable domain, and the label people name a site by ("github"). */
 function siteOf(origin: string): Site {
-  let host = "";
+  let host: string;
   try {
     host = new URL(origin).hostname.toLowerCase();
   } catch {

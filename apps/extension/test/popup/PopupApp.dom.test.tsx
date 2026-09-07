@@ -323,6 +323,13 @@ describe("PopupApp screens", () => {
     }
   });
 
+  it("filters by #tag in the popup search, like the vault", async () => {
+    await renderUnlocked();
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search ShardPass" }), { target: { value: "#ho" } });
+    expect(await screen.findByText("Wifi")).toBeVisible();
+    expect(screen.queryByText("Example Portal")).not.toBeInTheDocument();
+  });
+
   it("locks the vault from the title bar", async () => {
     const { sendMessage } = await renderUnlocked();
     fireEvent.click(screen.getByRole("button", { name: "Lock vault" }));

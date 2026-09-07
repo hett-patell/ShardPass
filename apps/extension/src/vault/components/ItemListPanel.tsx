@@ -1,3 +1,4 @@
+import { memo } from "react";
 import type { VaultItem } from "@shardpass/domain";
 import { Button, ItemRow } from "@shardpass/ui";
 
@@ -115,12 +116,13 @@ export function ItemListPanel({
       {items.map((item) => {
         const subtitle = itemDisplaySubtitle(item);
         return (
-          <ItemRow
+          <ListRow
             key={item.id}
+            id={item.id}
             kind={item.kind}
             name={itemDisplayName(item)}
             active={item.id === selectedId}
-            onClick={() => onSelect(item.id)}
+            onSelect={onSelect}
             {...(subtitle === undefined ? {} : { subtitle })}
           />
         );
@@ -128,3 +130,12 @@ export function ItemListPanel({
     </div>
   );
 }
+
+/** One row with a stable click handler, so the memoised ItemRow only redraws when its own props change. */
+const ListRow = memo(function ListRow({
+  id,
+  onSelect,
+  ...rest
+}: Readonly<{ id: string; onSelect: (id: string) => void; kind: VaultItem["kind"]; name: string; active: boolean; subtitle?: string }>) {
+  return <ItemRow {...rest} onClick={() => onSelect(id)} />;
+});

@@ -1,4 +1,4 @@
-import type { OtpItem, VaultItemKind } from "@shardpass/domain";
+import { VAULT_SORTS, type OtpItem, type VaultItemKind, type VaultSort } from "@shardpass/domain";
 import type { OtpEditableInput, OtpResponse } from "@shardpass/messaging";
 import { AppHeader, SearchBar, StatusBadge, ThemeToggle, type CategoryKey, type Status } from "@shardpass/ui";
 import { useCallback, useEffect, useState } from "react";
@@ -271,7 +271,25 @@ export function VaultApp({ platform }: VaultAppProps) {
                       value={vaultState.search}
                       onChange={vaultState.setSearch}
                       placeholder={vaultState.archived ? "Search archive" : "Search vault"}
+                      list="vault-tag-suggestions"
                     />
+                    <datalist id="vault-tag-suggestions">
+                      {vaultState.tagVocabulary.map((tag) => (
+                        <option key={tag} value={`#${tag}`} />
+                      ))}
+                    </datalist>
+                    <select
+                      className={styles.sort}
+                      aria-label="Sort items"
+                      value={vaultState.sort}
+                      onChange={(event) => vaultState.setSort(event.target.value as VaultSort)}
+                    >
+                      {VAULT_SORTS.map((option) => (
+                        <option key={option.id} value={option.id}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
                     {vaultState.archived ? null : <NewItemMenu onSelect={startCreate} />}
                   </div>
                   <div className={styles.listBody}>

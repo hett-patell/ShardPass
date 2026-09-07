@@ -9,6 +9,8 @@ export interface SearchBarProps {
   onChange: (value: string) => void;
   placeholder?: string;
   value: string;
+  /** Id of a <datalist> offering completions (tags, say). */
+  list?: string;
 }
 
 export function SearchBar({
@@ -17,6 +19,7 @@ export function SearchBar({
   onChange,
   placeholder = "Search",
   value,
+  list,
 }: SearchBarProps) {
   const wrapperClasses = [styles.wrapper, className].filter(Boolean).join(" ");
 
@@ -35,6 +38,7 @@ export function SearchBar({
         placeholder={placeholder}
         autoFocus={autoFocus}
         aria-label={placeholder}
+        {...(list === undefined ? {} : { list })}
       />
     </div>
   );

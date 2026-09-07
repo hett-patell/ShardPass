@@ -1,4 +1,5 @@
 import type { VaultItemKind } from "@shardpass/domain";
+import { parseQuery } from "@shardpass/domain";
 import { parseItemCrudResponseForRequest, type ItemListItemProjection } from "@shardpass/messaging";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -85,11 +86,16 @@ function normalize(value: string): string {
 }
 
 /** The text a projection can be found by: name, subtitle, tags, and a login's site hosts. */
+/** The same query language as the vault: `#tag` words filter by tag prefix, the rest by text. */
 export function projectionMatches(item: ItemListItemProjection, query: string): boolean {
-  const needle = normalize(query);
-  if (needle === "") return true;
-  const haystacks = [item.name, item.subtitle ?? "", ...item.tags, ...(item.urls ?? [])];
-  return haystacks.some((value) => normalize(value).includes(needle));
+  const parsed = parseQuery(query);
+  if (parsed.tags.length > 0) {
+    const tags = item.tags.map(normalize);
+    if (!parsed.tags.every((tag) => tags.some((candidate) => candidate.startsWith(tag)))) return false;
+  }
+  if (parsed.terms.length === 0) return true;
+  const haystacks = [item.name, item.subtitle ?? "", ...item.tags, ...(item.urls ?? [])].map(normalize);
+  return parsed.terms.every((term) => haystacks.some((value) => value.includes(term)));
 }
 
 export function itemsInCategory(

@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { CreditCard, Globe, KeyRound, Lock, StickyNote, User } from "lucide-react";
 import type { ComponentType, ReactNode } from "react";
 import type { VaultItemKind } from "@shardpass/domain";
@@ -28,7 +29,7 @@ export interface ItemRowProps {
   subtitle?: string;
 }
 
-export function ItemRow({
+function ItemRowView({
   active = false,
   kind,
   name,
@@ -65,3 +66,6 @@ export function ItemRow({
     </div>
   );
 }
+
+/** Memoised: a list of a thousand rows must not redraw every row on each keystroke. */
+export const ItemRow = memo(ItemRowView);
