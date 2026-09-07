@@ -21,8 +21,11 @@ function stripCrossOrigin(): Plugin {
 }
 
 
-export default defineConfig({
+export default defineConfig(({ command }) => ({
   root: "apps/extension",
+  // A production build must not depend on the shell: with NODE_ENV inherited as anything
+  // else, React resolves its development entry (389 KB of console.error) into the popup.
+  define: command === "build" ? { "process.env.NODE_ENV": JSON.stringify("production") } : {},
   plugins: [
     enteSrpVitePlugin({
       workspaceRoot,
@@ -59,4 +62,4 @@ export default defineConfig({
       },
     },
   },
-});
+}));
