@@ -449,6 +449,14 @@ async function reconcile(
   });
 }
 
+/** How many queued writes one cycle sends before handing back; the alarm continues. */
+const MAX_WRITES_PER_CYCLE = 25;
+
+/**
+ * Sends queued writes until the queue is empty, a limit is reached, or the cycle is
+ * cancelled. One write per cycle meant a vault with fifty local codes needed fifty
+ * fifteen-minute alarms to finish its first upload.
+ */
 async function executeHead(
   dependencies: OperationalDependencies,
   snapshot: EnteCycleSnapshot,
@@ -457,10 +465,26 @@ async function executeHead(
   signal: AbortSignal,
   budget: EnteResponseBudget,
 ): Promise<void> {
+  let current = snapshot;
+  for (let sent = 0; sent < MAX_WRITES_PER_CYCLE && !signal.aborted; sent += 1) {
+    const next = await executeOne(dependencies, current, token, authKey, signal, budget);
+    if (next === null) return;
+    current = next;
+  }
+}
+
+async function executeOne(
+  dependencies: OperationalDependencies,
+  snapshot: EnteCycleSnapshot,
+  token: string,
+  authKey: Uint8Array,
+  signal: AbortSignal,
+  budget: EnteResponseBudget,
+): Promise<EnteCycleSnapshot | null> {
   const head = snapshot.state.pending[0];
   if (head === undefined || snapshot.state.conflicts.length > 0 || snapshot.state.needsReauth)
-    return;
-  if (head.attempts >= ENTE_SYNC_LIMITS.maxMutationAttempts) return;
+    return null;
+  if (head.attempts >= ENTE_SYNC_LIMITS.maxMutationAttempts) return null;
   const attempted: EntePendingOperation = {
     ...head,
     attempts: head.attempts + 1,
@@ -511,6 +535,7 @@ async function executeHead(
     throw new EnteProtocolError(
       attempted.kind === "create" ? "ENTE_CREATE_UNCERTAIN" : "ENTE_WRITE_UNCERTAIN",
     );
+  return result;
 }
 
 export function createEnteOperationalCycle(dependencies: OperationalDependencies) {

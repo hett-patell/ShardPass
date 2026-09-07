@@ -54,25 +54,35 @@ export class SettingsService {
     return this.settings;
   }
 
+  /**
+   * Registers the activity and idle listeners. Must run synchronously in the worker's first
+   * turn: Chrome only wakes a dormant service worker for events whose listeners were
+   * registered before the first await, and lock-on-screen-lock depends on the idle event.
+   */
+  listen(): () => void {
+    if (this.disposeStarted !== null) return this.disposeStarted;
+    const disposers = [
+      this.platform.onUserActivity(() => void this.resetAlarm()),
+      this.platform.onIdleStateChanged((state) => {
+        if (state === "locked" && this.settings.lockOnScreenLock) void this.lock();
+      }),
+    ];
+    let disposed = false;
+    this.disposeStarted = () => {
+      if (disposed) return;
+      disposed = true;
+      for (const dispose of disposers) dispose();
+    };
+    return this.disposeStarted;
+  }
+
   start(): Promise<() => void> {
     if (this.startPromise !== null) return this.startPromise;
     this.startPromise = (async () => {
       await this.load();
       // The alarm is left as it was: a restored session keeps its countdown, and the
       // caller cancels it when the session did not survive the restart.
-      const disposers = [
-        this.platform.onUserActivity(() => void this.resetAlarm()),
-        this.platform.onIdleStateChanged((state) => {
-          if (state === "locked" && this.settings.lockOnScreenLock) void this.lock();
-        }),
-      ];
-      let disposed = false;
-      this.disposeStarted = () => {
-        if (disposed) return;
-        disposed = true;
-        for (const dispose of disposers) dispose();
-      };
-      return this.disposeStarted;
+      return this.listen();
     })();
     return this.startPromise;
   }

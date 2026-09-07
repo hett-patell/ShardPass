@@ -93,6 +93,9 @@ export function installBackground(
   });
   let lockTransition = () => sessions.lock();
   const settings = new SettingsService(platform.localStorage, platform, () => lockTransition());
+  // Synchronously, before any await: the idle listener has to exist in the worker's first
+  // turn or Chrome will not wake the worker to lock on screen lock.
+  settings.listen();
   const vault = new VaultService(sessions, settings);
   const backup = new BackupService({
     sessions,
