@@ -10,7 +10,7 @@ import {
 } from "@shardpass/domain";
 
 import { newItemBase } from "../common/item-base";
-import type { ImportResult } from "../common/import-result";
+import { createFolderIndex, type ImportResult } from "../common/import-result";
 import { IMPORT_LIMITS } from "../import-model";
 
 const BITWARDEN_TYPE_LOGIN = 1;
@@ -58,10 +58,28 @@ export function importBitwardenJson(text: string): ImportResult {
     return { items, warnings };
   }
 
+  if (isRecord(root) && root["encrypted"] === true) {
+    warnings.push(
+      "This is a password-protected Bitwarden export. Export again with the unencrypted .json format.",
+    );
+    return { items, warnings };
+  }
   const rawItems = isRecord(root) ? root["items"] : undefined;
   if (!Array.isArray(rawItems)) {
     warnings.push('Invalid Bitwarden export: missing top-level "items" array');
     return { items, warnings };
+  }
+  // Bitwarden folders are flat records whose names may carry a path ("Work/Clients").
+  const folderIndex = createFolderIndex();
+  const folderIdByBitwardenId = new Map<string, string>();
+  const rawFolders = isRecord(root) && Array.isArray(root["folders"]) ? root["folders"] : [];
+  for (const folder of rawFolders) {
+    if (!isRecord(folder)) continue;
+    const id = asString(folder["id"]);
+    const name = asString(folder["name"]);
+    if (id === "" || name.trim() === "") continue;
+    const provisional = folderIndex.idFor(name.split("/"));
+    if (provisional !== undefined) folderIdByBitwardenId.set(id, provisional);
   }
 
   const truncated = rawItems.length > IMPORT_LIMITS.maxEntries;
@@ -83,7 +101,16 @@ export function importBitwardenJson(text: string): ImportResult {
     const name = asString(raw["name"]).trim() || "Imported item";
     const notes = asString(raw["notes"]);
     const favorite = raw["favorite"] === true;
-    const base = { ...newItemBase(), favorite };
+    const folderId = folderIdByBitwardenId.get(asString(raw["folderId"]));
+    const fresh = newItemBase();
+    const createdAt = isoOf(raw["creationDate"]) ?? fresh.createdAt;
+    const base = {
+      ...fresh,
+      createdAt,
+      updatedAt: isoOf(raw["revisionDate"]) ?? createdAt,
+      favorite,
+      ...(folderId === undefined ? {} : { folderId }),
+    };
 
     switch (raw["type"]) {
       case BITWARDEN_TYPE_LOGIN: {
@@ -102,6 +129,7 @@ export function importBitwardenJson(text: string): ImportResult {
           : undefined;
         const totp = asString(login["totp"]);
         const customFields = customFieldsOf(raw["fields"], warnings, label);
+        const passwordHistory = passwordHistoryOf(raw["passwordHistory"]);
 
         const candidate = {
           ...base,
@@ -113,6 +141,7 @@ export function importBitwardenJson(text: string): ImportResult {
           ...(urlMatches === undefined ? {} : { urlMatches }),
           ...(totp === "" ? {} : { totp }),
           ...(customFields.length === 0 ? {} : { customFields }),
+          ...(passwordHistory.length === 0 ? {} : { passwordHistory }),
           notes,
         };
         const parsed = LoginItemSchema.safeParse(candidate);
@@ -198,7 +227,28 @@ export function importBitwardenJson(text: string): ImportResult {
     }
   }
 
-  return { items, warnings };
+  const folders = folderIndex.folders();
+  return folders.length === 0 ? { items, warnings } : { items, warnings, folders };
+}
+
+function isoOf(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const time = Date.parse(value);
+  return Number.isFinite(time) ? new Date(time).toISOString() : undefined;
+}
+
+/** Bitwarden keeps `{ lastUsedDate, password }`; newest first, as ShardPass stores it. */
+function passwordHistoryOf(raw: unknown): { password: string; changedAt: string }[] {
+  if (!Array.isArray(raw)) return [];
+  const entries: { password: string; changedAt: string }[] = [];
+  for (const entry of raw) {
+    if (!isRecord(entry)) continue;
+    const password = asString(entry["password"]);
+    const changedAt = isoOf(entry["lastUsedDate"]);
+    if (password === "" || changedAt === undefined) continue;
+    entries.push({ password, changedAt });
+  }
+  return entries.sort((left, right) => right.changedAt.localeCompare(left.changedAt)).slice(0, 10);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

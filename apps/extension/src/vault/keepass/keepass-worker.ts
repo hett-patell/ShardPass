@@ -19,7 +19,7 @@ workerScope.onmessage = (event: MessageEvent<unknown>) => {
       if (!(request.file instanceof ArrayBuffer) || typeof request.password !== "string")
         throw new Error("Malformed import request.");
       const result = await importKeePassKdbx(new Uint8Array(request.file), request.password);
-      workerScope.postMessage({ ok: true, items: result.items, warnings: result.warnings });
+      workerScope.postMessage({ ok: true, items: result.items, warnings: result.warnings, folders: result.folders ?? [] });
     } catch (error) {
       workerScope.postMessage({
         ok: false,

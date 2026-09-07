@@ -1,4 +1,4 @@
-import type { ImportResult } from "../common/import-result";
+import { createFolderIndex, type ImportResult } from "../common/import-result";
 import { IMPORT_LIMITS } from "../import-model";
 import { convertEntry } from "./classify";
 import { readKdbx } from "./kdbx-read";
@@ -24,6 +24,8 @@ export async function importKeePassKdbx(file: Uint8Array, password: string): Pro
       `Skipped ${database.skippedRecycleBin} entr${database.skippedRecycleBin === 1 ? "y" : "ies"} in the KeePass recycle bin.`,
     );
 
+  // KeePass groups become folders, mirroring the database's own tree.
+  const folderIndex = createFolderIndex();
   for (const entry of database.entries) {
     if (items.length >= IMPORT_LIMITS.maxEntries) {
       warnings.push(
@@ -31,10 +33,12 @@ export async function importKeePassKdbx(file: Uint8Array, password: string): Pro
       );
       break;
     }
-    const outcome = convertEntry(entry);
+    const folderId = folderIndex.idFor(entry.path);
+    const outcome = convertEntry(entry, folderId);
     items.push(...outcome.items);
     warnings.push(...outcome.warnings);
   }
 
-  return { items, warnings };
+  const folders = folderIndex.folders();
+  return folders.length === 0 ? { items, warnings } : { items, warnings, folders };
 }

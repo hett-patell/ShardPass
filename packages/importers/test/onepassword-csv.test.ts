@@ -21,11 +21,27 @@ AWS Console,admin,s3cret,https://aws.amazon.com,`;
     expect(github.notes).toBe("personal account");
   });
 
-  it("skips rows with empty password", () => {
+  it("keeps a login without a password and says so", () => {
     const csv = `Title,Username,Password,URL,Notes\nEmpty,user,,https://example.com,`;
     const result = importOnePasswordCsv(csv);
-    expect(result.items).toHaveLength(0);
-    expect(result.warnings).toHaveLength(1);
+    expect(result.items).toHaveLength(1);
+    expect(result.warnings).toEqual(['"Empty": imported without a password (the export has none).']);
+  });
+
+  it("reads the columns 1Password 8 writes: OTPAuth, Favorite, Archived and Tags", () => {
+    const csv = `Title,Url,Username,Password,OTPAuth,Favorite,Archived,Tags,Notes
+GitHub,https://github.com,octo,pw,otpauth://totp/GitHub:octo?secret=JBSWY3DPEHPK3PXP&issuer=GitHub,true,false,"work, code",
+Old site,https://old.example,me,pw2,,false,true,,gone`;
+    const result = importOnePasswordCsv(csv);
+    expect(result.warnings).toHaveLength(0);
+    const [github, old] = result.items;
+    if (github?.kind !== "login" || old?.kind !== "login") throw new Error("expected logins");
+    expect(github.totp).toBe("otpauth://totp/GitHub:octo?secret=JBSWY3DPEHPK3PXP&issuer=GitHub");
+    expect(github.favorite).toBe(true);
+    expect(github.tags).toEqual(["work", "code"]);
+    expect(github.archivedAt).toBeUndefined();
+    expect(old.archivedAt).toBeDefined();
+    expect(old.favorite).toBe(false);
   });
 
   it("matches header names case-insensitively", () => {

@@ -42,13 +42,22 @@ export function importOnePasswordCsv(text: string): ImportResult {
     const base = newItemBase();
     const name = title || "Imported item";
 
+    const favorite = truthy(pickField(row, headerIndex, "favorite", "favourite"));
+    const archived = truthy(pickField(row, headerIndex, "archived"));
+    const tags = splitTags(pickField(row, headerIndex, "tags"));
+    Object.assign(base, {
+      favorite,
+      tags,
+      ...(archived ? { archivedAt: base.updatedAt } : {}),
+    });
+
     if (kind === "login") {
       const password = pickField(row, headerIndex, "password");
-      if (!password) {
-        warnings.push(`Skipped "${label}": empty password`);
-        continue;
-      }
+      // A login without a password (passkey-only, username-only) is still worth keeping:
+      // the username, site and notes are what the person will look for.
+      if (!password) warnings.push(`"${label}": imported without a password (the export has none).`);
       const url = pickField(row, headerIndex, "url", "website", "login_uri", "urls").trim();
+      const totp = pickField(row, headerIndex, "otpauth", "one-time password", "totp").trim();
       const candidate = {
         ...base,
         kind: "login" as const,
@@ -56,6 +65,7 @@ export function importOnePasswordCsv(text: string): ImportResult {
         username: pickField(row, headerIndex, "username", "user name"),
         password,
         urls: url ? [url] : [],
+        ...(totp === "" ? {} : { totp }),
         notes: pickField(row, headerIndex, "notes", "notesplain", "note"),
       };
       const parsed = LoginItemSchema.safeParse(candidate);
@@ -135,6 +145,16 @@ export function importOnePasswordCsv(text: string): ImportResult {
   }
 
   return { items, warnings };
+}
+
+function truthy(value: string): boolean {
+  const normalized = value.trim().toLowerCase();
+  return normalized === "true" || normalized === "1" || normalized === "yes" || normalized === "y";
+}
+
+/** 1Password writes tags comma- or semicolon-separated in one cell. */
+function splitTags(value: string): string[] {
+  return [...new Set(value.split(/[,;]/u).map((tag) => tag.trim()).filter((tag) => tag !== ""))];
 }
 
 function classifyRow(rawType: string): OnePasswordKind {

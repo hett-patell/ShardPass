@@ -1,11 +1,13 @@
-import type { VaultItem } from "@shardpass/domain";
+import type { Folder, VaultItem } from "@shardpass/domain";
 import {
+  type ImportFolder,
   importBitwardenJson,
   importChromeCsv,
   importFirefoxCsv,
   importOnePasswordCsv,
   type ImportResult,
 } from "@shardpass/importers";
+import { parseFolderResponseForRequest, type FolderRequest } from "@shardpass/messaging";
 import { Button } from "@shardpass/ui";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -108,6 +110,8 @@ type ImportOutcome = Readonly<{
 type ThirdPartyState = Readonly<{
   phase: "pick" | "reading" | "password" | "unlocking" | "preview" | "importing" | "done";
   rows: readonly Row[];
+  /** Provisional folders from the source; created for real, parents first, on confirm. */
+  folders: readonly ImportFolder[];
   warnings: readonly string[];
   error: string | null;
   imported: number;
@@ -120,6 +124,7 @@ type ThirdPartyState = Readonly<{
 const INITIAL_THIRD_PARTY_STATE: ThirdPartyState = Object.freeze({
   phase: "pick",
   rows: [],
+  folders: [],
   warnings: [],
   error: null,
   imported: 0,
@@ -229,6 +234,7 @@ export function ImportDialog({ platform, active, onImported }: ImportDialogProps
         setState({
           phase: "preview",
           rows: result.items.map((item) => ({ id: item.id, item, selected: true })),
+          folders: result.folders ?? [],
           warnings: result.warnings,
           error:
             result.items.length === 0 ? "No importable entries were found in this file." : null,
@@ -261,6 +267,7 @@ export function ImportDialog({ platform, active, onImported }: ImportDialogProps
       setState({
         phase: "preview",
         rows: outcome.items.map((item) => ({ id: item.id, item, selected: true })),
+        folders: outcome.folders,
         warnings: [...outcome.warnings],
         error: outcome.items.length === 0 ? "No importable entries were found in this database." : null,
         imported: 0,
@@ -302,6 +309,10 @@ export function ImportDialog({ platform, active, onImported }: ImportDialogProps
     let duplicates = 0;
     let failed = 0;
     const outcomes: ImportOutcome[] = [];
+    // The source's folders come first so every item can be filed as it is created. A folder
+    // that cannot be created leaves its items unfiled rather than failing the import.
+    const folderIds = await realizeFolders(platform, state.folders, selected);
+    if (owner !== ownerRef.current) return;
     // Batched: each call is one vault commit, so a large import is seconds rather than
     // minutes and cannot be left half-written. Chunking keeps messages bounded and gives
     // the progress bar something to show.
@@ -309,7 +320,7 @@ export function ImportDialog({ platform, active, onImported }: ImportDialogProps
       const chunk = selected.slice(start, start + IMPORT_BATCH_SIZE);
       const results = await createItems(
         platform,
-        chunk.map((row) => row.item),
+        chunk.map((row) => refile(row.item, folderIds)),
       );
       if (owner !== ownerRef.current) return;
       for (const entry of results) {
@@ -335,6 +346,7 @@ export function ImportDialog({ platform, active, onImported }: ImportDialogProps
     setState({
       phase: "done",
       rows: [],
+      folders: [],
       warnings: [],
       error: failed > 0 ? `${failed} item(s) could not be imported.` : null,
       imported,
@@ -573,4 +585,87 @@ export function ImportDialog({ platform, active, onImported }: ImportDialogProps
       ) : null}
     </section>
   );
+}
+
+/** Swaps an item's provisional folder id for the real one; unfiled when the folder failed. */
+function refile(item: VaultItem, folderIds: ReadonlyMap<string, string>): VaultItem {
+  if (item.folderId === undefined) return item;
+  const real = folderIds.get(item.folderId);
+  if (real === undefined) {
+    const { folderId: _dropped, ...rest } = item;
+    void _dropped;
+    return rest;
+  }
+  return real === item.folderId ? item : { ...item, folderId: real };
+}
+
+/**
+ * Creates the folders the selected items reference, parents before children, reusing an
+ * existing folder with the same name under the same parent. Returns provisional → real ids.
+ */
+async function realizeFolders(
+  platform: Pick<ExtensionPlatform, "sendMessage">,
+  folders: readonly ImportFolder[],
+  selected: readonly Row[],
+): Promise<ReadonlyMap<string, string>> {
+  const resolved = new Map<string, string>();
+  if (folders.length === 0) return resolved;
+  const wanted = new Set<string>();
+  const byId = new Map(folders.map((folder) => [folder.id, folder]));
+  for (const row of selected) {
+    let id = row.item.folderId;
+    while (id !== undefined && !wanted.has(id)) {
+      wanted.add(id);
+      id = byId.get(id)?.parentId;
+    }
+  }
+  if (wanted.size === 0) return resolved;
+  const send = async (request: FolderRequest): Promise<readonly Folder[] | null> => {
+    try {
+      const parsed = parseFolderResponseForRequest(request, await platform.sendMessage(request));
+      return parsed.success ? parsed.data.folders : null;
+    } catch {
+      return null;
+    }
+  };
+  let existing = (await send({ version: 1, kind: "folder.list" })) ?? [];
+  const sameName = (left: string, right: string) =>
+    left.normalize("NFKC").toLocaleLowerCase("en-US") === right.normalize("NFKC").toLocaleLowerCase("en-US");
+  const pending = folders.filter((folder) => wanted.has(folder.id));
+  // Parents first: a child is only creatable once its parent has a real id.
+  let progress = true;
+  while (pending.length > 0 && progress) {
+    progress = false;
+    for (let index = 0; index < pending.length; index += 1) {
+      const folder = pending[index]!;
+      const parentReal = folder.parentId === undefined ? undefined : resolved.get(folder.parentId);
+      if (folder.parentId !== undefined && parentReal === undefined) {
+        // The parent failed (or is not created yet); once the loop stalls it is dropped.
+        continue;
+      }
+      pending.splice(index, 1);
+      index -= 1;
+      progress = true;
+      const match = existing.find(
+        (candidate) => candidate.parentId === parentReal && sameName(candidate.name, folder.name),
+      );
+      if (match !== undefined) {
+        resolved.set(folder.id, match.id);
+        continue;
+      }
+      const created = await send({
+        version: 1,
+        kind: "folder.create",
+        name: folder.name,
+        ...(parentReal === undefined ? {} : { parentId: parentReal }),
+      });
+      if (created === null) continue;
+      existing = created;
+      const real = created.find(
+        (candidate) => candidate.parentId === parentReal && sameName(candidate.name, folder.name),
+      );
+      if (real !== undefined) resolved.set(folder.id, real.id);
+    }
+  }
+  return resolved;
 }

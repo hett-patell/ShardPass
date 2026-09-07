@@ -21,3 +21,4 @@ export {
   KdbxPasswordError,
   type KeePassEntry,
 } from "./keepass";
+export { createFolderIndex, type ImportFolder } from "./common/import-result";

@@ -137,3 +137,63 @@ describe("importBitwardenJson", () => {
     expect(result.warnings).toHaveLength(1);
   });
 });
+
+describe("importBitwardenJson extras", () => {
+  it("turns folders (with slash paths) into provisional folders and files items into them", () => {
+    const result = importBitwardenJson(
+      JSON.stringify({
+        encrypted: false,
+        folders: [
+          { id: "f-work", name: "Work/Clients" },
+          { id: "f-home", name: "Home" },
+        ],
+        items: [
+          { id: "i1", type: 1, name: "Client portal", folderId: "f-work", login: { username: "a", password: "b", uris: [] } },
+          { id: "i2", type: 2, name: "Wifi", folderId: "f-home", notes: "pass", secureNote: { type: 0 } },
+          { id: "i3", type: 1, name: "Loose", folderId: null, login: { username: "c", password: "d", uris: [] } },
+        ],
+      }),
+    );
+    expect(result.warnings).toHaveLength(0);
+    const folders = result.folders ?? [];
+    expect(folders.map((folder) => folder.name).sort()).toEqual(["Clients", "Home", "Work"]);
+    const work = folders.find((folder) => folder.name === "Work")!;
+    const clients = folders.find((folder) => folder.name === "Clients")!;
+    expect(clients.parentId).toBe(work.id);
+    expect(work.parentId).toBeUndefined();
+    expect(result.items[0]?.folderId).toBe(clients.id);
+    expect(result.items[1]?.folderId).toBe(folders.find((folder) => folder.name === "Home")?.id);
+    expect(result.items[2]?.folderId).toBeUndefined();
+  });
+
+  it("keeps password history newest first and the item's own timestamps", () => {
+    const result = importBitwardenJson(
+      JSON.stringify({
+        items: [
+          {
+            type: 1,
+            name: "Mail",
+            creationDate: "2024-01-02T03:04:05.000Z",
+            revisionDate: "2025-06-07T08:09:10.000Z",
+            passwordHistory: [
+              { lastUsedDate: "2024-05-01T00:00:00.000Z", password: "older" },
+              { lastUsedDate: "2025-01-01T00:00:00.000Z", password: "newer" },
+            ],
+            login: { username: "u", password: "current", uris: [] },
+          },
+        ],
+      }),
+    );
+    const item = result.items[0];
+    if (item?.kind !== "login") throw new Error("expected login");
+    expect(item.createdAt).toBe("2024-01-02T03:04:05.000Z");
+    expect(item.updatedAt).toBe("2025-06-07T08:09:10.000Z");
+    expect(item.passwordHistory?.map((entry) => entry.password)).toEqual(["newer", "older"]);
+  });
+
+  it("names a password-protected export instead of calling it malformed", () => {
+    const result = importBitwardenJson(JSON.stringify({ encrypted: true, data: "..." }));
+    expect(result.items).toHaveLength(0);
+    expect(result.warnings[0]).toContain("password-protected");
+  });
+});

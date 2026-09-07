@@ -1,54 +1,76 @@
 /**
- * Minimal CSV parser shared by the password manager importers (Chrome,
- * Firefox, 1Password). It supports quoted fields, escaped double quotes
- * (`""`), and a leading UTF-8 BOM, which covers the exports these tools
- * actually produce. It does not support quoted fields containing embedded
- * newlines — none of the supported export formats emit those.
+ * CSV parser shared by the password manager importers (Chrome, Firefox, 1Password,
+ * Bitwarden). RFC 4180 as the exports actually write it: quoted fields, doubled quotes
+ * inside them, a leading UTF-8 BOM, CRLF or LF, and -- the part that matters for real
+ * vaults -- newlines inside a quoted field. Notes are multi-line more often than not;
+ * splitting the file into lines before parsing quotes shifted every column of every row
+ * after the first such note.
  */
 export function parseCsv(text: string): { headers: string[]; rows: Record<string, string>[] } {
-  const withoutBom = text.startsWith("\uFEFF") ? text.slice(1) : text;
-  const lines = withoutBom.split(/\r?\n/u).filter((line) => line.trim().length > 0);
-  if (lines.length === 0) return { headers: [], rows: [] };
-
-  const headers = parseCsvLine(lines[0]!);
-  const rows = lines.slice(1).map((line) => {
-    const values = parseCsvLine(line);
+  const records = parseRecords(text.startsWith("﻿") ? text.slice(1) : text).filter(
+    (record) => record.some((field) => field.trim().length > 0),
+  );
+  const headers = records[0];
+  if (headers === undefined) return { headers: [], rows: [] };
+  const rows = records.slice(1).map((values) => {
     const row: Record<string, string> = {};
-    for (let i = 0; i < headers.length; i++) {
-      row[headers[i]!] = values[i] ?? "";
+    for (let index = 0; index < headers.length; index++) {
+      row[headers[index]!] = values[index] ?? "";
     }
     return row;
   });
-
   return { headers, rows };
 }
 
-function parseCsvLine(line: string): string[] {
-  const result: string[] = [];
-  let current = "";
-  let inQuotes = false;
-  for (let i = 0; i < line.length; i++) {
-    const char = line[i];
-    if (inQuotes) {
-      if (char === '"' && line[i + 1] === '"') {
-        current += '"';
-        i++;
-      } else if (char === '"') {
-        inQuotes = false;
-      } else {
-        current += char;
-      }
-    } else {
+function parseRecords(text: string): string[][] {
+  const records: string[][] = [];
+  let record: string[] = [];
+  let field = "";
+  let quoted = false;
+  let index = 0;
+  while (index < text.length) {
+    const char = text[index]!;
+    if (quoted) {
       if (char === '"') {
-        inQuotes = true;
-      } else if (char === ",") {
-        result.push(current);
-        current = "";
-      } else {
-        current += char;
+        if (text[index + 1] === '"') {
+          field += '"';
+          index += 2;
+          continue;
+        }
+        quoted = false;
+        index += 1;
+        continue;
       }
+      field += char;
+      index += 1;
+      continue;
     }
+    if (char === '"') {
+      quoted = true;
+      index += 1;
+      continue;
+    }
+    if (char === ",") {
+      record.push(field);
+      field = "";
+      index += 1;
+      continue;
+    }
+    if (char === "\r" || char === "\n") {
+      record.push(field);
+      records.push(record);
+      record = [];
+      field = "";
+      index += char === "\r" && text[index + 1] === "\n" ? 2 : 1;
+      continue;
+    }
+    field += char;
+    index += 1;
   }
-  result.push(current);
-  return result;
+  // A final record without a trailing newline (and an unterminated quote is read as text).
+  if (field.length > 0 || record.length > 0) {
+    record.push(field);
+    records.push(record);
+  }
+  return records;
 }

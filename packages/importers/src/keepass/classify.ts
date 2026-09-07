@@ -120,7 +120,6 @@ function appendCustomFields(entry: KeePassEntry, base: string, skip: ReadonlySet
     if (skip.has(key)) continue;
     extras.push(`${key}: ${value}`);
   }
-  if (entry.path.length > 0) extras.push(`KeePass group: ${entry.path.join(" / ")}`);
   if (extras.length === 0) return base;
   return base === "" ? extras.join("\n") : `${base}\n\n${extras.join("\n")}`;
 }
@@ -132,7 +131,7 @@ export type ConversionOutcome = Readonly<{ items: VaultItem[]; warnings: string[
  * emitted alongside the login when the entry carries a TOTP secret, and the login links to it
  * via linkedOtpId.
  */
-export function convertEntry(entry: KeePassEntry): ConversionOutcome {
+export function convertEntry(entry: KeePassEntry, folderId?: string): ConversionOutcome {
   const items: VaultItem[] = [];
   const warnings: string[] = [];
   const label = entry.title.trim() === "" ? "(untitled)" : entry.title.trim();
@@ -155,7 +154,7 @@ export function convertEntry(entry: KeePassEntry): ConversionOutcome {
   }
 
   const kind = classifyEntry(entry);
-  const base = { ...newItemBase(), tags };
+  const base = { ...newItemBase(), tags, ...(folderId === undefined ? {} : { folderId }) };
 
   if (kind === "card") {
     const candidate = {
@@ -234,8 +233,7 @@ export function convertEntry(entry: KeePassEntry): ConversionOutcome {
       value: clampText(fieldValue, MAX_LOGIN_CUSTOM_FIELD_VALUE_LENGTH, `field "${key}"`, label, warnings),
     });
   }
-  const groupNote = entry.path.length > 0 ? `KeePass group: ${entry.path.join(" / ")}` : "";
-  const loginNotes = entry.notes === "" ? groupNote : groupNote === "" ? entry.notes : `${entry.notes}\n\n${groupNote}`;
+  const loginNotes = entry.notes;
   const candidate = {
     ...base,
     kind: "login" as const,

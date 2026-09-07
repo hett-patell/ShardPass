@@ -1,8 +1,10 @@
 import { VaultItemSchema, type VaultItem } from "@shardpass/domain";
+import type { ImportFolder } from "@shardpass/importers";
 
 export type KeePassImportOutcome = Readonly<{
   items: readonly VaultItem[];
   warnings: readonly string[];
+  folders: readonly ImportFolder[];
 }>;
 
 /** Wall-clock ceiling: a wrong-but-huge KDF parameter must not hang the dialog forever. */
@@ -36,7 +38,13 @@ export function runKeePassImport(file: ArrayBuffer, password: string): Promise<K
     );
 
     worker.onmessage = (event: MessageEvent<unknown>) => {
-      const message = event.data as { ok?: unknown; items?: unknown; warnings?: unknown; message?: unknown };
+      const message = event.data as {
+        ok?: unknown;
+        items?: unknown;
+        warnings?: unknown;
+        folders?: unknown;
+        message?: unknown;
+      };
       if (message.ok !== true) {
         const reason = typeof message.message === "string" ? message.message : "The database could not be read.";
         finish(() => reject(new Error(reason)));
@@ -52,7 +60,17 @@ export function runKeePassImport(file: ArrayBuffer, password: string): Promise<K
       const warnings = (Array.isArray(message.warnings) ? message.warnings : []).filter(
         (warning): warning is string => typeof warning === "string",
       );
-      finish(() => resolve({ items, warnings }));
+      const folders: ImportFolder[] = [];
+      for (const candidate of Array.isArray(message.folders) ? message.folders : []) {
+        const folder = candidate as { id?: unknown; name?: unknown; parentId?: unknown };
+        if (typeof folder.id !== "string" || typeof folder.name !== "string") continue;
+        folders.push({
+          id: folder.id,
+          name: folder.name,
+          ...(typeof folder.parentId === "string" ? { parentId: folder.parentId } : {}),
+        });
+      }
+      finish(() => resolve({ items, warnings, folders }));
     };
     worker.onerror = () => finish(() => reject(new Error("The database could not be read.")));
 

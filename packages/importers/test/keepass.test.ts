@@ -115,10 +115,15 @@ describe("KeePass import classification", () => {
     expect(item?.kind === "login" && item.username).toBe("user-only");
   });
 
-  it("carries the KeePass group into the imported notes", async () => {
-    const { items } = await importKeePassKdbx(load("argon2id-aes256.kdbx"), PASSWORD);
+  it("turns KeePass groups into a folder tree and files each entry into its group", async () => {
+    const { items, folders } = await importKeePassKdbx(load("argon2id-aes256.kdbx"), PASSWORD);
     const nested = items.find((item) => nameOf(item) === "Nested Bank");
-    expect(nested?.kind === "login" && nested.notes).toContain("Web / Banking");
+    const banking = folders?.find((folder) => folder.name === "Banking");
+    const web = folders?.find((folder) => folder.name === "Web");
+    expect(banking?.parentId).toBe(web?.id);
+    expect(web?.parentId).toBeUndefined();
+    expect(nested?.folderId).toBe(banking?.id);
+    expect(nested?.kind === "login" && nested.notes).not.toContain("KeePass group");
   });
 
   it("classifies a secret by its type", async () => {
