@@ -21,6 +21,7 @@ describe("built Manifest V3 policy", () => {
       [
         "action",
         "background",
+        "commands",
         "content_scripts",
         "content_security_policy",
         "description",
@@ -43,7 +44,14 @@ describe("built Manifest V3 policy", () => {
     });
 
     const contentScripts = builtManifest.content_scripts as Array<Record<string, unknown>>;
-    expect(contentScripts).toHaveLength(1);
+    expect(contentScripts).toHaveLength(2);
+    expect(contentScripts[1]).toEqual({
+      matches: ["<all_urls>"],
+      run_at: "document_start",
+      all_frames: true,
+      world: "MAIN",
+      js: ["assets/passkey-page.js"],
+    });
     expect(Object.keys(contentScripts[0] ?? {}).sort()).toEqual([
       "all_frames",
       "js",

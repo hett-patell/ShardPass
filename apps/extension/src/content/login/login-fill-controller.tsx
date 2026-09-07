@@ -233,6 +233,7 @@ export function createLoginFillController(
       closeHost();
       candidate.input.focus({ preventScroll: true });
       await sendConfirm(suggestion.itemId);
+      if (response.linkedOtpCode !== undefined) await offerOtpCode(candidate.input, response.linkedOtpCode);
     } catch {
       sendCancel(suggestion.itemId);
       invalidate(false);
@@ -270,6 +271,29 @@ export function createLoginFillController(
   };
 
   const onPageInvalidated = (): void => invalidate(false);
+
+  /**
+   * After a fill, the login's one-time code goes to the clipboard so the site's next step is
+   * a paste away -- what 1Password and Bitwarden do. Shown for a few seconds by the field;
+   * a clipboard refusal (no gesture, a locked-down page) is simply not mentioned.
+   */
+  const offerOtpCode = async (anchor: HTMLInputElement, code: string): Promise<void> => {
+    try {
+      await options.window.navigator.clipboard.writeText(code);
+    } catch {
+      return;
+    }
+    if (disposed || !anchor.isConnected) return;
+    const notice = createPickerHost(anchor, {
+      positionToAnchor: true,
+      content: (
+        <p className="loginNotice" role="status">
+          2FA code copied. Paste it when the site asks.
+        </p>
+      ),
+    });
+    options.window.setTimeout(() => notice.close(), 3_500);
+  };
 
   /**
    * The popup's "Fill" for a login. Only the extension's own pages may ask (no tab in the
@@ -313,6 +337,7 @@ export function createLoginFillController(
       fillLoginFields(fieldSet, response.username, response.password);
       invalidate(false);
       await sendConfirm(itemId);
+      if (response.linkedOtpCode !== undefined) await offerOtpCode(fieldSet.passwordField, response.linkedOtpCode);
       return { version: 1, kind: "login.fillFromPopupResult", status: "filled" };
     } catch {
       sendCancel(itemId);

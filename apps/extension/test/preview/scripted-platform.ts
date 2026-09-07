@@ -30,20 +30,39 @@ const projection = (item: VaultItem) => ({
   ...(item.kind === "login" ? { urls: item.urls } : {}),
 });
 
-const state = (sequence: number) => ({
-  version: 1, kind: "vault.state", state: "unlocked", autoLockMinutes: 15, lockOnScreenLock: true, retryAfterMs: 0,
+export type Scenario = "unlocked" | "empty" | "setup" | "locked";
+
+const state = (sequence: number, vault: "unlocked" | "locked" | "unconfigured") => ({
+  version: 1, kind: "vault.state", state: vault, autoLockMinutes: 15, lockOnScreenLock: true, retryAfterMs: 0,
   streamId: "00000000000000000000000000000001", sequence,
 });
 
-export function createScriptedPlatform(options: { tabUrl?: string } = {}) {
+const words = ["copper", "meadow", "lantern", "orbit", "velvet", "harbor", "quartz", "willow", "ember", "saffron"];
+function samplePassword(request: { mode?: string; length?: number; wordCount?: number; separator?: string; capitalize?: boolean }) {
+  if (request.mode === "passphrase") {
+    const sep = { hyphen: "-", space: " ", period: ".", none: "" }[request.separator ?? "hyphen"] ?? "-";
+    const picked = Array.from({ length: request.wordCount ?? 4 }, (_, i) => words[(i * 3 + Date.now()) % words.length] ?? "ember");
+    return { password: picked.map((w) => (request.capitalize ? w[0]!.toUpperCase() + w.slice(1) : w)).join(sep), entropyBits: 12.9 * (request.wordCount ?? 4) };
+  }
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%&*?";
+  const length = request.length ?? 20;
+  let out = "";
+  for (let i = 0; i < length; i += 1) out += alphabet[(i * 7 + Date.now() + i * i) % alphabet.length];
+  return { password: out, entropyBits: length * 6.02 };
+}
+
+export function createScriptedPlatform(options: { tabUrl?: string; scenario?: Scenario } = {}) {
   let sequence = 1;
+  const scenario: Scenario = options.scenario ?? "unlocked";
+  const vaultState = scenario === "setup" ? "unconfigured" : scenario === "locked" ? "locked" : "unlocked";
+  const visible = scenario === "empty" ? [] : items;
   const listeners = new Set<(state: unknown) => void>();
   return {
     extensionId: "preview",
     onMessage: () => () => undefined,
     connectVaultState(onState: (state: unknown) => void) {
       listeners.add(onState);
-      setTimeout(() => onState(state(sequence++)), 0);
+      setTimeout(() => onState(state(sequence++, vaultState)), 0);
       return () => listeners.delete(onState);
     },
     sendMessage(payload: unknown): Promise<unknown> {
@@ -52,13 +71,15 @@ export function createScriptedPlatform(options: { tabUrl?: string } = {}) {
         case "foundation.getStatus":
           return Promise.resolve({ version: 1, kind: "foundation.status", phase: "foundation", vaultAvailable: false });
         case "vault.getState":
-          return Promise.resolve(state(sequence++));
+          return Promise.resolve(state(sequence++, vaultState));
         case "item.list":
-          return Promise.resolve({ version: 1, kind: "item.listResult", items: items.map(projection) });
+          return Promise.resolve({ version: 1, kind: "item.listResult", items: visible.map(projection) });
         case "item.query":
-          return Promise.resolve({ version: 1, kind: "item.queryResult", items });
+          return Promise.resolve({ version: 1, kind: "item.queryResult", items: visible });
         case "item.get":
-          return Promise.resolve({ version: 1, kind: "item.getResult", item: items.find((item) => item.id === request.itemId) });
+          return Promise.resolve({ version: 1, kind: "item.getResult", item: visible.find((item) => item.id === request.itemId) });
+        case "password.generate":
+          return new Promise((resolve) => setTimeout(() => resolve({ version: 1, kind: "password.generateResult", ...samplePassword(request as Parameters<typeof samplePassword>[0]) }), 120));
         case "login.reveal":
           return Promise.resolve({ version: 1, kind: "login.fillRelease", username: "octocat", password: "correct horse battery staple" });
         case "folder.list":
@@ -84,7 +105,10 @@ export function createScriptedPlatform(options: { tabUrl?: string } = {}) {
       return Promise.reject(new Error("unused"));
     },
     sendEnteMessage(): Promise<EnteSafeState> {
-      return Promise.resolve({ version: 1, kind: "ente.state", state: "disconnected", connected: false, pendingCount: 0, conflictCount: 0, lastSuccessAt: null });
+      return Promise.resolve({
+        version: 1, kind: "ente.state", state: "idle", connected: true, pendingCount: 0, conflictCount: 0,
+        lastSuccessAt: Date.now() - 4 * 60_000, nextEligibleAt: Date.now() + 11 * 60_000,
+      } as unknown as EnteSafeState);
     },
     sendBackupMessage: () => Promise.reject(new Error("unused")),
     sendOtpImportMessage: () => Promise.reject(new Error("unused")),

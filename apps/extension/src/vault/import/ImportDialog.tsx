@@ -8,7 +8,7 @@ import {
   type ImportResult,
 } from "@shardpass/importers";
 import { parseFolderResponseForRequest, type FolderRequest } from "@shardpass/messaging";
-import { Button } from "@shardpass/ui";
+import { Button, PasswordInput } from "@shardpass/ui";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import type {
@@ -406,10 +406,9 @@ export function ImportDialog({ platform, active, onImported }: ImportDialogProps
               <label className={styles.unlockLabel} htmlFor="import-dialog-kdbx-password">
                 Master password
               </label>
-              <input
+              <PasswordInput
                 id="import-dialog-kdbx-password"
                 className={styles.unlockInput}
-                type="password"
                 autoComplete="current-password"
                 autoFocus
                 required

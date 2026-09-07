@@ -23,3 +23,4 @@ export { formatOtpAuthUri, MAX_OTP_AUTH_URI_LENGTH, parseOtpAuthUri } from "./ur
 export type { OtpUriMetadata } from "./uri";
 export { generateOtp } from "./totp";
 export type { GeneratedOtp } from "./totp";
+export { inlineTotpItem } from "./inline-totp";

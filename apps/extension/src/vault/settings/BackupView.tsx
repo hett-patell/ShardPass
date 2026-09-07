@@ -1,5 +1,5 @@
 import { createWorkerKdfExecutor, type KdfExecutor } from "@shardpass/crypto";
-import { Button } from "@shardpass/ui";
+import { Button, PasswordInput } from "@shardpass/ui";
 
 import type { BackupUiExtensionPlatform } from "../../platform/extension-platform";
 import styles from "./BackupView.module.css";
@@ -84,9 +84,8 @@ export function BackupView({
           </div>
           <label>
             Current vault password
-            <input
+            <PasswordInput
               ref={backup.currentPasswordRef}
-              type="password"
               autoComplete="off"
               spellCheck={false}
               disabled={exportWorking}
@@ -95,9 +94,8 @@ export function BackupView({
           </label>
           <label>
             Backup password
-            <input
+            <PasswordInput
               ref={backup.backupPasswordRef}
-              type="password"
               autoComplete="off"
               spellCheck={false}
               disabled={exportWorking}
@@ -106,9 +104,8 @@ export function BackupView({
           </label>
           <label>
             Confirm backup password
-            <input
+            <PasswordInput
               ref={backup.confirmationRef}
-              type="password"
               autoComplete="off"
               spellCheck={false}
               disabled={exportWorking}
@@ -145,9 +142,8 @@ export function BackupView({
             <>
               <label>
                 Backup file password
-                <input
+                <PasswordInput
                   ref={backup.importPasswordRef}
-                  type="password"
                   autoComplete="off"
                   spellCheck={false}
                   disabled={importWorking}

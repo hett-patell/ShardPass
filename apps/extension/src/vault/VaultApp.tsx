@@ -246,7 +246,7 @@ export function VaultApp({ platform }: VaultAppProps) {
                       category={vaultState.category}
                       archived={vaultState.archived}
                       onRetry={vaultState.refresh}
-                      {...(vaultState.archived ? {} : { onCreate: () => startCreate("login") })}
+                      {...(vaultState.archived ? {} : { onCreate: () => startCreate("login"), onImport: () => setView("settings") })}
                     />
                   </div>
                 </div>

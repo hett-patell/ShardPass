@@ -7,7 +7,7 @@ import {
   type LoginFillResponse,
   type LoginFillSuggestion,
 } from "@shardpass/messaging";
-import { generateOtp } from "@shardpass/otp";
+import { generateOtp, inlineTotpItem } from "@shardpass/otp";
 
 import type { SessionVaultRepository } from "../vault/session-vault-repository";
 
@@ -96,7 +96,7 @@ export class LoginFillService {
         username: item.username,
         favorite: item.favorite,
         tags: [...item.tags],
-        hasLinkedOtp: item.linkedOtpId !== undefined,
+        hasLinkedOtp: item.linkedOtpId !== undefined || (item.totp ?? "").trim() !== "",
       });
     }
     suggestions.sort(compareSuggestions);
@@ -113,7 +113,17 @@ export class LoginFillService {
     if (item.revision !== expectedRevision)
       throw new LoginFillServiceError("LOGIN_FILL_ITEM_CHANGED");
     let linkedOtpCode: string | undefined;
-    if (item.linkedOtpId !== undefined) {
+    // An inline one-time secret on the login itself: the code travels with the fill so the
+    // page's next step is already on the clipboard.
+    const inline = inlineTotpItem(item);
+    if (inline !== null && inline.otpType !== "hotp") {
+      try {
+        linkedOtpCode = (await generateOtp(inline, this.dependencies.now())).code;
+      } catch {
+        // A malformed inline secret must not block the fill itself.
+      }
+    }
+    if (linkedOtpCode === undefined && item.linkedOtpId !== undefined) {
       const linked = await this.dependencies.repository.getItem(item.linkedOtpId);
       // HOTP codes are intentionally excluded: reading one here would not advance its
       // counter (unlike a proper HOTP reservation/commit), so repeatedly filling the

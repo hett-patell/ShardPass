@@ -9,7 +9,7 @@ import {
   VaultStateResponseSchema,
   VaultStateUnavailableSchema,
 } from "@shardpass/messaging";
-import { Button } from "@shardpass/ui";
+import { Button, PasswordInput } from "@shardpass/ui";
 import { useEffect, useRef, useState } from "react";
 
 import type { ExtensionPlatform } from "../platform/extension-platform";
@@ -352,7 +352,7 @@ export function VaultAccess({
     return (
       <section className={styles.panel}>
         <h2>Vault unlocked</h2>
-        <p>Your vault data key is held only by the background session.</p>
+        <p>ShardPass locks itself after the time below, or as soon as your screen locks.</p>
         {securityControls ? (
           <>
             <h3>Security settings</h3>
@@ -390,8 +390,8 @@ export function VaultAccess({
             <h3>Change master password</h3>
             <label>
               Current password
-              <input
-                type="password"
+              <PasswordInput
+
                 autoComplete="current-password"
                 value={currentPassword}
                 onChange={(event) => setCurrentPassword(event.target.value)}
@@ -399,8 +399,8 @@ export function VaultAccess({
             </label>
             <label>
               New password
-              <input
-                type="password"
+              <PasswordInput
+
                 autoComplete="new-password"
                 value={newPassword}
                 onChange={(event) => setNewPassword(event.target.value)}
@@ -408,8 +408,8 @@ export function VaultAccess({
             </label>
             <label>
               Confirm new password
-              <input
-                type="password"
+              <PasswordInput
+
                 autoComplete="new-password"
                 value={newConfirmation}
                 onChange={(event) => setNewConfirmation(event.target.value)}
@@ -440,8 +440,8 @@ export function VaultAccess({
       <h2>{setup ? "Create your vault" : "Unlock ShardPass"}</h2>
       <p>
         {setup
-          ? "Choose a master password. ShardPass derives the unlock key in a dedicated worker on this trusted extension page."
-          : "Enter your master password to verify and unlock the encrypted vault."}
+          ? "One password protects everything in ShardPass. It never leaves this device and cannot be recovered, so pick something long that you will remember."
+          : "Enter your master password."}
       </p>
       <form
         onSubmit={(event) => {
@@ -452,9 +452,9 @@ export function VaultAccess({
       >
         <label>
           Master password
-          <input
+          <PasswordInput
+            autoFocus
             autoComplete={setup ? "new-password" : "current-password"}
-            type="password"
             value={password}
             onChange={(event) => setPassword(event.target.value)}
           />
@@ -462,9 +462,8 @@ export function VaultAccess({
         {setup ? (
           <label>
             Confirm master password
-            <input
+            <PasswordInput
               autoComplete="new-password"
-              type="password"
               value={confirmation}
               onChange={(event) => setConfirmation(event.target.value)}
             />

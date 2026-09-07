@@ -17,6 +17,8 @@ export interface ItemListPanelProps {
   archived?: boolean;
   onRetry?: () => void;
   onCreate?: () => void;
+  /** Opens the import flow; shown beside "add" when the vault is empty. */
+  onImport?: () => void;
 }
 
 const SKELETON_ROWS = 6;
@@ -28,7 +30,7 @@ function emptyCopy(search: string, category: string, archived: boolean): { title
     return { title: `No results for “${search.trim()}”`, body: "Check the spelling, or search a different field." };
   if (category !== "all" && category !== "")
     return { title: "Nothing in this category yet", body: "Add one from the New button, or import from another manager." };
-  return { title: "Your vault is empty", body: "Add your first item, or import from a browser, KeePass, Bitwarden or 1Password." };
+  return { title: "Your vault is empty", body: "Add a login, or bring everything over from your browser, 1Password, Bitwarden or KeePass." };
 }
 
 /** The item list, with honest loading, error and empty states. */
@@ -41,6 +43,7 @@ export function ItemListPanel({
   category = "all",
   onRetry,
   onCreate,
+  onImport,
   archived = false,
 }: ItemListPanelProps) {
   if (status === "loading" && items.length === 0) {
@@ -79,10 +82,19 @@ export function ItemListPanel({
       <div className={styles.stateBlock}>
         <strong>{copy.title}</strong>
         <span>{copy.body}</span>
-        {onCreate && search.trim() === "" ? (
-          <Button variant="secondary" onClick={onCreate}>
-            New item
-          </Button>
+        {search.trim() === "" ? (
+          <div className={styles.emptyActions}>
+            {onCreate ? (
+              <Button variant="secondary" onClick={onCreate}>
+                Add a login
+              </Button>
+            ) : null}
+            {onImport && (category === "all" || category === "") && !archived ? (
+              <Button variant="secondary" onClick={onImport}>
+                Import passwords
+              </Button>
+            ) : null}
+          </div>
         ) : null}
       </div>
     );

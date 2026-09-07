@@ -1,7 +1,8 @@
-import { Button } from "@shardpass/ui";
+import { Button, PasswordInput } from "@shardpass/ui";
 import { useEffect, useId, useRef, useState } from "react";
 
 import type { EnteUiPlatform } from "../../platform/extension-platform";
+import { formatWhen } from "../format-time";
 import styles from "./EnteSettings.module.css";
 import { useEnteSync } from "./useEnteSync";
 
@@ -12,14 +13,6 @@ export interface EnteSettingsProps {
   onSynced?: () => void;
 }
 
-const formatTime = (value: number | null | undefined) =>
-  value == null
-    ? "Not yet"
-    : new Intl.DateTimeFormat("en-US", {
-        dateStyle: "medium",
-        timeStyle: "short",
-        timeZone: "UTC",
-      }).format(value);
 
 export function EnteSettings({ platform, active, onSynced }: EnteSettingsProps) {
   const sync = useEnteSync({ platform, active, ...(onSynced === undefined ? {} : { onSynced }) });
@@ -95,17 +88,17 @@ export function EnteSettings({ platform, active, onSynced }: EnteSettingsProps) 
           </label>
           <label>
             Ente password
-            <input
+            <PasswordInput
               ref={sync.passwordRef}
-              type="password"
               autoComplete="off"
               maxLength={1024}
               required
             />
           </label>
           <p className={styles.help}>
-            The password transfers directly to a single-use local crypto worker and is cleared
-            immediately. There is no email-link or passkey fallback.
+            {state.state === "connecting"
+              ? "Unlocking your Ente account keys on this device. This takes up to a minute: Ente's key derivation is deliberately slow."
+              : "Your Ente password stays on this device: it is used once to unlock your account keys, then cleared. Accounts protected only by a passkey or an email code cannot connect yet."}
           </p>
           <div className={styles.actions}>
             <Button type="submit">Continue securely</Button>
@@ -319,11 +312,11 @@ export function EnteSettings({ platform, active, onSynced }: EnteSettingsProps) 
             </div>
             <div>
               <dt>Last successful sync</dt>
-              <dd>{formatTime(state.lastSuccessAt)}</dd>
+              <dd title={formatWhen(state.lastSuccessAt).title}>{formatWhen(state.lastSuccessAt).text}</dd>
             </div>
             <div>
               <dt>Next eligible run</dt>
-              <dd>{formatTime(state.nextEligibleAt)}</dd>
+              <dd title={formatWhen(state.nextEligibleAt).title}>{formatWhen(state.nextEligibleAt).text}</dd>
             </div>
             <div>
               <dt>Pending</dt>

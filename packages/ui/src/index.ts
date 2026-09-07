@@ -1,6 +1,7 @@
 export { ShardPassMark } from "./brand/ShardPassMark";
 export type { ShardPassMarkProps } from "./brand/ShardPassMark";
 
+export { AppErrorBoundary } from "./primitives/AppErrorBoundary";
 export { AppHeader } from "./primitives/AppHeader";
 export type { AppHeaderProps } from "./primitives/AppHeader";
 export { Button } from "./primitives/Button";
@@ -8,6 +9,8 @@ export type { ButtonProps, ButtonVariant } from "./primitives/Button";
 export { Field } from "./primitives/Field";
 export type { FieldProps } from "./primitives/Field";
 export { IconButton } from "./primitives/IconButton";
+export { PasswordInput } from "./primitives/PasswordInput";
+export type { PasswordInputProps } from "./primitives/PasswordInput";
 export type { IconButtonProps } from "./primitives/IconButton";
 export { SectionLabel } from "./primitives/SectionLabel";
 export type { SectionLabelProps } from "./primitives/SectionLabel";

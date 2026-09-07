@@ -7,6 +7,7 @@ import manifest from "../../apps/extension/src/manifest";
 const allowedSourceManifestKeys = [
   "action",
   "background",
+  "commands",
   "content_scripts",
   "host_permissions",
   "content_security_policy",
@@ -41,19 +42,36 @@ function assertManifestPolicy(candidate: Record<string, unknown>): void {
     default_title: "ShardPass",
   });
   expect(candidate.options_page).toBe("vault/index.html");
+  // One command only: opening the popup. Nothing runs code from a keystroke.
+  expect(Object.keys(candidate.commands as object)).toEqual(["_execute_action"]);
   expect(Object.keys(candidate.action as object).sort()).toEqual([
     "default_popup",
     "default_title",
   ]);
   expect(Object.keys(candidate.background as object).sort()).toEqual(["service_worker", "type"]);
   expect(candidate.background).toMatchObject({ type: "module" });
-  expect(candidate.content_scripts).toEqual([
+  // The isolated-world content script comes first. The build appends exactly one more: the
+  // passkey page script, the only code allowed in the page's own (MAIN) world, a single
+  // fixed file that must never gain matches, frames, or timing beyond this.
+  const [isolatedWorld, ...pageWorld] = candidate.content_scripts as Array<Record<string, unknown>>;
+  expect(isolatedWorld).toEqual(
     expect.objectContaining({
       matches: ["<all_urls>"],
       run_at: "document_idle",
       all_frames: true,
     }),
-  ]);
+  );
+  expect(isolatedWorld).not.toHaveProperty("world");
+  expect(pageWorld.length).toBeLessThanOrEqual(1);
+  for (const script of pageWorld) {
+    expect(script).toEqual({
+      matches: ["<all_urls>"],
+      run_at: "document_start",
+      all_frames: true,
+      world: "MAIN",
+      js: ["assets/passkey-page.js"],
+    });
+  }
   const contentScripts = candidate.content_scripts as Array<Record<string, unknown>>;
   expect(Object.keys(contentScripts[0] ?? {}).sort()).toEqual([
     "all_frames",

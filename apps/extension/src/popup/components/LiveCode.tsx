@@ -26,7 +26,7 @@ export function LiveCode({ platform, itemId, size = "row", now = Date.now, onCop
       </span>
     );
   const code = state.code;
-  const remaining = Math.max(0, Math.ceil((code.expiresAt - now()) / 1_000));
+  const remaining = state.remaining;
   const grouped = code.code.length === 6 ? `${code.code.slice(0, 3)} ${code.code.slice(3)}` : code.code;
   const body = (
     <>

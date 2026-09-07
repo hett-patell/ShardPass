@@ -67,6 +67,8 @@ function createTestPlatform(options: { tab?: { id: number; url: string } | null;
       return Promise.resolve({ version: 1, kind: "login.fillRelease", username: "alice@example.test", password: "hunter2" });
     if (request.kind === "vault.lock")
       return Promise.resolve({ version: 1, kind: "vault.ok", state: "locked", committed: true });
+    if (request.kind === "password.generate")
+      return Promise.resolve({ version: 1, kind: "password.generateResult", password: "Tr0ub4dor-3xample-Q9", entropyBits: 96 });
     return Promise.resolve(undefined);
   });
   const sendOtpMessage = vi.fn<(request: OtpRequest) => Promise<OtpResponse>>((request) => {
@@ -215,6 +217,23 @@ describe("PopupApp screens", () => {
       expect(sendMessage).toHaveBeenCalledWith({ version: 1, kind: "login.reveal", itemId: LOGIN_ID, expectedRevision: 1 }),
     );
     await waitFor(() => expect(writeAuthoritativeClipboardText).toHaveBeenCalledTimes(1));
+  });
+
+  it("generates a password from the footer and copies it", async () => {
+    const { sendMessage, writeAuthoritativeClipboardText } = await renderUnlocked();
+    fireEvent.click(screen.getByRole("button", { name: "Generate" }));
+    expect(await screen.findByLabelText("Generated password")).toHaveTextContent("Tr0ub4dor-3xample-Q9");
+    expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({ kind: "password.generate", mode: "random", length: 20 }));
+    expect(screen.getByText("96 bits of entropy")).toBeVisible();
+    fireEvent.click(screen.getByRole("tab", { name: "Passphrase" }));
+    await waitFor(() =>
+      expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({ kind: "password.generate", mode: "passphrase", wordCount: 4 })),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Copy" }));
+    await waitFor(() => expect(writeAuthoritativeClipboardText).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText("Password copied")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    expect(await screen.findByRole("searchbox", { name: "Search ShardPass" })).toBeVisible();
   });
 
   it("locks the vault from the title bar", async () => {

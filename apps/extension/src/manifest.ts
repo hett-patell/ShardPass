@@ -19,6 +19,14 @@ export default defineManifest({
   // tab's content script to fill. Granted only while the person is using the popup.
   permissions: ["storage", "unlimitedStorage", "alarms", "idle", "activeTab"],
   host_permissions: ["https://api.ente.io/*"],
+  // A shortcut to open the popup, as every password manager has; changeable at
+  // chrome://extensions/shortcuts.
+  commands: {
+    _execute_action: {
+      suggested_key: { default: "Ctrl+Shift+L", mac: "Command+Shift+L" },
+      description: "Open ShardPass",
+    },
+  },
   action: {
     default_popup: "popup/index.html",
     default_title: "ShardPass",

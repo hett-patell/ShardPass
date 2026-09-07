@@ -31,6 +31,8 @@ const environmentFilenameText = /(?:^|["'`/\\])\.env(?:\.[A-Za-z\d_.-]+)?(?:$|["
 const allowedManifestKeys = new Set([
   "action",
   "background",
+  // The popup shortcut (_execute_action) only; no command runs extension code itself.
+  "commands",
   "content_scripts",
   "content_security_policy",
   "description",

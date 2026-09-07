@@ -180,6 +180,17 @@ describe("LoginFillService", () => {
     expect(result.suggestions[0]).toMatchObject({ hasLinkedOtp: true });
   });
 
+  it("reports hasLinkedOtp for a login carrying its own inline TOTP secret", async () => {
+    const stored = loginItem({ totp: "JBSWY3DPEHPK3PXP", urls: ["https://example.test"] });
+    const { service } = fixture([stored]);
+    const result = await service.handle(
+      request("login.fillSuggestions", { domain: "example.test" }),
+    );
+    if (result.kind !== "login.fillSuggestionsResult") throw new Error("expected suggestions");
+    expect(result.suggestions[0]).toMatchObject({ hasLinkedOtp: true });
+    expect(JSON.stringify(result)).not.toContain("JBSWY3DP");
+  });
+
   it("releases username and password on fillSelect", async () => {
     const stored = loginItem();
     const { activity, service } = fixture([stored]);
@@ -199,6 +210,27 @@ describe("LoginFillService", () => {
     );
     if (result.kind !== "login.fillRelease") throw new Error("expected release");
     expect(result.linkedOtpCode).toMatch(/^\d{6}$/u);
+  });
+
+  it("includes a code from the login's own inline TOTP secret", async () => {
+    const stored = loginItem({ totp: "JBSWY3DPEHPK3PXP" });
+    const { service } = fixture([stored], 15_000);
+    const result = await service.handle(
+      request("login.fillSelect", { itemId: stored.id, expectedRevision: 1 }),
+    );
+    if (result.kind !== "login.fillRelease") throw new Error("expected release");
+    expect(result.linkedOtpCode).toMatch(/^\d{6}$/u);
+  });
+
+  it("ignores an unparseable inline TOTP value rather than failing the fill", async () => {
+    const stored = loginItem({ totp: "otpauth://totp/x?secret=" });
+    const { service } = fixture([stored], 15_000);
+    const result = await service.handle(
+      request("login.fillSelect", { itemId: stored.id, expectedRevision: 1 }),
+    );
+    if (result.kind !== "login.fillRelease") throw new Error("expected release");
+    expect(result.password).toBe("s3cret");
+    expect(result.linkedOtpCode).toBeUndefined();
   });
 
   it("omits linkedOtpCode when the linked item is HOTP", async () => {

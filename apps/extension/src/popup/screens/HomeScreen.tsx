@@ -48,6 +48,8 @@ export interface HomeScreenProps {
   onCopyPassword: (item: ItemListItemProjection) => void;
   onOpenVault: () => void;
   onNewItem: (kind: VaultItemKind) => void;
+  /** Opens the password generator screen. */
+  onGenerate: () => void;
   platform: Pick<ExtensionPlatform, "sendOtpMessage">;
 }
 
@@ -65,6 +67,7 @@ export function HomeScreen({
   onCopyPassword,
   onOpenVault,
   onNewItem,
+  onGenerate,
 }: HomeScreenProps) {
   const query = search.trim();
   const suggestions =
@@ -112,6 +115,24 @@ export function HomeScreen({
           </section>
         ) : (
           <>
+            {status === "ready" && items.length === 0 ? (
+              <section className={styles.getStarted} aria-labelledby="get-started-label">
+                <SectionLabel id="get-started-label" className={styles.sectionLabel}>
+                  Get started
+                </SectionLabel>
+                <p className={styles.getStartedCopy}>
+                  Your vault is empty. Bring your passwords over from your browser, 1Password, Bitwarden or KeePass,
+                  or add the first one by hand.
+                </p>
+                <div className={styles.getStartedActions}>
+                  <Button onClick={onOpenVault}>Import passwords</Button>
+                  <Button variant="secondary" onClick={() => onNewItem("login")}>
+                    Add a login
+                  </Button>
+                </div>
+              </section>
+            ) : null}
+
             {identity !== null ? (
               <button
                 type="button"
@@ -205,6 +226,10 @@ export function HomeScreen({
         <button type="button" className={styles.footerButton} onClick={() => onNewItem("login")}>
           <Plus size={16} aria-hidden="true" />
           New item
+        </button>
+        <button type="button" className={styles.footerButton} onClick={onGenerate}>
+          <KeyRound size={16} aria-hidden="true" />
+          Generate
         </button>
         <button type="button" className={styles.footerButton} onClick={onOpenVault}>
           <ExternalLink size={16} aria-hidden="true" />

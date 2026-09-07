@@ -12,6 +12,7 @@ import { useCopy } from "./hooks/useClipboard";
 import { useFillIntoTab } from "./hooks/useFillIntoTab";
 import { itemsInCategory, useVaultItems, type CategoryId } from "./hooks/useVaultItems";
 import { DetailScreen } from "./screens/DetailScreen";
+import { GeneratorScreen } from "./screens/GeneratorScreen";
 import { CATEGORY_TITLES, HomeScreen } from "./screens/HomeScreen";
 import { ListScreen } from "./screens/ListScreen";
 import styles from "./PopupApp.module.css";
@@ -56,6 +57,7 @@ export function useOpenVaultAction(platform: ExtensionPlatform) {
 type Screen =
   | { kind: "home" }
   | { kind: "list"; category: CategoryId }
+  | { kind: "generator" }
   | { kind: "detail"; itemId: string; name: string; kindOf: VaultItemKind; urls?: readonly string[]; urlMatches?: readonly UrlMatchMode[] };
 
 /**
@@ -160,7 +162,8 @@ export function PopupApp({ platform }: PopupAppProps) {
               ? { onLock: () => void lock(), onSettings: () => void openVault() }
               : {
                   back: { label: "Back", onBack: pop },
-                  title: screen.kind === "list" ? CATEGORY_TITLES[screen.category] : screen.name,
+                  title:
+                    screen.kind === "list" ? CATEGORY_TITLES[screen.category] : screen.kind === "generator" ? "Generate password" : screen.name,
                 })}
           />
           {actionError ? (
@@ -189,6 +192,7 @@ export function PopupApp({ platform }: PopupAppProps) {
                 onCopyPassword={copyPassword}
                 onOpenVault={() => void openVault()}
                 onNewItem={() => void openVault()}
+                onGenerate={() => push({ kind: "generator" })}
                 platform={platform}
               />
             ) : screen.kind === "list" ? (
@@ -202,6 +206,8 @@ export function PopupApp({ platform }: PopupAppProps) {
                 onCopyPassword={copyPassword}
                 onCopyCode={(_item, code) => void copy(code, "Code")}
               />
+            ) : screen.kind === "generator" ? (
+              <GeneratorScreen platform={platform} onCopy={(value, label) => void copy(value, label)} />
             ) : (
               <DetailScreen
                 itemId={screen.itemId}

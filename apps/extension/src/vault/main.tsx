@@ -1,11 +1,12 @@
 import "@shardpass/ui/styles";
 
-import { applyThemePreference } from "@shardpass/ui";
+import { AppErrorBoundary, applyThemePreference } from "@shardpass/ui";
 
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 
 import { createChromePlatform } from "../platform/chrome-platform";
+import { reloadWhenContextInvalidated } from "../platform/extension-context";
 import { VaultApp } from "./VaultApp";
 
 const rootElement = document.querySelector<HTMLElement>("#root");
@@ -18,9 +19,12 @@ if (rootElement === null) {
 applyThemePreference();
 
 const platform = createChromePlatform();
+reloadWhenContextInvalidated();
 
 createRoot(rootElement).render(
   <StrictMode>
-    <VaultApp platform={platform} />
+    <AppErrorBoundary surface="the vault page">
+      <VaultApp platform={platform} />
+    </AppErrorBoundary>
   </StrictMode>,
 );
