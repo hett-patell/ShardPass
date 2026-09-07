@@ -8,6 +8,8 @@ import { useEnteSync } from "./useEnteSync";
 export interface EnteSettingsProps {
   platform: EnteUiPlatform;
   active: boolean;
+  /** After a sync that may have changed items; the page refreshes its list. */
+  onSynced?: () => void;
 }
 
 const formatTime = (value: number | null | undefined) =>
@@ -19,8 +21,8 @@ const formatTime = (value: number | null | undefined) =>
         timeZone: "UTC",
       }).format(value);
 
-export function EnteSettings({ platform, active }: EnteSettingsProps) {
-  const sync = useEnteSync({ platform, active });
+export function EnteSettings({ platform, active, onSynced }: EnteSettingsProps) {
+  const sync = useEnteSync({ platform, active, ...(onSynced === undefined ? {} : { onSynced }) });
   const [showCredentials, setShowCredentials] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
   const [choices, setChoices] = useState<

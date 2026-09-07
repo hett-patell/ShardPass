@@ -1,6 +1,7 @@
 import type { EnteRequest, EnteSafeState, SenderContext } from "@shardpass/messaging";
-import { EnteProtocolError } from "./protocol";
+import { ENTE_SYNC_LIMITS, EnteProtocolError } from "./protocol";
 import type { EnteSyncCoordinator } from "./coordinator";
+import type { EntePersistedStatus } from "./runtime";
 
 export class EnteService {
   private state: EnteSafeState = {
@@ -32,15 +33,56 @@ export class EnteService {
       sender: SenderContext,
     ) => Promise<void>,
     private readonly disconnectSession?: () => Promise<void>,
+    private readonly readStatus?: () => Promise<EntePersistedStatus | null>,
   ) {}
   snapshot(): EnteSafeState {
     return { ...this.state };
+  }
+
+  /**
+   * Folds the persisted sync state into the in-memory one. The worker that ran the last
+   * cycle may be gone; without this the panel showed "Disconnected" and "Not yet" after
+   * every service-worker restart, and a person reconnected a vault that was still connected.
+   */
+  private async refresh(): Promise<void> {
+    if (this.readStatus === undefined) return;
+    const persisted = await this.readStatus().catch(() => null);
+    if (persisted === null) {
+      if (this.state.connected) this.state = { ...this.state, connected: false, state: "disconnected" };
+      return;
+    }
+    const transient = this.state.state === "connecting" || this.state.state === "syncing";
+    const state: EnteSafeState["state"] = !persisted.connected
+      ? "disconnected"
+      : persisted.needsReauth
+        ? "reauth-required"
+        : persisted.uncertain
+          ? "uncertain"
+          : persisted.conflictCount > 0
+            ? "conflict"
+            : transient
+              ? this.state.state
+              : "idle";
+    this.state = {
+      ...this.state,
+      state,
+      connected: persisted.connected,
+      pendingCount: Math.min(persisted.pendingCount, 10_000),
+      conflictCount: Math.min(persisted.conflictCount, 10_000),
+      uncertainCount: persisted.uncertain ? 1 : 0,
+      lastSuccessAt: persisted.lastSuccessAt,
+      nextEligibleAt:
+        persisted.connected && persisted.lastAttemptAt !== null
+          ? persisted.lastAttemptAt + ENTE_SYNC_LIMITS.schedulerMinutes * 60_000
+          : null,
+    };
   }
   async handle(request: EnteRequest, sender: SenderContext): Promise<EnteSafeState> {
     if (sender.contextKind === "popup" && request.kind !== "ente.status")
       throw new EnteProtocolError("ENTE_PERMISSION_DENIED");
     switch (request.kind) {
       case "ente.status": {
+        await this.refresh();
         if (!this.state.connected || this.conflictPreview === undefined) return this.snapshot();
         const conflicts = [...(await this.conflictPreview(sender))];
         this.state = {
@@ -61,6 +103,7 @@ export class EnteService {
       }
       case "ente.manualSync": {
         await this.coordinator.trigger("manual");
+        await this.refresh();
         if (this.conflictPreview === undefined) return this.snapshot();
         const conflicts = [...(await this.conflictPreview(sender))];
         this.state = {
@@ -87,6 +130,7 @@ export class EnteService {
           throw error;
         }
         this.state = { ...this.state, state: "idle", connected: true };
+        await this.refresh();
         return this.snapshot();
       case "ente.submitTotp2fa":
         this.state = { ...this.state, state: "syncing" };

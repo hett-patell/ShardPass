@@ -190,7 +190,8 @@ export function installBackground(
     runtimeOwner === null ? undefined : runtimeOwner.resolve,
     runtimeOwner === null ? undefined : runtimeOwner.preview,
     async (connected) => {
-      await runtimeOwner?.setConnected(connected);
+      // Activation already persisted connected:true; only a disconnect needs writing.
+      if (!connected) await runtimeOwner?.setConnected(false);
       await enteScheduler?.setConnected(connected);
     },
     runtimeOwner === null ? undefined : runtimeOwner.issueSessionHandoff,
@@ -201,6 +202,7 @@ export function installBackground(
           await runtimeOwner.disconnect();
           await enteScheduler?.setConnected(false);
         },
+    runtimeOwner === null ? undefined : () => runtimeOwner.status(),
   );
   const publisher = new StatePublisher(randomStreamId(), () => vault.getStateSnapshot());
 

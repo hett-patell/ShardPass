@@ -18,7 +18,7 @@ export function clearSensitiveControl(ref: React.RefObject<HTMLInputElement | nu
   if (ref.current !== null) ref.current.value = "";
 }
 
-export function useEnteSync(input: { platform: EnteUiPlatform; active: boolean }) {
+export function useEnteSync(input: { platform: EnteUiPlatform; active: boolean; onSynced?: () => void }) {
   const [state, setState] = useState<EnteSafeState>(initialState);
   const [error, setError] = useState(false);
   /** Names a failure for the panel: the background's code, else a bounded message. */
@@ -39,6 +39,21 @@ export function useEnteSync(input: { platform: EnteUiPlatform; active: boolean }
   const totpRef = useRef<HTMLInputElement>(null);
   const authAbort = useRef<AbortController | null>(null);
   const authWorker = useRef<Worker | null>(null);
+  // The handoff key lives in the background worker's memory; Chrome may end an idle worker
+  // in 30 s while Argon2id and a 2FA code take longer. A status ping keeps it awake.
+  const keepAlive = useRef<ReturnType<typeof setInterval> | null>(null);
+  const stopKeepAlive = useCallback(() => {
+    if (keepAlive.current !== null) clearInterval(keepAlive.current);
+    keepAlive.current = null;
+  }, []);
+  const startKeepAlive = useCallback(() => {
+    stopKeepAlive();
+    keepAlive.current = setInterval(() => {
+      void platformRef.current.sendEnteMessage({ version: 1, kind: "ente.status" }).catch(() => undefined);
+    }, 20_000);
+  }, [stopKeepAlive]);
+  const onSyncedRef = useRef(input.onSynced);
+  onSyncedRef.current = input.onSynced;
   const platformRef = useRef(input.platform);
   platformRef.current = input.platform;
 
@@ -61,6 +76,14 @@ export function useEnteSync(input: { platform: EnteUiPlatform; active: boolean }
         if (!mounted.current || token !== ownership.current) return null;
         clearSensitive();
         setState(options.preserveResultBytes ? next : { ...next, authHandoffPublicKey: undefined });
+        if (
+          request.kind === "ente.connect" ||
+          request.kind === "ente.manualSync" ||
+          request.kind === "ente.resolveConflict"
+        ) {
+          stopKeepAlive();
+          onSyncedRef.current?.();
+        }
         return next;
       } catch (failure) {
         // A rejection without a code did not come from the background's error envelope; it
@@ -77,7 +100,7 @@ export function useEnteSync(input: { platform: EnteUiPlatform; active: boolean }
         return null;
       }
     },
-    [clearSensitive],
+    [clearSensitive, stopKeepAlive],
   );
 
   useEffect(() => {
@@ -89,6 +112,7 @@ export function useEnteSync(input: { platform: EnteUiPlatform; active: boolean }
       setState(initialState);
     }
     return () => {
+      stopKeepAlive();
       mounted.current = false;
       ownership.current += 1;
       authAbort.current?.abort();
@@ -134,6 +158,7 @@ export function useEnteSync(input: { platform: EnteUiPlatform; active: boolean }
           throw new Error("Auth challenge came back without a handoff key.");
         const worker = createEnteAuthWorker();
         authWorker.current = worker;
+        startKeepAlive();
         return executeEnteAuthWorker({
           worker,
           request: {
@@ -170,6 +195,7 @@ export function useEnteSync(input: { platform: EnteUiPlatform; active: boolean }
             });
         },
         (failure: unknown) => {
+          stopKeepAlive();
           clearSensitive();
           authWorker.current?.terminate();
           authWorker.current = null;
@@ -177,7 +203,7 @@ export function useEnteSync(input: { platform: EnteUiPlatform; active: boolean }
           setErrorCode(reasonOf(failure, "Sign-in failed before reaching Ente."));
         },
       );
-  }, [clearSensitive, send]);
+  }, [clearSensitive, send, startKeepAlive, stopKeepAlive]);
 
   const submitTotp = useCallback(() => {
     const codeUtf8 = new TextEncoder().encode(totpRef.current?.value ?? "");

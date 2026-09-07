@@ -287,11 +287,16 @@ export class VaultRepository {
         const item = OtpItemSchema.parse(
           previous === undefined
             ? { ...candidate, revision: 1, createdAt: now, updatedAt: now, deletedAt: undefined }
-            : canonicalJson(projectOtpContent(previous)) ===
-                canonicalJson(projectOtpContent(candidate))
+            : canonicalJson(syncedOtpContent(previous)) ===
+                canonicalJson(syncedOtpContent(candidate))
               ? previous
               : {
                   ...candidate,
+                  // Local-only organisation is not part of what the sync carries; a remote
+                  // change must not un-favourite, un-file or un-archive the local copy.
+                  favorite: previous.favorite,
+                  ...(previous.folderId === undefined ? {} : { folderId: previous.folderId }),
+                  ...(previous.archivedAt === undefined ? {} : { archivedAt: previous.archivedAt }),
                   revision: previous.revision + 1,
                   createdAt: previous.createdAt,
                   updatedAt: now,
@@ -1627,6 +1632,13 @@ function parseCandidate(candidate: unknown): VaultItem {
   } catch {
     throw new StorageError("VAULT_INVALID");
   }
+}
+
+/** The part of an OTP item a sync source can change: everything but local organisation. */
+function syncedOtpContent(item: OtpItem) {
+  const { favorite: _favorite, ...content } = projectOtpContent(item);
+  void _favorite;
+  return content;
 }
 
 function projectOtpContent(item: OtpItem) {

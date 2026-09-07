@@ -12,6 +12,7 @@ import {
 import { EnteProtocolError } from "./protocol";
 import { EnteSessionHandoffStore } from "./session-handoff";
 import { createEnteSessionCycleRepository } from "./session-cycle-repository";
+import { parseEnteOtpSyncState } from "./sync-state";
 import type { EnteSodiumAdapter } from "./sodium-adapter";
 
 export type EnteRuntimeDependencies = Omit<OperationalDependencies, "repository"> &
@@ -21,6 +22,17 @@ export type EnteRuntimeDependencies = Omit<OperationalDependencies, "repository"
     randomCapability(): string;
     sodiumReady: Promise<EnteSodiumAdapter>;
   }>;
+
+/** What the panel shows about the persisted sync state; never a credential or a code. */
+export type EntePersistedStatus = Readonly<{
+  connected: boolean;
+  pendingCount: number;
+  conflictCount: number;
+  uncertain: boolean;
+  needsReauth: boolean;
+  lastAttemptAt: number | null;
+  lastSuccessAt: number | null;
+}>;
 
 export type EnteRuntimeOwner = Readonly<{
   issueSessionHandoff(
@@ -37,6 +49,8 @@ export type EnteRuntimeOwner = Readonly<{
   setConnected(connected: boolean): Promise<void>;
   disconnect(): Promise<void>;
   connected(): Promise<boolean>;
+  /** `null` when no Ente account has ever been connected in this vault. */
+  status(): Promise<EntePersistedStatus | null>;
   clearSessionHandoffs(): void;
 }>;
 
@@ -73,30 +87,54 @@ export function createEnteRuntimeOwner(
       const sessionPayload = await (await handoffsReady).consume(capability, ciphertext, sender);
       try {
         const rawSnapshot = await session.readOtpItemsAndMetadata("ente-otp-state");
+        // A state already exists when this is a re-sign-in (a reconnect after "Disconnected"
+        // was shown, or a reauthentication). Its mappings, bases and cursor are kept when it
+        // is the same account: starting over made a second local copy of every code and
+        // then pushed the old copies back to Ente as new entities.
+        let previous: ReturnType<typeof parseEnteOtpSyncState> | null = null;
+        if (rawSnapshot.metadata !== null) {
+          try {
+            previous = parseEnteOtpSyncState(
+              JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(rawSnapshot.metadata)),
+            );
+          } catch {
+            previous = null;
+          }
+        }
         rawSnapshot.metadata?.fill(0);
         const credentialEnvelope = btoa(String.fromCharCode(...sessionPayload.token));
         const masterKeyEnvelope = btoa(String.fromCharCode(...sessionPayload.masterKey));
         const authKeyEnvelope = btoa(String.fromCharCode(...sessionPayload.authKey));
         const accountFingerprint = btoa(String.fromCharCode(...sessionPayload.accountFingerprint));
-        const state = {
-          version: 1 as const,
-          protocolPin: "c69dcf66704ad7ec1f95e32920455be429a566ef" as const,
-          origin: "https://api.ente.io" as const,
-          accountFingerprint,
-          snapshotAccountFingerprint: null,
-          initialSnapshotEstablished: false,
-          credentialEnvelope,
-          masterKeyEnvelope,
-          authKeyEnvelope,
-          mappings: [],
-          bases: [],
-          cursor: 0,
-          pending: [],
-          uncertain: null,
-          conflicts: [],
-          scheduler: { connected: true, lastAttemptAt: null, lastSuccessAt: null },
-          needsReauth: false,
-        };
+        const state =
+          previous !== null && previous.accountFingerprint === accountFingerprint
+            ? {
+              ...previous,
+              credentialEnvelope,
+              masterKeyEnvelope,
+              authKeyEnvelope,
+              scheduler: { ...previous.scheduler, connected: true },
+              needsReauth: false,
+            }
+          : {
+              version: 1 as const,
+              protocolPin: "c69dcf66704ad7ec1f95e32920455be429a566ef" as const,
+              origin: "https://api.ente.io" as const,
+              accountFingerprint,
+              snapshotAccountFingerprint: null,
+              initialSnapshotEstablished: false,
+              credentialEnvelope,
+              masterKeyEnvelope,
+              authKeyEnvelope,
+              mappings: [],
+              bases: [],
+              cursor: 0,
+              pending: [],
+              uncertain: null,
+              conflicts: [],
+              scheduler: { connected: true, lastAttemptAt: null, lastSuccessAt: null },
+              needsReauth: false,
+            };
         const plaintext = new TextEncoder().encode(canonicalJson(state));
         try {
           if (
@@ -173,6 +211,23 @@ export function createEnteRuntimeOwner(
         return (await repository.read()).state.scheduler.connected;
       } catch (error) {
         if (error instanceof EnteProtocolError && error.code === "ENTE_INVALID") return false;
+        throw error;
+      }
+    },
+    async status() {
+      try {
+        const { state } = await repository.read();
+        return {
+          connected: state.scheduler.connected,
+          pendingCount: state.pending.length,
+          conflictCount: state.conflicts.length,
+          uncertain: state.uncertain !== null,
+          needsReauth: state.needsReauth,
+          lastAttemptAt: state.scheduler.lastAttemptAt,
+          lastSuccessAt: state.scheduler.lastSuccessAt,
+        };
+      } catch (error) {
+        if (error instanceof EnteProtocolError && error.code === "ENTE_INVALID") return null;
         throw error;
       }
     },

@@ -260,7 +260,13 @@ async function planMerge(
         : {}),
       pending: normalizePendingOperations(pending),
       conflicts,
-      scheduler: { ...state.scheduler, lastAttemptAt: dependencies.now() },
+      scheduler: {
+        ...state.scheduler,
+        lastAttemptAt: dependencies.now(),
+        // A pull that merged is a successful sync from the person's point of view; writes
+        // that follow report their own failures.
+        lastSuccessAt: dependencies.now(),
+      },
     },
   };
 }

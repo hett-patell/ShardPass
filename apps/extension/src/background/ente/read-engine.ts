@@ -78,8 +78,9 @@ export async function readRemoteState(input: {
           if (entity.updatedAt === previous.updatedAt) continue;
         }
         observations.set(entity.id, { updatedAt: entity.updatedAt, digest, entity });
-        if (mode === "snapshot" && entity.isDeleted) entities.delete(entity.id);
-        else entities.set(entity.id, entity);
+        // A tombstone is kept in snapshot mode too: dropping it made a remote deletion look
+        // like "unchanged" to the planner, so the local copy was never deleted.
+        entities.set(entity.id, entity);
       }
 
       const serverTimestamp = response.timestamp ?? maximum;
@@ -99,7 +100,9 @@ export async function readRemoteState(input: {
         continue;
       }
 
-      cursor = Math.max(cursor, serverTimestamp);
+      // Advance to the newest entity seen, as the official client does. The server's own
+      // timestamp is later than its SELECT, so a row committed in between would be skipped.
+      cursor = Math.max(cursor, maximum);
       return {
         mode,
         complete: mode === "snapshot",

@@ -107,8 +107,11 @@ describe("bounded Ente read engine", () => {
       .mockResolvedValueOnce({ diff: [tombstone(uuid(1), 2_501)], timestamp: 2_501 });
     const result = await read(getEntityDiff);
     expect(result.complete).toBe(true);
-    expect(result.entities.size).toBe(2_499);
-    expect(result.entities.has(uuid(1))).toBe(false);
+    // The tombstone stays in the snapshot so the planner sees the deletion rather than
+    // "unchanged"; only the live count drops.
+    expect(result.entities.size).toBe(2_500);
+    expect(result.entities.get(uuid(1))?.isDeleted).toBe(true);
+    expect([...result.entities.values()].filter((entity) => !entity.isDeleted)).toHaveLength(2_499);
     expect(result.nextCursor).toBe(2_501);
     expect(getEntityDiff).toHaveBeenNthCalledWith(2, "token", 2_500, expect.any(AbortSignal));
   });

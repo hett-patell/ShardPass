@@ -74,6 +74,7 @@ export const totpTwoFactorVerifyResponseSchema = tolerant({
   keyAttributes: z.unknown(),
 });
 export const authenticatorKeyResponseSchema = tolerant({ encryptedKey: ciphertext, header });
+export const createAuthenticatorKeyRequestSchema = strict({ encryptedKey: ciphertext, header });
 
 const liveEntity = tolerant({
   id: uuid,

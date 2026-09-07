@@ -110,19 +110,46 @@ async function completeResult(
   let payload: Uint8Array | undefined;
   const tokenUtf8 = encoder.encode(token);
   try {
-    const response = (await client.getAuthenticatorKey(token, new AbortController().signal)) as {
-      encryptedKey?: unknown;
-      header?: unknown;
-    };
-    if (typeof response.encryptedKey !== "string" || typeof response.header !== "string")
-      throw new Error("authenticator key response is malformed");
-    const encryptedAuthKey = sodium.fromBase64(response.encryptedKey);
-    const authHeader = sodium.fromBase64(response.header);
+    let response: { encryptedKey?: unknown; header?: unknown } | null = null;
     try {
-      authKey = sodium.secretboxOpen(encryptedAuthKey, authHeader, masterKey);
-    } finally {
-      encryptedAuthKey.fill(0);
-      authHeader.fill(0);
+      response = (await client.getAuthenticatorKey(token, new AbortController().signal)) as {
+        encryptedKey?: unknown;
+        header?: unknown;
+      };
+    } catch (error) {
+      if (!(error instanceof EnteProtocolError) || error.code !== "ENTE_AUTH_KEY_MISSING") throw error;
+    }
+    if (response === null) {
+      // A fresh Ente account has no authenticator key yet. The official client creates one
+      // on first use: a random secretbox key wrapped with the master key.
+      const fresh = sodium.randomBytes(32);
+      const nonce = sodium.randomBytes(24);
+      const sealed = sodium.secretboxSeal(fresh, nonce, masterKey);
+      try {
+        await client.createAuthenticatorKey(
+          token,
+          { encryptedKey: sodium.toBase64(sealed), header: sodium.toBase64(nonce) },
+          new AbortController().signal,
+        );
+      } catch (error) {
+        fresh.fill(0);
+        throw error;
+      } finally {
+        sealed.fill(0);
+        nonce.fill(0);
+      }
+      authKey = fresh;
+    } else {
+      if (typeof response.encryptedKey !== "string" || typeof response.header !== "string")
+        throw new Error("authenticator key response is malformed");
+      const encryptedAuthKey = sodium.fromBase64(response.encryptedKey);
+      const authHeader = sodium.fromBase64(response.header);
+      try {
+        authKey = sodium.secretboxOpen(encryptedAuthKey, authHeader, masterKey);
+      } finally {
+        encryptedAuthKey.fill(0);
+        authHeader.fill(0);
+      }
     }
     fingerprint = new Uint8Array(
       await crypto.subtle.digest("SHA-256", Uint8Array.from(authKey).buffer),

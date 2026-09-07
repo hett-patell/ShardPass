@@ -1,6 +1,7 @@
 import {
   authenticatorEntityDiffResponseSchema,
   authenticatorKeyResponseSchema,
+  createAuthenticatorKeyRequestSchema,
   createEntityRequestSchema,
   createEntityResponseSchema,
   createSrpSessionRequestSchema,
@@ -74,6 +75,13 @@ export interface EnteClient {
     signal: AbortSignal,
     budget?: EnteResponseBudget,
   ): Promise<unknown>;
+  /** Uploads the account's first authenticator key (a fresh account has none). */
+  createAuthenticatorKey(
+    token: string,
+    body: unknown,
+    signal: AbortSignal,
+    budget?: EnteResponseBudget,
+  ): Promise<void>;
   getEntityDiff(
     token: string,
     sinceTime: number,
@@ -205,7 +213,12 @@ export function createEnteClient(dependencies: { readonly fetch: EnteFetch }): E
       // Detail names the request and status only; the path is stripped of its query, which
       // for srp/attributes carries the email.
       const where = `${input.method} ${input.path.split("?")[0]} -> ${response.status}`;
-      if (response.status === 401) throw fixedError("ENTE_REAUTH_REQUIRED", where);
+      // The server answers a wrong SRP proof with 401 too; that is a wrong password, not a
+      // session to renew.
+      if (response.status === 401)
+        throw input.path === "/users/srp/verify-session"
+          ? fixedError("ENTE_AUTH_FAILED", "incorrect email or password")
+          : fixedError("ENTE_REAUTH_REQUIRED", where);
       if (response.status === 404 && input.acceptNotFound) return undefined as T;
       if (response.status === 404 && input.method === "GET" && input.path === "/authenticator/key")
         throw fixedError("ENTE_AUTH_KEY_MISSING");
@@ -296,6 +309,18 @@ export function createEnteClient(dependencies: { readonly fetch: EnteFetch }): E
         signal,
         ...(budget === undefined ? {} : { budget }),
         schema: authenticatorKeyResponseSchema,
+      });
+    },
+    async createAuthenticatorKey(token, body, signal, budget) {
+      const parsed = createAuthenticatorKeyRequestSchema.parse(body);
+      await request({
+        method: "POST",
+        path: "/authenticator/key",
+        token,
+        body: parsed,
+        signal,
+        ...(budget === undefined ? {} : { budget }),
+        empty: true,
       });
     },
     getEntityDiff(token, sinceTime, signal, budget) {

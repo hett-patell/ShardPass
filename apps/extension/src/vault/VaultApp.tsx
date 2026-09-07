@@ -309,7 +309,7 @@ export function VaultApp({ platform }: VaultAppProps) {
                     <ImportDialog platform={platform} active onImported={handleUpdate} />
                   </>
                 ) : (
-                  <EnteSettings platform={platform} active />
+                  <EnteSettings platform={platform} active onSynced={handleUpdate} />
                 )}
               </div>
             )}
