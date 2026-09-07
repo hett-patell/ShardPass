@@ -307,10 +307,12 @@ async function downloadVerifiedBackup(page: Page): Promise<Download> {
 }
 
 async function selectBackup(page: Page, file: string, password: string): Promise<void> {
+  // File first, then the password for it: the order a person expects.
+  await page.getByLabel("Choose local backup file").setInputFiles(file);
   const passwordInput = page.getByLabel("Backup file password");
   await expect(passwordInput).toBeVisible();
   await passwordInput.fill(password);
-  await page.getByLabel("Choose local backup file").setInputFiles(file);
+  await page.getByRole("button", { name: "Unlock backup" }).click();
   await expect(passwordInput).toHaveValue("");
 }
 
