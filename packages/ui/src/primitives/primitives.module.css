@@ -193,7 +193,7 @@
 .input:focus {
   outline: none;
   border-color: var(--accent);
-  box-shadow: var(--focus-ring);
+  box-shadow: none;
 }
 .input::placeholder {
   color: var(--text-tertiary);
@@ -340,4 +340,9 @@
   letter-spacing: var(--label-tracking);
   text-transform: uppercase;
   color: var(--text-tertiary);
+}
+/* The trailing part is data (a hostname, a count), shown as written. */
+.sectionLabel > span:last-child:not(:first-child) {
+  letter-spacing: 0.02em;
+  text-transform: none;
 }

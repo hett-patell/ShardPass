@@ -339,9 +339,12 @@ describe("ItemService", () => {
     ).resolves.toMatchObject({ kind: "item.getResult", item: { id: stored.id } });
     await expect(
       service.handle(request("item.get", { itemId: stored.id }), {
-        ...vaultSender,
+        extensionId: vaultSender.extensionId,
         contextKind: "content",
         senderUrl: "https://example.test/login",
+        tabId: 7,
+        frameId: 0,
+        documentId: "content-document",
       }),
     ).rejects.toMatchObject({ code: "ITEM_INVALID" });
     await expect(

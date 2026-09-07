@@ -55,6 +55,7 @@
 }
 .chevron {
   flex-shrink: 0;
+  margin-right: var(--space-3);
   color: var(--text-tertiary);
 }
 .actions {

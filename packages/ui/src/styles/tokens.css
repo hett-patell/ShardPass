@@ -101,7 +101,7 @@
   --motion-slow: 260ms;
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
 
-  --focus-ring: 0 0 0 1px var(--bg-primary), 0 0 0 3px var(--accent);
+  --focus-ring: 0 0 0 1px var(--bg-primary), 0 0 0 2px var(--accent);
 }
 
 :root[data-theme="light"],

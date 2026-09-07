@@ -18,9 +18,9 @@
   padding: 0 var(--space-2) 0 32px;
   color: var(--text-primary);
   caret-color: var(--accent);
-  background: var(--bg-secondary);
+  background: var(--bg-tertiary);
   border: 1px solid var(--border);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-sm);
   font-family: var(--font-sans);
   font-size: var(--text-sm);
   transition:
@@ -38,10 +38,16 @@
 }
 
 .input:focus {
-  background: var(--bg-primary);
-  border-color: var(--accent);
+  background: var(--bg-tertiary);
+  border-color: var(--border-hover);
   outline: none;
-  box-shadow: 0 0 0 3px var(--accent-subtle);
+  box-shadow: none;
+}
+/* Text inputs match :focus-visible whenever focused; a vermillion box on every open would
+   read as an error. Keyboard users still get the caret and the lifted surface. */
+.input:focus-visible {
+  border-color: var(--border-hover);
+  box-shadow: none;
 }
 
 .input::-webkit-search-cancel-button {

@@ -8,3 +8,6 @@ blob-report/
 !.env.example
 *.tsbuildinfo
 .DS_Store
+
+# Playwright MCP session output
+.playwright-mcp/

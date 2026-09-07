@@ -25,9 +25,9 @@ export function PopupRow({ item, onOpen, actions, trailing }: PopupRowProps) {
           {item.subtitle ? <span className={styles.subtitle}>{item.subtitle}</span> : null}
         </span>
         {trailing ? <span className={styles.trailing}>{trailing}</span> : null}
-        <ChevronRight size={16} className={styles.chevron} aria-hidden="true" />
       </button>
       {actions ? <span className={styles.actions}>{actions}</span> : null}
+      <ChevronRight size={16} className={styles.chevron} aria-hidden="true" />
     </div>
   );
 }

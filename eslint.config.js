@@ -6,6 +6,7 @@ export default tseslint.config(
   {
     ignores: [
       ".remember/**",
+      "vite.config.preview.ts",
       ".test-dist/**",
       "assets/**",
       "dist/**",
