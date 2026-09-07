@@ -73,3 +73,53 @@ DOM tests: home shows suggestions and categories, category → list → detail n
 results across kinds, Fill sends the tab message, copy actions, axe on every screen. Policy tests
 for `item.get` from the popup. Content-script test for `login.fillFromPopup`. The Chrome-110
 syntax pin on vault stylesheets stays.
+
+## Addendum (2026-09-07, later): identity on top, several accounts per site, passkeys
+
+### Identity on top
+
+The popup's home screen pins the person's own identity above everything else: initials
+avatar, name, email (the identity item marked favourite, else the first identity). Tapping it
+opens the identity's detail with every field copyable. The list projection for identities
+carries the email as its subtitle so the pin needs no extra request.
+
+### Several accounts per site
+
+Suggestions and the in-page picker already list every login whose URLs match; nothing is
+collapsed to "first match". What was missing is saving: the in-page prompt after a submit
+offered "Save" but only opened the vault page, because content scripts may not create items.
+Now the offer is held in the background (`login.saveOffer` answers with an offer id and what
+the vault already has for that host: nothing, the same username with the same password,
+or the same username with a different password). The banner then reads "Save new login" or
+"Update password for <username>", and `login.saveConfirm` (content-only, carrying only the
+offer id and the person's choice) creates or updates the item in the background. Offers
+expire in five minutes and hold the password only in the worker's memory.
+
+### Passkeys
+
+Chrome gives ordinary extensions no passkey-provider API; managers that offer passkeys
+(Bitwarden, 1Password) intercept WebAuthn in the page instead. ShardPass does the same:
+
+- A dependency-free **main-world script** (built separately as an IIFE and added to the
+  manifest by a post-build plugin, because the crx loader cannot run outside the isolated
+  world) wraps `navigator.credentials.create` and `get`. When a call carries `publicKey`
+  options, it asks the isolated content script over `window.postMessage` (tagged, id-matched)
+  and waits. "fallback" answers hand the call to the browser's own implementation.
+- The **content script** builds `clientDataJSON` itself from the real origin, shows the
+  prompt in its closed shadow root ("Create a passkey for <rpId> as <user>?" naming the login
+  it will attach to, or "Sign in with a passkey" listing candidates), and talks to the
+  background with a content-only `passkey.*` family. The vault must be unlocked; otherwise
+  the prompt says so and the call falls back.
+- The **background** owns keys: ES256 (P-256) pairs generated with WebCrypto, stored on the
+  login item (`passkeys[]`: credential id, rp id, user handle, user name, private key PKCS#8,
+  COSE public key, counter, created at) — the same place 1Password keeps them, so the passkey
+  lives with the account it belongs to. It produces the attestation object (`fmt: "none"`,
+  CBOR) and, for assertions, the authenticator data and a DER-encoded ECDSA signature over
+  `authenticatorData || sha256(clientDataJSON)`. rpId must be the origin's host or a parent
+  domain of it.
+- The **page script** returns an object shaped like `PublicKeyCredential` (id, rawId, type,
+  response with `clientDataJSON`, `attestationObject` / `authenticatorData` + `signature` +
+  `userHandle`, the accessor methods, `getClientExtensionResults`, `toJSON`), with the real
+  `PublicKeyCredential.prototype` as its prototype so `instanceof` holds.
+- Vault and popup detail screens list a login's passkeys (rp, user, created) and allow
+  deletion. `minimum_chrome_version` rises to 111 for main-world content scripts.
