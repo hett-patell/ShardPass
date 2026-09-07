@@ -138,7 +138,15 @@ export class EnteService {
         };
       }
       case "ente.manualSync": {
+        // A cycle already in flight takes the request as a follow-up; the panel sees
+        // "syncing" now rather than "idle" for a sync that has not happened.
+        if (this.coordinator.isRunning?.() === true) {
+          void this.coordinator.trigger("manual").catch(() => undefined);
+          this.state = { ...this.state, state: "syncing" };
+          return this.snapshot();
+        }
         await this.coordinator.trigger("manual");
+        this.noteSuccess();
         await this.refresh();
         if (this.conflictPreview === undefined) return this.snapshot();
         const conflicts = [...(await this.conflictPreview(sender))];
@@ -155,18 +163,21 @@ export class EnteService {
       case "ente.connect":
         if (this.activateSession === undefined) throw new EnteProtocolError("ENTE_AUTH_FAILED");
         this.state = { ...this.state, state: "connecting" };
-        await this.activateSession(request.capability, Uint8Array.from(request.ciphertext), sender);
-        await this.setConnected?.(true);
-        this.state = { ...this.state, connected: true };
         try {
-          await this.coordinator.trigger("connected");
+          await this.activateSession(request.capability, Uint8Array.from(request.ciphertext), sender);
         } catch (error) {
-          this.state = { ...this.state, connected: false };
-          await this.setConnected?.(false).catch(() => undefined);
+          // A failed sign-in leaves nothing behind: not a "connecting" panel forever.
+          this.state = { ...this.state, state: "disconnected", connected: false };
           throw error;
         }
-        this.state = { ...this.state, state: "idle", connected: true };
-        await this.refresh();
+        await this.setConnected?.(true);
+        this.state = { ...this.state, state: "syncing", connected: true };
+        // The account is connected; the first sync runs on its own. It can take minutes on a
+        // large account, and the reply used to wait for all of it.
+        void this.coordinator
+          .trigger("connected")
+          .then(() => this.noteSuccess())
+          .catch((error: unknown) => this.noteFailure(error, Date.now()));
         return this.snapshot();
       case "ente.submitTotp2fa":
         this.state = { ...this.state, state: "syncing" };

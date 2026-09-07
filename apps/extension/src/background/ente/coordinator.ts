@@ -36,6 +36,10 @@ export class EnteSyncCoordinator {
       this.running = false;
     }
   }
+  /** Whether a cycle is in flight right now (a trigger during one only queues a follow-up). */
+  isRunning(): boolean {
+    return this.running;
+  }
   cancel(): void {
     this.followup = false;
     this.controller?.abort();

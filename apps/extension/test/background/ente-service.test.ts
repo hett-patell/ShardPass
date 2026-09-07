@@ -113,4 +113,32 @@ describe("Ente conflict service path", () => {
     await expect(service.shouldRunOnRestart(2_000_000 + 5 * 60_000)).resolves.toBe(false);
     await expect(service.shouldRunOnRestart(2_000_000 + 16 * 60_000)).resolves.toBe(true);
   });
+
+  it("answers connect as soon as the session is active, with the first sync running on its own", async () => {
+    let finish: () => void = () => undefined;
+    const trigger = vi.fn(() => new Promise<void>((resolve) => (finish = resolve)));
+    const activate = vi.fn(() => Promise.resolve());
+    const service = new EnteService(
+      { trigger } as unknown as EnteSyncCoordinator,
+      undefined,
+      undefined,
+      () => Promise.resolve(),
+      undefined,
+      activate,
+    );
+    const sender = { extensionId: "x", contextKind: "vault", tabId: -1, frameId: -1, documentId: "d", senderUrl: "chrome-extension://x/vault/index.html" } as never;
+    const reply = await service.handle({ version: 1, kind: "ente.connect", capability: "c".repeat(32), ciphertext: [1, 2, 3] } as never, sender);
+    expect(reply).toMatchObject({ connected: true, state: "syncing" });
+    expect(trigger).toHaveBeenCalledWith("connected");
+    finish();
+  });
+
+  it("reports syncing when a manual sync arrives during a running cycle", async () => {
+    const trigger = vi.fn(() => Promise.resolve());
+    const service = new EnteService({ trigger, isRunning: () => true } as unknown as EnteSyncCoordinator);
+    const sender = { extensionId: "x", contextKind: "vault", tabId: -1, frameId: -1, documentId: "d", senderUrl: "chrome-extension://x/vault/index.html" } as never;
+    const reply = await service.handle({ version: 1, kind: "ente.manualSync" } as never, sender);
+    expect(reply.state).toBe("syncing");
+    expect(trigger).toHaveBeenCalledWith("manual");
+  });
 });
