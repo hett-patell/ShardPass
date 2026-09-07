@@ -58,7 +58,8 @@ export class SettingsService {
     if (this.startPromise !== null) return this.startPromise;
     this.startPromise = (async () => {
       await this.load();
-      await this.cancelAutoLock();
+      // The alarm is left as it was: a restored session keeps its countdown, and the
+      // caller cancels it when the session did not survive the restart.
       const disposers = [
         this.platform.onUserActivity(() => void this.resetAlarm()),
         this.platform.onIdleStateChanged((state) => {

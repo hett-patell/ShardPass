@@ -143,14 +143,53 @@ const portableDescriptor = {
 };
 
 describe("SessionService", () => {
-  it("sets up only an empty vault and retains only the DEK in background memory", async () => {
+  it("sets up only an empty vault and keeps the DEK out of local storage", async () => {
     const { local, session, service } = fixture();
     expect(await service.getState()).toMatchObject({ state: "unconfigured" });
     await setup(service);
     expect(await service.getState()).toMatchObject({ state: "unlocked" });
     expect((await local.get([ACTIVE_ROOT_KEY]))[ACTIVE_ROOT_KEY]).toBeDefined();
-    expect(await session.snapshot()).toEqual({});
+    // The unlocked key lives in session storage (memory-only) so a worker restart keeps
+    // the session; it is bound to the root it was unlocked against.
+    const stored = (await session.snapshot()) as Record<string, { dek?: string; root?: string }>;
+    expect(Object.keys(stored)).toEqual(["shardpass:v1:session"]);
+    const record = stored["shardpass:v1:session"]!;
+    expect(typeof record.dek).toBe("string");
+    expect(JSON.stringify(await local.snapshot())).not.toContain(record.dek);
     await expect(setup(service)).rejects.toMatchObject({ code: "VAULT_ALREADY_CONFIGURED" });
+  });
+
+  it("reopens the session a previous worker instance left behind, but not after a lock or a root change", async () => {
+    const values = fixture();
+    await setup(values.service);
+    const restart = () =>
+      new SessionService({
+        local: values.local,
+        session: values.session,
+        random: createDeterministicRandomSource(new Uint8Array(1024)),
+        now: () => 2_000,
+        isoNow: () => new Date(2_000).toISOString(),
+        nextId: () => "10000000-0000-4000-8000-000000000001",
+      });
+
+    const survived = restart();
+    expect(await survived.getState()).toMatchObject({ state: "locked" });
+    expect(await survived.restoreSession()).toBe("restored");
+    expect(await survived.getState()).toMatchObject({ state: "unlocked" });
+
+    await survived.lock();
+    expect(await values.session.snapshot()).toEqual({});
+    const afterLock = restart();
+    expect(await afterLock.restoreSession()).toBe("locked");
+    expect(await afterLock.getState()).toMatchObject({ state: "locked" });
+
+    await unlock(afterLock);
+    // The root changing underneath (another profile, a restore) invalidates the key.
+    const root = (await values.local.get([ACTIVE_ROOT_KEY]))[ACTIVE_ROOT_KEY] as Record<string, unknown>;
+    await values.local.set({ [ACTIVE_ROOT_KEY]: { ...root, generationId: "00000000-0000-4000-8000-00000000dead" } });
+    const changed = restart();
+    expect(await changed.restoreSession()).toBe("locked");
+    expect(await values.session.snapshot()).toEqual({});
   });
 
   it("seals migration transaction plaintext with transaction-bound authenticated data", async () => {

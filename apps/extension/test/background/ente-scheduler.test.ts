@@ -20,52 +20,44 @@ function fixture() {
   };
 }
 
-describe("Ente connected and unlocked scheduler", () => {
-  it("arms one exact 15-minute alarm and runs first sync only after both conditions", async () => {
+describe("Ente periodic alarm scheduler", () => {
+  it("clears a stale alarm once on a fresh instance, arms once both conditions hold, never runs a cycle", async () => {
     const f = fixture();
     await f.scheduler.setConnected(true);
-    expect(f.scheduleEnteSync).not.toHaveBeenCalled();
-    await f.scheduler.setUnlocked(true);
+    // A previous worker may have left the alarm armed; a fresh instance clears it once.
     expect(f.scheduleEnteSync).toHaveBeenCalledTimes(1);
-    expect(f.scheduleEnteSync).toHaveBeenCalledWith(15);
-    expect(f.trigger).toHaveBeenCalledWith("unlock");
+    expect(f.scheduleEnteSync).toHaveBeenCalledWith(null);
+    await f.scheduler.setUnlocked(true);
+    expect(f.scheduleEnteSync).toHaveBeenCalledTimes(2);
+    expect(f.scheduleEnteSync).toHaveBeenLastCalledWith(15);
     await f.scheduler.setUnlocked(true);
     await f.scheduler.setConnected(true);
-    expect(f.scheduleEnteSync).toHaveBeenCalledTimes(1);
+    expect(f.scheduleEnteSync).toHaveBeenCalledTimes(2);
+    expect(f.trigger).not.toHaveBeenCalled();
   });
 
-  it("cancels on lock/disconnect/error and ignores stale alarm callbacks", async () => {
+  it("disarms on lock, disconnect and failure, and stays quiet while already disarmed", async () => {
     const f = fixture();
     await f.scheduler.setUnlocked(true);
     await f.scheduler.setConnected(true);
-    const stale = f.scheduler.alarmHandler();
+    expect(f.scheduleEnteSync).toHaveBeenLastCalledWith(15);
     await f.scheduler.setUnlocked(false);
-    stale();
     expect(f.lock).toHaveBeenCalledOnce();
     expect(f.scheduleEnteSync).toHaveBeenLastCalledWith(null);
-    expect(f.trigger).toHaveBeenCalledTimes(1);
+    const calls = f.scheduleEnteSync.mock.calls.length;
+    await f.scheduler.setConnected(false);
+    await f.scheduler.setUnlocked(false);
+    expect(f.scheduleEnteSync).toHaveBeenCalledTimes(calls);
 
     await f.scheduler.setUnlocked(true);
-    const current = f.scheduler.alarmHandler();
-    current();
-    expect(f.trigger).toHaveBeenLastCalledWith("alarm");
+    await f.scheduler.setConnected(true);
+    expect(f.scheduleEnteSync).toHaveBeenLastCalledWith(15);
     await f.scheduler.failed();
-    current();
-    expect(f.cancel).toHaveBeenCalled();
-    expect(f.trigger).toHaveBeenCalledTimes(3);
-  });
-
-  it("disarms automatically when the first sync fails", async () => {
-    const f = fixture();
-    f.trigger.mockRejectedValueOnce(new Error("sync failed"));
-    await f.scheduler.setUnlocked(true);
-    await expect(f.scheduler.setConnected(true)).rejects.toThrow("sync failed");
-    expect(f.scheduleEnteSync).toHaveBeenNthCalledWith(1, 15);
-    expect(f.scheduleEnteSync).toHaveBeenNthCalledWith(2, null);
     expect(f.cancel).toHaveBeenCalledOnce();
+    expect(f.scheduleEnteSync).toHaveBeenLastCalledWith(null);
   });
 
-  it("does not extend the alarm after failed authentication or sync", async () => {
+  it("does not extend the alarm after a failure", async () => {
     const f = fixture();
     await f.scheduler.setUnlocked(true);
     await f.scheduler.setConnected(true);

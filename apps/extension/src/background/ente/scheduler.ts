@@ -10,51 +10,32 @@ export class EnteSyncScheduler {
   private connected = false;
   private unlocked = false;
   private armed = false;
-  private epoch = 0;
+  /** Whether a persisted alarm from an earlier worker instance has been cleared. */
+  private cleared = false;
 
   constructor(
     private readonly port: EnteAlarmPort,
     private readonly coordinator: EnteSyncCoordinator,
   ) {}
 
+  /**
+   * Arms or disarms the periodic alarm. Running a cycle is the caller's decision (main.ts
+   * orchestrates it from the session state), so a transition here never blocks a reply.
+   */
   async setConnected(connected: boolean): Promise<void> {
-    const becameAuthorized = connected && !this.connected && this.unlocked;
     this.connected = connected;
     await this.reconcile();
-    if (becameAuthorized)
-      try {
-        await this.coordinator.trigger("connected");
-      } catch (error) {
-        await this.failed();
-        throw error;
-      }
   }
 
   async setUnlocked(unlocked: boolean): Promise<void> {
-    const becameAuthorized = unlocked && !this.unlocked && this.connected;
     this.unlocked = unlocked;
     if (!unlocked) this.coordinator.lock();
     await this.reconcile();
-    if (becameAuthorized)
-      try {
-        await this.coordinator.trigger("unlock");
-      } catch (error) {
-        await this.failed();
-        throw error;
-      }
   }
 
   async failed(): Promise<void> {
     this.coordinator.cancel();
     await this.disarm();
-  }
-
-  alarmHandler(): () => void {
-    const issuedEpoch = this.epoch;
-    return () => {
-      if (!this.armed || issuedEpoch !== this.epoch || !this.connected || !this.unlocked) return;
-      void this.coordinator.trigger("alarm").catch(() => undefined);
-    };
   }
 
   async dispose(): Promise<void> {
@@ -67,17 +48,19 @@ export class EnteSyncScheduler {
   private async reconcile(): Promise<void> {
     if (this.connected && this.unlocked) {
       if (!this.armed) {
-        this.epoch += 1;
         this.armed = true;
+        this.cleared = false;
         await this.port.scheduleEnteSync(ENTE_SYNC_LIMITS.schedulerMinutes);
       }
     } else await this.disarm();
   }
 
   private async disarm(): Promise<void> {
-    this.epoch += 1;
-    if (!this.armed) return;
+    // After a worker restart `armed` is false while the persisted alarm may still exist, so
+    // the first disarm of an instance always clears; later ones only when armed.
+    if (!this.armed && this.cleared) return;
     this.armed = false;
+    this.cleared = true;
     await this.port.scheduleEnteSync(null);
   }
 }

@@ -110,8 +110,11 @@ describe("installed background migration runtime", () => {
   it("drives the Ente alarm from persisted connection and live vault lock state", async () => {
     const platform = new FakeExtensionPlatform(extensionId);
     const dispose = installBackground(platform);
+    const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
     await setupVault(platform);
-    expect(platform.enteSyncSchedules).toEqual([]);
+    await settle();
+    // A fresh worker clears whatever periodic alarm an earlier instance left, exactly once.
+    expect(platform.enteSyncSchedules).toEqual([null]);
 
     await expect(
       platform.dispatchMessage(
@@ -124,14 +127,18 @@ describe("installed background migration runtime", () => {
         vaultSender,
       ),
     ).resolves.toMatchObject({ kind: "error" });
-    expect(platform.enteSyncSchedules).toEqual([]);
+    await settle();
+    expect(platform.enteSyncSchedules).toEqual([null]);
 
     await platform.dispatchMessage({ version: 1, kind: "vault.lock" }, vaultSender);
-    expect(platform.enteSyncSchedules).toEqual([]);
+    await settle();
+    expect(platform.enteSyncSchedules).toEqual([null]);
     platform.triggerEnteSyncAlarm();
+    await settle();
 
     await unlockVault(platform);
-    expect(platform.enteSyncSchedules).toEqual([]);
+    await settle();
+    expect(platform.enteSyncSchedules).toEqual([null]);
     await platform.dispatchMessage(
       {
         version: 1,
@@ -139,7 +146,8 @@ describe("installed background migration runtime", () => {
       },
       vaultSender,
     );
-    expect(platform.enteSyncSchedules).toEqual([]);
+    await settle();
+    expect(platform.enteSyncSchedules).toEqual([null]);
     dispose();
   });
   it("constructs one backup service, injects current settings, publishes committed imports, and clears on lock/dispose", async () => {

@@ -204,10 +204,33 @@ export function installBackground(
   );
   const publisher = new StatePublisher(randomStreamId(), () => vault.getStateSnapshot());
 
+  // Runs (never awaited by a reply) after the vault becomes usable: arms the periodic alarm
+  // when an Ente account is connected and starts one cycle. Before this, the unlock reply
+  // waited for a whole network sync -- up to two minutes on a bad connection.
+  const kickEnte = async (trigger: "unlock" | "restart" | "alarm") => {
+    try {
+      if (!enteUnlocked) return;
+      const connected = (await runtimeOwner?.connected().catch(() => false)) ?? false;
+      await enteScheduler?.setUnlocked(true);
+      await enteScheduler?.setConnected(connected);
+      if (connected) await enteCoordinator.trigger(trigger);
+    } catch {
+      // A failed cycle is reported by the next status request; nothing to surface here.
+    }
+  };
+
   const ready = (async () => {
     try {
       await platform.initializeTrustedStorage();
       await settings.start();
+      // A session a previous worker instance left behind is reopened here, so a teardown of
+      // the worker is invisible to the person. The countdown continues only when it did.
+      const restored = await sessions.restoreSession();
+      if (restored === "restored") {
+        await settings.notePrivilegedActivity();
+        enteUnlocked = true;
+        void kickEnte("restart");
+      } else await settings.cancelAutoLock();
       if (disposed) settings.dispose();
     } catch (error) {
       // Logged rather than swallowed: a failure here disables every route behind
@@ -238,7 +261,19 @@ export function installBackground(
 
   const disposeAlarm = platform.onAutoLock(() => void lockAndPublish());
   const disposeEnteAlarm =
-    platform.onEnteSyncAlarm?.(() => enteScheduler?.alarmHandler()()) ?? (() => undefined);
+    platform.onEnteSyncAlarm?.(() => {
+      // The worker that armed this alarm may be long gone; decide from persisted state.
+      void (async () => {
+        if (!(await awaitReady())) return;
+        const state = await sessions.getState().catch(() => null);
+        enteUnlocked = state?.state === "unlocked";
+        if (!enteUnlocked) {
+          await enteScheduler?.setUnlocked(false).catch(() => undefined);
+          return;
+        }
+        await kickEnte("alarm");
+      })();
+    }) ?? (() => undefined);
   const disposeRoot = platform.onLocalStorageChanged((changes) => {
     void (async () => {
       if (!(await awaitReady()) || !(ACTIVE_ROOT_KEY in changes)) return;
@@ -308,15 +343,14 @@ export function installBackground(
         const state = await sessions.getState();
         const wasUnlocked = enteUnlocked;
         enteUnlocked = state.state === "unlocked";
-        if (wasUnlocked !== enteUnlocked) {
-          await enteScheduler?.setUnlocked(enteUnlocked).catch(() => undefined);
-          if (enteUnlocked && (await runtimeOwner?.connected().catch(() => false)))
-            await enteScheduler?.setConnected(true).catch(() => undefined);
-        }
-        if (!wasUnlocked && enteUnlocked && enteScheduler === null)
-          void enteCoordinator.trigger("unlock").catch(() => undefined);
-        if (!enteUnlocked) enteService.lock();
+        if (!enteUnlocked) {
+          enteService.lock();
+          if (wasUnlocked) void enteScheduler?.setUnlocked(false).catch(() => undefined);
+        } else if (!wasUnlocked) void kickEnte("unlock");
       }
+      // A session that locked itself (storage trouble, an alarm mid-request) is announced
+      // to every page, whatever family the refused request belonged to.
+      if (response.kind === "error" && response.error.code === "VAULT_LOCKED") publisher.publish();
       if (
         (parsedBackup.success &&
           (response.kind === "backup.importConfirmed" || shouldRefreshBackupState(response))) ||

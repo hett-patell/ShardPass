@@ -47,6 +47,13 @@ import {
 } from "./session-vault-repository";
 
 const ATTEMPTS_KEY = "shardpass:v1:unlock-attempts";
+/**
+ * The unlocked data key, kept in chrome.storage.session (memory-only, extension-private,
+ * cleared when the browser closes) so an MV3 service-worker teardown -- which happens after
+ * ~30 s of idleness -- does not lock the vault. Without this, "auto-lock after 15 minutes"
+ * was a promise the worker could not keep. Bound to the active root it was unlocked against.
+ */
+const SESSION_KEY = "shardpass:v1:session";
 const ATTEMPT_VERSION = 1;
 const CHALLENGE_LIFETIME_MS = 300_000;
 const FAILURE_THRESHOLD = 5;
@@ -604,6 +611,7 @@ export class SessionService {
       candidateDek = null;
       await this.clearAttempts();
       this.assertEpoch(operationEpoch);
+      await this.rememberSession();
       return outcome;
     } catch (error) {
       candidateDek?.fill(0);
@@ -652,6 +660,7 @@ export class SessionService {
         this.expectedRoot = root;
         await this.clearAttempts();
         this.assertEpoch(operationEpoch);
+        await this.rememberSession();
       } catch (error) {
         candidateDek?.fill(0);
         if (error instanceof VaultSessionError && error.code === "VAULT_LOCKED") throw error;
@@ -777,7 +786,8 @@ export class SessionService {
     } catch (error) {
       verifiedDek?.fill(0);
       if (error instanceof VaultSessionError && error.code === "VAULT_LOCKED") throw error;
-      if (error instanceof StorageError) await this.lock();
+      // Inside the mutation mutex: lock in place rather than waiting on ourselves.
+      if (error instanceof StorageError) this.lockWhileMutationHeld();
       else await this.recordFailure();
       throw new VaultSessionError(this.dek === null ? "VAULT_LOCKED" : "INVALID_CREDENTIALS");
     } finally {
@@ -1332,7 +1342,9 @@ export class SessionService {
         throw new Error("root changed");
     } catch (error) {
       if (error instanceof VaultSessionError && error.code === "VAULT_LOCKED") throw error;
-      await this.lock();
+      // Reached both from plain reads and from inside the mutation mutex; the in-place lock
+      // is safe in both (in-flight mutations see the epoch change and fail closed).
+      this.lockWhileMutationHeld();
       throw new VaultSessionError("VAULT_UNAVAILABLE");
     }
   }
@@ -1377,6 +1389,66 @@ export class SessionService {
     this.expectedRoot = null;
     this.commitCandidate = null;
     this.backupAuthorities.clear();
+    this.forgetSession();
+  }
+
+  /** Writes the unlocked key to session storage; best effort, the vault works without it. */
+  private async rememberSession(): Promise<void> {
+    if (this.dek === null || this.expectedRoot === null) return;
+    try {
+      await this.dependencies.session.set({
+        [SESSION_KEY]: {
+          version: 1,
+          dek: bytesToBase64(this.dek),
+          root: canonicalJson(this.expectedRoot),
+        },
+      });
+    } catch {
+      // The session simply will not survive a worker restart.
+    }
+  }
+
+  private forgetSession(): void {
+    void this.dependencies.session.remove([SESSION_KEY]).catch(() => undefined);
+  }
+
+  /**
+   * Re-opens the session a previous service-worker instance left in session storage. The
+   * key is accepted only for the exact root it was unlocked against and only if it still
+   * decrypts the active generation; anything else is discarded and the vault stays locked.
+   */
+  restoreSession(): Promise<"restored" | "locked"> {
+    return this.mutationMutex.run(async () => {
+      if (this.dek !== null) return "restored";
+      let stored: unknown;
+      try {
+        stored = (await this.dependencies.session.get([SESSION_KEY]))[SESSION_KEY];
+      } catch {
+        return "locked";
+      }
+      if (stored === undefined) return "locked";
+      const record = stored as { version?: unknown; dek?: unknown; root?: unknown };
+      if (record.version !== 1 || typeof record.dek !== "string" || typeof record.root !== "string") {
+        this.forgetSession();
+        return "locked";
+      }
+      let dek: Uint8Array | null = null;
+      try {
+        dek = base64ToBytes(record.dek);
+        if (dek.byteLength !== 32) throw new Error("wrong key length");
+        const root = await this.readRoot();
+        if (root === null || canonicalJson(root) !== record.root) throw new Error("root changed");
+        await this.generations.readActive({ dek });
+        this.dek = dek;
+        dek = null;
+        this.expectedRoot = root;
+        return "restored";
+      } catch {
+        dek?.fill(0);
+        this.forgetSession();
+        return "locked";
+      }
+    });
   }
 
   private rebindBackupAuthorities(root: VaultRoot): void {
@@ -1470,7 +1542,9 @@ export class SessionService {
     if (value === undefined) return null;
     const parsed = VaultRootSchema.safeParse(value);
     if (!parsed.success) {
-      await this.lock();
+      // Called from inside mutation-held paths (setup, unlock, change password, commit), so
+      // this must not queue behind the mutex it is already inside: that deadlocked the worker.
+      this.lockWhileMutationHeld();
       throw new VaultSessionError("VAULT_UNAVAILABLE");
     }
     return parsed.data;
@@ -1666,3 +1740,16 @@ function equalBytes(left: Uint8Array, right: Uint8Array): boolean {
 }
 
 export type { VaultLockSettings };
+
+function bytesToBase64(bytes: Uint8Array): string {
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary);
+}
+
+function base64ToBytes(text: string): Uint8Array {
+  const binary = atob(text);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+  return bytes;
+}
