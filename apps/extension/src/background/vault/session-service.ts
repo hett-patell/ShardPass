@@ -17,12 +17,15 @@ import type {
 } from "@shardpass/messaging";
 import type {
   CreateManyOutcome,
+  PortableFolderOutcome,
+  PortableItemKindCounts,
   PortableOtpImportStatus,
   TombstoneResult,
   VaultItemMetadata,
 } from "@shardpass/storage";
 import {
   ACTIVE_ROOT_KEY,
+  GENERATION_PREFIX,
   GenerationStore,
   StorageError,
   VaultRepository,
@@ -32,6 +35,7 @@ import {
   decryptVaultRecord,
   encryptVaultRecord,
   type Clock,
+  type GenerationContents,
   type IdSource,
   type GenerationMetadataName,
   type OtpImportCandidate,
@@ -60,6 +64,12 @@ const FAILURE_THRESHOLD = 5;
 const BASE_COOLDOWN_MS = 30_000;
 const MAX_COOLDOWN_MS = 86_400_000;
 const MAX_FAILURES = Number.MAX_SAFE_INTEGER;
+/**
+ * How old a staged-but-never-activated generation must be before orphan collection reclaims
+ * it. A migration staged by a previous worker instance is resumed from storage by the next
+ * one, so anything younger than this is presumed to be in flight.
+ */
+export const ORPHAN_GENERATION_GRACE_MS = 60 * 60 * 1000;
 
 type AttemptState = Readonly<{
   version: 1;
@@ -196,6 +206,31 @@ export class SessionService {
   private dek: Uint8Array | null = null;
   private expectedRoot: VaultRoot | null = null;
   private epoch = 0;
+  /**
+   * The last generation this session authenticated in full (hash and AEAD over every record,
+   * journal entry, receipt, metadata blob, the manifest, and the marker) with the current key,
+   * remembered so a request costs one root read instead of three full passes.
+   *
+   * Invariant: an entry is trusted only while (1) the session is unlocked with the key that
+   * did the authentication -- lock, an epoch change, and clearLockedState drop it, and it is
+   * never carried across lock/unlock; (2) nothing has been observed to change under it --
+   * activation, every storage-change notification, and any failed operation drop it; and
+   * (3) the stored root still equals the entry's root, which is re-read and compared on every
+   * use, so a root swapped underneath the cache is detected before the cache is honoured.
+   * A hit therefore proves "the root this session is bound to is still the one in storage,
+   * and its contents authenticated under this key". It never stands in for the
+   * authentication a repository operation performs on its own load, which still reads and
+   * validates every entry before use.
+   */
+  private authenticatedActive: {
+    readonly epoch: number;
+    readonly revision: number;
+    readonly root: string;
+    readonly contents: GenerationContents;
+  } | null = null;
+  /** Generations this instance is staging outside the mutation mutex (migrations). */
+  private readonly stagingGenerationIds = new Set<string>();
+  private orphanCollectionScheduled = false;
 
   constructor(private readonly dependencies: SessionDependencies) {
     this.generations = new GenerationStore(dependencies.local);
@@ -237,13 +272,13 @@ export class SessionService {
           repository.readPortableState(context),
         ),
       previewPortableImport: (candidates, descriptor) => {
-        const owned = candidates.map(copyOtpItem);
+        const owned = candidates.map(copyVaultItem);
         return this.#runRepositoryOperation((repository, context) =>
           repository.previewPortableImport(owned, descriptor, context),
         ).finally(() => owned.splice(0));
       },
       importPortableState: (candidates, descriptor, expected) => {
-        const owned = candidates.map(copyOtpItem);
+        const owned = candidates.map(copyVaultItem);
         return this.#runRepositoryOperation((repository, context) =>
           repository.importPortableState(owned, descriptor, expected, context),
         ).finally(() => owned.splice(0));
@@ -460,9 +495,10 @@ export class SessionService {
     const settings = state.settings ?? (await readSettings());
     await this.assertBackupSession(authority);
     return {
-      schemaVersion: 1,
+      schemaVersion: 2,
       exportedAt: this.dependencies.isoNow(),
-      items: state.items.map(copyOtpItem),
+      items: state.items.map(copyVaultItem),
+      folders: state.folders.map((folder) => ({ ...folder })),
       settings: {
         autoLockMinutes: normalizePortableAutoLockMinutes(settings.autoLockMinutes),
         lockOnScreenLock: settings.lockOnScreenLock,
@@ -476,7 +512,7 @@ export class SessionService {
 
   async previewPortableBackupImport(
     descriptor: SafeBackupDescriptor,
-    candidates: readonly OtpItem[],
+    candidates: readonly VaultItem[],
     authority: BackupSessionAuthority,
   ) {
     await this.assertBackupSession(authority);
@@ -487,13 +523,15 @@ export class SessionService {
 
   async confirmPortableBackupImport(
     descriptor: SafeBackupDescriptor,
-    candidates: readonly OtpItem[],
+    candidates: readonly VaultItem[],
     expected: Readonly<{
       rows: readonly Readonly<{
         status: "accepted" | "duplicate" | "conflict" | "rejected";
       }>[];
       settings: "unchanged" | "replace";
       history: Readonly<{ journalAdded: number; tombstonesAdded: number }>;
+      byKind: PortableItemKindCounts;
+      folders: PortableFolderOutcome;
     }>,
     authority: BackupSessionAuthority,
   ) {
@@ -504,6 +542,8 @@ export class SessionService {
       statuses,
       settings: expected.settings,
       history: expected.history,
+      byKind: expected.byKind,
+      folders: expected.folders,
     } as const;
     const result = await this.vaultRepository.importPortableState(
       candidates,
@@ -524,6 +564,8 @@ export class SessionService {
           imported: result.imported,
           duplicate: result.duplicate,
           conflict: result.conflict,
+          byKind: { ...result.byKind },
+          folders: { ...result.folders },
         };
   }
 
@@ -622,10 +664,15 @@ export class SessionService {
     }
   }
 
-  unlock(challengeId: string, keyEncryptionKey: Uint8Array, sender: SenderBinding): Promise<void> {
-    return this.credentialMutex.run(() =>
+  async unlock(
+    challengeId: string,
+    keyEncryptionKey: Uint8Array,
+    sender: SenderBinding,
+  ): Promise<void> {
+    await this.credentialMutex.run(() =>
       this.unlockInternal(challengeId, keyEncryptionKey, sender),
     );
+    this.scheduleOrphanCollection();
   }
 
   private async unlockInternal(
@@ -653,11 +700,12 @@ export class SessionService {
           root.wrappedKey,
         );
         this.assertEpoch(operationEpoch);
-        await this.generations.readActive({ dek: candidateDek });
+        const active = await this.generations.readActive({ dek: candidateDek });
         this.assertEpoch(operationEpoch);
         this.dek = candidateDek;
         candidateDek = null;
         this.expectedRoot = root;
+        this.rememberAuthenticatedActive(active);
         await this.clearAttempts();
         this.assertEpoch(operationEpoch);
         await this.rememberSession();
@@ -903,7 +951,9 @@ export class SessionService {
 
   reserveMigrationGeneration(capability: MigrationCapability): string {
     this.requireMigrationCapability(capability);
-    return this.dependencies.nextId();
+    const generationId = this.dependencies.nextId();
+    this.stagingGenerationIds.add(generationId);
+    return generationId;
   }
 
   async stageMigration(
@@ -912,7 +962,8 @@ export class SessionService {
   ): Promise<MigrationStageReference> {
     const binding = this.requireMigrationCapability(capability);
     if (this.dek === null) throw new VaultSessionError("VAULT_LOCKED");
-    const context = this.context(this.dek);
+    const context = this.stagingContext(this.dek);
+    if (input.generationId !== undefined) this.stagingGenerationIds.add(input.generationId);
     const records = await Promise.all(
       input.items.map((item) => encryptVaultRecord(OtpItemSchema.parse(item), context)),
     );
@@ -952,6 +1003,7 @@ export class SessionService {
   ): Promise<MigrationStageReference> {
     const binding = this.requireMigrationCapability(capability);
     if (this.dek === null) throw new VaultSessionError("VAULT_LOCKED");
+    this.stagingGenerationIds.add(generationId);
     const verified = await this.generations.reconstructVerified(
       binding.root,
       generationId,
@@ -1241,10 +1293,15 @@ export class SessionService {
       const result = await operation(repository, context);
       this.assertEpoch(operationEpoch);
       this.assertNoCrossedRootObservation(observationStart);
-      await this.assertActiveRootWhileMutationHeld(operationEpoch);
+      // The operation authenticated everything it loaded and, if it activated, the
+      // activation re-authenticated the new generation; what is left to prove is that the
+      // root is still the one this session is bound to.
+      await this.assertActiveRootUnchangedWhileMutationHeld(operationEpoch);
       this.assertNoCrossedRootObservation(observationStart);
       return result;
     } catch (error) {
+      // Whatever went wrong, the next request re-authenticates from storage.
+      this.authenticatedActive = null;
       if (error instanceof VaultSessionError) {
         if (this.hasCrossedRootObservation(observationStart) && this.dek !== null)
           this.lockWhileMutationHeld();
@@ -1278,6 +1335,7 @@ export class SessionService {
         throw new StorageError("EXTERNAL_ROOT_CHANGED");
       this.expectedRoot = activated;
       this.repositoryRevision += 1;
+      this.rememberAuthenticatedActive(active);
       this.rebindBackupAuthorities(activated);
       this.commitCandidate = null;
       await this.rememberSession();
@@ -1323,10 +1381,22 @@ export class SessionService {
     if (this.dek === null || this.expectedRoot === null)
       throw new VaultSessionError("VAULT_LOCKED");
     try {
-      const active = await this.generations.readActive({ dek: this.dek });
+      await this.authenticateExpectedRoot(this.dek, this.expectedRoot, operationEpoch);
+    } catch (error) {
+      if (error instanceof VaultSessionError && error.code === "VAULT_LOCKED") throw error;
+      this.lockWhileMutationHeld();
+      throw new VaultSessionError("VAULT_UNAVAILABLE");
+    }
+  }
+
+  /** The post-operation check: the stored root is still the one this session is bound to. */
+  private async assertActiveRootUnchangedWhileMutationHeld(operationEpoch: number): Promise<void> {
+    if (this.dek === null || this.expectedRoot === null)
+      throw new VaultSessionError("VAULT_LOCKED");
+    try {
+      const stored = await this.readStoredRootCanonical();
       this.assertEpoch(operationEpoch);
-      if (active === null || canonicalJson(active.root) !== canonicalJson(this.expectedRoot))
-        throw new Error("root changed");
+      if (stored !== canonicalJson(this.expectedRoot)) throw new Error("root changed");
     } catch (error) {
       if (error instanceof VaultSessionError && error.code === "VAULT_LOCKED") throw error;
       this.lockWhileMutationHeld();
@@ -1339,10 +1409,7 @@ export class SessionService {
     if (this.dek === null || this.expectedRoot === null)
       throw new VaultSessionError("VAULT_LOCKED");
     try {
-      const active = await this.generations.readActive({ dek: this.dek });
-      this.assertEpoch(operationEpoch);
-      if (active === null || canonicalJson(active.root) !== canonicalJson(this.expectedRoot))
-        throw new Error("root changed");
+      await this.authenticateExpectedRoot(this.dek, this.expectedRoot, operationEpoch);
     } catch (error) {
       if (error instanceof VaultSessionError && error.code === "VAULT_LOCKED") throw error;
       // Reached both from plain reads and from inside the mutation mutex; the in-place lock
@@ -1352,7 +1419,107 @@ export class SessionService {
     }
   }
 
+  /**
+   * Proves the active generation is the one this session is bound to and authenticates
+   * under `dek`: either the cached authentication still applies (same key, epoch, revision,
+   * and root, and the stored root re-read now is still that root), or the generation is read
+   * and authenticated in full and the result cached. A stored root that no longer matches
+   * the cache is not a verdict on its own: outside the mutation mutex a commit may have
+   * moved the root and the session's binding together, so the slow path authenticates what
+   * is in storage now and compares it against the binding as it stands after that read,
+   * exactly as an uncached check always has. Throws on any mismatch.
+   */
+  private async authenticateExpectedRoot(
+    dek: Uint8Array,
+    expectedRoot: VaultRoot,
+    operationEpoch: number,
+  ): Promise<void> {
+    const expected = canonicalJson(expectedRoot);
+    const cached = this.authenticatedActive;
+    if (
+      cached !== null &&
+      cached.epoch === this.epoch &&
+      cached.revision === this.repositoryRevision &&
+      cached.root === expected
+    ) {
+      const stored = await this.readStoredRootCanonical();
+      this.assertEpoch(operationEpoch);
+      if (stored === expected) return;
+    }
+    this.authenticatedActive = null;
+    const active = await this.generations.readActive({ dek });
+    this.assertEpoch(operationEpoch);
+    if (
+      active === null ||
+      this.expectedRoot === null ||
+      canonicalJson(active.root) !== canonicalJson(this.expectedRoot)
+    )
+      throw new Error("root changed");
+    this.rememberAuthenticatedActive(active);
+  }
+
+  /** Caches `active` as authenticated, but only when it is the generation of the bound root. */
+  private rememberAuthenticatedActive(active: GenerationContents | null): void {
+    if (active === null || this.dek === null || this.expectedRoot === null) return;
+    const root = canonicalJson(active.root);
+    if (root !== canonicalJson(this.expectedRoot)) return;
+    this.authenticatedActive = {
+      epoch: this.epoch,
+      revision: this.repositoryRevision,
+      root,
+      contents: active,
+    };
+  }
+
+  /** The stored root as canonical JSON, null when absent; throws when it does not parse. */
+  private async readStoredRootCanonical(): Promise<string | null> {
+    const value = (await this.dependencies.local.get([ACTIVE_ROOT_KEY]))[ACTIVE_ROOT_KEY];
+    if (value === undefined) return null;
+    return canonicalJson(VaultRootSchema.parse(value));
+  }
+
+  /**
+   * Any change to vault storage that was not observed through {@link handleActiveRootChange}
+   * (a record, journal, or manifest key) invalidates the cached authentication; the next
+   * request re-authenticates from storage.
+   */
+  handleLocalStorageChange(changedKeys: readonly string[]): void {
+    if (changedKeys.some((key) => key === ACTIVE_ROOT_KEY || key.startsWith(GENERATION_PREFIX)))
+      this.authenticatedActive = null;
+  }
+
+  /**
+   * Reclaims generations that were staged but never activated: at most a bounded number per
+   * call, never the active generation or its direct predecessor, never one this instance is
+   * still staging, and never one younger than {@link ORPHAN_GENERATION_GRACE_MS} that another
+   * worker instance might still resume. Runs under the mutation mutex so no repository
+   * staging interleaves with it. Returns the number of generations removed.
+   */
+  collectOrphans(): Promise<number> {
+    const operationEpoch = this.epoch;
+    return this.mutationMutex.run(async () => {
+      if (this.dek === null || this.expectedRoot === null || this.epoch !== operationEpoch)
+        return 0;
+      const root = this.expectedRoot;
+      const stored = await this.readStoredRootCanonical();
+      if (stored !== canonicalJson(root) || this.epoch !== operationEpoch) return 0;
+      return this.generations.collectOrphans(root, {
+        exclude: this.stagingGenerationIds,
+        olderThan: new Date(this.now() - ORPHAN_GENERATION_GRACE_MS).toISOString(),
+      });
+    });
+  }
+
+  /** Fires orphan collection once per worker instance, after the first successful unlock or restore. */
+  private scheduleOrphanCollection(): void {
+    if (this.orphanCollectionScheduled) return;
+    this.orphanCollectionScheduled = true;
+    void this.collectOrphans().catch(() => undefined);
+  }
+
   handleActiveRootChange(value: unknown): Promise<void> {
+    // Storage moved under the session; whatever was authenticated before is re-proven.
+    this.authenticatedActive = null;
     const parsedObservation = VaultRootSchema.safeParse(value);
     const canonicalObservation = parsedObservation.success
       ? canonicalJson(parsedObservation.data)
@@ -1377,8 +1544,10 @@ export class SessionService {
       if (this.dek === null || this.expectedRoot === null) return;
       try {
         const active = await this.generations.readActive({ dek: this.dek });
-        if (active !== null && canonicalJson(active.root) === canonicalJson(this.expectedRoot))
+        if (active !== null && canonicalJson(active.root) === canonicalJson(this.expectedRoot)) {
+          this.rememberAuthenticatedActive(active);
           return;
+        }
       } catch {
         // Current storage is not authenticated as the session root.
       }
@@ -1390,6 +1559,7 @@ export class SessionService {
     this.dek?.fill(0);
     this.dek = null;
     this.expectedRoot = null;
+    this.authenticatedActive = null;
     this.commitCandidate = null;
     this.backupAuthorities.clear();
     this.forgetSession();
@@ -1420,8 +1590,8 @@ export class SessionService {
    * key is accepted only for the exact root it was unlocked against and only if it still
    * decrypts the active generation; anything else is discarded and the vault stays locked.
    */
-  restoreSession(): Promise<"restored" | "locked"> {
-    return this.mutationMutex.run(async () => {
+  async restoreSession(): Promise<"restored" | "locked"> {
+    const outcome = await this.mutationMutex.run(async (): Promise<"restored" | "locked"> => {
       if (this.dek !== null) return "restored";
       let stored: unknown;
       try {
@@ -1431,7 +1601,11 @@ export class SessionService {
       }
       if (stored === undefined) return "locked";
       const record = stored as { version?: unknown; dek?: unknown; root?: unknown };
-      if (record.version !== 1 || typeof record.dek !== "string" || typeof record.root !== "string") {
+      if (
+        record.version !== 1 ||
+        typeof record.dek !== "string" ||
+        typeof record.root !== "string"
+      ) {
         this.forgetSession();
         return "locked";
       }
@@ -1441,10 +1615,11 @@ export class SessionService {
         if (dek.byteLength !== 32) throw new Error("wrong key length");
         const root = await this.readRoot();
         if (root === null || canonicalJson(root) !== record.root) throw new Error("root changed");
-        await this.generations.readActive({ dek });
+        const active = await this.generations.readActive({ dek });
         this.dek = dek;
         dek = null;
         this.expectedRoot = root;
+        this.rememberAuthenticatedActive(active);
         return "restored";
       } catch {
         dek?.fill(0);
@@ -1452,6 +1627,8 @@ export class SessionService {
         return "locked";
       }
     });
+    if (outcome === "restored") this.scheduleOrphanCollection();
+    return outcome;
   }
 
   private rebindBackupAuthorities(root: VaultRoot): void {
@@ -1469,6 +1646,7 @@ export class SessionService {
     const candidate = canonicalJson(verified.root);
     let wroteCandidate = false;
     this.commitCandidate = candidate;
+    this.authenticatedActive = null;
     try {
       const activated = await this.generations.activate(verified, context, () =>
         this.assertEpoch(operationEpoch),
@@ -1482,6 +1660,7 @@ export class SessionService {
         return { committed: true, state: "locked" };
       }
       this.expectedRoot = activated;
+      if (authenticationDek === this.dek) this.rememberAuthenticatedActive(actual);
       this.rebindBackupAuthorities(activated);
       // The root just moved on; the saved session must follow it, or the next worker restart
       // finds a stale binding and the vault shows up locked minutes after a save.
@@ -1524,6 +1703,21 @@ export class SessionService {
     const clock: Clock = { now: () => this.dependencies.isoNow() };
     const ids: IdSource = { next: () => this.dependencies.nextId() };
     return { dek, random: this.dependencies.random, clock, ids };
+  }
+
+  /** A context whose generation ids are registered as in-flight before they are written. */
+  private stagingContext(dek: Uint8Array): VaultCryptoContext {
+    const context = this.context(dek);
+    return {
+      ...context,
+      ids: {
+        next: () => {
+          const generationId = context.ids.next();
+          this.stagingGenerationIds.add(generationId);
+          return generationId;
+        },
+      },
+    };
   }
 
   private consume(id: string, purpose: ChallengePurpose, sender: SenderBinding): Challenge {
@@ -1669,12 +1863,16 @@ function summarizePortablePreview(
     statuses: readonly PortableOtpImportStatus[];
     settings: "unchanged" | "replace";
     history: Readonly<{ journalAdded: number; tombstonesAdded: number }>;
+    byKind: PortableItemKindCounts;
+    folders: PortableFolderOutcome;
   }>,
 ) {
   return Object.freeze({
     ...summarizePortableStatuses(preview.statuses),
     settings: preview.settings,
     history: Object.freeze({ ...preview.history }),
+    byKind: Object.freeze({ ...preview.byKind }),
+    folders: Object.freeze({ ...preview.folders }),
   });
 }
 
@@ -1701,6 +1899,11 @@ function summarizePortableStatuses(statuses: readonly PortableOtpImportStatus[])
 
 function copyOtpItem(candidate: OtpItem): OtpItem {
   return OtpItemSchema.parse({ ...candidate, tags: [...candidate.tags] });
+}
+
+/** A fresh object graph the caller cannot reach into afterwards. */
+function copyVaultItem(candidate: VaultItem): VaultItem {
+  return VaultItemSchema.parse(candidate);
 }
 
 function copyImportCandidate(candidate: OtpImportCandidate) {

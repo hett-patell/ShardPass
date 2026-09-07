@@ -8,7 +8,6 @@
   border-radius: var(--radius-sm);
 }
 
-.header,
 .previewHeading {
   display: flex;
   align-items: flex-start;
@@ -17,8 +16,18 @@
 }
 
 .header {
+  display: grid;
+  gap: var(--space-1);
   padding-bottom: var(--space-3);
   border-bottom: 1px solid var(--border);
+}
+
+.header p {
+  max-width: 68ch;
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: var(--line-body);
 }
 
 .header h3,
@@ -41,9 +50,6 @@
   font-size: var(--text-lg);
 }
 
-.scope,
-.panelHeading > span,
-.previewHeading span,
 .counts dt {
   margin: 0;
   color: var(--text-secondary);
@@ -52,14 +58,7 @@
   font-weight: 700;
   line-height: var(--line-compact);
   letter-spacing: 0;
-}
-
-.scope {
-  padding: var(--space-1) var(--space-2);
-  color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 10%, transparent);
-  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
-  border-radius: var(--radius-sm);
+  text-transform: uppercase;
 }
 
 .warning {
@@ -80,6 +79,120 @@
 .warning strong {
   color: var(--warning);
   white-space: nowrap;
+}
+
+/* The choice between the three files. Each option is one card; the radio stays a real radio. */
+.choices {
+  display: grid;
+  gap: var(--space-2);
+  padding: 0;
+  margin: 0;
+  border: 0;
+  min-inline-size: 0;
+}
+
+.panel .choice {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  color: var(--text-primary);
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-weight: 400;
+  cursor: pointer;
+  transition:
+    border-color var(--motion-fast) var(--ease-out),
+    background-color var(--motion-fast) var(--ease-out);
+}
+
+.panel .choice:hover {
+  border-color: var(--border-hover);
+}
+
+.panel .choice[data-selected="true"] {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 6%, var(--bg-primary));
+}
+
+.panel .choice:has(input:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.choice input {
+  margin: 0.2em 0 0;
+  accent-color: var(--accent);
+}
+
+.choiceBody {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.choiceTitle {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+}
+
+.choiceText {
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: var(--line-body);
+  overflow-wrap: anywhere;
+}
+
+.tag {
+  padding: 1px var(--space-2);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  line-height: var(--line-compact);
+  text-transform: uppercase;
+}
+
+.tag[data-tone="good"] {
+  color: var(--success);
+  background: color-mix(in srgb, var(--success) 10%, transparent);
+  border-color: color-mix(in srgb, var(--success) 40%, transparent);
+}
+
+.tag[data-tone="warn"] {
+  color: var(--warning);
+  background: color-mix(in srgb, var(--warning) 10%, transparent);
+  border-color: color-mix(in srgb, var(--warning) 45%, transparent);
+}
+
+/* Shown only while an unencrypted file is selected; it repeats what the tag already says, on purpose. */
+.unencrypted {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-3);
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--warning) 10%, var(--bg-primary));
+  border: 1px solid color-mix(in srgb, var(--warning) 45%, transparent);
+  border-left: 3px solid var(--warning);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  line-height: var(--line-body);
+}
+
+.unencrypted strong {
+  color: var(--warning);
+}
+
+.restore {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
 }
 
 .columns {
@@ -211,6 +324,16 @@
   font-size: var(--text-lg);
 }
 
+.fileButton[data-chosen="true"] {
+  border-style: solid;
+  border-color: color-mix(in srgb, var(--success) 60%, transparent);
+  background: color-mix(in srgb, var(--success) 6%, var(--bg-primary));
+}
+
+.fileButton[data-chosen="true"] > span {
+  color: var(--success);
+}
+
 .fileButton small {
   color: var(--text-secondary);
 }
@@ -226,6 +349,12 @@
   border-radius: var(--radius-sm);
   font-weight: 700;
   text-decoration: none;
+}
+
+.download[data-tone="warn"] {
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--warning) 18%, var(--bg-primary));
+  border: 1px solid color-mix(in srgb, var(--warning) 55%, transparent);
 }
 
 .preview {
@@ -325,7 +454,6 @@
     white-space: normal;
   }
 
-  .header,
   .previewHeading {
     flex-direction: column;
   }
@@ -336,7 +464,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .fileButton {
+  .fileButton,
+  .panel .choice {
     transition: none;
   }
 }

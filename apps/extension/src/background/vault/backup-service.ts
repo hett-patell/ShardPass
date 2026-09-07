@@ -2,6 +2,8 @@ import {
   BackupRequestSchema,
   BackupResponseSchema,
   isValidSenderContext,
+  type BackupCountsByKind,
+  type BackupFolderOutcome,
   type BackupRequest,
   type BackupResponse,
   type PortableBackupSnapshot,
@@ -9,7 +11,7 @@ import {
   type SenderContext,
   type VaultLockSettings,
 } from "@shardpass/messaging";
-import type { OtpItem } from "@shardpass/domain";
+import { VAULT_ITEM_KINDS, VaultItemSchema, type VaultItem } from "@shardpass/domain";
 
 import type { SenderBinding } from "./session-service";
 
@@ -37,9 +39,18 @@ type PreviewResult = Readonly<{
   rejected: number;
   settings: "unchanged" | "replace";
   history: Readonly<{ journalAdded: number; tombstonesAdded: number }>;
+  byKind: BackupCountsByKind;
+  folders: BackupFolderOutcome;
 }>;
 type ConfirmResult =
-  | Readonly<{ previewChanged: false; imported: number; duplicate: number; conflict: number }>
+  | Readonly<{
+      previewChanged: false;
+      imported: number;
+      duplicate: number;
+      conflict: number;
+      byKind: BackupCountsByKind;
+      folders: BackupFolderOutcome;
+    }>
   | Readonly<{ previewChanged: true; preview: PreviewResult }>;
 
 /** Opaque session/root authority. Implementations must reject it after lock or root replacement. */
@@ -71,12 +82,12 @@ export type BackupSessionPort = Readonly<{
   ): Promise<PortableBackupSnapshot>;
   previewPortableBackupImport(
     descriptor: SafeBackupDescriptor,
-    items: readonly OtpItem[],
+    items: readonly VaultItem[],
     authority: BackupSessionAuthority,
   ): Promise<PreviewResult>;
   confirmPortableBackupImport(
     descriptor: SafeBackupDescriptor,
-    items: readonly OtpItem[],
+    items: readonly VaultItem[],
     expected: PreviewResult,
     authority: BackupSessionAuthority,
   ): Promise<ConfirmResult>;
@@ -103,7 +114,7 @@ type PreviewCapability = {
   senderKey: string;
   authority: BackupSessionAuthority;
   descriptor: SafeBackupDescriptor;
-  items: OtpItem[];
+  items: VaultItem[];
   preview: PreviewResult;
   expiresAt: number;
   sequence: number;
@@ -241,7 +252,7 @@ export class BackupService {
 
   private async previewImport(
     descriptor: SafeBackupDescriptor,
-    items: readonly OtpItem[],
+    items: readonly VaultItem[],
     sender: SenderBinding,
   ): Promise<BackupResponse> {
     const ownedDescriptor = copyDescriptor(descriptor);
@@ -309,6 +320,8 @@ export class BackupService {
         imported: result.imported,
         duplicate: result.duplicate,
         conflict: result.conflict,
+        byKind: { ...result.byKind },
+        folders: { ...result.folders },
       });
     } catch (error) {
       throw mapCapabilityError(error);
@@ -359,7 +372,7 @@ export class BackupService {
 
   private reservePreview(
     descriptor: SafeBackupDescriptor,
-    items: OtpItem[],
+    items: VaultItem[],
     authority: BackupSessionAuthority,
     binding: string,
   ): PreviewCapability {
@@ -374,15 +387,7 @@ export class BackupService {
       authority,
       descriptor,
       items,
-      preview: {
-        rows: [],
-        accepted: 0,
-        duplicate: 0,
-        conflict: 0,
-        rejected: 0,
-        settings: "unchanged",
-        history: { journalAdded: 0, tombstonesAdded: 0 },
-      },
+      preview: emptyPreview(),
       expiresAt: 0,
       sequence: this.sequence++,
       generation: this.generation,
@@ -470,8 +475,10 @@ export class BackupService {
       duplicate: operation.preview.duplicate,
       conflict: operation.preview.conflict,
       rejected: operation.preview.rejected,
+      byKind: { ...operation.preview.byKind },
       settings: operation.preview.settings,
       history: { ...operation.preview.history },
+      folders: { ...operation.preview.folders },
       expiresAt: operation.expiresAt,
     });
   }
@@ -502,8 +509,9 @@ function decodeCanonicalKey(value: string): Uint8Array {
   }
   return bytes;
 }
-function copyItem(item: OtpItem): OtpItem {
-  return Object.freeze({ ...item, tags: Object.freeze([...item.tags]) }) as OtpItem;
+/** A fresh, frozen object graph: nothing the sender handed over is kept by reference. */
+function copyItem(item: VaultItem): VaultItem {
+  return Object.freeze(VaultItemSchema.parse(item));
 }
 function copyDescriptor(descriptor: SafeBackupDescriptor): SafeBackupDescriptor {
   return {
@@ -514,6 +522,9 @@ function copyDescriptor(descriptor: SafeBackupDescriptor): SafeBackupDescriptor 
       journal: descriptor.history.journal.map((entry) => ({ ...entry })),
       tombstones: descriptor.history.tombstones.map((entry) => ({ ...entry })),
     },
+    ...(descriptor.folders === undefined
+      ? {}
+      : { folders: descriptor.folders.map((folder) => ({ ...folder })) }),
   };
 }
 function copyPreview(result: PreviewResult): PreviewResult {
@@ -525,11 +536,12 @@ function copyPreview(result: PreviewResult): PreviewResult {
     rejected: result.rejected,
     settings: result.settings,
     history: Object.freeze({ ...result.history }),
+    byKind: Object.freeze({ ...result.byKind }),
+    folders: Object.freeze({ ...result.folders }),
   });
 }
-function clearPreview(operation: PreviewCapability): void {
-  operation.items.splice(0);
-  operation.preview = {
+function emptyPreview(): PreviewResult {
+  return {
     rows: [],
     accepted: 0,
     duplicate: 0,
@@ -537,7 +549,13 @@ function clearPreview(operation: PreviewCapability): void {
     rejected: 0,
     settings: "unchanged",
     history: { journalAdded: 0, tombstonesAdded: 0 },
+    byKind: Object.fromEntries(VAULT_ITEM_KINDS.map((kind) => [kind, 0])) as BackupCountsByKind,
+    folders: { created: 0, unfiled: 0 },
   };
+}
+function clearPreview(operation: PreviewCapability): void {
+  operation.items.splice(0);
+  operation.preview = emptyPreview();
 }
 function safeAdd(left: number, right: number): number {
   return Math.min(Number.MAX_SAFE_INTEGER, left + right);

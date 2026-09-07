@@ -1,18 +1,41 @@
-import { ItemTimestampSchema, OtpItemSchema } from "@shardpass/domain";
+import {
+  FolderSchema,
+  ItemTimestampSchema,
+  MAX_FOLDERS,
+  VaultItemSchema,
+  type VaultItemKind,
+} from "@shardpass/domain";
 import { z } from "zod/mini";
 
 import type { CommandSenderPolicy } from "./context";
 import { MESSAGE_VERSION } from "./envelope";
 
-export const MAX_BACKUP_IMPORT_ITEMS = 10_000;
+export const MAX_BACKUP_IMPORT_ITEMS = 20_000;
+export const MAX_BACKUP_IMPORT_FOLDERS = MAX_FOLDERS;
 export const MAX_BACKUP_JOURNAL_ENTRIES = 10_000;
 export const MAX_BACKUP_TOMBSTONES = 10_000;
+/** The payload version the runtime hands out; older files are accepted on import. */
+export const BACKUP_SNAPSHOT_SCHEMA_VERSION = 2 as const;
 
 const challengeId = z.string().check(z.regex(/^[0-9a-f]{32}$/));
 const opaqueToken = z.uuid();
 const canonicalKeyEncryptionKey = z.string().check(z.regex(/^[A-Za-z0-9+/]{43}=$/));
 const timestamp = z.number().check(z.int(), z.nonnegative(), z.maximum(Number.MAX_SAFE_INTEGER));
 const count = z.int().check(z.nonnegative(), z.maximum(MAX_BACKUP_IMPORT_ITEMS));
+const folderCount = z.int().check(z.nonnegative(), z.maximum(MAX_BACKUP_IMPORT_FOLDERS));
+/** How many items of each kind a step touched; every kind is present so the UI need not guess. */
+const countsByKind = z.strictObject({
+  otp: count,
+  login: count,
+  note: count,
+  card: count,
+  identity: count,
+  secret: count,
+} satisfies Record<VaultItemKind, typeof count>);
+const folderOutcome = z.strictObject({
+  created: folderCount,
+  unfiled: count,
+});
 const autoLockMinutes = z.union([
   z.literal(0),
   z.literal(5),
@@ -47,18 +70,25 @@ const history = z.strictObject({
   journal: z.array(journalEntry).check(z.maxLength(MAX_BACKUP_JOURNAL_ENTRIES)),
   tombstones: z.array(tombstone).check(z.maxLength(MAX_BACKUP_TOMBSTONES)),
 });
-const items = z.array(OtpItemSchema).check(z.maxLength(MAX_BACKUP_IMPORT_ITEMS));
+const items = z.array(VaultItemSchema).check(z.maxLength(MAX_BACKUP_IMPORT_ITEMS));
+const folders = z.array(FolderSchema).check(z.maxLength(MAX_BACKUP_IMPORT_FOLDERS));
 
+/**
+ * What the vault page tells the runtime about a decrypted file besides its items.
+ * `folders` is absent for the old one-time-code-only payload, which carried none.
+ */
 export const SafeBackupDescriptorSchema = z.strictObject({
   sourceFormat: z.enum(["v2", "legacy-v1"]),
   exportedAt: ItemTimestampSchema,
   settings,
   history,
+  folders: z.optional(folders),
 });
 export const PortableBackupSnapshotSchema = z.strictObject({
-  schemaVersion: z.literal(1),
+  schemaVersion: z.literal(BACKUP_SNAPSHOT_SCHEMA_VERSION),
   exportedAt: ItemTimestampSchema,
   items,
+  folders,
   settings,
   history,
 });
@@ -146,11 +176,13 @@ const previewFields = {
   duplicate: count,
   conflict: count,
   rejected: count,
+  byKind: countsByKind,
   settings: z.enum(["unchanged", "replace"]),
   history: z.strictObject({
     journalAdded: z.int().check(z.nonnegative(), z.maximum(MAX_BACKUP_JOURNAL_ENTRIES)),
     tombstonesAdded: z.int().check(z.nonnegative(), z.maximum(MAX_BACKUP_TOMBSTONES)),
   }),
+  folders: folderOutcome,
   expiresAt: timestamp,
 } as const;
 const totalsMatch = (value: {
@@ -180,6 +212,8 @@ export const BackupImportConfirmedSchema = z.strictObject({
   imported: count,
   duplicate: count,
   conflict: count,
+  byKind: countsByKind,
+  folders: folderOutcome,
 });
 export const BackupImportCancelledSchema = z.strictObject({
   version: z.literal(MESSAGE_VERSION),
@@ -198,6 +232,8 @@ export const BackupResponseSchema = z.discriminatedUnion("kind", [
 
 export type SafeBackupDescriptor = z.infer<typeof SafeBackupDescriptorSchema>;
 export type PortableBackupSnapshot = z.infer<typeof PortableBackupSnapshotSchema>;
+export type BackupCountsByKind = z.infer<typeof countsByKind>;
+export type BackupFolderOutcome = z.infer<typeof folderOutcome>;
 export type BackupRequest = z.infer<typeof BackupRequestSchema>;
 export type BackupResponse = z.infer<typeof BackupResponseSchema>;
 export type BackupCommandKind = BackupRequest["kind"];

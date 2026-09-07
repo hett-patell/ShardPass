@@ -29,12 +29,32 @@ const item = {
   tags: [],
   note: "",
 };
+const folder = { id: "10000000-0000-4000-8000-000000000002", name: "Work" };
+const login = {
+  id: "10000000-0000-4000-8000-000000000003",
+  kind: "login" as const,
+  schemaVersion: 2 as const,
+  revision: 1,
+  createdAt: "2026-08-12T00:00:00.000Z",
+  updatedAt: "2026-08-12T00:00:00.000Z",
+  favorite: false,
+  tags: [],
+  folderId: folder.id,
+  name: "Synthetic login",
+  username: "account",
+  password: "secret",
+  urls: ["https://example.invalid"],
+  notes: "",
+};
 const descriptor = {
   sourceFormat: "v2" as const,
   exportedAt: "2026-08-12T00:00:00.000Z",
   settings: { autoLockMinutes: 15 as const, lockOnScreenLock: true },
   history: { journal: [], tombstones: [] },
+  folders: [folder],
 };
+const byKind = { otp: 1, login: 1, note: 0, card: 0, identity: 0, secret: 0 };
+const folders = { created: 1, unfiled: 0 };
 
 const begin = { version: 1 as const, kind: "backup.beginExportStepUp" as const };
 const challenge = {
@@ -54,19 +74,24 @@ const previewRequest = {
   version: 1 as const,
   kind: "backup.previewImport" as const,
   descriptor,
-  items: [item],
+  items: [item, login],
 };
 const previewResult = {
   version: 1 as const,
   kind: "backup.importPreview" as const,
   previewToken,
-  rows: [{ ordinal: 1, status: "accepted" as const, reason: "BACKUP_IMPORT_ACCEPTED" as const }],
-  accepted: 1,
+  rows: [
+    { ordinal: 1, status: "accepted" as const, reason: "BACKUP_IMPORT_ACCEPTED" as const },
+    { ordinal: 2, status: "accepted" as const, reason: "BACKUP_IMPORT_ACCEPTED" as const },
+  ],
+  accepted: 2,
   duplicate: 0,
   conflict: 0,
   rejected: 0,
+  byKind,
   settings: "replace" as const,
   history: { journalAdded: 0, tombstonesAdded: 0 },
+  folders,
   expiresAt: 300_000,
 };
 
@@ -87,7 +112,11 @@ describe("backup runtime messaging", () => {
     ];
     for (const request of requests) {
       expect(BackupRequestSchema.safeParse(request).success).toBe(true);
-      expect(JSON.stringify(request).toLowerCase()).not.toContain("password");
+      // Vault items themselves carry a login's password (that is what the vault stores); no
+      // message field ever carries a vault or backup password.
+      const { items: _items, ...envelope } = request as { items?: unknown };
+      void _items;
+      expect(JSON.stringify(envelope).toLowerCase()).not.toContain("password");
     }
     expect(
       BackupRequestSchema.safeParse({ ...begin, password: "never-cross-runtime" }).success,
@@ -104,11 +133,32 @@ describe("backup runtime messaging", () => {
     expect(BackupRequestSchema.safeParse({ ...begin, version: 2 }).success).toBe(false);
   });
 
-  it("bounds imported portable items and rejects storage authority or raw backup bodies", () => {
+  it("bounds imported portable items and folders and rejects storage authority or raw backup bodies", () => {
     expect(BackupRequestSchema.safeParse(previewRequest).success).toBe(true);
     expect(BackupRequestSchema.safeParse({ ...previewRequest, items: [] }).success).toBe(true);
+    const { folders: _folders, ...withoutFolders } = descriptor;
+    void _folders;
     expect(
-      BackupRequestSchema.safeParse({ ...previewRequest, items: Array(10_001).fill(item) }).success,
+      BackupRequestSchema.safeParse({ ...previewRequest, descriptor: withoutFolders }).success,
+    ).toBe(true);
+    expect(
+      BackupRequestSchema.safeParse({ ...previewRequest, items: Array(20_001).fill(item) }).success,
+    ).toBe(false);
+    expect(
+      BackupRequestSchema.safeParse({
+        ...previewRequest,
+        descriptor: {
+          ...descriptor,
+          folders: Array.from({ length: 65 }, (_, index) => ({
+            id: `${index.toString(16).padStart(8, "0")}-0000-4000-8000-000000000000`,
+            name: `Folder ${index.toString()}`,
+          })),
+        },
+      }).success,
+    ).toBe(false);
+    expect(
+      BackupRequestSchema.safeParse({ ...previewRequest, items: [{ ...login, kind: "sprocket" }] })
+        .success,
     ).toBe(false);
     for (const forbidden of [
       { root: { generationId: "private" } },
@@ -136,21 +186,48 @@ describe("backup runtime messaging", () => {
         kind: "backup.portableSnapshot",
         capability,
         payload: {
-          schemaVersion: 1,
+          schemaVersion: 2,
           exportedAt: descriptor.exportedAt,
-          items: [item],
+          items: [item, login],
+          folders: [folder],
           settings: descriptor.settings,
           history: descriptor.history,
         },
       },
       previewResult,
-      { version: 1, kind: "backup.importConfirmed", imported: 1, duplicate: 0, conflict: 0 },
+      {
+        version: 1,
+        kind: "backup.importConfirmed",
+        imported: 2,
+        duplicate: 0,
+        conflict: 0,
+        byKind,
+        folders,
+      },
       { ...previewResult, kind: "backup.importPreviewChanged" as const },
       { version: 1, kind: "backup.importCancelled", cancelled: true },
     ];
     for (const response of responses)
       expect(BackupResponseSchema.safeParse(response).success).toBe(true);
 
+    expect(
+      BackupResponseSchema.safeParse({
+        version: 1,
+        kind: "backup.portableSnapshot",
+        capability,
+        payload: {
+          schemaVersion: 1,
+          exportedAt: descriptor.exportedAt,
+          items: [item],
+          settings: descriptor.settings,
+          history: descriptor.history,
+        },
+      }).success,
+    ).toBe(false);
+    expect(
+      BackupResponseSchema.safeParse({ ...previewResult, byKind: { ...byKind, sprocket: 1 } })
+        .success,
+    ).toBe(false);
     expect(parseBackupResponseForRequest(begin, challenge).success).toBe(true);
     expect(parseBackupResponseForRequest(begin, previewResult).success).toBe(false);
     expect(parseBackupResponseForRequest(previewRequest, previewResult).success).toBe(true);

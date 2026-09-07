@@ -1,3 +1,5 @@
+import type { VaultItem } from "@shardpass/domain";
+import type { SafeBackupDescriptor } from "@shardpass/messaging";
 import { describe, expect, it, vi } from "vitest";
 
 import { BackupService } from "../../src/background/vault/backup-service";
@@ -16,14 +18,34 @@ const descriptor = {
   settings: { autoLockMinutes: 15 as const, lockOnScreenLock: true },
   history: { journal: [], tombstones: [] },
 };
+const zeroByKind = { otp: 0, login: 0, note: 0, card: 0, identity: 0, secret: 0 };
 const emptyPreview = {
   rows: [],
   accepted: 0,
   duplicate: 0,
   conflict: 0,
   rejected: 0,
+  byKind: zeroByKind,
   settings: "unchanged" as const,
   history: { journalAdded: 0, tombstonesAdded: 0 },
+  folders: { created: 0, unfiled: 0 },
+};
+const loginItem = {
+  id: "10000000-0000-4000-8000-000000000003",
+  kind: "login" as const,
+  schemaVersion: 2 as const,
+  revision: 1,
+  createdAt: "2026-08-12T00:00:00.000Z",
+  updatedAt: "2026-08-12T00:00:00.000Z",
+  favorite: false,
+  tags: ["work"],
+  folderId: "10000000-0000-4000-8000-000000000002",
+  name: "Synthetic login",
+  username: "account",
+  password: "secret",
+  urls: ["https://example.invalid"],
+  customFields: [{ name: "PIN", type: "hidden" as const, value: "1234" }],
+  notes: "",
 };
 
 function fixture() {
@@ -47,9 +69,10 @@ function fixture() {
     captureBackupSession: vi.fn().mockResolvedValue(binding),
     assertBackupSession: vi.fn().mockResolvedValue(undefined),
     readPortableBackupSnapshot: vi.fn().mockResolvedValue({
-      schemaVersion: 1,
+      schemaVersion: 2,
       exportedAt: "2026-08-12T00:00:00.000Z",
       items: [],
+      folders: [],
       settings: { autoLockMinutes: 15, lockOnScreenLock: true },
       history: { journal: [], tombstones: [] },
     }),
@@ -59,6 +82,8 @@ function fixture() {
       imported: 0,
       duplicate: 0,
       conflict: 0,
+      byKind: zeroByKind,
+      folders: { created: 0, unfiled: 0 },
     }),
     onLockOrDispose: vi.fn((callback: () => void) => {
       cleanup = callback;
@@ -264,6 +289,83 @@ describe("BackupService core", () => {
     );
   });
 
+  it("carries every item kind and the file's folders through preview and confirm, and reports per-kind counts", async () => {
+    const values = fixture();
+    const folders = [{ id: "10000000-0000-4000-8000-000000000002", name: "Work" }];
+    const mixedPreview = {
+      ...emptyPreview,
+      rows: [
+        { ordinal: 1, status: "accepted" as const, reason: "BACKUP_IMPORT_ACCEPTED" as const },
+      ],
+      accepted: 1,
+      byKind: { ...zeroByKind, login: 1 },
+      folders: { created: 1, unfiled: 0 },
+    };
+    values.sessions.previewPortableBackupImport.mockResolvedValue(mixedPreview);
+    // The service empties its owned copies once a confirmation settles, so record the
+    // arguments as they were at call time.
+    let confirmed: { descriptor: unknown; items: unknown; expected: unknown } | undefined;
+    values.sessions.confirmPortableBackupImport.mockImplementation(
+      (descriptorArg: unknown, itemsArg: unknown, expectedArg: unknown) => {
+        confirmed = {
+          descriptor: structuredClone(descriptorArg),
+          items: structuredClone(itemsArg),
+          expected: structuredClone(expectedArg),
+        };
+        return Promise.resolve({
+          previewChanged: false,
+          imported: 1,
+          duplicate: 0,
+          conflict: 0,
+          byKind: { ...zeroByKind, login: 1 },
+          folders: { created: 1, unfiled: 0 },
+        });
+      },
+    );
+    const items = [loginItem];
+    const response = await values.service.handle(
+      { version: 1, kind: "backup.previewImport", descriptor: { ...descriptor, folders }, items },
+      sender,
+    );
+    if (response.kind !== "backup.importPreview") throw new Error("expected preview");
+    expect(response).toMatchObject({
+      accepted: 1,
+      byKind: { login: 1, otp: 0 },
+      folders: { created: 1, unfiled: 0 },
+    });
+    const [previewDescriptor, previewItems] = values.sessions.previewPortableBackupImport.mock
+      .calls[0] as [SafeBackupDescriptor, readonly VaultItem[], unknown];
+    expect(previewDescriptor).toEqual({ ...descriptor, folders });
+    expect(previewItems).toEqual(items);
+    // The service keeps its own copies: the sender's objects are never held by reference.
+    expect(previewItems[0]).not.toBe(loginItem);
+    expect((previewItems[0] as typeof loginItem).customFields).not.toBe(loginItem.customFields);
+    expect(previewDescriptor.folders).not.toBe(folders);
+
+    await expect(
+      values.service.handle(
+        { version: 1, kind: "backup.confirmImport", previewToken: response.previewToken },
+        sender,
+      ),
+    ).resolves.toMatchObject({
+      kind: "backup.importConfirmed",
+      imported: 1,
+      byKind: { login: 1 },
+      folders: { created: 1, unfiled: 0 },
+    });
+    expect(confirmed).toEqual({
+      descriptor: { ...descriptor, folders },
+      items,
+      expected: mixedPreview,
+    });
+    expect(values.sessions.confirmPortableBackupImport).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      values.binding,
+    );
+  });
+
   it("expires previews, cancels without ownership disclosure, and clears on lock/dispose", async () => {
     const values = fixture();
     const expired = await preview(values);
@@ -313,8 +415,10 @@ describe("BackupService core", () => {
         duplicate: 0,
         conflict: 1,
         rejected: 0,
+        byKind: zeroByKind,
         settings: "replace",
         history: { journalAdded: 1, tombstonesAdded: 0 },
+        folders: { created: 0, unfiled: 0 },
       },
     });
     const original = await preview(values);
@@ -360,6 +464,8 @@ describe("BackupService core", () => {
       imported: 0,
       duplicate: 0,
       conflict: 0,
+      byKind: zeroByKind,
+      folders: { created: 0, unfiled: 0 },
     });
     await expect(
       values.service.handle(

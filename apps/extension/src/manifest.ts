@@ -26,6 +26,8 @@ export default defineManifest({
       suggested_key: { default: "Ctrl+Shift+L", mac: "Command+Shift+L" },
       description: "Open ShardPass",
     },
+    // No default key: a chord that locks everything is for the person to choose.
+    "lock-vault": { description: "Lock ShardPass" },
   },
   action: {
     default_popup: "popup/index.html",

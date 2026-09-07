@@ -10,7 +10,12 @@ import {
   webCryptoRandomSource,
 } from "@shardpass/crypto";
 
-import { BACKUP_V2_LIMITS, PortableBackupPayloadSchema, type PortableBackupPayload } from "./model";
+import {
+  BACKUP_V2_LIMITS,
+  PortableBackupPayloadSchema,
+  type PortableBackupPayload,
+  type PortableBackupPayloadVersion,
+} from "./model";
 import {
   encodeBackupV2Envelope,
   encodeBackupV2Header,
@@ -44,7 +49,11 @@ export async function exportPortableBackup(
     if (plaintext.byteLength > BACKUP_V2_LIMITS.maxCiphertextBytes - AEAD_TAG_BYTES) {
       throw new Error("Backup creation failed.");
     }
-    assertEnvelopeSizeFeasible(parameters, plaintext.byteLength + AEAD_TAG_BYTES);
+    assertEnvelopeSizeFeasible(
+      parameters,
+      plaintext.byteLength + AEAD_TAG_BYTES,
+      payload.schemaVersion,
+    );
     salt = random.randomBytes(ARGON2ID_SALT_BYTES);
     if (salt.byteLength !== ARGON2ID_SALT_BYTES) throw new Error("Backup creation failed.");
     const kdfSalt = salt.slice();
@@ -57,7 +66,7 @@ export async function exportPortableBackup(
     const header: BackupV2Header = {
       type: "shardpass-backup",
       formatVersion: 2,
-      payloadSchemaVersion: 1,
+      payloadSchemaVersion: payload.schemaVersion,
       kdf: {
         algorithm: "argon2id",
         version: 19,
@@ -89,16 +98,31 @@ export async function exportPortableBackup(
   }
 }
 
+/**
+ * One fixed field order per payload version, so the decrypted bytes can be compared
+ * against a re-encoding of what they parsed to.
+ */
 export function encodeCanonicalPayload(input: PortableBackupPayload): Uint8Array {
   const payload = parsePayload(input);
   return encoder.encode(
-    JSON.stringify({
-      schemaVersion: payload.schemaVersion,
-      exportedAt: payload.exportedAt,
-      items: payload.items,
-      settings: payload.settings,
-      history: payload.history,
-    }),
+    JSON.stringify(
+      payload.schemaVersion === 1
+        ? {
+            schemaVersion: payload.schemaVersion,
+            exportedAt: payload.exportedAt,
+            items: payload.items,
+            settings: payload.settings,
+            history: payload.history,
+          }
+        : {
+            schemaVersion: payload.schemaVersion,
+            exportedAt: payload.exportedAt,
+            items: payload.items,
+            folders: payload.folders,
+            settings: payload.settings,
+            history: payload.history,
+          },
+    ),
   );
 }
 
@@ -111,12 +135,13 @@ function parsePayload(input: unknown): PortableBackupPayload {
 function assertEnvelopeSizeFeasible(
   parameters: Argon2idWorkParameters,
   ciphertextBytes: number,
+  payloadSchemaVersion: PortableBackupPayloadVersion,
 ): void {
   const placeholder = "A".repeat(Math.ceil(ciphertextBytes / 3) * 4);
   const envelope: BackupV2Envelope = {
     type: "shardpass-backup",
     formatVersion: 2,
-    payloadSchemaVersion: 1,
+    payloadSchemaVersion,
     kdf: {
       algorithm: "argon2id",
       version: 19,

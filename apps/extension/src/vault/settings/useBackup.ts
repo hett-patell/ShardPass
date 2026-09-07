@@ -1,5 +1,8 @@
 import {
   BACKUP_V2_LIMITS,
+  encodeCanonicalPayload,
+  encodeLoginsCsvExport,
+  encodePlaintextJsonExport,
   exportPortableBackup,
   importLegacyBackup,
   importPortableBackup,
@@ -7,51 +10,73 @@ import {
   type PortableBackupPayload,
 } from "@shardpass/importers";
 import type { KdfExecutor } from "@shardpass/crypto";
-import type { BackupResponse, SafeBackupDescriptor } from "@shardpass/messaging";
+import type {
+  BackupCountsByKind,
+  BackupResponse,
+  SafeBackupDescriptor,
+} from "@shardpass/messaging";
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
 
 import type { BackupUiExtensionPlatform } from "../../platform/extension-platform";
+
+/** The three files the export panel can make; every one sits behind the same step-up. */
+export type BackupExportKind = "encrypted" | "json" | "csv";
+
+export const EXPORT_FILES: Readonly<
+  Record<BackupExportKind, Readonly<{ fileName: string; mimeType: string }>>
+> = Object.freeze({
+  encrypted: { fileName: "shardpass-backup.shardpass", mimeType: "application/x-shardpass" },
+  json: { fileName: "shardpass-export.json", mimeType: "application/json" },
+  csv: { fileName: "shardpass-logins.csv", mimeType: "text/csv" },
+});
 
 export type BackupCryptoPort = Readonly<{
   exportPortableBackup: typeof exportPortableBackup;
   importPortableBackup: typeof importPortableBackup;
   importLegacyBackup: typeof importLegacyBackup;
   canonicalPayload(payload: PortableBackupPayload): Uint8Array;
+  encodePlaintextJson(payload: PortableBackupPayload): Uint8Array;
+  encodeLoginsCsv(payload: PortableBackupPayload): Uint8Array;
 }>;
 
 export const defaultBackupCrypto: BackupCryptoPort = Object.freeze({
   exportPortableBackup,
   importPortableBackup,
   importLegacyBackup,
-  canonicalPayload(payload) {
-    return new TextEncoder().encode(
-      JSON.stringify({
-        schemaVersion: payload.schemaVersion,
-        exportedAt: payload.exportedAt,
-        items: payload.items,
-        settings: payload.settings,
-        history: payload.history,
-      }),
-    );
-  },
+  canonicalPayload: encodeCanonicalPayload,
+  encodePlaintextJson: encodePlaintextJsonExport,
+  encodeLoginsCsv: encodeLoginsCsvExport,
 });
 
-type SafePreview = Readonly<{
+export type SafePreview = Readonly<{
   previewToken: string;
   accepted: number;
   duplicate: number;
   conflict: number;
   rejected: number;
+  byKind: BackupCountsByKind;
   settings: "unchanged" | "replace";
   journalAdded: number;
   tombstonesAdded: number;
+  foldersCreated: number;
+  unfiled: number;
+}>;
+
+export type ImportOutcome = Readonly<{
+  imported: number;
+  byKind: BackupCountsByKind;
+  foldersCreated: number;
+  unfiled: number;
 }>;
 
 type BackupState = Readonly<{
+  exportKind: BackupExportKind;
   exportPhase: "idle" | "working" | "ready";
-  downloadUrl: string | null;
-  importPhase: "idle" | "reading" | "preview" | "confirming" | "complete";
+  download: Readonly<{ url: string; kind: BackupExportKind }> | null;
+  /** "selected": a file is chosen and waiting for its password. */
+  importPhase: "idle" | "selected" | "reading" | "preview" | "confirming" | "complete";
   preview: SafePreview | null;
+  outcome: ImportOutcome | null;
   reviewed: boolean;
   error: string | null;
   status: string | null;
@@ -68,10 +93,12 @@ type OwnedJob = {
 };
 
 const INITIAL_STATE: BackupState = Object.freeze({
+  exportKind: "encrypted",
   exportPhase: "idle",
-  downloadUrl: null,
+  download: null,
   importPhase: "idle",
   preview: null,
+  outcome: null,
   reviewed: false,
   error: null,
   status: null,
@@ -145,9 +172,12 @@ function previewFrom(
     duplicate: response.duplicate,
     conflict: response.conflict,
     rejected: response.rejected,
+    byKind: { ...response.byKind },
     settings: response.settings,
     journalAdded: response.history.journalAdded,
     tombstonesAdded: response.history.tombstonesAdded,
+    foldersCreated: response.folders.created,
+    unfiled: response.folders.unfiled,
   };
 }
 
@@ -160,6 +190,9 @@ function descriptorFrom(imported: ImportedPortableBackup): SafeBackupDescriptor 
       journal: imported.payload.history.journal.map((entry) => ({ ...entry })),
       tombstones: imported.payload.history.tombstones.map((entry) => ({ ...entry })),
     },
+    ...(imported.payload.schemaVersion === 1
+      ? {}
+      : { folders: imported.payload.folders.map((folder) => ({ ...folder })) }),
   };
 }
 
@@ -205,6 +238,8 @@ export function useBackup({
   const confirmationRef = useRef<HTMLInputElement>(null);
   const importPasswordRef = useRef<HTMLInputElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const pendingFileRef = useRef<File | null>(null);
+  const exportKindRef = useRef<BackupExportKind>("encrypted");
   const exportJobRef = useRef<OwnedJob | null>(null);
   const importJobRef = useRef<OwnedJob | null>(null);
   const ownerRef = useRef(0);
@@ -233,6 +268,7 @@ export function useBackup({
     importJobRef.current?.dispose();
     exportJobRef.current = null;
     importJobRef.current = null;
+    pendingFileRef.current = null;
     clearControls();
     revokeDownload();
   }, [clearControls, revokeDownload]);
@@ -271,8 +307,25 @@ export function useBackup({
     !job.disposed &&
     (exportJobRef.current === job || importJobRef.current === job);
 
+  const setExportKind = useCallback(
+    (exportKind: BackupExportKind) => {
+      exportKindRef.current = exportKind;
+      revokeDownload();
+      setState((value) => ({
+        ...value,
+        exportKind,
+        exportPhase: "idle",
+        download: null,
+        error: null,
+        status: null,
+      }));
+    },
+    [revokeDownload],
+  );
+
   const prepareExport = useCallback(() => {
     if (!activeRef.current) return;
+    const kind = exportKindRef.current;
     const currentPassword = currentPasswordRef.current?.value ?? "";
     const backupPassword = backupPasswordRef.current?.value ?? "";
     const confirmation = confirmationRef.current?.value ?? "";
@@ -281,25 +334,27 @@ export function useBackup({
     exportJobRef.current?.dispose();
     const job = createJob(++ownerRef.current);
     exportJobRef.current = job;
-    if (
-      currentPassword.length === 0 ||
-      backupPassword.length === 0 ||
-      backupPassword !== confirmation
-    ) {
+    const missingBackupPassword =
+      kind === "encrypted" && (backupPassword.length === 0 || backupPassword !== confirmation);
+    if (currentPassword.length === 0 || missingBackupPassword) {
       job.dispose();
       setState((value) => ({
         ...value,
         exportPhase: "idle",
-        error: "Enter matching backup passwords and your current vault password.",
+        download: null,
+        error:
+          kind === "encrypted"
+            ? "Enter matching backup passwords and your current vault password."
+            : "Enter your current vault password.",
       }));
       return;
     }
     const currentBytes = encoder.encode(currentPassword);
-    job.password = encoder.encode(backupPassword);
+    if (kind === "encrypted") job.password = encoder.encode(backupPassword);
     setState((value) => ({
       ...value,
       exportPhase: "working",
-      downloadUrl: null,
+      download: null,
       error: null,
       status: null,
     }));
@@ -307,8 +362,10 @@ export function useBackup({
       let proof: Uint8Array | undefined;
       let verifiedCanonical: Uint8Array | undefined;
       let expectedCanonical: Uint8Array | undefined;
-      let backupBytes: Uint8Array | undefined;
+      let fileBytes: Uint8Array | undefined;
       try {
+        // Every export kind goes through the same step-up: a fresh challenge, a local
+        // proof of the current vault password, and a one-use capability to read the vault.
         const challenge = await platform.sendBackupMessage({
           version: 1,
           kind: "backup.beginExportStepUp",
@@ -342,24 +399,35 @@ export function useBackup({
         });
         if (!isOwner(job) || snapshot.kind !== "backup.portableSnapshot") return;
         job.payload = snapshot.payload;
-        backupBytes = await crypto.exportPortableBackup(
-          snapshot.payload,
-          job.password!,
-          kdfExecutor,
-        );
-        if (!isOwner(job)) return;
-        const verified = await crypto.importPortableBackup(
-          backupBytes,
-          job.password!,
-          kdfExecutor,
-          { signal: job.controller.signal },
-        );
-        if (!isOwner(job) || verified.sourceFormat !== "v2") return;
-        expectedCanonical = crypto.canonicalPayload(snapshot.payload);
-        verifiedCanonical = crypto.canonicalPayload(verified.payload);
-        if (!equalBytes(expectedCanonical, verifiedCanonical)) throw new Error("BACKUP_INVALID");
-        const blobBytes = backupBytes.slice().buffer;
-        const url = URL.createObjectURL(new Blob([blobBytes], { type: "application/x-shardpass" }));
+        let status: string;
+        if (kind === "encrypted") {
+          fileBytes = await crypto.exportPortableBackup(
+            snapshot.payload,
+            job.password!,
+            kdfExecutor,
+          );
+          if (!isOwner(job)) return;
+          const verified = await crypto.importPortableBackup(
+            fileBytes,
+            job.password!,
+            kdfExecutor,
+            { signal: job.controller.signal },
+          );
+          if (!isOwner(job) || verified.sourceFormat !== "v2") return;
+          expectedCanonical = crypto.canonicalPayload(snapshot.payload);
+          verifiedCanonical = crypto.canonicalPayload(verified.payload);
+          if (!equalBytes(expectedCanonical, verifiedCanonical))
+            throw new Error("BACKUP_INVALID");
+          status = "Encrypted backup verified locally.";
+        } else if (kind === "json") {
+          fileBytes = crypto.encodePlaintextJson(snapshot.payload);
+          status = "JSON export ready. The file is not encrypted.";
+        } else {
+          fileBytes = crypto.encodeLoginsCsv(snapshot.payload);
+          status = "CSV export ready. The file is not encrypted.";
+        }
+        const blobBytes = fileBytes.slice().buffer;
+        const url = URL.createObjectURL(new Blob([blobBytes], { type: EXPORT_FILES[kind].mimeType }));
         if (!isOwner(job)) {
           URL.revokeObjectURL(url);
           return;
@@ -368,15 +436,16 @@ export function useBackup({
         setState((value) => ({
           ...value,
           exportPhase: "ready",
-          downloadUrl: url,
+          download: { url, kind },
           error: null,
-          status: "Encrypted backup verified locally.",
+          status,
         }));
       } catch (error) {
         if (isOwner(job))
           setState((value) => ({
             ...value,
             exportPhase: "idle",
+            download: null,
             error: fixedError(error),
             status: null,
           }));
@@ -385,7 +454,7 @@ export function useBackup({
         proof?.fill(0);
         verifiedCanonical?.fill(0);
         expectedCanonical?.fill(0);
-        backupBytes?.fill(0);
+        fileBytes?.fill(0);
         job.password?.fill(0);
         job.password = null;
         job.payload = null;
@@ -393,99 +462,142 @@ export function useBackup({
     })();
   }, [clearControls, crypto, kdfExecutor, platform, revokeDownload]);
 
+  /** Step one of a restore: keep the chosen file (never its name) and ask for its password. */
   const selectFile = useCallback(
     (file?: File) => {
-      const password = importPasswordRef.current?.value ?? "";
-      clearControls();
+      if (fileRef.current !== null) fileRef.current.value = "";
+      if (importPasswordRef.current !== null) importPasswordRef.current.value = "";
       importJobRef.current?.dispose();
-      const job = createJob(++ownerRef.current);
-      importJobRef.current = job;
-      if (file === undefined || password.length === 0) {
-        job.dispose();
-        setState((value) => ({
-          ...value,
-          importPhase: "idle",
-          error: "Enter the backup file password before choosing a local backup.",
-        }));
-        return;
-      }
-      if (file.size === 0 || file.size > BACKUP_V2_LIMITS.maxEnvelopeBytes) {
-        job.dispose();
-        setState((value) => ({
-          ...value,
-          importPhase: "idle",
-          error: fixedError(new Error("BACKUP_LIMIT")),
-        }));
-        return;
-      }
-      job.password = encoder.encode(password);
+      importJobRef.current = null;
+      pendingFileRef.current = null;
       const oldToken = previewTokenRef.current;
       previewTokenRef.current = null;
       if (oldToken !== null)
         void platform
           .sendBackupMessage({ version: 1, kind: "backup.cancelImport", previewToken: oldToken })
           .catch(() => undefined);
+      if (file === undefined) {
+        setState((value) => ({ ...value, importPhase: "idle", preview: null, reviewed: false }));
+        return;
+      }
+      if (file.size === 0 || file.size > BACKUP_V2_LIMITS.maxEnvelopeBytes) {
+        setState((value) => ({
+          ...value,
+          importPhase: "idle",
+          preview: null,
+          reviewed: false,
+          error: fixedError(new Error("BACKUP_LIMIT")),
+        }));
+        return;
+      }
+      pendingFileRef.current = file;
       setState((value) => ({
         ...value,
-        importPhase: "reading",
+        importPhase: "selected",
         preview: null,
+        outcome: null,
         reviewed: false,
         error: null,
         status: null,
       }));
-      void (async () => {
+    },
+    [platform],
+  );
+
+  /** Step two: read the chosen file, decrypt it here, and ask the runtime for a safe preview. */
+  const unlockBackup = useCallback(() => {
+    const file = pendingFileRef.current;
+    const password = importPasswordRef.current?.value ?? "";
+    if (importPasswordRef.current !== null) importPasswordRef.current.value = "";
+    importJobRef.current?.dispose();
+    const job = createJob(++ownerRef.current);
+    importJobRef.current = job;
+    if (file === null) {
+      job.dispose();
+      setState((value) => ({
+        ...value,
+        importPhase: "idle",
+        error: "Choose a backup file first.",
+      }));
+      return;
+    }
+    if (password.length === 0) {
+      job.dispose();
+      setState((value) => ({
+        ...value,
+        importPhase: "selected",
+        error: "Enter the password for this backup file.",
+      }));
+      return;
+    }
+    job.password = encoder.encode(password);
+    const oldToken = previewTokenRef.current;
+    previewTokenRef.current = null;
+    if (oldToken !== null)
+      void platform
+        .sendBackupMessage({ version: 1, kind: "backup.cancelImport", previewToken: oldToken })
+        .catch(() => undefined);
+    setState((value) => ({
+      ...value,
+      importPhase: "reading",
+      preview: null,
+      reviewed: false,
+      error: null,
+      status: null,
+    }));
+    void (async () => {
+      try {
+        job.bytes = await boundedRead(file, job.controller.signal);
+        if (!isOwner(job)) return;
+        let imported: ImportedPortableBackup;
         try {
-          job.bytes = await boundedRead(file, job.controller.signal);
-          if (!isOwner(job)) return;
-          let imported: ImportedPortableBackup;
-          try {
-            imported = await crypto.importPortableBackup(job.bytes, job.password!, kdfExecutor, {
-              signal: job.controller.signal,
-            });
-          } catch {
-            if (!isOwner(job)) return;
-            imported = await crypto.importLegacyBackup(job.bytes, job.password!);
-          }
-          if (!isOwner(job)) return;
-          job.payload = imported.payload;
-          const response = await platform.sendBackupMessage({
-            version: 1,
-            kind: "backup.previewImport",
-            descriptor: descriptorFrom(imported),
-            items: imported.payload.items.map((item) => ({ ...item, tags: [...item.tags] })),
+          imported = await crypto.importPortableBackup(job.bytes, job.password!, kdfExecutor, {
+            signal: job.controller.signal,
           });
-          if (!isOwner(job) || response.kind !== "backup.importPreview") return;
-          previewTokenRef.current = response.previewToken;
-          job.dispose();
-          importJobRef.current = null;
+        } catch {
+          if (!isOwner(job)) return;
+          imported = await crypto.importLegacyBackup(job.bytes, job.password!);
+        }
+        if (!isOwner(job)) return;
+        job.payload = imported.payload;
+        const response = await platform.sendBackupMessage({
+          version: 1,
+          kind: "backup.previewImport",
+          descriptor: descriptorFrom(imported),
+          items: imported.payload.items.map((item) => ({ ...item, tags: [...item.tags] })),
+        });
+        if (!isOwner(job) || response.kind !== "backup.importPreview") return;
+        previewTokenRef.current = response.previewToken;
+        pendingFileRef.current = null;
+        job.dispose();
+        importJobRef.current = null;
+        setState((value) => ({
+          ...value,
+          importPhase: "preview",
+          preview: previewFrom(response),
+          reviewed: false,
+          error: null,
+        }));
+      } catch (error) {
+        // The file stays chosen so a mistyped password can simply be typed again.
+        if (isOwner(job))
           setState((value) => ({
             ...value,
-            importPhase: "preview",
-            preview: previewFrom(response),
-            reviewed: false,
-            error: null,
+            importPhase: "selected",
+            preview: null,
+            error: fixedError(error),
           }));
-        } catch (error) {
-          if (isOwner(job))
-            setState((value) => ({
-              ...value,
-              importPhase: "idle",
-              preview: null,
-              error: fixedError(error),
-            }));
-          job.dispose();
-          if (importJobRef.current === job) importJobRef.current = null;
-        }
-      })();
-    },
-    [clearControls, crypto, kdfExecutor, platform],
-  );
+        job.dispose();
+        if (importJobRef.current === job) importJobRef.current = null;
+      }
+    })();
+  }, [crypto, kdfExecutor, platform]);
 
   const cancel = useCallback(() => {
     const token = previewTokenRef.current;
     previewTokenRef.current = null;
     disposeOwned();
-    setState(INITIAL_STATE);
+    setState((value) => ({ ...INITIAL_STATE, exportKind: value.exportKind }));
     if (token !== null)
       void platform
         .sendBackupMessage({ version: 1, kind: "backup.cancelImport", previewToken: token })
@@ -519,6 +631,12 @@ export function useBackup({
             ...value,
             importPhase: "complete",
             preview: null,
+            outcome: {
+              imported: response.imported,
+              byKind: { ...response.byKind },
+              foldersCreated: response.folders.created,
+              unfiled: response.folders.unfiled,
+            },
             reviewed: false,
             error: null,
             status: `Backup import complete. ${response.imported.toLocaleString("en-US")} imported.`,
@@ -544,8 +662,11 @@ export function useBackup({
         setState((value) => ({
           ...value,
           exportPhase: "idle",
-          downloadUrl: null,
-          status: "Backup download started.",
+          download: null,
+          status:
+            value.download?.kind === "encrypted"
+              ? "Backup download started."
+              : "Export download started. Delete the file when you are done with it.",
         }));
     }, 0);
   }, [revokeDownload]);
@@ -557,8 +678,10 @@ export function useBackup({
     confirmationRef,
     importPasswordRef,
     fileRef,
+    setExportKind,
     prepareExport,
     selectFile,
+    unlockBackup,
     confirm,
     cancel,
     downloadConsumed,

@@ -246,6 +246,18 @@ export function createChromePlatform(): BackgroundExtensionPlatform &
       return alarm !== undefined && alarm !== null;
     },
 
+    onCommand(handler) {
+      type CommandEvent = {
+        addListener(callback: (command: string) => void): void;
+        removeListener(callback: (command: string) => void): void;
+      };
+      const commands = (chrome as { commands?: { onCommand?: CommandEvent } }).commands;
+      if (commands?.onCommand === undefined) return () => undefined;
+      const listener = (name: string) => handler(name);
+      commands.onCommand.addListener(listener);
+      return () => commands.onCommand?.removeListener(listener);
+    },
+
     onAutoLock(handler) {
       const listener = (alarm: chrome.alarms.Alarm) => {
         if (alarm.name === AUTO_LOCK_ALARM) handler();

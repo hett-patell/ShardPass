@@ -10,6 +10,8 @@ import {
   VaultStateUnavailableSchema,
 } from "@shardpass/messaging";
 import { Button, PasswordInput } from "@shardpass/ui";
+
+import { passwordStrength } from "./password-strength";
 import { useEffect, useRef, useState } from "react";
 
 import type { ExtensionPlatform } from "../platform/extension-platform";
@@ -57,6 +59,7 @@ export function VaultAccess({
   const [state, setState] = useState<"loading" | "unconfigured" | "locked" | "unlocked">("loading");
   const [password, setPassword] = useState("");
   const [confirmation, setConfirmation] = useState("");
+  const [weakAllowed, setWeakAllowed] = useState(false);
   const [error, setError] = useState("");
   const [working, setWorking] = useState(false);
   const [settings, setSettings] = useState({ autoLockMinutes: 15, lockOnScreenLock: true });
@@ -436,6 +439,7 @@ export function VaultAccess({
     );
   }
   const setup = state === "unconfigured";
+  const strength = passwordStrength(password);
   return (
     <section className={styles.panel}>
       <h2>{setup ? "Create your vault" : "Unlock ShardPass"}</h2>
@@ -447,6 +451,11 @@ export function VaultAccess({
       <form
         onSubmit={(event) => {
           event.preventDefault();
+          // The length rule speaks first (from submit); the weak gate only for a long enough one.
+          if (setup && Array.from(password).length >= MIN_SETUP_PASSWORD_CODE_POINTS && strength.level < 2 && !weakAllowed) {
+            setError("This password is weak. Tick the box to use it anyway, or choose a longer one.");
+            return;
+          }
           void submit();
         }}
         className={styles.form}
@@ -460,6 +469,25 @@ export function VaultAccess({
             onChange={(event) => setPassword(event.target.value)}
           />
         </label>
+        {setup && password.length > 0 ? (
+          <div className={styles.strength} role="status" aria-live="polite">
+            <div className={styles.meter} aria-hidden="true">
+              <span className={styles.meterFill} data-level={strength.level} />
+            </div>
+            <span className={styles.strengthLabel}>{strength.label}</span>
+          </div>
+        ) : null}
+        {setup && password.length > 0 && strength.level < 2 ? (
+          <>
+            <p className={styles.weakNote}>
+              This password is weak. Anyone who gets your vault file could crack it offline. A few unrelated words are both easier to remember and much stronger.
+            </p>
+            <label className={styles.checkField}>
+              <input type="checkbox" checked={weakAllowed} onChange={(event) => setWeakAllowed(event.target.checked)} />
+              Use this password anyway
+            </label>
+          </>
+        ) : null}
         {setup ? (
           <label>
             Confirm master password

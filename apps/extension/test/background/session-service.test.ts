@@ -16,7 +16,11 @@ import {
 import { FakeStoragePort } from "@shardpass/testing/fake-storage-port";
 import { describe, expect, it, vi } from "vitest";
 
-import { SessionService, VaultSessionError } from "../../src/background/vault/session-service";
+import {
+  ORPHAN_GENERATION_GRACE_MS,
+  SessionService,
+  VaultSessionError,
+} from "../../src/background/vault/session-service";
 
 const kek = Uint8Array.from({ length: 32 }, (_, index) => index + 1);
 const wrongKek = new Uint8Array(32);
@@ -100,7 +104,8 @@ async function readPortableFromStorage(local: FakeStoragePort) {
     },
   };
   try {
-    return await new VaultRepository(local, root.wrappedKey).readPortableState(context);
+    const state = await new VaultRepository(local, root.wrappedKey).readPortableState(context);
+    return { ...state, items: state.items.filter((item): item is OtpItem => item.kind === "otp") };
   } finally {
     dek.fill(0);
   }
@@ -185,8 +190,13 @@ describe("SessionService", () => {
 
     await unlock(afterLock);
     // The root changing underneath (another profile, a restore) invalidates the key.
-    const root = (await values.local.get([ACTIVE_ROOT_KEY]))[ACTIVE_ROOT_KEY] as Record<string, unknown>;
-    await values.local.set({ [ACTIVE_ROOT_KEY]: { ...root, generationId: "00000000-0000-4000-8000-00000000dead" } });
+    const root = (await values.local.get([ACTIVE_ROOT_KEY]))[ACTIVE_ROOT_KEY] as Record<
+      string,
+      unknown
+    >;
+    await values.local.set({
+      [ACTIVE_ROOT_KEY]: { ...root, generationId: "00000000-0000-4000-8000-00000000dead" },
+    });
     const changed = restart();
     expect(await changed.restoreSession()).toBe("locked");
     expect(await values.session.snapshot()).toEqual({});
@@ -531,7 +541,9 @@ describe("SessionService", () => {
     const survived = restart();
     expect(await survived.restoreSession()).toBe("restored");
     expect(await survived.getState()).toMatchObject({ state: "unlocked" });
-    await expect(survived.vaultRepository.get(hotpItem.id)).resolves.toMatchObject({ id: hotpItem.id });
+    await expect(survived.vaultRepository.get(hotpItem.id)).resolves.toMatchObject({
+      id: hotpItem.id,
+    });
   });
 
   it("keeps the session unlocked when Chrome reports a stale root after migration commit", async () => {
@@ -697,7 +709,7 @@ describe("SessionService", () => {
       lockOnScreenLock: true,
     }));
     expect(snapshot).toMatchObject({
-      schemaVersion: 1,
+      schemaVersion: 2,
       items: [{ id: hotpItemId, counter: 0 }],
       settings,
       history: { tombstones: [] },
@@ -1011,5 +1023,209 @@ describe("SessionService", () => {
     await local.set({ [ACTIVE_ROOT_KEY]: { corrupt: true } });
     await expect(service.assertActiveRoot()).rejects.toBeInstanceOf(VaultSessionError);
     await expect(service.getState()).rejects.toMatchObject({ code: "VAULT_UNAVAILABLE" });
+  });
+
+  describe("authenticated-active cache", () => {
+    it("serves the pre-operation check from the cache and re-authenticates after a storage-change notification", async () => {
+      const { local, service } = fixture();
+      await setup(service);
+      await service.vaultRepository.create(hotpItem);
+      const readActive = vi.spyOn(GenerationStore.prototype, "readActive");
+
+      // Steady state: the repository's own load is the only full authentication.
+      await expect(service.vaultRepository.listMetadata()).resolves.toHaveLength(1);
+      const perOperation = readActive.mock.calls.length;
+      await expect(service.vaultRepository.listMetadata()).resolves.toHaveLength(1);
+      expect(readActive).toHaveBeenCalledTimes(2 * perOperation);
+      // A plain state read costs a root read, not a full pass.
+      await expect(service.getState()).resolves.toMatchObject({ state: "unlocked" });
+      expect(readActive).toHaveBeenCalledTimes(2 * perOperation);
+
+      // Any vault storage change drops the cache: the next check authenticates in full.
+      service.handleLocalStorageChange([generationKeys(hotpItem.id).manifest]);
+      await expect(service.getState()).resolves.toMatchObject({ state: "unlocked" });
+      expect(readActive).toHaveBeenCalledTimes(2 * perOperation + 1);
+      await expect(service.getState()).resolves.toMatchObject({ state: "unlocked" });
+      expect(readActive).toHaveBeenCalledTimes(2 * perOperation + 1);
+
+      // So does a root notification, even for the session's own root.
+      await service.handleActiveRootChange((await local.get([ACTIVE_ROOT_KEY]))[ACTIVE_ROOT_KEY]);
+      await expect(service.vaultRepository.listMetadata()).resolves.toHaveLength(1);
+      expect(readActive).toHaveBeenCalledTimes(3 * perOperation + 2);
+    });
+
+    it("detects a root swapped underneath the cache without any notification", async () => {
+      const { local, service } = fixture();
+      await setup(service);
+      await service.vaultRepository.create(hotpItem);
+      await expect(service.vaultRepository.listMetadata()).resolves.toHaveLength(1);
+      const current = (await local.get([ACTIVE_ROOT_KEY]))[ACTIVE_ROOT_KEY] as Record<
+        string,
+        StorageValue
+      >;
+      await local.set({
+        [ACTIVE_ROOT_KEY]: {
+          ...current,
+          activeGenerationId: "10000000-0000-4000-8000-000000000099",
+        },
+      });
+
+      await expect(service.vaultRepository.listMetadata()).rejects.toMatchObject({
+        code: "VAULT_UNAVAILABLE",
+      });
+      await expect(service.getState()).resolves.toMatchObject({ state: "locked" });
+    });
+
+    it("detects a root swapped after the operation ran, before the result is returned", async () => {
+      const { local, service } = fixture();
+      await setup(service);
+      const created = await service.vaultRepository.create(hotpItem);
+      const originalGet = local.get.bind(local);
+      let swapped = false;
+      local.get = async (keys) => {
+        const result = await originalGet(keys);
+        // The repository's load reads the manifest; swap the root right after it.
+        if (!swapped && keys.some((key) => key.endsWith(":manifest"))) {
+          swapped = true;
+          const current = (await originalGet([ACTIVE_ROOT_KEY]))[ACTIVE_ROOT_KEY] as Record<
+            string,
+            StorageValue
+          >;
+          await local.set({
+            [ACTIVE_ROOT_KEY]: {
+              ...current,
+              activeGenerationId: "10000000-0000-4000-8000-000000000099",
+            },
+          });
+        }
+        return result;
+      };
+
+      await expect(service.vaultRepository.get(created.id)).rejects.toMatchObject({
+        code: "VAULT_UNAVAILABLE",
+      });
+      expect(swapped).toBe(true);
+      await expect(service.getState()).resolves.toMatchObject({ state: "locked" });
+    });
+
+    it("never serves cached contents to a locked session and re-authenticates on unlock", async () => {
+      const { service } = fixture();
+      await setup(service);
+      await service.vaultRepository.create(hotpItem);
+      await expect(service.vaultRepository.listMetadata()).resolves.toHaveLength(1);
+      const readActive = vi.spyOn(GenerationStore.prototype, "readActive");
+
+      await service.lock();
+      await expect(service.assertActiveRoot()).rejects.toMatchObject({ code: "VAULT_LOCKED" });
+      await expect(service.vaultRepository.listMetadata()).rejects.toMatchObject({
+        code: "VAULT_LOCKED",
+      });
+      expect(readActive).not.toHaveBeenCalled();
+
+      await unlock(service);
+      expect(readActive).toHaveBeenCalledTimes(1);
+      await expect(service.vaultRepository.listMetadata()).resolves.toHaveLength(1);
+    });
+
+    it("still fails closed on a tampered record under an unchanged root", async () => {
+      const { local, service } = fixture();
+      await setup(service);
+      await service.vaultRepository.create(hotpItem);
+      await expect(service.vaultRepository.listMetadata()).resolves.toHaveLength(1);
+      const root = (await local.get([ACTIVE_ROOT_KEY]))[ACTIVE_ROOT_KEY] as {
+        activeGenerationId: string;
+      };
+      const recordKey = generationKeys(root.activeGenerationId).record(hotpItem.id);
+      const record = (await local.get([recordKey]))[recordKey] as Record<string, StorageValue>;
+      await local.set({
+        [recordKey]: { ...record, ciphertext: Buffer.alloc(64, 9).toString("base64") },
+      });
+
+      // The operation's own load authenticates every record and refuses the tampered one...
+      await expect(service.vaultRepository.listMetadata()).rejects.toMatchObject({
+        code: "STORAGE_CORRUPT",
+      });
+      // ...and the failure drops the cache, so the next check re-authenticates and locks.
+      await expect(service.getState()).rejects.toMatchObject({ code: "VAULT_UNAVAILABLE" });
+      await expect(service.getState()).resolves.toMatchObject({ state: "locked" });
+    });
+  });
+
+  describe("orphan collection", () => {
+    const strayId = "10000000-0000-4000-8000-0000000000aa";
+
+    function restart(values: ReturnType<typeof fixture>, milliseconds: number) {
+      let id = 500;
+      return new SessionService({
+        local: values.local,
+        session: values.session,
+        random: createDeterministicRandomSource(
+          Uint8Array.from({ length: 4096 }, (_, index) => (index * 7) % 251),
+        ),
+        now: () => milliseconds,
+        isoNow: () => new Date(milliseconds).toISOString(),
+        nextId: () => `00000000-0000-4000-8000-${(++id).toString().padStart(12, "0")}`,
+      });
+    }
+
+    async function generationIds(local: FakeStoragePort): Promise<Set<string>> {
+      return new Set(
+        Object.keys(await local.snapshot())
+          .filter((key) => key.startsWith("shardpass:v1:g:"))
+          .map((key) => key.split(":")[3]!),
+      );
+    }
+
+    it("reclaims stale orphans once after a restored session, never the active pair or a fresh stage", async () => {
+      const values = fixture();
+      await setup(values.service);
+      await values.service.vaultRepository.create(hotpItem);
+      const capability = await values.service.beginMigration();
+      const staged = await values.service.stageMigration(capability, { items: [], metadata: [] });
+      await values.local.set({ [generationKeys(strayId).record(hotpItem.id)]: { partial: true } });
+      const root = (await values.local.get([ACTIVE_ROOT_KEY]))[ACTIVE_ROOT_KEY] as {
+        activeGenerationId: string;
+        previousGenerationId: string;
+      };
+      const collect = vi.spyOn(GenerationStore.prototype, "collectOrphans");
+
+      // Within the grace period the uncommitted stage survives; the manifest-less partial goes.
+      const soon = restart(values, 5_000);
+      expect(await soon.restoreSession()).toBe("restored");
+      await expect(soon.vaultRepository.listMetadata()).resolves.toHaveLength(1);
+      expect(collect).toHaveBeenCalledTimes(1);
+      let ids = await generationIds(values.local);
+      expect(ids.has(strayId)).toBe(false);
+      expect(ids.has(staged.generationId)).toBe(true);
+      // Once per worker instance: a lock and unlock on the same instance does not rerun it.
+      await soon.lock();
+      await unlock(soon);
+      await expect(soon.vaultRepository.listMetadata()).resolves.toHaveLength(1);
+      expect(collect).toHaveBeenCalledTimes(1);
+
+      // Past the grace period the stale stage is reclaimed too.
+      const later = restart(values, 5_000 + ORPHAN_GENERATION_GRACE_MS + 1);
+      await unlock(later);
+      await expect(later.vaultRepository.listMetadata()).resolves.toHaveLength(1);
+      expect(collect).toHaveBeenCalledTimes(2);
+      ids = await generationIds(values.local);
+      expect(ids.has(staged.generationId)).toBe(false);
+      expect(ids.has(root.activeGenerationId)).toBe(true);
+      expect(ids.has(root.previousGenerationId)).toBe(true);
+      await expect(later.vaultRepository.get(hotpItem.id)).resolves.toMatchObject({
+        id: hotpItem.id,
+      });
+    });
+
+    it("does not run for a session that stays locked", async () => {
+      const values = fixture();
+      await setup(values.service);
+      const collect = vi.spyOn(GenerationStore.prototype, "collectOrphans");
+      const restarted = restart(values, 5_000);
+      await restarted.lock();
+      expect(await restarted.restoreSession()).toBe("locked");
+      await expect(restarted.collectOrphans()).resolves.toBe(0);
+      expect(collect).not.toHaveBeenCalled();
+    });
   });
 });

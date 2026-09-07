@@ -89,6 +89,8 @@ export interface BackgroundExtensionPlatform extends RuntimeExtensionPlatform {
   /** Whether the auto-lock alarm is still armed (Chrome keeps alarms across worker restarts). */
   autoLockPending?(): Promise<boolean>;
   onAutoLock(handler: () => void): () => void;
+  /** Keyboard commands declared in the manifest, by name ("lock-vault"). */
+  onCommand?(handler: (name: string) => void): () => void;
   scheduleEnteSync?(minutes: 15 | null): Promise<void>;
   enteSyncPending?(): Promise<boolean>;
   onEnteSyncAlarm?(handler: () => void): () => void;

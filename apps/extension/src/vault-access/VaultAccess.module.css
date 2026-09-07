@@ -103,3 +103,63 @@
   font-size: var(--text-sm);
   line-height: var(--line-body);
 }
+
+.strength {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-top: calc(-1 * var(--space-2));
+}
+.meter {
+  flex: 1;
+  height: 4px;
+  overflow: hidden;
+  background: var(--bg-tertiary);
+  border-radius: 2px;
+}
+.meterFill {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transition: width var(--motion-fast, 150ms) ease-out;
+}
+.meterFill[data-level="0"] {
+  width: 15%;
+  background: var(--danger);
+}
+.meterFill[data-level="1"] {
+  width: 40%;
+  background: var(--danger);
+}
+.meterFill[data-level="2"] {
+  width: 70%;
+  background: var(--warning, var(--accent));
+}
+.meterFill[data-level="3"] {
+  width: 100%;
+  background: var(--success, var(--accent));
+}
+.strengthLabel {
+  flex: 0 0 auto;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.weakNote {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: var(--line-body);
+}
+.checkField {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+}
+.checkField input {
+  accent-color: var(--accent);
+}

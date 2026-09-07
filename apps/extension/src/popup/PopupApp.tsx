@@ -24,6 +24,35 @@ export interface PopupAppProps {
 }
 
 const PINNED_IDENTITY_KEY = "shardpass:popup:pinnedIdentity";
+const LAST_SCREEN_KEY = "shardpass:popup:lastScreen";
+/** How long a closed popup remembers where it was; a later open starts at home. */
+const LAST_SCREEN_TTL_MS = 5 * 60_000;
+
+type RememberedScreen = Readonly<{ at: number; screen: { kind: "list"; category: CategoryId } | { kind: "generator" } | { kind: "identity" } }>;
+
+/** The screen a popup closed on moments ago: reopening lands back there, like a window would. */
+function readLastScreen(): RememberedScreen["screen"] | null {
+  try {
+    const raw = globalThis.localStorage?.getItem(LAST_SCREEN_KEY);
+    if (raw === null || raw === undefined) return null;
+    const parsed = JSON.parse(raw) as RememberedScreen;
+    if (typeof parsed.at !== "number" || Date.now() - parsed.at > LAST_SCREEN_TTL_MS) return null;
+    const screen = parsed.screen;
+    if (screen.kind === "list" && typeof screen.category === "string") return screen;
+    if (screen.kind === "generator" || screen.kind === "identity") return { kind: screen.kind };
+    return null;
+  } catch {
+    return null;
+  }
+}
+function writeLastScreen(screen: RememberedScreen["screen"] | null): void {
+  try {
+    if (screen === null) globalThis.localStorage?.removeItem(LAST_SCREEN_KEY);
+    else globalThis.localStorage?.setItem(LAST_SCREEN_KEY, JSON.stringify({ at: Date.now(), screen }));
+  } catch {
+    // Forgetting where the popup was is harmless.
+  }
+}
 
 /** The pinned identity's id: a preference, not a secret, so plain page storage will do. */
 function readPinnedIdentity(): string | null {
@@ -109,6 +138,14 @@ export function PopupApp({ platform }: PopupAppProps) {
   const { fill, filling } = useFillIntoTab(platform, tab);
 
   const screen = stack[stack.length - 1] ?? { kind: "home" };
+  // Lists, the generator and the identity chooser are remembered for a few minutes; a detail
+  // screen is not (its item may be gone, and it may show a secret).
+  useEffect(() => {
+    if (!vaultUnlocked) return;
+    writeLastScreen(
+      screen.kind === "list" ? { kind: "list", category: screen.category } : screen.kind === "generator" || screen.kind === "identity" ? { kind: screen.kind } : null,
+    );
+  }, [screen, vaultUnlocked]);
   const push = useCallback((next: Screen) => {
     setDirection("push");
     setStack((current) => [...current, next]);
@@ -127,12 +164,18 @@ export function PopupApp({ platform }: PopupAppProps) {
     return () => clearTimeout(timer);
   }, [feedback, feedbackTick]);
 
+  const restored = useRef(false);
   useEffect(() => {
     if (!vaultUnlocked) {
       setStack([{ kind: "home" }]);
       setSearch("");
       setFeedback("");
+      return;
     }
+    if (restored.current) return;
+    restored.current = true;
+    const last = readLastScreen();
+    if (last !== null) setStack([{ kind: "home" }, last]);
   }, [vaultUnlocked]);
 
   const lock = useCallback(async (): Promise<void> => {

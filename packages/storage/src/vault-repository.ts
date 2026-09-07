@@ -1,7 +1,10 @@
 import { AEAD_TAG_BYTES, decryptEnvelope, encryptEnvelope } from "@shardpass/crypto/aead";
 import {
   ITEM_SCHEMA_VERSION,
+  MAX_FOLDER_DEPTH,
+  MAX_FOLDERS,
   OtpItemSchema,
+  VAULT_ITEM_KINDS,
   VaultItemSchema,
   type OtpItem,
   type VaultItem,
@@ -49,7 +52,10 @@ import {
 
 const HOTP_RECEIPT_RETENTION_MS = 5 * 60_000;
 
-import { FoldersDocumentSchema } from "./folders";
+import { FoldersDocumentSchema, folderDepth } from "./folders";
+
+/** The most items one portable import may carry; matches the backup format's bound. */
+const MAX_PORTABLE_ITEMS = 20_000;
 
 export interface VaultItemMetadata {
   readonly id: string;
@@ -105,19 +111,35 @@ export type PortableHistory = Readonly<{
   journal: readonly ChangeJournalEntry[];
   tombstones: readonly Readonly<{ itemId: string; revision: number; deletedAt: string }>[];
 }>;
+/**
+ * What a portable file says besides its items. `folders` is absent for the old
+ * one-time-code-only payload, which carried none; its items keep no folder.
+ */
 export type PortableImportDescriptor = Readonly<{
   settings: PortableLockSettings;
   history: PortableHistory;
+  folders?: readonly Folder[] | undefined;
 }>;
+export type PortableItemKindCounts = Readonly<Record<VaultItemKind, number>>;
+/** Folders the import will create, and accepted items whose folder could not be placed. */
+export type PortableFolderOutcome = Readonly<{ created: number; unfiled: number }>;
 export type PortableImportPreview = Readonly<{
   statuses: readonly PortableOtpImportStatus[];
   settings: "unchanged" | "replace";
   history: Readonly<{ journalAdded: number; tombstonesAdded: number }>;
+  byKind: PortableItemKindCounts;
+  folders: PortableFolderOutcome;
 }>;
 /** A change-journal entry known (by construction) to describe an OTP-kind item. */
 export type OtpChangeJournalEntry = ChangeJournalEntry & { readonly kind: "otp" };
+/**
+ * Everything the portable backup carries: every item of every kind, the folders, the lock
+ * settings, and the one-time-code change history (the journal stays OTP-only because that
+ * is what the sync consumers of it understand).
+ */
 export type PortableVaultState = Readonly<{
-  items: readonly OtpItem[];
+  items: readonly VaultItem[];
+  folders: readonly Folder[];
   settings: PortableLockSettings | null;
   journal: readonly OtpChangeJournalEntry[];
   tombstones: readonly Readonly<{ itemId: string; revision: number; deletedAt: string }>[];
@@ -137,6 +159,16 @@ export type ImportPortableOtpItemsResult = Readonly<{
   previewChanged: boolean;
   items: readonly OtpItem[];
   statuses: readonly PortableOtpImportStatus[];
+}>;
+export type ImportPortableStateResult = Readonly<{
+  imported: number;
+  duplicate: number;
+  conflict: number;
+  previewChanged: boolean;
+  items: readonly VaultItem[];
+  statuses: readonly PortableOtpImportStatus[];
+  byKind: PortableItemKindCounts;
+  folders: PortableFolderOutcome;
 }>;
 
 export interface HotpReservationCommitRequest {
@@ -546,9 +578,9 @@ export class VaultRepository {
     const items = await Promise.all(
       loaded.records.map((record) => decryptVaultRecord(record, context.dek)),
     );
-    // The portable format is OTP-only: entries for other item kinds must not leak into
-    // the exported journal (their ids, kinds, and change timestamps are not this format's
-    // business), so the journal is filtered to OTP-kind entries before deriving tombstones.
+    // The portable history is OTP-only: entries for other item kinds must not leak into
+    // the exported journal (its consumers only understand one-time codes), so the journal
+    // is filtered to OTP-kind entries before deriving tombstones.
     const journal = (
       await Promise.all(loaded.journal.map((record) => this.changes.decrypt(record, context.dek)))
     ).filter(isOtpJournalEntry);
@@ -560,11 +592,8 @@ export class VaultRepository {
         deletedAt: entry.changedAt,
       }));
     return Object.freeze({
-      items: Object.freeze(
-        items
-          .filter(isOtpItem)
-          .map((item) => OtpItemSchema.parse({ ...item, tags: [...item.tags] })),
-      ),
+      items: Object.freeze(items.map((item) => VaultItemSchema.parse(item))),
+      folders: await readFoldersMetadata(loaded.metadata, context, this.generations),
       settings: await readPortableSettings(loaded.metadata, context, this.generations),
       journal: Object.freeze(journal.map((entry) => Object.freeze({ ...entry }))),
       tombstones: Object.freeze(tombstones.map((entry) => Object.freeze(entry))),
@@ -600,7 +629,7 @@ export class VaultRepository {
   }
 
   async previewPortableImport(
-    candidates: readonly OtpItem[],
+    candidates: readonly VaultItem[],
     descriptor: PortableImportDescriptor,
     context: VaultCryptoContext,
   ): Promise<PortableImportPreview> {
@@ -613,15 +642,31 @@ export class VaultRepository {
       loaded.journal.map((record) => this.changes.decrypt(record, context.dek)),
     );
     const currentSettings = await readPortableSettings(loaded.metadata, context, this.generations);
-    return portablePreview(existing, candidates, currentSettings, currentJournal, descriptor);
+    const currentFolders = await readFoldersMetadata(loaded.metadata, context, this.generations);
+    return portablePreview(
+      existing,
+      candidates,
+      currentSettings,
+      currentJournal,
+      currentFolders,
+      descriptor,
+    );
   }
 
+  /**
+   * Merges a portable backup into the vault under one commit. Items are never overwritten:
+   * one-time codes follow the sync rules (an HOTP counter may only move forward), every other
+   * kind is a duplicate when an item with the same content already exists, a conflict when
+   * its id is taken by something else, and otherwise created under a fresh id. Folders are
+   * matched by path and created when missing; an item whose folder cannot be placed is
+   * filed at the top level rather than left pointing at nothing.
+   */
   async importPortableState(
-    candidates: readonly OtpItem[],
+    candidates: readonly VaultItem[],
     descriptor: PortableImportDescriptor,
     expected: PortableImportPreview,
     context: VaultCryptoContext,
-  ): Promise<ImportPortableOtpItemsResult> {
+  ): Promise<ImportPortableStateResult> {
     return this.serialize(async () => {
       validatePortableDescriptor(descriptor);
       const loaded = await this.load(context);
@@ -636,44 +681,68 @@ export class VaultRepository {
         context,
         this.generations,
       );
+      const currentFolders = await readFoldersMetadata(loaded.metadata, context, this.generations);
       const preview = portablePreview(
         existing,
         candidates,
         currentSettings,
         currentJournal,
+        currentFolders,
         descriptor,
       );
       const duplicate = preview.statuses.filter((status) => status === "duplicate").length;
       const conflictCount = preview.statuses.filter((status) => status === "conflict").length;
       if (canonicalJson(preview) !== canonicalJson(expected))
-        return portableImportResult(0, duplicate, conflictCount, true, [], preview.statuses);
+        return portableStateResult(0, duplicate, conflictCount, true, [], preview);
 
-      const classified = classifyPortableItems(existing, candidates);
+      const classified = classifyPortableVaultItems(existing, candidates);
+      const folderPlan = planPortableFolders(currentFolders, descriptor.folders ?? [], () =>
+        context.ids.next(),
+      );
       const now = context.clock.now();
       const records = [...loaded.records];
-      const changed: OtpItem[] = [];
+      const changed: VaultItem[] = [];
       const newNonces = new Set<string>();
-      for (const accepted of classified.accepted) {
+      const otpIds = new Map(classified.otpIds);
+      let unfiled = 0;
+      const placed = (candidate: VaultItem): Partial<Pick<VaultItem, "folderId">> => {
+        if (candidate.folderId === undefined) return {};
+        const folderId = folderPlan.map.get(candidate.folderId);
+        if (folderId !== undefined) return { folderId };
+        unfiled += 1;
+        return {};
+      };
+      // One-time codes first, so a login's link to one can be pointed at its new id.
+      const ordered = [
+        ...classified.accepted.filter(({ candidate }) => candidate.kind === "otp"),
+        ...classified.accepted.filter(({ candidate }) => candidate.kind !== "otp"),
+      ];
+      for (const accepted of ordered) {
         const current = existing[accepted.existingIndex];
-        // classifyPortableItems() only accepts a matching existingIndex whose item
-        // already compared equal to an OTP candidate, so it is always OTP-kind here.
-        if (current !== undefined && current.kind !== "otp") conflict();
-        const item =
-          current === undefined
-            ? OtpItemSchema.parse({
-                ...accepted.candidate,
-                id: context.ids.next(),
-                revision: 1,
-                createdAt: now,
-                updatedAt: now,
-                deletedAt: undefined,
-              })
-            : OtpItemSchema.parse({
-                ...current,
-                counter: Math.max(current.counter ?? 0, accepted.candidate.counter ?? 0),
-                revision: current.revision + 1,
-                updatedAt: now,
-              });
+        let item: VaultItem;
+        if (current !== undefined) {
+          // classifyPortableVaultItems() only accepts an existing index for an HOTP item
+          // whose counter moves forward, so both sides are OTP-kind here.
+          if (current.kind !== "otp" || accepted.candidate.kind !== "otp") conflict();
+          item = OtpItemSchema.parse({
+            ...current,
+            counter: Math.max(current.counter ?? 0, accepted.candidate.counter ?? 0),
+            revision: current.revision + 1,
+            updatedAt: now,
+          });
+        } else {
+          const id = context.ids.next();
+          item = parseCandidate({
+            ...relinkOtp(accepted.candidate, otpIds, existing),
+            ...placed(accepted.candidate),
+            id,
+            revision: 1,
+            createdAt: now,
+            updatedAt: now,
+            deletedAt: undefined,
+          });
+          if (item.kind === "otp") otpIds.set(accepted.candidate.id, id);
+        }
         const encrypted = await encryptVaultRecord(item, context);
         if (current === undefined) records.push(encrypted);
         else records[accepted.existingIndex] = encrypted;
@@ -721,12 +790,24 @@ export class VaultRepository {
         journal.push(appended.at(-1)!);
         newNonces.add(journal.at(-1)!.nonce);
       }
-      const metadata = await replacePortableSettingsMetadata(
+      let metadata = await replacePortableSettingsMetadata(
         loaded.metadata,
         descriptor.settings,
         context,
         this.generations,
       );
+      if (folderPlan.created > 0) {
+        const document = FoldersDocumentSchema.safeParse({ version: 1, folders: folderPlan.folders });
+        if (!document.success) throw new StorageError("VAULT_INVALID");
+        metadata = [
+          ...metadata.filter((entry) => entry.name !== "folders"),
+          {
+            name: "folders",
+            schemaVersion: 1 as const,
+            plaintext: new TextEncoder().encode(canonicalJson(document.data)),
+          },
+        ];
+      }
       preflightOtpImportGenerationCapacity(
         {
           records: records.length,
@@ -739,7 +820,10 @@ export class VaultRepository {
         this.limits.maxGenerationEntries,
       );
       const hasEffect =
-        changed.length > 0 || preview.settings === "replace" || preview.history.journalAdded > 0;
+        changed.length > 0 ||
+        folderPlan.created > 0 ||
+        preview.settings === "replace" ||
+        preview.history.journalAdded > 0;
       if (hasEffect)
         await this.commitPlaintextMetadata(
           loaded.root,
@@ -750,14 +834,10 @@ export class VaultRepository {
           newNonces,
           context,
         );
-      return portableImportResult(
-        changed.length,
-        duplicate,
-        conflictCount,
-        false,
-        changed,
-        preview.statuses,
-      );
+      return portableStateResult(changed.length, duplicate, conflictCount, false, changed, {
+        ...preview,
+        folders: { created: folderPlan.created, unfiled },
+      });
     });
   }
 
@@ -1917,13 +1997,29 @@ function mergePortableHistory(
 
 function portablePreview(
   existing: readonly VaultItem[],
-  candidates: readonly OtpItem[],
+  candidates: readonly VaultItem[],
   currentSettings: PortableLockSettings | null,
   currentJournal: readonly ChangeJournalEntry[],
+  currentFolders: readonly Folder[],
   descriptor: PortableImportDescriptor,
 ): PortableImportPreview {
-  validatePortableCandidates(candidates);
-  const statuses = classifyPortableItems(existing, candidates).statuses;
+  validatePortableVaultCandidates(candidates);
+  const classified = classifyPortableVaultItems(existing, candidates);
+  const statuses = classified.statuses;
+  // Placeholder ids: the plan is only counted here, never written.
+  let placeholder = 0;
+  const folderPlan = planPortableFolders(
+    currentFolders,
+    descriptor.folders ?? [],
+    () => `pending-${(placeholder += 1).toString()}`,
+  );
+  const byKind = zeroItemKindCounts();
+  let unfiled = 0;
+  for (const { candidate, existingIndex } of classified.accepted) {
+    byKind[candidate.kind] += 1;
+    if (existingIndex < 0 && candidate.folderId !== undefined && !folderPlan.map.has(candidate.folderId))
+      unfiled += 1;
+  }
   const currentKeys = new Set(currentJournal.map(logicalHistoryKey));
   const importedUnique = new Set(
     descriptor.history.journal.map(logicalHistoryKey).filter((key) => !currentKeys.has(key)),
@@ -1946,6 +2042,227 @@ function portablePreview(
         ? "unchanged"
         : "replace",
     history: Object.freeze({ journalAdded: importedUnique.size, tombstonesAdded }),
+    byKind: Object.freeze(byKind),
+    folders: Object.freeze({ created: folderPlan.created, unfiled }),
+  });
+}
+
+function zeroItemKindCounts(): Record<VaultItemKind, number> {
+  return Object.fromEntries(VAULT_ITEM_KINDS.map((kind) => [kind, 0])) as Record<
+    VaultItemKind,
+    number
+  >;
+}
+
+async function readFoldersMetadata(
+  metadata: readonly EncryptedGenerationMetadata[],
+  context: VaultCryptoContext,
+  generations: GenerationStore,
+): Promise<readonly Folder[]> {
+  const entry = metadata.find((candidate) => candidate.name === "folders");
+  if (entry === undefined) return Object.freeze([]);
+  try {
+    const text = new TextDecoder("utf-8", { fatal: true }).decode(
+      await generations.decryptMetadata(entry, context),
+    );
+    const document = FoldersDocumentSchema.parse(JSON.parse(text));
+    if (canonicalJson(document) !== text) throw new Error("noncanonical folders");
+    return Object.freeze(document.folders.map((folder) => Object.freeze({ ...folder })));
+  } catch {
+    throw new StorageError("STORAGE_CORRUPT");
+  }
+}
+
+function folderNameKey(name: string): string {
+  return name.normalize("NFKC").toLocaleLowerCase("en-US");
+}
+
+/**
+ * Matches each imported folder to a vault folder with the same path (names compared the
+ * way the folder service does, ignoring case) and plans the missing ones, parents first.
+ * A folder that cannot be placed -- its parent is missing, the vault is full, or it would
+ * nest too deep -- is left out of the map, and so are its descendants.
+ */
+function planPortableFolders(
+  current: readonly Folder[],
+  imported: readonly Folder[],
+  nextId: () => string,
+): Readonly<{ folders: readonly Folder[]; map: ReadonlyMap<string, string>; created: number }> {
+  const folders: Folder[] = current.map((folder) => ({ ...folder }));
+  const map = new Map<string, string>();
+  let created = 0;
+  const ordered = [...imported].sort(
+    (left, right) => folderDepth(imported, left.id) - folderDepth(imported, right.id),
+  );
+  for (const folder of ordered) {
+    let parentId: string | undefined;
+    if (folder.parentId !== undefined) {
+      parentId = map.get(folder.parentId);
+      if (parentId === undefined) continue;
+    }
+    const key = folderNameKey(folder.name);
+    const match = folders.find(
+      (candidate) => candidate.parentId === parentId && folderNameKey(candidate.name) === key,
+    );
+    if (match !== undefined) {
+      map.set(folder.id, match.id);
+      continue;
+    }
+    if (folders.length >= MAX_FOLDERS) continue;
+    if (parentId !== undefined && folderDepth(folders, parentId) >= MAX_FOLDER_DEPTH) continue;
+    const id = nextId();
+    folders.push(parentId === undefined ? { id, name: folder.name } : { id, name: folder.name, parentId });
+    map.set(folder.id, id);
+    created += 1;
+  }
+  return { folders, map, created };
+}
+
+/**
+ * The candidate without the file's folder (the caller places it), and with a login's
+ * one-time-code link pointed at the vault's copy of that code: the id it was given (or
+ * matched to) during this import, else the same id when the vault already holds such an
+ * item, else nothing rather than a dangling reference.
+ */
+function relinkOtp(
+  candidate: VaultItem,
+  otpIds: ReadonlyMap<string, string>,
+  existing: readonly VaultItem[],
+): VaultItem {
+  const { folderId: _folderId, ...unfiled } = candidate;
+  void _folderId;
+  if (unfiled.kind !== "login" || unfiled.linkedOtpId === undefined) return unfiled;
+  const { linkedOtpId, ...login } = unfiled;
+  const mapped =
+    otpIds.get(linkedOtpId) ??
+    (existing.some((item) => item.kind === "otp" && item.id === linkedOtpId)
+      ? linkedOtpId
+      : undefined);
+  return mapped === undefined ? login : { ...login, linkedOtpId: mapped };
+}
+
+/**
+ * What makes two items of the same non-OTP kind "the same item": their content, minus
+ * local organisation (favourite, tags, folder, archive) and usage bookkeeping (revision,
+ * timestamps, password history, passkey counters). A login's one-time-code link is compared
+ * through the id map so a re-import of the same file lands as a duplicate, not a copy.
+ */
+function stablePortableContent(item: VaultItem, otpIds: ReadonlyMap<string, string>): string {
+  const {
+    id: _id,
+    revision: _revision,
+    createdAt: _createdAt,
+    updatedAt: _updatedAt,
+    favorite: _favorite,
+    archivedAt: _archivedAt,
+    deletedAt: _deletedAt,
+    folderId: _folderId,
+    tags: _tags,
+    ...content
+  } = item;
+  void [_id, _revision, _createdAt, _updatedAt, _favorite, _archivedAt, _deletedAt, _folderId, _tags];
+  if (content.kind !== "login") return canonicalJson(content);
+  const {
+    lastUsedAt: _lastUsedAt,
+    passwordHistory: _passwordHistory,
+    passkeys,
+    linkedOtpId,
+    ...login
+  } = content;
+  void [_lastUsedAt, _passwordHistory];
+  return canonicalJson({
+    ...login,
+    ...(linkedOtpId === undefined ? {} : { linkedOtpId: otpIds.get(linkedOtpId) ?? linkedOtpId }),
+    ...(passkeys === undefined
+      ? {}
+      : {
+          passkeys: passkeys.map(({ counter: _counter, lastUsedAt: _used, ...passkey }) => {
+            void [_counter, _used];
+            return passkey;
+          }),
+        }),
+  });
+}
+
+function validatePortableVaultCandidates(candidates: readonly VaultItem[]): void {
+  if (candidates.length > MAX_PORTABLE_ITEMS) throw new StorageError("VAULT_INVALID");
+  for (const candidate of candidates) parseCandidate(candidate);
+}
+
+/**
+ * Classifies a mixed-kind portable import. One-time codes keep the sync rules of
+ * {@link classifyPortableItems}; every other kind is matched by id (same content: a
+ * duplicate; different content: a conflict, the vault's copy wins) and then by content
+ * (a duplicate under another id). Ids claimed twice in one file conflict on their second
+ * use. `otpIds` maps a file's one-time-code ids to the vault ids they resolved to.
+ */
+function classifyPortableVaultItems(existing: readonly VaultItem[], candidates: readonly VaultItem[]) {
+  const accepted: Array<{ candidate: VaultItem; existingIndex: number }> = [];
+  const statuses: PortableOtpImportStatus[] = new Array<PortableOtpImportStatus>(
+    candidates.length,
+  ).fill("conflict");
+  const claimedIds = new Set<string>();
+  const firstClaim = candidates.map((candidate) => {
+    if (claimedIds.has(candidate.id)) return false;
+    claimedIds.add(candidate.id);
+    return true;
+  });
+  const otpIds = new Map<string, string>();
+  const otpCandidates = candidates.filter(
+    (candidate, index): candidate is OtpItem => firstClaim[index] === true && candidate.kind === "otp",
+  );
+  const otp = classifyPortableItems(existing, otpCandidates);
+  let otpIndex = 0;
+  for (const [index, candidate] of candidates.entries()) {
+    if (firstClaim[index] !== true || candidate.kind !== "otp") continue;
+    const status = otp.statuses[otpIndex]!;
+    otpIndex += 1;
+    statuses[index] = status;
+    if (status === "conflict") continue;
+    const match =
+      existing.find((item) => item.id === candidate.id) ??
+      existing.find((item) => sameOtpSemanticKeyIgnoringCounter(item, candidate));
+    if (match !== undefined) otpIds.set(candidate.id, match.id);
+  }
+  for (const entry of otp.accepted) accepted.push(entry);
+  const existingContent = existing.map((item) =>
+    item.kind === "otp" ? null : stablePortableContent(item, otpIds),
+  );
+  for (const [index, candidate] of candidates.entries()) {
+    if (firstClaim[index] !== true || candidate.kind === "otp") continue;
+    const content = stablePortableContent(candidate, otpIds);
+    const existingIndex = existing.findIndex((item) => item.id === candidate.id);
+    if (existingIndex >= 0) {
+      statuses[index] = existingContent[existingIndex] === content ? "duplicate" : "conflict";
+      continue;
+    }
+    if (existingContent.includes(content)) {
+      statuses[index] = "duplicate";
+      continue;
+    }
+    statuses[index] = "accepted";
+    accepted.push({ candidate, existingIndex: -1 });
+  }
+  return { accepted, statuses, otpIds };
+}
+
+function portableStateResult(
+  imported: number,
+  duplicate: number,
+  conflictCount: number,
+  previewChanged: boolean,
+  items: readonly VaultItem[],
+  preview: PortableImportPreview,
+): ImportPortableStateResult {
+  return Object.freeze({
+    imported,
+    duplicate,
+    conflict: conflictCount,
+    previewChanged,
+    items: Object.freeze([...items]),
+    statuses: Object.freeze([...preview.statuses]),
+    byKind: Object.freeze({ ...preview.byKind }),
+    folders: Object.freeze({ ...preview.folders }),
   });
 }
 

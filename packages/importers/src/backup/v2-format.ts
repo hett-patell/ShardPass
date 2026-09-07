@@ -2,7 +2,7 @@ import { validateArgon2idWorkParameters } from "@shardpass/crypto";
 import { decodeCanonicalBase64 } from "@shardpass/security";
 import { z } from "zod/mini";
 
-import { BACKUP_V2_LIMITS } from "./model";
+import { BACKUP_V2_LIMITS, type PortableBackupPayloadVersion } from "./model";
 
 const encoder = new TextEncoder();
 const fatalDecoder = new TextDecoder("utf-8", { fatal: true });
@@ -17,7 +17,7 @@ const canonicalBase64 = (minimumBytes: number, maximumBytes: number) =>
 const BackupV2HeaderSchema = z.strictObject({
   type: z.literal("shardpass-backup"),
   formatVersion: z.literal(2),
-  payloadSchemaVersion: z.literal(1),
+  payloadSchemaVersion: z.union([z.literal(1), z.literal(2)]),
   kdf: z.strictObject({
     algorithm: z.literal("argon2id"),
     version: z.literal(19),
@@ -39,7 +39,7 @@ const BackupV2EnvelopeSchema = z.extend(BackupV2HeaderSchema, {
 export type BackupV2Header = Readonly<{
   type: "shardpass-backup";
   formatVersion: 2;
-  payloadSchemaVersion: 1;
+  payloadSchemaVersion: PortableBackupPayloadVersion;
   kdf: Readonly<{
     algorithm: "argon2id";
     version: 19;

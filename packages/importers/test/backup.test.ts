@@ -14,6 +14,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   BACKUP_V2_LIMITS,
   encodeBackupV2Header,
+  encodeCanonicalPayload,
   exportPortableBackup,
   importLegacyBackup,
   importPortableBackup,
@@ -22,6 +23,7 @@ import {
   type BackupV2Envelope,
   type BackupV2Header,
   type PortableBackupPayload,
+  type PortableBackupPayloadV2,
 } from "../src/backup";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
@@ -146,6 +148,112 @@ const payload: PortableBackupPayload = {
   },
 };
 
+const folderIds = {
+  work: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+  clients: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+  personal: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+};
+const metadata = {
+  schemaVersion: 2 as const,
+  revision: 1,
+  createdAt: "2026-03-04T05:06:07.000Z",
+  updatedAt: "2026-03-04T05:06:07.000Z",
+  favorite: false,
+  tags: [],
+};
+/** Every item kind, folders, and a login linked to a one-time code. */
+const mixedPayload: PortableBackupPayloadV2 = {
+  schemaVersion: 2,
+  exportedAt: fixedNow,
+  items: [
+    { ...payload.items[0]!, folderId: folderIds.work },
+    {
+      ...metadata,
+      id: "66666666-6666-4666-8666-666666666666",
+      kind: "login",
+      name: "Synthetic mail",
+      username: "fixture@example.invalid",
+      password: "correct horse, \"battery\" staple",
+      urls: ["https://mail.example.invalid/login", "https://example.invalid"],
+      urlMatches: ["domain", "host"],
+      linkedOtpId: "11111111-1111-4111-8111-111111111111",
+      customFields: [{ name: "PIN", type: "hidden", value: "1234" }],
+      passwordHistory: [{ password: "older", changedAt: "2026-02-01T00:00:00.000Z" }],
+      passkeys: [
+        {
+          credentialId: "Y3JlZA",
+          rpId: "example.invalid",
+          userHandle: "dXNlcg",
+          userName: "fixture",
+          algorithm: -7,
+          privateKey: "cHJpdmF0ZQ",
+          publicKey: "cHVibGlj",
+          counter: 3,
+          createdAt: "2026-02-01T00:00:00.000Z",
+        },
+      ],
+      notes: "line one\nline two",
+      folderId: folderIds.clients,
+    },
+    {
+      ...metadata,
+      id: "77777777-7777-4777-8777-777777777777",
+      kind: "note",
+      name: "Recovery codes",
+      content: "café ∕ カフェ",
+      archivedAt: "2026-04-01T00:00:00.000Z",
+    },
+    {
+      ...metadata,
+      id: "88888888-8888-4888-8888-888888888888",
+      kind: "card",
+      name: "Synthetic card",
+      brand: "visa",
+      cardholderName: "Fixture Holder",
+      number: "4111111111111111",
+      expMonth: "12",
+      expYear: "2031",
+      cvv: "123",
+      pin: "",
+      notes: "",
+      folderId: folderIds.personal,
+    },
+    {
+      ...metadata,
+      id: "99999999-9999-4999-8999-999999999999",
+      kind: "identity",
+      name: "Fixture identity",
+      firstName: "Fixture",
+      lastName: "Person",
+      email: "fixture@example.invalid",
+      phone: "",
+      street: "",
+      city: "",
+      state: "",
+      zip: "",
+      country: "",
+      notes: "",
+    },
+    {
+      ...metadata,
+      id: "aaaaaaaa-1111-4111-8111-111111111111",
+      kind: "secret",
+      name: "Deploy token",
+      secretType: "token",
+      value: "tok_synthetic",
+      metadata: { env: "staging" },
+      notes: "",
+    },
+  ],
+  folders: [
+    { id: folderIds.work, name: "Work" },
+    { id: folderIds.clients, name: "Clients", parentId: folderIds.work },
+    { id: folderIds.personal, name: "Personal" },
+  ],
+  settings: { autoLockMinutes: 5, lockOnScreenLock: false },
+  history: payload.history,
+};
+
 const randomFixture = Uint8Array.from({ length: 40 }, (_, index) => index + 1);
 
 async function exportFixture(input: PortableBackupPayload = payload): Promise<Uint8Array> {
@@ -159,13 +267,16 @@ function parseJsonEnvelope(input: Uint8Array): BackupV2Envelope {
   return JSON.parse(decoder.decode(input)) as BackupV2Envelope;
 }
 
-async function envelopeForPlaintext(plaintext: string): Promise<Uint8Array> {
+async function envelopeForPlaintext(
+  plaintext: string,
+  payloadSchemaVersion: 1 | 2 = 1,
+): Promise<Uint8Array> {
   const salt = randomFixture.slice(0, 16);
   const nonce = randomFixture.slice(16, 40);
   const header: BackupV2Header = {
     type: "shardpass-backup",
     formatVersion: 2,
-    payloadSchemaVersion: 1,
+    payloadSchemaVersion,
     kdf: {
       algorithm: "argon2id",
       version: 19,
@@ -220,14 +331,110 @@ describe("ShardPass portable backup v2", () => {
     );
   });
 
-  it("round trips all portable Project 1 fields, Unicode, settings, journal, and tombstones", async () => {
+  it("still reads a version 1 (one-time-codes-only) file exactly as written", async () => {
     const exported = await exportFixture();
+    expect(parseBackupV2Envelope(exported).payloadSchemaVersion).toBe(1);
     const imported = await importPortableBackup(exported, password, executor());
     expect(imported).toEqual({ sourceFormat: "v2", payload });
 
     const outer = decoder.decode(exported);
     expect(outer).not.toContain("Synthetic Ω Service");
     expect(outer).not.toContain("JBSWY3DPEHPK3PXP");
+  });
+
+  it("round trips a whole vault: every item kind, folders, settings, journal, and tombstones", async () => {
+    const exported = await exportFixture(mixedPayload);
+    const envelope = parseBackupV2Envelope(exported);
+    expect(envelope.payloadSchemaVersion).toBe(2);
+    const imported = await importPortableBackup(exported, password, executor());
+    expect(imported).toEqual({ sourceFormat: "v2", payload: mixedPayload });
+    if (imported.payload.schemaVersion !== 2) throw new Error("expected a version 2 payload");
+    expect(imported.payload.items.map((item) => item.kind)).toEqual([
+      "otp",
+      "login",
+      "note",
+      "card",
+      "identity",
+      "secret",
+    ]);
+    expect(imported.payload.folders).toHaveLength(3);
+
+    const outer = decoder.decode(exported);
+    for (const secret of [
+      "correct horse",
+      "4111111111111111",
+      "tok_synthetic",
+      "cHJpdmF0ZQ",
+      "Recovery codes",
+      "Clients",
+    ]) {
+      expect(outer).not.toContain(secret);
+    }
+  });
+
+  it("binds the payload version into the authenticated header and rejects a mismatch", async () => {
+    const v2AsV1 = await envelopeForPlaintext(
+      JSON.stringify({ ...mixedPayload, folders: undefined, schemaVersion: 1 }),
+      2,
+    );
+    await expect(importPortableBackup(v2AsV1, password, executor())).rejects.toThrow();
+    const v1AsV2 = await envelopeForPlaintext(JSON.stringify(payload), 2);
+    await expect(importPortableBackup(v1AsV2, password, executor())).rejects.toThrow();
+    const canonicalV2 = await envelopeForPlaintext(
+      decoder.decode(encodeCanonicalPayload(mixedPayload)),
+      2,
+    );
+    await expect(importPortableBackup(canonicalV2, password, executor())).resolves.toEqual({
+      sourceFormat: "v2",
+      payload: mixedPayload,
+    });
+  });
+
+  it("rejects folders that are not one bounded tree, and bounds their count", async () => {
+    const cyclic = {
+      ...mixedPayload,
+      folders: [
+        { id: folderIds.work, name: "Work", parentId: folderIds.clients },
+        { id: folderIds.clients, name: "Clients", parentId: folderIds.work },
+      ],
+    };
+    const orphan = {
+      ...mixedPayload,
+      folders: [{ id: folderIds.clients, name: "Clients", parentId: folderIds.work }],
+    };
+    const tooDeep = {
+      ...mixedPayload,
+      folders: [
+        { id: folderIds.work, name: "A" },
+        { id: folderIds.clients, name: "B", parentId: folderIds.work },
+        { id: folderIds.personal, name: "C", parentId: folderIds.clients },
+        { id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd", name: "D", parentId: folderIds.personal },
+      ],
+    };
+    const duplicateIds = {
+      ...mixedPayload,
+      folders: [
+        { id: folderIds.work, name: "Work" },
+        { id: folderIds.work, name: "Work again" },
+      ],
+    };
+    const tooMany = {
+      ...mixedPayload,
+      folders: Array.from({ length: BACKUP_V2_LIMITS.maxFolders + 1 }, (_, index) => ({
+        id: `${index.toString(16).padStart(8, "0")}-0000-4000-8000-000000000000`,
+        name: `Folder ${index.toString()}`,
+      })),
+    };
+    for (const invalid of [cyclic, orphan, tooDeep, duplicateIds, tooMany]) {
+      await expect(exportPortableBackup(invalid, password, executor())).rejects.toThrow();
+    }
+    const v1WithFolders = { ...payload, folders: [] };
+    await expect(exportPortableBackup(v1WithFolders, password, executor())).rejects.toThrow();
+    const { folders: _folders, ...v2WithoutFolders } = mixedPayload;
+    void _folders;
+    await expect(
+      exportPortableBackup(v2WithoutFolders as never, password, executor()),
+    ).rejects.toThrow();
   });
 
   it("uses fresh 16-byte salts and 24-byte nonces and never mutates caller password bytes", async () => {
@@ -250,7 +457,7 @@ describe("ShardPass portable backup v2", () => {
       { ...valid, unexpected: true },
       { ...valid, type: "other-backup" },
       { ...valid, formatVersion: 3 },
-      { ...valid, payloadSchemaVersion: 2 },
+      { ...valid, payloadSchemaVersion: 3 },
       { ...valid, kdf: { ...valid.kdf, algorithm: "argon2i" } },
       { ...valid, kdf: { ...valid.kdf, version: 16 } },
       { ...valid, kdf: { ...valid.kdf, salt: valid.kdf.salt.replace(/==$/u, "") } },
@@ -308,12 +515,13 @@ describe("ShardPass portable backup v2", () => {
         executor(exportDerive),
       ),
     ).rejects.toThrow();
+    // Well under maxItems, but over maxCiphertextBytes: the byte bound is checked on its own.
     const largeValidItem = { ...payload.items[0]!, note: "x".repeat(4_096) };
     await expect(
       exportPortableBackup(
         {
           ...payload,
-          items: Array.from({ length: BACKUP_V2_LIMITS.maxItems }, () => largeValidItem),
+          items: Array.from({ length: 2_000 }, () => largeValidItem),
         },
         password,
         executor(exportDerive),
@@ -399,6 +607,7 @@ describe("ShardPass portable backup v2", () => {
     for (const plaintext of [
       "{",
       JSON.stringify({ ...payload, schemaVersion: 2 }),
+      JSON.stringify({ ...payload, schemaVersion: 3 }),
       JSON.stringify({ ...payload, extra: true }),
       JSON.stringify(payload, null, 2),
       `{"exportedAt":"${fixedNow}","schemaVersion":1,"items":[],"settings":{"autoLockMinutes":15,"lockOnScreenLock":true},"history":{"journal":[],"tombstones":[]}}`,
@@ -489,7 +698,9 @@ describe("authorized legacy backup import-only compatibility", () => {
     expect(imported.sourceFormat).toBe("legacy-v1");
     expect(imported.payload.schemaVersion).toBe(1);
     expect(imported.payload.items).toHaveLength(8);
-    expect(imported.payload.items.map((item) => item.otpType)).toEqual([
+    expect(
+      imported.payload.items.map((item) => (item.kind === "otp" ? item.otpType : item.kind)),
+    ).toEqual([
       "totp",
       "totp",
       "totp",

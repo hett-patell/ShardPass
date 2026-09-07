@@ -6,6 +6,7 @@ import type {
   PendingHotpReservation,
   ImportOtpItemsResult,
   ImportPortableOtpItemsResult,
+  ImportPortableStateResult,
   OtpImportCandidate,
   PortableImportDescriptor,
   PortableImportPreview,
@@ -65,14 +66,14 @@ export interface SessionVaultRepository {
   updateItem(candidate: VaultItem, expectedRevision: number): Promise<VaultItem>;
   readPortableState(): Promise<PortableVaultState>;
   previewPortableImport(
-    candidates: readonly OtpItem[],
+    candidates: readonly VaultItem[],
     descriptor: PortableImportDescriptor,
   ): Promise<PortableImportPreview>;
   importPortableState(
-    candidates: readonly OtpItem[],
+    candidates: readonly VaultItem[],
     descriptor: PortableImportDescriptor,
     expected: PortableImportPreview,
-  ): Promise<ImportPortableOtpItemsResult>;
+  ): Promise<ImportPortableStateResult>;
   previewPortableOtpItems(
     candidates: readonly OtpItem[],
   ): Promise<Readonly<{ statuses: readonly PortableOtpImportStatus[] }>>;
@@ -141,14 +142,14 @@ type SessionVaultRepositoryOperations = Readonly<{
   ): Promise<"activated" | "root-changed">;
   readPortableState(): Promise<PortableVaultState>;
   previewPortableImport(
-    candidates: readonly OtpItem[],
+    candidates: readonly VaultItem[],
     descriptor: PortableImportDescriptor,
   ): Promise<PortableImportPreview>;
   importPortableState(
-    candidates: readonly OtpItem[],
+    candidates: readonly VaultItem[],
     descriptor: PortableImportDescriptor,
     expected: PortableImportPreview,
-  ): Promise<ImportPortableOtpItemsResult>;
+  ): Promise<ImportPortableStateResult>;
   previewPortableOtpItems(
     candidates: readonly OtpItem[],
   ): Promise<Readonly<{ statuses: readonly PortableOtpImportStatus[] }>>;

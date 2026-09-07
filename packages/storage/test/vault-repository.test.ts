@@ -1,5 +1,6 @@
 import {
   LoginItemSchema,
+  MAX_FOLDERS,
   MAX_ITEM_TAGS,
   MAX_ITEM_TAG_LENGTH,
   MAX_OTP_ISSUER_LENGTH,
@@ -8,6 +9,7 @@ import {
   MAX_OTP_SECRET_LENGTH,
   NoteItemSchema,
   OtpItemSchema,
+  VaultItemSchema,
 } from "@shardpass/domain";
 import { describe, expect, it } from "vitest";
 
@@ -1538,5 +1540,292 @@ describe("folders metadata", () => {
         context,
       ),
     ).rejects.toMatchObject({ code: "VAULT_INVALID" });
+  });
+});
+
+describe("full-vault portable state", () => {
+  const folderIds = {
+    work: "0190aaaa-0000-7000-8000-00000000aa01",
+    clients: "0190aaaa-0000-7000-8000-00000000aa02",
+    personal: "0190aaaa-0000-7000-8000-00000000aa03",
+    stray: "0190aaaa-0000-7000-8000-00000000aa04",
+  };
+  const otpId = "0190bbbb-0000-7000-8000-00000000bb01";
+  const loginId = "0190bbbb-0000-7000-8000-00000000bb02";
+  const noteId = "0190bbbb-0000-7000-8000-00000000bb03";
+  const cardId = "0190bbbb-0000-7000-8000-00000000bb04";
+  const identityId = "0190bbbb-0000-7000-8000-00000000bb05";
+  const secretId = "0190bbbb-0000-7000-8000-00000000bb06";
+  const base = {
+    schemaVersion: 2 as const,
+    revision: 3,
+    createdAt: timestamps[0]!,
+    updatedAt: timestamps[1]!,
+    favorite: false,
+    tags: [] as string[],
+  };
+  const fileItems = () =>
+    [
+      { ...item(), id: otpId, issuer: "Portable", label: "otp@example.test", folderId: folderIds.work },
+      {
+        ...base,
+        id: loginId,
+        kind: "login",
+        name: "Portable login",
+        username: "user",
+        password: "hunter2",
+        urls: ["https://example.test"],
+        linkedOtpId: otpId,
+        notes: "",
+        folderId: folderIds.clients,
+      },
+      { ...base, id: noteId, kind: "note", name: "Portable note", content: "milk", folderId: folderIds.stray },
+      {
+        ...base,
+        id: cardId,
+        kind: "card",
+        name: "Portable card",
+        cardholderName: "Holder",
+        number: "4111",
+        expMonth: "12",
+        expYear: "2031",
+        cvv: "123",
+        pin: "",
+        notes: "",
+        folderId: folderIds.personal,
+      },
+      {
+        ...base,
+        id: identityId,
+        kind: "identity",
+        name: "Portable identity",
+        firstName: "A",
+        lastName: "B",
+        email: "",
+        phone: "",
+        street: "",
+        city: "",
+        state: "",
+        zip: "",
+        country: "",
+        notes: "",
+      },
+      {
+        ...base,
+        id: secretId,
+        kind: "secret",
+        name: "Portable secret",
+        secretType: "token",
+        value: "tok",
+        metadata: {},
+        notes: "",
+      },
+    ].map((candidate) => VaultItemSchema.parse(candidate));
+  const fileFolders = () => [
+    { id: folderIds.work, name: "Work" },
+    { id: folderIds.clients, name: "Clients", parentId: folderIds.work },
+    { id: folderIds.personal, name: "Personal" },
+  ];
+  const descriptor = (folders = fileFolders()) => ({
+    settings: { autoLockMinutes: 15 as const, lockOnScreenLock: true },
+    history: { journal: [], tombstones: [] },
+    folders,
+  });
+
+  function unboundedContext(): VaultCryptoContext {
+    let nonce = 1;
+    let sequence = 0;
+    return {
+      dek: new Uint8Array(32).fill(7),
+      random: {
+        randomBytes(length) {
+          const output = new Uint8Array(length).fill(nonce % 251);
+          nonce += 1;
+          return output;
+        },
+      },
+      clock: { now: () => timestamps[3]! },
+      ids: { next: () => `0190cccc-0000-7000-8000-${(++sequence).toString().padStart(12, "0")}` },
+    };
+  }
+
+  it("reads every item kind and the folders, with an OTP-only history", async () => {
+    const storage = new FakeStoragePort();
+    const repository = new VaultRepository(storage, wrappedKey);
+    const context = unboundedContext();
+    await repository.replaceFolders([{ id: folderIds.work, name: "Work" }], context);
+    await repository.create(OtpItemSchema.parse({ ...item(), folderId: folderIds.work }), context);
+    await repository.create(loginItem(), context);
+    await repository.create(noteItem(), context);
+
+    const state = await repository.readPortableState(context);
+
+    expect(state.items.map((entry) => entry.kind)).toEqual(["otp", "login", "note"]);
+    expect(state.items[0]).toMatchObject({ folderId: folderIds.work });
+    expect(state.folders).toEqual([{ id: folderIds.work, name: "Work" }]);
+    expect(state.journal.map((entry) => entry.kind)).toEqual(["otp"]);
+    expect(Object.isFrozen(state.items)).toBe(true);
+  });
+
+  it("restores a mixed vault: creates folders by path, reuses matching ones, remaps ids, strips unknown folders, relinks logins", async () => {
+    const storage = new FakeStoragePort();
+    const repository = new VaultRepository(storage, wrappedKey);
+    const context = unboundedContext();
+    const existingWork = "0190dddd-0000-7000-8000-00000000dd01";
+    await repository.replaceFolders([{ id: existingWork, name: "work" }], context);
+
+    const preview = await repository.previewPortableImport(fileItems(), descriptor(), context);
+    expect(preview).toMatchObject({
+      statuses: ["accepted", "accepted", "accepted", "accepted", "accepted", "accepted"],
+      byKind: { otp: 1, login: 1, note: 1, card: 1, identity: 1, secret: 1 },
+      folders: { created: 2, unfiled: 1 },
+    });
+    expect(await repository.readFolders(context)).toHaveLength(1);
+
+    const result = await repository.importPortableState(fileItems(), descriptor(), preview, context);
+    expect(result).toMatchObject({
+      imported: 6,
+      duplicate: 0,
+      conflict: 0,
+      previewChanged: false,
+      byKind: { otp: 1, login: 1, note: 1, card: 1, identity: 1, secret: 1 },
+      folders: { created: 2, unfiled: 1 },
+    });
+
+    const folders = await repository.readFolders(context);
+    expect(folders).toHaveLength(3);
+    const clients = folders.find((folder) => folder.name === "Clients");
+    const personal = folders.find((folder) => folder.name === "Personal");
+    expect(clients).toMatchObject({ parentId: existingWork });
+    expect(personal?.parentId).toBeUndefined();
+
+    const items = await repository.listItems(context);
+    const byKind = Object.fromEntries(items.map((entry) => [entry.kind, entry]));
+    expect(items).toHaveLength(6);
+    // Fresh ids and revision 1, like every other portable import.
+    expect(items.every((entry) => entry.revision === 1 && entry.id.startsWith("0190cccc"))).toBe(true);
+    expect(byKind.otp).toMatchObject({ folderId: existingWork });
+    expect(byKind.login).toMatchObject({ folderId: clients!.id, linkedOtpId: byKind.otp!.id });
+    expect(byKind.note!.folderId).toBeUndefined();
+    expect(byKind.card).toMatchObject({ folderId: personal!.id });
+    expect(byKind.identity!.folderId).toBeUndefined();
+    expect(items.some((entry) => entry.folderId === folderIds.stray)).toBe(false);
+    expect(items.some((entry) => entry.id === loginId)).toBe(false);
+
+    // A second restore of the same file is all duplicates: content-matched, link remapped.
+    const again = await repository.previewPortableImport(fileItems(), descriptor(), context);
+    expect(again).toMatchObject({
+      statuses: ["duplicate", "duplicate", "duplicate", "duplicate", "duplicate", "duplicate"],
+      byKind: { otp: 0, login: 0, note: 0, card: 0, identity: 0, secret: 0 },
+      folders: { created: 0, unfiled: 0 },
+    });
+  });
+
+  it("treats a version 1 file (no folders) as items with no folder", async () => {
+    const storage = new FakeStoragePort();
+    const repository = new VaultRepository(storage, wrappedKey);
+    const context = unboundedContext();
+    const otpOnly = { settings: descriptor().settings, history: descriptor().history };
+    const candidates = [OtpItemSchema.parse({ ...item(), folderId: folderIds.work })];
+    const preview = await repository.previewPortableImport(candidates, otpOnly, context);
+    expect(preview).toMatchObject({ statuses: ["accepted"], folders: { created: 0, unfiled: 1 } });
+    await repository.importPortableState(candidates, otpOnly, preview, context);
+    const [restored] = await repository.listItems(context);
+    expect(restored?.folderId).toBeUndefined();
+    expect(await repository.readFolders(context)).toEqual([]);
+  });
+
+  it("unfiles items whose folder cannot be created because the vault is full or the tree is too deep", async () => {
+    const storage = new FakeStoragePort();
+    const repository = new VaultRepository(storage, wrappedKey);
+    const context = unboundedContext();
+    const full = Array.from({ length: MAX_FOLDERS - 1 }, (_, index) => ({
+      id: `0190eeee-0000-7000-8000-${index.toString().padStart(12, "0")}`,
+      name: `Existing ${index.toString()}`,
+    }));
+    await repository.replaceFolders(full, context);
+
+    const preview = await repository.previewPortableImport(fileItems(), descriptor(), context);
+    // One slot left: "Work" is created, "Clients" (under it) and "Personal" are not.
+    expect(preview.folders).toEqual({ created: 1, unfiled: 3 });
+    const result = await repository.importPortableState(fileItems(), descriptor(), preview, context);
+    expect(result.folders).toEqual({ created: 1, unfiled: 3 });
+    const folders = await repository.readFolders(context);
+    expect(folders).toHaveLength(MAX_FOLDERS);
+    const work = folders.find((folder) => folder.name === "Work")!;
+    const items = await repository.listItems(context);
+    expect(items.find((entry) => entry.kind === "otp")).toMatchObject({ folderId: work.id });
+    for (const kind of ["login", "note", "card"] as const)
+      expect(items.find((entry) => entry.kind === kind)?.folderId).toBeUndefined();
+
+    const deep = new FakeStoragePort();
+    const deepRepository = new VaultRepository(deep, wrappedKey);
+    const deepContext = unboundedContext();
+    const chain = [
+      { id: folderIds.work, name: "A" },
+      { id: folderIds.clients, name: "B", parentId: folderIds.work },
+      { id: folderIds.personal, name: "C", parentId: folderIds.clients },
+      { id: folderIds.stray, name: "D", parentId: folderIds.personal },
+    ];
+    const deepItems = [OtpItemSchema.parse({ ...item(), folderId: folderIds.stray })];
+    const deepPreview = await deepRepository.previewPortableImport(
+      deepItems,
+      descriptor(chain),
+      deepContext,
+    );
+    expect(deepPreview.folders).toEqual({ created: 3, unfiled: 1 });
+    await deepRepository.importPortableState(deepItems, descriptor(chain), deepPreview, deepContext);
+    expect((await deepRepository.readFolders(deepContext)).map((folder) => folder.name)).toEqual([
+      "A",
+      "B",
+      "C",
+    ]);
+  });
+
+  it("marks a same-id item with different content as a conflict and a same-content item as a duplicate", async () => {
+    const storage = new FakeStoragePort();
+    const repository = new VaultRepository(storage, wrappedKey);
+    const context = unboundedContext();
+    const existing = loginItem({ id: loginId, folderId: undefined, tags: ["local"], favorite: true });
+    await repository.create(existing, context);
+    const sameContentOtherId = LoginItemSchema.parse({ ...existing, id: cardId, tags: [] });
+    const changedPassword = LoginItemSchema.parse({ ...existing, password: "changed" });
+    const otherKindSameId = NoteItemSchema.parse({ ...noteItem(), id: loginId });
+    const twice = LoginItemSchema.parse({ ...existing, id: secretId, name: "Twice" });
+
+    const preview = await repository.previewPortableImport(
+      [sameContentOtherId, changedPassword, otherKindSameId, twice, twice],
+      { settings: descriptor().settings, history: descriptor().history },
+      context,
+    );
+    expect(preview.statuses).toEqual(["duplicate", "conflict", "conflict", "accepted", "conflict"]);
+    expect(preview.byKind).toMatchObject({ login: 1, note: 0 });
+
+    const result = await repository.importPortableState(
+      [sameContentOtherId, changedPassword, otherKindSameId, twice, twice],
+      { settings: descriptor().settings, history: descriptor().history },
+      preview,
+      context,
+    );
+    expect(result).toMatchObject({ imported: 1, duplicate: 1, conflict: 3 });
+    const items = await repository.listItems(context);
+    expect(items).toHaveLength(2);
+    expect(items.find((entry) => entry.id === loginId)).toMatchObject({
+      kind: "login",
+      password: "hunter2",
+      revision: 1,
+    });
+  });
+
+  it("changes the preview when folders change underneath it and refuses to apply the stale one", async () => {
+    const storage = new FakeStoragePort();
+    const repository = new VaultRepository(storage, wrappedKey);
+    const context = unboundedContext();
+    const preview = await repository.previewPortableImport(fileItems(), descriptor(), context);
+    expect(preview.folders.created).toBe(3);
+    await repository.replaceFolders([{ id: folderIds.work, name: "WORK" }], context);
+    const stale = await repository.importPortableState(fileItems(), descriptor(), preview, context);
+    expect(stale).toMatchObject({ imported: 0, previewChanged: true, folders: { created: 2 } });
+    expect(await repository.listItems(context)).toEqual([]);
   });
 });

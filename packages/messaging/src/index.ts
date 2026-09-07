@@ -35,6 +35,8 @@ export {
   BackupResponseSchema,
   backupResponseKindsByRequest,
   backupSenderPolicy,
+  BACKUP_SNAPSHOT_SCHEMA_VERSION,
+  MAX_BACKUP_IMPORT_FOLDERS,
   MAX_BACKUP_IMPORT_ITEMS,
   MAX_BACKUP_JOURNAL_ENTRIES,
   MAX_BACKUP_TOMBSTONES,
@@ -44,6 +46,8 @@ export {
 } from "./backup";
 export type {
   BackupCommandKind,
+  BackupCountsByKind,
+  BackupFolderOutcome,
   BackupRequest,
   BackupResponse,
   BackupResponseKind,

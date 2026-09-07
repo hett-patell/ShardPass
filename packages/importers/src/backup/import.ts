@@ -64,6 +64,9 @@ export async function importPortableBackup(
     aad = encodeBackupV2Header(header);
     plaintext = await decryptEnvelope(key, { nonce, ciphertext }, aad);
     const payload = parseCanonicalPayload(plaintext);
+    // The header (authenticated as AAD) and the sealed payload must agree on the version.
+    if (payload.schemaVersion !== envelope.payloadSchemaVersion)
+      throw new Error("Invalid backup payload.");
     canonical = encodeCanonicalPayload(payload);
     if (!equalBytes(plaintext, canonical)) throw new Error("Invalid backup payload.");
     return { sourceFormat: "v2", payload };

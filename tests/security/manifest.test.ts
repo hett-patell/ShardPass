@@ -42,8 +42,9 @@ function assertManifestPolicy(candidate: Record<string, unknown>): void {
     default_title: "ShardPass",
   });
   expect(candidate.options_page).toBe("vault/index.html");
-  // One command only: opening the popup. Nothing runs code from a keystroke.
-  expect(Object.keys(candidate.commands as object)).toEqual(["_execute_action"]);
+  // Two commands: opening the popup, and locking the vault. Nothing else runs from a keystroke.
+  expect(Object.keys(candidate.commands as object)).toEqual(["_execute_action", "lock-vault"]);
+  expect(candidate.commands).toMatchObject({ "lock-vault": { description: "Lock ShardPass" } });
   expect(Object.keys(candidate.action as object).sort()).toEqual([
     "default_popup",
     "default_title",

@@ -284,6 +284,10 @@ export function installBackground(
   };
 
   const disposeAlarm = platform.onAutoLock(() => void lockAndPublish());
+  // The "Lock ShardPass" keyboard command: lock everything now, from anywhere.
+  const disposeCommands = platform.onCommand?.((name) => {
+    if (name === "lock-vault") void lockAndPublish();
+  });
   const disposeEnteAlarm =
     platform.onEnteSyncAlarm?.(() => {
       // The worker that armed this alarm may be long gone; decide from persisted state.
@@ -300,7 +304,10 @@ export function installBackground(
     }) ?? (() => undefined);
   const disposeRoot = platform.onLocalStorageChanged((changes) => {
     void (async () => {
-      if (!(await awaitReady()) || !(ACTIVE_ROOT_KEY in changes)) return;
+      if (!(await awaitReady())) return;
+      // Any change to the root or a generation key drops the authenticated-generation cache.
+      sessions.handleLocalStorageChange(Object.keys(changes));
+      if (!(ACTIVE_ROOT_KEY in changes)) return;
       await sessions.handleActiveRootChange(changes[ACTIVE_ROOT_KEY]);
       publisher.publish();
     })();
@@ -424,6 +431,7 @@ export function installBackground(
     disposed = true;
     disposeMessage();
     disposeAlarm();
+    disposeCommands?.();
     disposeEnteAlarm();
     void enteScheduler?.dispose();
     enteService.dispose();
