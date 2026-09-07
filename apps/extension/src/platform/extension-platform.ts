@@ -90,6 +90,7 @@ export interface BackgroundExtensionPlatform extends RuntimeExtensionPlatform {
   autoLockPending?(): Promise<boolean>;
   onAutoLock(handler: () => void): () => void;
   scheduleEnteSync?(minutes: 15 | null): Promise<void>;
+  enteSyncPending?(): Promise<boolean>;
   onEnteSyncAlarm?(handler: () => void): () => void;
   onUserActivity(handler: () => void): () => void;
   onIdleStateChanged(handler: (state: "active" | "idle" | "locked") => void): () => void;

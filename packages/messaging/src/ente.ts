@@ -101,5 +101,13 @@ export const EnteSafeStateSchema = z.strictObject({
   writeCategory: z.optional(z.enum(["create", "update", "delete"])),
   conflicts: z.optional(z.array(conflictPreview).check(z.maxLength(10_000))),
   authHandoffPublicKey: z.optional(wireBytes(32, 32)),
+  /** The last background cycle that failed, for the panel; cleared by the next success. */
+  lastFailure: z.optional(
+    z.strictObject({
+      code: z.string().check(z.maxLength(64)),
+      detail: z.optional(z.string().check(z.maxLength(200))),
+      at: z.number().check(z.nonnegative()),
+    }),
+  ),
 });
 export type EnteSafeState = z.infer<typeof EnteSafeStateSchema>;

@@ -87,4 +87,30 @@ describe("Ente conflict service path", () => {
       ),
     ).rejects.toMatchObject({ code: "ENTE_UNAVAILABLE" });
   });
+
+  it("surfaces the last background failure and backs restarts off until a success", async () => {
+    let lastAttemptAt: number | null = null;
+    const service = new EnteService(
+      {} as EnteSyncCoordinator,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      () => Promise.resolve({ connected: true, lastAttemptAt } as never),
+    );
+    await expect(service.shouldRunOnRestart(1_000_000)).resolves.toBe(true);
+    service.noteFailure(Object.assign(new Error("x"), { code: "ENTE_UNAVAILABLE", detail: "/authenticator/key" }), 1_000_000);
+    expect(service.snapshot().lastFailure).toEqual({ code: "ENTE_UNAVAILABLE", detail: "/authenticator/key", at: 1_000_000 });
+    await expect(service.shouldRunOnRestart(1_000_000 + 30_000)).resolves.toBe(false);
+    await expect(service.shouldRunOnRestart(1_000_000 + 61_000)).resolves.toBe(true);
+    service.noteFailure(new Error("again"), 1_100_000);
+    await expect(service.shouldRunOnRestart(1_100_000 + 90_000)).resolves.toBe(false);
+    service.noteSuccess();
+    expect(service.snapshot().lastFailure).toBeUndefined();
+    lastAttemptAt = 2_000_000;
+    await expect(service.shouldRunOnRestart(2_000_000 + 5 * 60_000)).resolves.toBe(false);
+    await expect(service.shouldRunOnRestart(2_000_000 + 16 * 60_000)).resolves.toBe(true);
+  });
 });

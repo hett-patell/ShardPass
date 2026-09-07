@@ -3,7 +3,12 @@ import { ENTE_SYNC_LIMITS, EnteProtocolError } from "./protocol";
 import type { EnteSyncCoordinator } from "./coordinator";
 import type { EntePersistedStatus } from "./runtime";
 
+/** Restart-triggered cycles back off after failures: 1, 2, 4 ... up to 60 minutes. */
+const MAX_BACKOFF_MINUTES = 60;
+
 export class EnteService {
+  private failures = 0;
+  private lastFailure: NonNullable<EnteSafeState["lastFailure"]> | undefined;
   private state: EnteSafeState = {
     version: 1,
     kind: "ente.state",
@@ -36,7 +41,38 @@ export class EnteService {
     private readonly readStatus?: () => Promise<EntePersistedStatus | null>,
   ) {}
   snapshot(): EnteSafeState {
-    return { ...this.state };
+    return { ...this.state, ...(this.lastFailure === undefined ? {} : { lastFailure: this.lastFailure }) };
+  }
+
+  /** A background cycle failed: the panel gets the code and detail, and restarts back off. */
+  noteFailure(error: unknown, now: number): void {
+    const candidate = error as { code?: unknown; detail?: unknown } | null;
+    const code = typeof candidate?.code === "string" ? candidate.code.slice(0, 64) : "ENTE_UNAVAILABLE";
+    const detail = typeof candidate?.detail === "string" ? candidate.detail.slice(0, 200) : undefined;
+    this.failures += 1;
+    this.lastFailure = { code, ...(detail === undefined ? {} : { detail }), at: now };
+  }
+
+  noteSuccess(): void {
+    this.failures = 0;
+    this.lastFailure = undefined;
+  }
+
+  /**
+   * Whether a worker restart should run a cycle now. Not when the last attempt is younger
+   * than the schedule (browsing wakes the worker on most page loads), and not inside the
+   * backoff after a failure.
+   */
+  async shouldRunOnRestart(now: number): Promise<boolean> {
+    const failure = this.lastFailure;
+    if (failure !== undefined) {
+      const backoffMs = Math.min(MAX_BACKOFF_MINUTES, 2 ** (this.failures - 1)) * 60_000;
+      if (now - failure.at < backoffMs) return false;
+    }
+    const persisted = await this.readStatus?.().catch(() => null);
+    const lastAttemptAt = persisted?.lastAttemptAt ?? null;
+    if (lastAttemptAt !== null) return now - lastAttemptAt >= ENTE_SYNC_LIMITS.schedulerMinutes * 60_000;
+    return true;
   }
 
   /**

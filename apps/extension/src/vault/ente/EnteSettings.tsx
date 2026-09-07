@@ -70,6 +70,13 @@ export function EnteSettings({ platform, active, onSynced }: EnteSettingsProps) 
           <code>{sync.errorCode ?? "not reported"}</code>.
         </p>
       ) : null}
+      {!sync.error && state.lastFailure ? (
+        <p className={styles.error} role="status">
+          The last background sync failed {formatWhen(state.lastFailure.at).text}. Reason:{" "}
+          <code>{state.lastFailure.code}</code>
+          {state.lastFailure.detail ? <> — {state.lastFailure.detail}</> : null}. It is retried with a growing wait; Sync now tries at once.
+        </p>
+      ) : null}
 
       {(showCredentials && !state.connected && state.state !== "totp-required") ||
       state.state === "connecting" ? (

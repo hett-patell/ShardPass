@@ -226,11 +226,15 @@ export function installBackground(
     try {
       if (!enteUnlocked) return;
       const connected = (await runtimeOwner?.connected().catch(() => false)) ?? false;
-      await enteScheduler?.setUnlocked(true);
-      await enteScheduler?.setConnected(connected);
-      if (connected) await enteCoordinator.trigger(trigger);
-    } catch {
-      // A failed cycle is reported by the next status request; nothing to surface here.
+      await enteScheduler?.setState(connected, true);
+      if (!connected) return;
+      // A restart is not a reason to sync: the worker wakes on most page loads.
+      if (trigger === "restart" && !(await enteService.shouldRunOnRestart(Date.now()))) return;
+      await enteCoordinator.trigger(trigger);
+      enteService.noteSuccess();
+    } catch (error) {
+      // The panel shows the code and detail; restarts back off until it works again.
+      enteService.noteFailure(error, Date.now());
     }
   };
 

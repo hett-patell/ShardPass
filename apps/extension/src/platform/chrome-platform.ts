@@ -260,6 +260,12 @@ export function createChromePlatform(): BackgroundExtensionPlatform &
         await chrome.alarms.create(ENTE_SYNC_ALARM, { periodInMinutes: minutes });
     },
 
+    async enteSyncPending() {
+      if (typeof chrome.alarms.get !== "function") return false;
+      const alarm = await chrome.alarms.get(ENTE_SYNC_ALARM);
+      return alarm !== undefined && alarm !== null;
+    },
+
     onEnteSyncAlarm(handler) {
       const listener = (alarm: chrome.alarms.Alarm) => {
         if (alarm.name === ENTE_SYNC_ALARM) handler();
