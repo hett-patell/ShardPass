@@ -1,3 +1,5 @@
+import { useState } from "react";
+
 export interface OtpPickerSuggestion {
   readonly itemId: string;
   readonly expectedRevision: number;
@@ -6,6 +8,7 @@ export interface OtpPickerSuggestion {
   readonly otpType: "totp" | "hotp" | "steam";
   readonly favorite: boolean;
   readonly tags: readonly string[];
+  readonly siteMatch?: boolean | undefined;
 }
 
 export interface OtpPickerProps {
@@ -23,14 +26,20 @@ const STATUS = Object.freeze({
 
 /** The on-page one-time-code list: favourites first, a slim bar, no search box to take focus. */
 export function OtpPicker({ suggestions, state, onClose, onSelect }: OtpPickerProps) {
-  const visible = suggestions
+  const [showAll, setShowAll] = useState(false);
+  const sorted = suggestions
     .slice()
     .sort(
       (left, right) =>
+        Number(right.siteMatch ?? false) - Number(left.siteMatch ?? false) ||
         Number(right.favorite) - Number(left.favorite) ||
         left.issuer.localeCompare(right.issuer) ||
         left.label.localeCompare(right.label),
     );
+  // When some accounts belong to this site, only those show until asked for the rest.
+  const matched = sorted.filter((item) => item.siteMatch === true);
+  const visible = matched.length > 0 && !showAll ? matched : sorted;
+  const hidden = sorted.length - visible.length;
   return (
     <section
       className="otpPicker"
@@ -65,6 +74,11 @@ export function OtpPicker({ suggestions, state, onClose, onSelect }: OtpPickerPr
               <span className="otpType">{item.otpType.toUpperCase()}</span>
             </button>
           ))}
+          {hidden > 0 ? (
+            <button className="otpMore" type="button" onClick={() => setShowAll(true)}>
+              Show {hidden} more {hidden === 1 ? "account" : "accounts"}
+            </button>
+          ) : null}
         </div>
       ) : (
         <p className="status" role="status">

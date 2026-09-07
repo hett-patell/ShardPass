@@ -127,6 +127,7 @@ describe("OTP fill service", () => {
           otpType: "totp",
           favorite: true,
           tags: ["work"],
+          siteMatch: true,
         },
         {
           itemId,
@@ -136,12 +137,23 @@ describe("OTP fill service", () => {
           otpType: "totp",
           favorite: false,
           tags: ["work"],
+          siteMatch: true,
         },
       ],
     });
     expect(JSON.stringify(response)).not.toContain("secret");
     expect(JSON.stringify(response)).not.toContain("private");
     expect(JSON.stringify(response)).not.toContain("code");
+  });
+
+  it("puts the page's own accounts first and marks the others as belonging elsewhere", async () => {
+    const elsewhere = otp({ id: otherItemId, issuer: "Other Service", label: "someone", favorite: true, secret: "GEZDGNBVGY3TQOJQ" });
+    const { service } = harness([elsewhere, otp()]);
+    const response = (await suggestions(service)) as { suggestions: Array<{ itemId: string; siteMatch?: boolean }> };
+    expect(response.suggestions.map((item) => [item.itemId, item.siteMatch])).toEqual([
+      [itemId, true],
+      [otherItemId, false],
+    ]);
   });
 
   it("binds capabilities and releases to exact sender origin field item revision and session", async () => {

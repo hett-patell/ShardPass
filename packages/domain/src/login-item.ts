@@ -115,6 +115,8 @@ export const LoginItemSchema = z.extend(ItemMetadataSchema, {
     z.array(passwordHistoryEntrySchema).check(z.maxLength(MAX_LOGIN_PASSWORD_HISTORY)),
   ),
   passkeys: z.optional(z.array(passkeySchema).check(z.maxLength(MAX_LOGIN_PASSKEYS))),
+  /** When this login was last filled; the background sets it on fill confirmation. */
+  lastUsedAt: z.optional(ItemTimestampSchema),
   notes: boundedString(MAX_LOGIN_NOTES_LENGTH),
 });
 

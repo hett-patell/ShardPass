@@ -6,6 +6,7 @@ export interface LoginPickerSuggestion {
   readonly favorite: boolean;
   readonly tags: readonly string[];
   readonly hasLinkedOtp: boolean;
+  readonly lastUsedAt?: string | undefined;
 }
 
 /** "locked": the vault is closed; the chip stays so a click after unlocking asks again. */
@@ -32,8 +33,9 @@ const STATUS: Readonly<
 });
 
 /**
- * Favourites first, then by name; when the person has typed, a login stays only if what they
- * typed and its username are prefixes of each other (either way), or its name contains it.
+ * Favourites first, then the most recently used, then by name; when the person has typed, a
+ * login stays only if what they typed and its username are prefixes of each other (either
+ * way), or its name contains it.
  */
 export function filterSuggestions(
   suggestions: readonly LoginPickerSuggestion[],
@@ -49,6 +51,7 @@ export function filterSuggestions(
     .sort(
       (left, right) =>
         Number(right.favorite) - Number(left.favorite) ||
+        (right.lastUsedAt ?? "").localeCompare(left.lastUsedAt ?? "") ||
         left.name.localeCompare(right.name) ||
         left.username.localeCompare(right.username),
     );

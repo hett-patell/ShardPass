@@ -1,4 +1,5 @@
-import { OtpItemSchema, type OtpItem } from "@shardpass/domain";
+import { LoginItemSchema, OtpItemSchema, type OtpItem } from "@shardpass/domain";
+import { matchLoginUrls, registrableDomain } from "@shardpass/autofill";
 import {
   OTP_FILL_LIMITS,
   OtpFillRequestSchema,
@@ -167,14 +168,24 @@ export class OtpFillService {
       this.assertOwner(owner, fieldKey);
       await this.dependencies.assertSession(authority);
       this.assertOwner(owner, fieldKey);
-      const projected: OtpFillSuggestion[] = [];
+      // The page's site decides the order: accounts whose issuer or label names it, and the
+      // one linked from a login saved for it, come first; the rest follow.
+      const site = siteOf(binding.origin);
+      const linked = new Set<string>();
+      for (const candidate of candidates) {
+        const login = LoginItemSchema.safeParse(candidate);
+        if (!login.success || login.data.deletedAt !== undefined || login.data.archivedAt !== undefined) continue;
+        if (login.data.linkedOtpId !== undefined && matchLoginUrls(site.host, login.data.urls, login.data.urlMatches))
+          linked.add(login.data.linkedOtpId);
+      }
+      const all: OtpFillSuggestion[] = [];
       for (const candidate of candidates) {
         const parsed = OtpItemSchema.safeParse(candidate);
-        if (!parsed.success || parsed.data.deletedAt !== undefined) continue;
-        projected.push(project(parsed.data));
-        if (projected.length === OTP_FILL_LIMITS.maxSuggestions) break;
+        if (!parsed.success || parsed.data.deletedAt !== undefined || parsed.data.archivedAt !== undefined) continue;
+        all.push(project(parsed.data, linked.has(parsed.data.id) || namesSite(parsed.data, site)));
       }
-      projected.sort(compareSuggestions);
+      all.sort(compareSuggestions);
+      const projected = all.slice(0, OTP_FILL_LIMITS.maxSuggestions);
       const id = this.dependencies.nextOpaqueId();
       const expiresAt = this.dependencies.now() + OTP_FILL_LIMITS.suggestionTtlMs;
       const capability: Capability = Object.freeze({
@@ -559,7 +570,7 @@ function bindingKey(binding: Binding): string {
     binding.fieldHandle,
   ].join("\u0000");
 }
-function project(item: OtpItem): OtpFillSuggestion {
+function project(item: OtpItem, siteMatch: boolean): OtpFillSuggestion {
   return Object.freeze({
     itemId: item.id,
     expectedRevision: item.revision,
@@ -568,9 +579,36 @@ function project(item: OtpItem): OtpFillSuggestion {
     otpType: item.otpType,
     favorite: item.favorite,
     tags: [...item.tags],
+    siteMatch,
   });
 }
+
+type Site = Readonly<{ host: string; domain: string; brand: string }>;
+
+/** The page's host, its registrable domain, and the label people name a site by ("github"). */
+function siteOf(origin: string): Site {
+  let host = "";
+  try {
+    host = new URL(origin).hostname.toLowerCase();
+  } catch {
+    host = "";
+  }
+  const domain = registrableDomain(host.replace(/^www\./u, ""));
+  return { host, domain, brand: domain.split(".")[0] ?? "" };
+}
+
+/** "GitHub" names github.com; "Amazon Web Services" names amazon.com; a label holding the domain counts too. */
+function namesSite(item: OtpItem, site: Site): boolean {
+  if (site.brand.length < 3) return false;
+  const issuer = normalize(item.issuer).replace(/[^a-z0-9]/gu, "");
+  const label = normalize(item.label);
+  if (issuer === site.brand) return true;
+  if (issuer.length >= 4 && site.brand.length >= 4 && (issuer.includes(site.brand) || site.brand.includes(issuer))) return true;
+  return site.domain !== "" && label.includes(site.domain);
+}
+
 function compareSuggestions(left: OtpFillSuggestion, right: OtpFillSuggestion): number {
+  if ((left.siteMatch ?? false) !== (right.siteMatch ?? false)) return left.siteMatch ? -1 : 1;
   if (left.favorite !== right.favorite) return left.favorite ? -1 : 1;
   return (
     compare(normalize(left.issuer), normalize(right.issuer)) ||

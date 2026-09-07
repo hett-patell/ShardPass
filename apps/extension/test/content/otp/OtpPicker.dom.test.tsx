@@ -53,6 +53,16 @@ describe("metadata-only OTP picker shell", () => {
     expect(screen.getByRole("button", { name: "Close ShardPass picker" })).toBeInTheDocument();
   });
 
+  it("shows the page's own accounts and keeps the rest behind Show more", () => {
+    const here = { ...suggestions[0]!, itemId: "10000000-0000-4000-8000-00000000aaaa", issuer: "Here", siteMatch: true };
+    render(
+      <OtpPicker suggestions={[...suggestions, here]} state="ready" onClose={vi.fn()} onSelect={vi.fn()} />,
+    );
+    expect(screen.getAllByRole("button", { name: /Use OTP account/ })).toHaveLength(1);
+    fireEvent.click(screen.getByRole("button", { name: `Show ${suggestions.length} more accounts` }));
+    expect(screen.getAllByRole("button", { name: /Use OTP account/ })).toHaveLength(suggestions.length + 1);
+  });
+
   it("supports keyboard selection and Escape close", () => {
     const onClose = vi.fn();
     const onSelect = vi.fn();

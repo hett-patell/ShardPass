@@ -11,6 +11,8 @@ export const LoginFillSuggestionSchema = z.strictObject({
   favorite: z.boolean(),
   tags: z.array(z.string()),
   hasLinkedOtp: z.boolean(),
+  /** When this login was last filled or copied, so the most recently used one leads. */
+  lastUsedAt: z.optional(z.string()),
 });
 
 export type LoginFillSuggestion = z.infer<typeof LoginFillSuggestionSchema>;

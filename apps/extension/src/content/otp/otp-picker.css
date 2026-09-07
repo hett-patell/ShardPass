@@ -54,7 +54,24 @@
   font-family: var(--font-mono);
   font-size: 10px;
 }
-.otpRow:focus-visible {
+.otpMore {
+  min-height: 34px;
+  padding: 0 var(--space-3);
+  color: var(--color-text-muted);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  background: var(--color-surface);
+  border: 0;
+  cursor: pointer;
+}
+
+.otpMore:hover {
+  color: var(--color-text);
+}
+
+.otpRow:focus-visible,
+.otpMore:focus-visible {
   outline: 2px solid var(--color-focus);
   outline-offset: -2px;
 }

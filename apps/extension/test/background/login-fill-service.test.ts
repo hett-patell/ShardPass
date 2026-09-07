@@ -185,6 +185,22 @@ describe("LoginFillService", () => {
     expect(result.suggestions.map((s) => s.itemId)).toEqual([ids.otherLogin, ids.login]);
   });
 
+  it("leads with the most recently used login, and records a use on fill confirmation", async () => {
+    const older = loginItem({ id: ids.login, name: "Older", lastUsedAt: "2026-08-01T00:00:00.000Z" });
+    const newer = loginItem({ id: ids.otherLogin, name: "Newer", lastUsedAt: "2026-08-09T00:00:00.000Z" });
+    const { service, repository } = fixture([older, newer], Date.UTC(2026, 7, 10, 12));
+    const before = await service.handle(request("login.fillSuggestions", { domain: "example.test" }), sender);
+    if (before.kind !== "login.fillSuggestionsResult") throw new Error("expected suggestions");
+    expect(before.suggestions.map((item) => item.name)).toEqual(["Newer", "Older"]);
+
+    await service.handle(request("login.fillConfirm", { itemId: ids.login }), sender);
+    const touched = await repository.getItem(ids.login);
+    expect(touched).toMatchObject({ lastUsedAt: "2026-08-10T12:00:00.000Z" });
+    const after = await service.handle(request("login.fillSuggestions", { domain: "example.test" }), sender);
+    if (after.kind !== "login.fillSuggestionsResult") throw new Error("expected suggestions");
+    expect(after.suggestions.map((item) => item.name)).toEqual(["Older", "Newer"]);
+  });
+
   it("reports hasLinkedOtp without dereferencing the linked item", async () => {
     const stored = loginItem({ linkedOtpId: ids.totp, urls: ["https://example.test"] });
     const { service } = fixture([stored]);

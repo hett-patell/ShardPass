@@ -98,12 +98,28 @@ export class LoginFillService {
           this.offers.delete(command.offerId);
           return validated({ version: 1, kind: "login.fillAck", ok: true });
         case "login.fillConfirm":
+          // A fill happened: remember when, so this login leads next time. Best effort.
+          await this.touch(command.itemId);
+          return validated({ version: 1, kind: "login.fillAck", ok: true });
         case "login.fillCancel":
-          // Fire-and-forget acknowledgements: neither reveals a secret nor mutates the vault.
+          // A fire-and-forget acknowledgement: reveals nothing, changes nothing.
           return validated({ version: 1, kind: "login.fillAck", ok: true });
       }
     } catch (error) {
       throw mapError(error);
+    }
+  }
+
+  private async touch(itemId: string): Promise<void> {
+    try {
+      const item = await this.dependencies.repository.getItem(itemId);
+      if (item === null || !isLiveLogin(item)) return;
+      await this.dependencies.repository.updateItem(
+        { ...item, lastUsedAt: new Date(this.dependencies.now()).toISOString() },
+        item.revision,
+      );
+    } catch {
+      // A missed timestamp costs nothing; the fill already happened.
     }
   }
 
@@ -121,6 +137,7 @@ export class LoginFillService {
         favorite: item.favorite,
         tags: [...item.tags],
         hasLinkedOtp: item.linkedOtpId !== undefined || (item.totp ?? "").trim() !== "",
+        ...(item.lastUsedAt === undefined ? {} : { lastUsedAt: item.lastUsedAt }),
       });
     }
     suggestions.sort(compareSuggestions);
@@ -368,6 +385,9 @@ function tabOf(sender: SenderContext): number {
 
 function compareSuggestions(left: LoginFillSuggestion, right: LoginFillSuggestion): number {
   if (left.favorite !== right.favorite) return left.favorite ? -1 : 1;
+  // Most recently used first: on a site with several accounts, the one used here leads.
+  const recency = compareText(right.lastUsedAt ?? "", left.lastUsedAt ?? "");
+  if (recency !== 0) return recency;
   return (
     compareText(normalize(left.name), normalize(right.name)) ||
     compareText(normalize(left.username), normalize(right.username)) ||

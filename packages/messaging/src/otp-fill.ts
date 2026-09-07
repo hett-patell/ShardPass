@@ -45,6 +45,8 @@ export const OtpFillSuggestionSchema = z.strictObject({
   otpType,
   favorite: z.boolean(),
   tags,
+  /** The account belongs to the page's site (issuer, label, or a login saved for it says so). */
+  siteMatch: z.optional(z.boolean()),
 });
 
 export const OtpFillSuggestionsRequestSchema = z.strictObject({
