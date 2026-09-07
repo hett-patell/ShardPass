@@ -1,7 +1,7 @@
 import type { OtpItem, VaultItemKind } from "@shardpass/domain";
 import type { OtpEditableInput, OtpResponse } from "@shardpass/messaging";
 import { AppHeader, SearchBar, StatusBadge, ThemeToggle, type CategoryKey, type Status } from "@shardpass/ui";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { useFoundationStatus } from "../foundation/useFoundationStatus";
 import type {
@@ -31,6 +31,7 @@ import { countItemsByFolder } from "./item-support";
 import { MigrationPanel } from "./migration/MigrationPanel";
 import { defaultOtpInput, OtpEditor } from "./otp/OtpEditor";
 import styles from "./VaultApp.module.css";
+import { parseVaultPageHash, type VaultPageTarget } from "../platform/vault-route";
 
 export interface VaultAppProps {
   platform: ExtensionPlatform &
@@ -138,6 +139,35 @@ export function VaultApp({ platform }: VaultAppProps) {
   );
 
   const cancelCreate = useCallback(() => setCreatingKind(null), []);
+
+  // Deep links from the popup and the save prompt ride in the URL hash; they apply once the
+  // vault is unlocked (a locked page keeps them until then) and are then cleared, so a
+  // reload does not replay "new login" or reopen an item.
+  const [route, setRoute] = useState<VaultPageTarget | null>(() => parseVaultPageHash(window.location.hash));
+  useEffect(() => {
+    const onHashChange = () => {
+      const next = parseVaultPageHash(window.location.hash);
+      if (next !== null) setRoute(next);
+    };
+    window.addEventListener("hashchange", onHashChange);
+    return () => window.removeEventListener("hashchange", onHashChange);
+  }, []);
+  useEffect(() => {
+    if (route === null || !vaultUnlocked) return;
+    if ("view" in route) {
+      setCreatingKind(null);
+      setView(route.view === "import" ? "settings" : route.view);
+    } else if ("newItem" in route) startCreate(route.newItem);
+    else {
+      goToVaultView();
+      vaultState.setCategory("all");
+      vaultState.setFolderId(null);
+      vaultState.setSelectedId(route.item);
+    }
+    setRoute(null);
+    if (window.location.hash !== "")
+      window.history.replaceState(null, "", window.location.pathname + window.location.search);
+  }, [route, vaultUnlocked, startCreate, goToVaultView, vaultState]);
 
   // Shared by every non-OTP create form: only `id` is needed to select the new item,
   // and every VaultItem kind carries one, so this is safe to reuse across kinds.

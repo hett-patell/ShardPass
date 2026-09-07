@@ -644,4 +644,38 @@ describe("Chrome extension platform", () => {
     );
     await expect(platform.openVaultPage()).rejects.toThrow("tab failed");
   });
+
+  it("moves an already-open vault tab to the target instead of opening a second one", async () => {
+    const platform = createChromePlatform();
+    const tabsQuery = vi.fn((_query: unknown, callback: (tabs: chrome.tabs.Tab[]) => void) => {
+      callback([{ id: 9, windowId: 2 } as chrome.tabs.Tab]);
+    });
+    const tabsUpdate = vi.fn((_id: number, _properties: unknown, callback: () => void) => callback());
+    const windowsUpdate = vi.fn((_id: number, _properties: unknown, callback: () => void) => callback());
+    const tabs = chrome.tabs as unknown as Record<string, unknown>;
+    tabs.query = tabsQuery;
+    tabs.update = tabsUpdate;
+    (chrome as unknown as Record<string, unknown>).windows = { update: windowsUpdate };
+
+    await expect(platform.openVaultPage({ view: "settings" })).resolves.toBeUndefined();
+    expect(tabsQuery).toHaveBeenCalledWith(
+      { url: "chrome-extension://runtime-owned-extension-id/vault/index.html*" },
+      expect.any(Function),
+    );
+    expect(tabsUpdate).toHaveBeenCalledWith(
+      9,
+      { url: "chrome-extension://runtime-owned-extension-id/vault/index.html#/settings", active: true },
+      expect.any(Function),
+    );
+    expect(windowsUpdate).toHaveBeenCalledWith(2, { focused: true }, expect.any(Function));
+    expect(tabsCreate).not.toHaveBeenCalled();
+
+    tabsQuery.mockImplementationOnce((_query: unknown, callback: (tabs: chrome.tabs.Tab[]) => void) => callback([]));
+    tabsCreate.mockImplementationOnce((_properties: chrome.tabs.CreateProperties, callback: () => void) => callback());
+    await expect(platform.openVaultPage({ newItem: "login" })).resolves.toBeUndefined();
+    expect(tabsCreate).toHaveBeenCalledWith(
+      { url: "chrome-extension://runtime-owned-extension-id/vault/index.html#/new/login" },
+      expect.any(Function),
+    );
+  });
 });

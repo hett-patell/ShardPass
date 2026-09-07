@@ -47,6 +47,8 @@ export interface HomeScreenProps {
   filling: string | null;
   onCopyPassword: (item: ItemListItemProjection) => void;
   onOpenVault: () => void;
+  /** Opens the vault page at its import section. */
+  onImport: () => void;
   onNewItem: (kind: VaultItemKind) => void;
   /** Opens the password generator screen. */
   onGenerate: () => void;
@@ -66,6 +68,7 @@ export function HomeScreen({
   filling,
   onCopyPassword,
   onOpenVault,
+  onImport,
   onNewItem,
   onGenerate,
 }: HomeScreenProps) {
@@ -125,7 +128,7 @@ export function HomeScreen({
                   or add the first one by hand.
                 </p>
                 <div className={styles.getStartedActions}>
-                  <Button onClick={onOpenVault}>Import passwords</Button>
+                  <Button onClick={onImport}>Import passwords</Button>
                   <Button variant="secondary" onClick={() => onNewItem("login")}>
                     Add a login
                   </Button>

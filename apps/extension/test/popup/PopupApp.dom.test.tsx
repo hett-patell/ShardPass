@@ -236,6 +236,14 @@ describe("PopupApp screens", () => {
     expect(await screen.findByRole("searchbox", { name: "Search ShardPass" })).toBeVisible();
   });
 
+  it("opens the vault page at the right place from the title bar and the new-item action", async () => {
+    const { openVaultPage } = await renderUnlocked();
+    fireEvent.click(screen.getByRole("button", { name: "Open vault settings" }));
+    await waitFor(() => expect(openVaultPage).toHaveBeenCalledWith({ view: "settings" }));
+    fireEvent.click(screen.getByRole("button", { name: "New item" }));
+    await waitFor(() => expect(openVaultPage).toHaveBeenCalledWith({ newItem: "login" }));
+  });
+
   it("locks the vault from the title bar", async () => {
     const { sendMessage } = await renderUnlocked();
     fireEvent.click(screen.getByRole("button", { name: "Lock vault" }));

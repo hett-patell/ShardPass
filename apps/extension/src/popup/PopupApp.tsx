@@ -4,6 +4,7 @@ import { parseLoginFillResponseForRequest, type ItemListItemProjection } from "@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { EnteUiPlatform, ExtensionPlatform } from "../platform/extension-platform";
+import type { VaultPageTarget } from "../platform/vault-route";
 import { clearClipboardNow } from "../vault/components/detail/clipboard";
 import { VaultAccess } from "../vault-access/VaultAccess";
 import { PopupTitleBar } from "./components/PopupTitleBar";
@@ -38,18 +39,21 @@ export function useOpenVaultAction(platform: ExtensionPlatform) {
     };
   }, []);
 
-  const openVault = useCallback(async (): Promise<void> => {
+  const openVault = useCallback(
+    async (target?: VaultPageTarget): Promise<void> => {
     const token = ++invocationToken.current;
     setActionError(false);
     setOpeningVault(true);
     try {
-      await platform.openVaultPage();
+      await platform.openVaultPage(target);
     } catch {
       if (mounted.current && token === invocationToken.current) setActionError(true);
     } finally {
       if (mounted.current && token === invocationToken.current) setOpeningVault(false);
     }
-  }, [platform]);
+    },
+    [platform],
+  );
 
   return { actionError, openingVault, openVault } as const;
 }
@@ -159,7 +163,7 @@ export function PopupApp({ platform }: PopupAppProps) {
         <>
           <PopupTitleBar
             {...(screen.kind === "home"
-              ? { onLock: () => void lock(), onSettings: () => void openVault() }
+              ? { onLock: () => void lock(), onSettings: () => void openVault({ view: "settings" }) }
               : {
                   back: { label: "Back", onBack: pop },
                   title:
@@ -191,7 +195,8 @@ export function PopupApp({ platform }: PopupAppProps) {
                 filling={filling}
                 onCopyPassword={copyPassword}
                 onOpenVault={() => void openVault()}
-                onNewItem={() => void openVault()}
+                onImport={() => void openVault({ view: "import" })}
+                onNewItem={(kind) => void openVault({ newItem: kind })}
                 onGenerate={() => push({ kind: "generator" })}
                 platform={platform}
               />
@@ -217,7 +222,7 @@ export function PopupApp({ platform }: PopupAppProps) {
                 filling={filling === screen.itemId}
                 onFill={(item: LoginItem) => void fillItem(item.id, item.revision)}
                 onCopy={(value, label) => void copy(value, label)}
-                onOpenVault={() => void openVault()}
+                onOpenVault={() => void openVault({ item: screen.itemId })}
               />
             )}
           </div>

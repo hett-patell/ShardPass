@@ -110,7 +110,10 @@ function readyUnlockedPlatform(): FakeExtensionPlatform {
   return platform;
 }
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  window.history.replaceState(null, "", window.location.pathname);
+});
 
 describe("VaultApp foundation shell", () => {
   it("provides skip navigation and a named header, main, and category landmarks", async () => {
@@ -232,6 +235,26 @@ describe("VaultApp foundation shell", () => {
       expect(platform.sentMessages).toContainEqual({ version: 1, kind: "migration.inspect" }),
     );
     expect(await screen.findByRole("heading", { name: "Vault unlocked" })).toBeVisible();
+  });
+
+  it("boots into the Settings destination from a #/settings deep link and clears the hash", async () => {
+    window.location.hash = "#/settings";
+    const platform = readyUnlockedPlatform();
+    platform.queueSendResponse({ version: 1, kind: "migration.status", available: false, phase: "none", itemCount: 0 });
+    platform.queueSendResponse(unlockedVaultState(2));
+    render(<VaultApp platform={platform} />);
+
+    expect(await screen.findByRole("heading", { name: "Vault unlocked" })).toBeVisible();
+    await waitFor(() => expect(window.location.hash).toBe(""));
+  });
+
+  it("opens an item's detail from a #/item deep link", async () => {
+    window.location.hash = "#/item/10000000-0000-4000-8000-000000000001";
+    const platform = readyUnlockedPlatform();
+    render(<VaultApp platform={platform} />);
+
+    expect(await screen.findByRole("heading", { name: "Example Login" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Edit" })).toBeVisible();
   });
 
   it("creates a folder inline from the sidebar and shows it in the tree", async () => {

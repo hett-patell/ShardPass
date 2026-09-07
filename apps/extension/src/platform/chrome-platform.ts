@@ -39,6 +39,7 @@ import type {
   PasskeyContentPlatform,
 } from "./extension-platform";
 import { diagnostics } from "./diagnostics";
+import { vaultPageHash } from "./vault-route";
 
 const AUTO_LOCK_ALARM = "shardpass:auto-lock";
 const ENTE_SYNC_ALARM = "shardpass:ente-otp-sync:v1";
@@ -489,15 +490,40 @@ export function createChromePlatform(): BackgroundExtensionPlatform &
       });
     },
 
-    openVaultPage() {
+    openVaultPage(target) {
+      const base = chrome.runtime.getURL("vault/index.html");
+      const url = base + vaultPageHash(target);
       return new Promise((resolve, reject) => {
-        chrome.tabs.create({ url: chrome.runtime.getURL("vault/index.html") }, () => {
+        const settle = () => {
           const error = runtimeError();
-          if (error === null) {
-            resolve();
-          } else {
-            reject(error);
+          if (error === null) resolve();
+          else reject(error);
+        };
+        const create = () => chrome.tabs.create({ url }, settle);
+        // A vault tab that is already open is moved and focused rather than duplicated; the
+        // page applies the hash without reloading. Anything odd falls back to a new tab.
+        if (typeof chrome.tabs.query !== "function" || typeof chrome.tabs.update !== "function") {
+          create();
+          return;
+        }
+        chrome.tabs.query({ url: `${base}*` }, (tabs) => {
+          const existing = runtimeError() === null ? tabs.find((tab) => tab.id !== undefined) : undefined;
+          if (existing?.id === undefined) {
+            create();
+            return;
           }
+          chrome.tabs.update(existing.id, { url, active: true }, () => {
+            if (runtimeError() !== null) {
+              create();
+              return;
+            }
+            if (typeof chrome.windows?.update === "function") {
+              chrome.windows.update(existing.windowId, { focused: true }, () => {
+                runtimeError();
+                resolve();
+              });
+            } else resolve();
+          });
         });
       });
     },

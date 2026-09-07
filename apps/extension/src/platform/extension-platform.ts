@@ -19,6 +19,7 @@ import type {
   PasskeyResponse,
 } from "@shardpass/messaging";
 import type { StoragePort } from "@shardpass/storage";
+import type { VaultPageTarget } from "./vault-route";
 
 export type ExtensionMessageHandler = (
   payload: unknown,
@@ -30,7 +31,8 @@ interface RuntimeExtensionPlatform {
   onMessage(handler: ExtensionMessageHandler): () => void;
   sendMessage(payload: unknown, transfer?: Transferable[]): Promise<unknown>;
   connectVaultState?(onState: (state: unknown) => void, onDisconnect: () => void): () => void;
-  openVaultPage(): Promise<void>;
+  /** Opens the vault page, reusing an already-open vault tab, at `target` when given. */
+  openVaultPage(target?: VaultPageTarget): Promise<void>;
 }
 
 export interface EnteUiPlatform extends RuntimeExtensionPlatform {

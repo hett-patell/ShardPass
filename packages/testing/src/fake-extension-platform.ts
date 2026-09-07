@@ -10,6 +10,8 @@ export class FakeExtensionPlatform {
   enteSyncMinutes: 15 | null = null;
   readonly enteSyncSchedules: (15 | null)[] = [];
   openVaultPageCallCount = 0;
+  /** The last deep-link target passed to openVaultPage, when any. */
+  lastVaultPageTarget: unknown;
   clipboardWriteCallCount = 0;
   clipboardCompletedWriteCount = 0;
   clipboardWriteShouldFail = false;
@@ -149,8 +151,9 @@ export class FakeExtensionPlatform {
     });
   }
 
-  openVaultPage(): Promise<void> {
+  openVaultPage(target?: { view: string } | { newItem: string } | { item: string }): Promise<void> {
     this.openVaultPageCallCount += 1;
+    this.lastVaultPageTarget = target;
     return Promise.resolve();
   }
 
