@@ -328,7 +328,7 @@ describe("ItemService", () => {
     expect(activity).toEqual([]);
   });
 
-  it("defends every item-crud command in depth and does not decrypt for popup", async () => {
+  it("defends every mutating item-crud command in depth; the popup may read one item for its detail screen", async () => {
     const stored = loginItem();
     const { repository, service } = fixture([stored]);
     await expect(service.handle(request("item.query", {}), popupSender)).rejects.toMatchObject({
@@ -336,6 +336,13 @@ describe("ItemService", () => {
     });
     await expect(
       service.handle(request("item.get", { itemId: stored.id }), popupSender),
+    ).resolves.toMatchObject({ kind: "item.getResult", item: { id: stored.id } });
+    await expect(
+      service.handle(request("item.get", { itemId: stored.id }), {
+        ...vaultSender,
+        contextKind: "content",
+        senderUrl: "https://example.test/login",
+      }),
     ).rejects.toMatchObject({ code: "ITEM_INVALID" });
     await expect(
       service.handle(

@@ -1,0 +1,14 @@
+.list {
+  flex: 1;
+  margin: 0;
+  padding: 0 0 var(--space-4);
+  overflow-y: auto;
+  list-style: none;
+}
+.empty {
+  margin: 0;
+  padding: var(--space-7) var(--space-5);
+  color: var(--text-secondary);
+  font-size: var(--text-md);
+  text-align: center;
+}

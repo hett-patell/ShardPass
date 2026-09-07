@@ -406,8 +406,10 @@ describe("item routing", () => {
     ],
   ] as const;
 
-  it("routes item.query/get/create/update/delete only from the vault page", async () => {
+  it("routes item.query/create/update/delete only from the vault page", async () => {
     for (const [request, response] of itemCases) {
+      // item.get is an extension-page command now (the popup's detail screen); tested below.
+      if ((request as { kind: string }).kind === "item.get") continue;
       const service = { handle: vi.fn().mockResolvedValue(response) };
       await expect(routeItem(request, vaultSender(), service)).resolves.toEqual(response);
       expect(service.handle).toHaveBeenCalledWith(request, vaultSender());
@@ -420,6 +422,21 @@ describe("item routing", () => {
         expect(deniedService.handle).not.toHaveBeenCalled();
       }
     }
+  });
+
+  it("routes item.get from the popup and the vault page, never from a content script", async () => {
+    const request = { version: 1, kind: "item.get", itemId: "10000000-0000-4000-8000-000000000001" } as const;
+    const response = { version: 1, kind: "item.getResult", item: { id: request.itemId } } as const;
+    for (const sender of [popupSender(), vaultSender()]) {
+      const service = { handle: vi.fn().mockResolvedValue(response) };
+      await expect(routeItem(request, sender, service)).resolves.not.toMatchObject({ kind: "error", error: { code: "UNAUTHORIZED_SENDER" } });
+      expect(service.handle).toHaveBeenCalledWith(request, sender);
+    }
+    const deniedService = { handle: vi.fn().mockResolvedValue(response) };
+    await expect(
+      routeItem(request, normalizeSenderContext(contentMetadata, extensionId)!, deniedService),
+    ).resolves.toEqual(unauthorizedSender);
+    expect(deniedService.handle).not.toHaveBeenCalled();
   });
 
   it("routes item.list — the popup-safe projection — from both the popup and the vault page", async () => {

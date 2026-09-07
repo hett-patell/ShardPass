@@ -26,6 +26,7 @@ import { toSafeError, type SafeErrorCode } from "@shardpass/security";
 import { createChromeStoragePort } from "./chrome-storage-port";
 import type {
   BackgroundExtensionPlatform,
+  ExtensionPlatform,
   BackupUiExtensionPlatform,
   EnteUiPlatform,
   LoginFillContentPlatform,
@@ -161,7 +162,8 @@ export function createChromePlatform(): BackgroundExtensionPlatform &
   OtpUiExtensionPlatform &
   OtpImportUiExtensionPlatform &
   OtpFillContentPlatform &
-  LoginFillContentPlatform {
+  LoginFillContentPlatform &
+  ExtensionPlatform {
   const activePorts = new Set<chrome.runtime.Port>();
   const portDisposers = new Map<chrome.runtime.Port, () => void>();
   return {
@@ -437,6 +439,36 @@ export function createChromePlatform(): BackgroundExtensionPlatform &
       } catch {
         return Promise.reject(safeUiFailure(undefined, "CLIPBOARD_UNAVAILABLE"));
       }
+    },
+
+    activeTab() {
+      return new Promise((resolve) => {
+        try {
+          chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+            const tab = tabs[0];
+            // Without activeTab access the URL is undefined; that is "no tab" for the popup.
+            if (runtimeError() !== null || tab?.id === undefined || typeof tab.url !== "string")
+              resolve(null);
+            else resolve({ id: tab.id, url: tab.url });
+          });
+        } catch {
+          resolve(null);
+        }
+      });
+    },
+
+    sendToTab(tabId, payload) {
+      return new Promise((resolve, reject) => {
+        try {
+          chrome.tabs.sendMessage(tabId, payload, (response: unknown) => {
+            const error = runtimeError();
+            if (error !== null) reject(error);
+            else resolve(response);
+          });
+        } catch (error) {
+          reject(error instanceof Error ? error : new Error("tab message failed"));
+        }
+      });
     },
 
     openVaultPage() {

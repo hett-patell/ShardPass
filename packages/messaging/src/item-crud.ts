@@ -54,6 +54,11 @@ export const ItemListItemProjectionSchema = z.strictObject({
   subtitle: z.optional(z.string().check(z.maxLength(MAX_ITEM_LIST_SUBTITLE_LENGTH))),
   favorite: z.boolean(),
   tags: projectionTags,
+  /** A login's saved sites and match modes, so the popup can suggest it for the open tab. */
+  urls: z.optional(z.array(z.string().check(z.maxLength(2048))).check(z.maxLength(32))),
+  urlMatches: z.optional(
+    z.array(z.enum(["domain", "host", "startsWith", "exact", "never"])).check(z.maxLength(32)),
+  ),
 });
 
 export const ItemGetRequestSchema = z.strictObject({
@@ -198,7 +203,8 @@ const popupAndVault = { allowedContexts: ["popup", "vault"], requireDocument: tr
 // ItemListItemProjectionSchema above) and is safe for the popup, mirroring otp.list.
 export const itemCrudSenderPolicy = {
   "item.query": vaultOnly,
-  "item.get": vaultOnly,
+  // The popup's detail screen needs the whole item; popup and vault page share one origin.
+  "item.get": popupAndVault,
   "item.create": vaultOnly,
   "item.createMany": vaultOnly,
   "item.update": vaultOnly,

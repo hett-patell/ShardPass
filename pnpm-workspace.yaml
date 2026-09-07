@@ -3,17 +3,19 @@ packages:
   - packages/*
 
 catalog:
-  "@bufbuild/buf": 1.72.0
-  "@bufbuild/protobuf": 2.13.0
-  "@bufbuild/protoc-gen-es": 2.13.0
-  "@noble/ciphers": 2.2.0
-  "@noble/hashes": 2.2.0
-  "@streamparser/json": 0.0.22
-  "@testing-library/jest-dom": 7.0.0
-  "@testing-library/react": 16.3.2
-  "@types/chrome": 0.2.2
-  "@types/react": 19.2.17
-  "@types/react-dom": 19.2.3
+  '@bufbuild/buf': 1.72.0
+  '@bufbuild/protobuf': 2.13.0
+  '@bufbuild/protoc-gen-es': 2.13.0
+  '@fontsource/ibm-plex-mono': 5.3.0
+  '@fontsource/inter-tight': 5.3.0
+  '@noble/ciphers': 2.2.0
+  '@noble/hashes': 2.2.0
+  '@streamparser/json': 0.0.22
+  '@testing-library/jest-dom': 7.0.0
+  '@testing-library/react': 16.3.2
+  '@types/chrome': 0.2.2
+  '@types/react': 19.2.17
+  '@types/react-dom': 19.2.3
   axe-core: 4.12.1
   buffer: 6.0.3
   dependency-cruiser: 18.1.0

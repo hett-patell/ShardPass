@@ -62,7 +62,8 @@ export class ItemService {
           result = await this.query(command);
           break;
         case "item.get":
-          this.assertVaultSender(sender);
+          // Extension pages only (popup or vault); the router's policy already refuses others.
+          if (sender.contextKind === "content") invalid();
           result = await this.get(command.itemId);
           break;
         case "item.create":
@@ -308,7 +309,17 @@ function freezeProjection(projection: ItemListItemProjection): void {
 
 function toListProjection(item: VaultItem): ItemListItemProjection {
   const { id, kind, revision, favorite, tags } = item;
-  return { id, kind, revision, favorite, tags, ...listDisplayFields(item) };
+  return {
+    id,
+    kind,
+    revision,
+    favorite,
+    tags,
+    ...listDisplayFields(item),
+    ...(item.kind === "login" && item.urls.length > 0
+      ? { urls: [...item.urls], ...(item.urlMatches === undefined ? {} : { urlMatches: [...item.urlMatches] }) }
+      : {}),
+  };
 }
 
 function listDisplayFields(item: VaultItem): Pick<ItemListItemProjection, "name" | "subtitle"> {

@@ -89,6 +89,7 @@ export function createLoginFillController(
   let owner: Owner | null = null;
   let host: PickerHandle | null = null;
   let cachedSuggestions: readonly LoginPickerSuggestion[] = [];
+  let disposeRuntimeMessages: (() => void) | null = null;
 
   const owns = (candidate: Owner): boolean =>
     !disposed &&
@@ -270,6 +271,55 @@ export function createLoginFillController(
 
   const onPageInvalidated = (): void => invalidate(false);
 
+  /**
+   * The popup's "Fill" for a login. Only the extension's own pages may ask (no tab in the
+   * sender), and the credential is still released to this frame under the content-only
+   * `login.fillSelect` policy. A frame without a login form never answers, so the popup hears
+   * from the frame that filled -- or from nobody, which its timeout reads as "no form".
+   */
+  const onRuntimeMessage = (payload: unknown, senderMetadata: unknown): Promise<unknown> => {
+    const request = payload as { version?: unknown; kind?: unknown; itemId?: unknown; expectedRevision?: unknown } | null;
+    if (request?.kind !== "login.fillFromPopup") return new Promise(() => undefined);
+    const meta = senderMetadata as { extensionId?: unknown; tabId?: unknown } | null;
+    if (meta?.extensionId !== options.platform.extensionId || meta.tabId !== undefined)
+      return Promise.resolve({ version: 1, kind: "login.fillFromPopupResult", status: "failed" });
+    if (typeof request.itemId !== "string" || typeof request.expectedRevision !== "number")
+      return Promise.resolve({ version: 1, kind: "login.fillFromPopupResult", status: "failed" });
+    rescan();
+    const active = options.document.activeElement;
+    const fieldSet =
+      (active instanceof HTMLInputElement ? fieldSetFor(active, fieldSets) : null) ?? fieldSets[0] ?? null;
+    if (fieldSet === null) return new Promise(() => undefined);
+    return fillFromPopup(fieldSet, request.itemId, request.expectedRevision);
+  };
+
+  const fillFromPopup = async (fieldSet: LoginFieldSet, itemId: string, expectedRevision: number) => {
+    try {
+      const response = await options.platform.sendLoginFillMessage({
+        version: 1,
+        kind: "login.fillSelect",
+        itemId,
+        expectedRevision,
+      });
+      if (response.kind !== "login.fillRelease")
+        return { version: 1, kind: "login.fillFromPopupResult", status: "failed" };
+      if (
+        !fieldSet.passwordField.isConnected ||
+        (fieldSet.usernameField !== null && !fieldSet.usernameField.isConnected)
+      ) {
+        sendCancel(itemId);
+        return { version: 1, kind: "login.fillFromPopupResult", status: "no-form" };
+      }
+      fillLoginFields(fieldSet, response.username, response.password);
+      invalidate(false);
+      await sendConfirm(itemId);
+      return { version: 1, kind: "login.fillFromPopupResult", status: "filled" };
+    } catch {
+      sendCancel(itemId);
+      return { version: 1, kind: "login.fillFromPopupResult", status: "failed" };
+    }
+  };
+
   return {
     start() {
       if (started || disposed) return;
@@ -282,6 +332,7 @@ export function createLoginFillController(
       options.window.addEventListener("pagehide", onPageInvalidated, { once: true });
       options.window.addEventListener("popstate", onPageInvalidated);
       options.window.addEventListener("hashchange", onPageInvalidated);
+      disposeRuntimeMessages = options.platform.onMessage(onRuntimeMessage);
       savePrompt.start();
       onFocusIn();
     },
@@ -295,6 +346,8 @@ export function createLoginFillController(
       options.window.removeEventListener("pagehide", onPageInvalidated);
       options.window.removeEventListener("popstate", onPageInvalidated);
       options.window.removeEventListener("hashchange", onPageInvalidated);
+      disposeRuntimeMessages?.();
+      disposeRuntimeMessages = null;
       invalidate(false);
       savePrompt.dispose();
     },

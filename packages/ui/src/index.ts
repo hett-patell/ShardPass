@@ -9,6 +9,8 @@ export { Field } from "./primitives/Field";
 export type { FieldProps } from "./primitives/Field";
 export { IconButton } from "./primitives/IconButton";
 export type { IconButtonProps } from "./primitives/IconButton";
+export { SectionLabel } from "./primitives/SectionLabel";
+export type { SectionLabelProps } from "./primitives/SectionLabel";
 export { StatusBadge } from "./primitives/StatusBadge";
 export type { Status, StatusBadgeProps } from "./primitives/StatusBadge";
 

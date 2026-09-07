@@ -54,20 +54,18 @@ describe("UI CSS contracts", () => {
     expect(css).toContain("white-space: nowrap");
   });
 
-  it("defaults to light mode and gates dark overrides behind prefers-color-scheme or data-theme", async () => {
+  it("defaults to the dark graphite theme and defines the light variant under data-theme", async () => {
     const { tokens } = await readStyles();
-    const [defaultBlock] = tokens.split('@media (prefers-color-scheme: dark)');
+    const [defaultBlock, lightBlock] = tokens.split(':root[data-theme="light"]');
 
-    expect(defaultBlock).toContain("--bg-primary: #ffffff;");
-    expect(tokens).toContain('@media (prefers-color-scheme: dark)');
-    expect(tokens).toMatch(/:root:not\(\[data-theme="light"\]\)/);
-    expect(tokens).toMatch(/:root\[data-theme="dark"\]/);
-
-    const afterMediaGuard = tokens.split(':root:not([data-theme="light"])').at(1) ?? "";
-    expect(afterMediaGuard).toContain("--bg-primary: #111113;");
-
-    const afterDarkTheme = tokens.split(':root[data-theme="dark"]').at(1) ?? "";
-    expect(afterDarkTheme).toContain("--bg-primary: #111113;");
+    expect(defaultBlock).toContain("color-scheme: dark;");
+    expect(defaultBlock).toContain("--bg-primary: #0c0c0d;");
+    expect(defaultBlock).toContain("--accent: #ff4d2e;");
+    expect(lightBlock).toContain("color-scheme: light;");
+    expect(lightBlock).toContain("--bg-primary: #fafafa;");
+    // The OS preference is resolved in theme.ts, not by the stylesheet, so a stored choice
+    // always wins and every token has exactly one definition per theme.
+    expect(tokens).not.toContain("prefers-color-scheme");
   });
 
   it("defines shadow tokens and an ordered, collision-free stacking scale", async () => {
@@ -102,7 +100,7 @@ describe("UI CSS contracts", () => {
 
     for (const status of ["success", "warning", "danger", "info"]) {
       expect(tokens).toMatch(new RegExp(`--${status}:\\s*#[0-9a-f]{6};`, "i"));
-      expect(tokens).toMatch(new RegExp(`--${status}-subtle:\\s*#[0-9a-f]{6};`, "i"));
+      expect(tokens).toMatch(new RegExp(`--${status}-subtle:\\s*(#[0-9a-f]{6}|rgba\\([^)]+\\));`, "i"));
     }
     expect(primitives).toContain("color: var(--status-color)");
     expect(primitives).toContain("background: var(--status-bg)");

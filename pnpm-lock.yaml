@@ -15,6 +15,12 @@ catalogs:
     '@bufbuild/protoc-gen-es':
       specifier: 2.13.0
       version: 2.13.0
+    '@fontsource/ibm-plex-mono':
+      specifier: 5.3.0
+      version: 5.3.0
+    '@fontsource/inter-tight':
+      specifier: 5.3.0
+      version: 5.3.0
     '@noble/ciphers':
       specifier: 2.2.0
       version: 2.2.0
@@ -337,6 +343,12 @@ importers:
 
   packages/ui:
     dependencies:
+      '@fontsource/ibm-plex-mono':
+        specifier: 'catalog:'
+        version: 5.3.0
+      '@fontsource/inter-tight':
+        specifier: 'catalog:'
+        version: 5.3.0
       '@shardpass/domain':
         specifier: workspace:*
         version: link:../domain
@@ -709,6 +721,12 @@ packages:
     peerDependenciesMeta:
       '@noble/hashes':
         optional: true
+
+  '@fontsource/ibm-plex-mono@5.3.0':
+    resolution: {integrity: sha512-eTgnZjZEGk1QtD3ZstF+Vclo2HLAni8YMy34/DxllwZvyz1lR/1RF/xTiAquOBO7MvqBx8D2Ig2WCPMVfdZu7Q==}
+
+  '@fontsource/inter-tight@5.3.0':
+    resolution: {integrity: sha512-uRwIrjKSUcCKIFeO2qm3yECA9phwge6Y1qQZvUmwqFgiIVWUELwwuq7pFlmlpPtO33ZtFQVOXQGNuvna1JPs6A==}
 
   '@humanfs/core@0.19.2':
     resolution: {integrity: sha512-UhXNm+CFMWcbChXywFwkmhqjs3PRCmcSa/hfBgLIb7oQ5HNb1wS0icWsGtSAUNgefHeI+eBrA8I1fxmbHsGdvA==}
@@ -2169,6 +2187,10 @@ snapshots:
   '@exodus/bytes@1.15.1(@noble/hashes@2.2.0)':
     optionalDependencies:
       '@noble/hashes': 2.2.0
+
+  '@fontsource/ibm-plex-mono@5.3.0': {}
+
+  '@fontsource/inter-tight@5.3.0': {}
 
   '@humanfs/core@0.19.2':
     dependencies:

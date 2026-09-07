@@ -1,0 +1,17 @@
+.icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  color: var(--text-secondary);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg);
+}
+.large {
+  width: 44px;
+  height: 44px;
+  color: var(--accent);
+}

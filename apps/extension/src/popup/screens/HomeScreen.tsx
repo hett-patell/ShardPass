@@ -1,0 +1,188 @@
+import type { VaultItemKind } from "@shardpass/domain";
+import type { ItemListItemProjection } from "@shardpass/messaging";
+import { matchLoginUrls } from "@shardpass/autofill";
+import { Button, SearchBar, SectionLabel } from "@shardpass/ui";
+import { ChevronRight, ExternalLink, KeyRound, LayoutGrid, Plus, Star, type LucideIcon } from "lucide-react";
+
+import type { ExtensionPlatform } from "../../platform/extension-platform";
+import { KIND_ICONS } from "../components/KindIcon";
+import { PopupRow } from "../components/PopupRow";
+import { QuickAction } from "../components/QuickAction";
+import type { ActiveTab } from "../hooks/useActiveTab";
+import { itemsInCategory, projectionMatches, type CategoryId } from "../hooks/useVaultItems";
+import styles from "./HomeScreen.module.css";
+
+const CATEGORIES: readonly { id: CategoryId; label: string; icon: LucideIcon }[] = [
+  { id: "favorites", label: "Favorites", icon: Star },
+  { id: "all", label: "All items", icon: LayoutGrid },
+  { id: "login", label: "Logins", icon: KIND_ICONS.login },
+  { id: "otp", label: "One-time codes", icon: KIND_ICONS.otp },
+  { id: "note", label: "Notes", icon: KIND_ICONS.note },
+  { id: "card", label: "Cards", icon: KIND_ICONS.card },
+  { id: "identity", label: "Identities", icon: KIND_ICONS.identity },
+  { id: "secret", label: "Secrets", icon: KIND_ICONS.secret },
+];
+
+export const CATEGORY_TITLES: Record<CategoryId, string> = Object.fromEntries(
+  CATEGORIES.map((category) => [category.id, category.label]),
+) as Record<CategoryId, string>;
+
+const MAX_SEARCH_RESULTS = 60;
+
+export interface HomeScreenProps {
+  items: readonly ItemListItemProjection[];
+  status: "error" | "loading" | "locked" | "ready";
+  tab: ActiveTab | null;
+  search: string;
+  onSearch: (value: string) => void;
+  onOpenCategory: (category: CategoryId) => void;
+  onOpenItem: (item: ItemListItemProjection) => void;
+  onFill: (item: ItemListItemProjection) => void;
+  filling: string | null;
+  onCopyPassword: (item: ItemListItemProjection) => void;
+  onOpenVault: () => void;
+  onNewItem: (kind: VaultItemKind) => void;
+  platform: Pick<ExtensionPlatform, "sendOtpMessage">;
+}
+
+/** Suggestions for the open tab, then the categories: the popup's first screen. */
+export function HomeScreen({
+  items,
+  status,
+  tab,
+  search,
+  onSearch,
+  onOpenCategory,
+  onOpenItem,
+  onFill,
+  filling,
+  onCopyPassword,
+  onOpenVault,
+  onNewItem,
+}: HomeScreenProps) {
+  const query = search.trim();
+  const suggestions =
+    tab === null
+      ? []
+      : items.filter(
+          (item) =>
+            item.kind === "login" && item.urls !== undefined && matchLoginUrls(tab.url, item.urls, item.urlMatches),
+        );
+  const results = query === "" ? [] : items.filter((item) => projectionMatches(item, query)).slice(0, MAX_SEARCH_RESULTS);
+
+  return (
+    <div className={styles.screen}>
+      <div className={styles.searchRow}>
+        <SearchBar value={search} onChange={onSearch} placeholder="Search ShardPass" autoFocus />
+      </div>
+
+      <div className={styles.scroll}>
+        {status === "error" ? (
+          <p className={styles.error} role="alert">
+            Items unavailable. Try again.
+          </p>
+        ) : null}
+
+        {query !== "" ? (
+          <section aria-labelledby="results-label">
+            <SectionLabel id="results-label" className={styles.sectionLabel} trailing={String(results.length)}>
+              Results
+            </SectionLabel>
+            {results.length === 0 ? (
+              <p className={styles.quiet}>Nothing matches “{query}”.</p>
+            ) : (
+              <ul className={styles.list}>
+                {results.map((item) => (
+                  <li key={item.id}>
+                    <PopupRow item={item} onOpen={onOpenItem} />
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        ) : (
+          <>
+            {tab !== null ? (
+              <section aria-labelledby="suggestions-label">
+                <SectionLabel id="suggestions-label" className={styles.sectionLabel} trailing={tab.host}>
+                  Suggestions
+                </SectionLabel>
+                {status !== "ready" ? (
+                  <ul className={styles.list} aria-busy="true">
+                    <li className={styles.skeleton} />
+                    <li className={styles.skeleton} />
+                  </ul>
+                ) : suggestions.length === 0 ? (
+                  <p className={styles.quiet}>No logins saved for {tab.host}.</p>
+                ) : (
+                  <ul className={styles.list}>
+                    {suggestions.map((item) => (
+                      <li key={item.id}>
+                        <PopupRow
+                          item={item}
+                          onOpen={onOpenItem}
+                          actions={
+                            <>
+                              <QuickAction
+                                aria-label={`Copy password for ${item.name}`}
+                                title="Copy password"
+                                onClick={() => onCopyPassword(item)}
+                              >
+                                <KeyRound size={15} />
+                              </QuickAction>
+                              <Button
+                                className={styles.fill}
+                                loading={filling === item.id}
+                                onClick={() => onFill(item)}
+                              >
+                                Fill
+                              </Button>
+                            </>
+                          }
+                        />
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </section>
+            ) : null}
+
+            <section aria-labelledby="categories-label">
+              <SectionLabel id="categories-label" className={styles.sectionLabel}>
+                Categories
+              </SectionLabel>
+              <ul className={styles.list}>
+                {CATEGORIES.map(({ id, label, icon: Icon }) => {
+                  const count = status === "ready" ? itemsInCategory(items, id).length : null;
+                  return (
+                    <li key={id}>
+                      <button type="button" className={styles.category} onClick={() => onOpenCategory(id)}>
+                        <span className={styles.categoryIcon} aria-hidden="true">
+                          <Icon size={16} strokeWidth={1.75} />
+                        </span>
+                        <span className={styles.categoryLabel}>{label}</span>
+                        {count === null ? null : <span className={styles.count}>{count}</span>}
+                        <ChevronRight size={16} className={styles.chevron} aria-hidden="true" />
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+          </>
+        )}
+      </div>
+
+      <footer className={styles.footer}>
+        <button type="button" className={styles.footerButton} onClick={() => onNewItem("login")}>
+          <Plus size={16} aria-hidden="true" />
+          New item
+        </button>
+        <button type="button" className={styles.footerButton} onClick={onOpenVault}>
+          <ExternalLink size={16} aria-hidden="true" />
+          Open vault
+        </button>
+      </footer>
+    </div>
+  );
+}

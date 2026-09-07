@@ -1,7 +1,12 @@
 /*
- * ShardPass UI uses the operating system's native font stack (see
- * --font-sans / --font-mono in tokens.css) rather than a bundled webfont.
- * This keeps the CSP simple (no remote @import, no redistributed font
- * assets) and matches each platform's system typography. Keep this file as
- * the CSS import hook in case a bundled font is ever reintroduced.
+ * Inter Tight for text, IBM Plex Mono for codes, secrets and section labels: the ShardPass
+ * type pairing. Self-hosted through @fontsource so nothing is fetched at runtime (the manifest
+ * CSP allows only 'self' for fonts, which is the right call for a password manager).
  */
+@import "@fontsource/inter-tight/400.css";
+@import "@fontsource/inter-tight/500.css";
+@import "@fontsource/inter-tight/600.css";
+@import "@fontsource/inter-tight/700.css";
+@import "@fontsource/ibm-plex-mono/400.css";
+@import "@fontsource/ibm-plex-mono/500.css";
+@import "@fontsource/ibm-plex-mono/600.css";

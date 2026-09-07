@@ -143,6 +143,8 @@ describe("VaultApp foundation shell", () => {
       sendOtpMessage: () => Promise.reject(new Error("unused")),
       sendOtpImportMessage: () => Promise.reject(new Error("unused")),
       writeAuthoritativeClipboardText: () => Promise.resolve(),
+      activeTab: () => Promise.resolve(null),
+      sendToTab: () => Promise.resolve(undefined),
       openVaultPage: vi.fn(() => Promise.resolve()),
     };
 

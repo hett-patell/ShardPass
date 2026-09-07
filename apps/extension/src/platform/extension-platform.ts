@@ -67,6 +67,10 @@ export interface PasswordGenUiPlatform extends RuntimeExtensionPlatform {
 export interface ExtensionPlatform extends RuntimeExtensionPlatform {
   sendOtpMessage(request: OtpRequest): Promise<OtpResponse>;
   writeAuthoritativeClipboardText(value: Promise<string>): Promise<void>;
+  /** The tab the popup was opened over: id and URL, or null when there is none or no access. */
+  activeTab(): Promise<Readonly<{ id: number; url: string }> | null>;
+  /** Sends a runtime message to a tab's content scripts; rejects when none answers. */
+  sendToTab(tabId: number, payload: unknown): Promise<unknown>;
 }
 
 export interface BackgroundExtensionPlatform extends RuntimeExtensionPlatform {

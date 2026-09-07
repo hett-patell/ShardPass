@@ -1,19 +1,22 @@
 export type ThemePreference = "system" | "light" | "dark";
 
 const STORAGE_KEY = "shardpass:theme";
-const PREFERENCES: readonly ThemePreference[] = ["system", "light", "dark"];
+const PREFERENCES: readonly ThemePreference[] = ["dark", "light", "system"];
 
 function isPreference(value: unknown): value is ThemePreference {
   return typeof value === "string" && (PREFERENCES as readonly string[]).includes(value);
 }
 
-/** The stored preference; "system" when nothing is stored or storage is unavailable. */
+/**
+ * The stored preference. Dark when nothing is stored: the graphite theme is the identity, and
+ * a person who wants their OS to decide picks "system" from the toggle.
+ */
 export function getThemePreference(): ThemePreference {
   try {
     const stored = globalThis.localStorage?.getItem(STORAGE_KEY);
-    return isPreference(stored) ? stored : "system";
+    return isPreference(stored) ? stored : "dark";
   } catch {
-    return "system";
+    return "dark";
   }
 }
 
@@ -25,14 +28,18 @@ export function getThemePreference(): ThemePreference {
 export function applyThemePreference(preference: ThemePreference = getThemePreference()): void {
   const root = globalThis.document?.documentElement;
   if (root === undefined) return;
-  if (preference === "system") delete root.dataset["theme"];
-  else root.dataset["theme"] = preference;
+  // The tokens are dark by default and light under data-theme="light"; "system" resolves the
+  // OS preference here so the stylesheet needs no media query of its own.
+  const light =
+    preference === "light" ||
+    (preference === "system" &&
+      globalThis.matchMedia?.("(prefers-color-scheme: light)").matches === true);
+  root.dataset["theme"] = light ? "light" : "dark";
 }
 
 export function setThemePreference(preference: ThemePreference): void {
   try {
-    if (preference === "system") globalThis.localStorage?.removeItem(STORAGE_KEY);
-    else globalThis.localStorage?.setItem(STORAGE_KEY, preference);
+    globalThis.localStorage?.setItem(STORAGE_KEY, preference);
   } catch {
     // Storage can be unavailable (private mode, quota); the choice still applies for this page.
   }
@@ -41,5 +48,5 @@ export function setThemePreference(preference: ThemePreference): void {
 
 /** The next preference in the cycle, for a single-button toggle. */
 export function nextThemePreference(current: ThemePreference): ThemePreference {
-  return PREFERENCES[(PREFERENCES.indexOf(current) + 1) % PREFERENCES.length] ?? "system";
+  return PREFERENCES[(PREFERENCES.indexOf(current) + 1) % PREFERENCES.length] ?? "dark";
 }

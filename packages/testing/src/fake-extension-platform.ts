@@ -150,6 +150,20 @@ export class FakeExtensionPlatform {
     return Promise.resolve();
   }
 
+  /** What `activeTab()` answers; null (the default) means no tab or no access. */
+  activeTabValue: Readonly<{ id: number; url: string }> | null = null;
+  readonly tabMessages: { tabId: number; payload: unknown }[] = [];
+  readonly tabResponses: unknown[] = [];
+
+  activeTab(): Promise<Readonly<{ id: number; url: string }> | null> {
+    return Promise.resolve(this.activeTabValue);
+  }
+
+  sendToTab(tabId: number, payload: unknown): Promise<unknown> {
+    this.tabMessages.push({ tabId, payload });
+    return Promise.resolve(this.tabResponses.shift());
+  }
+
   queueSendResponse(response: unknown): void {
     this.sendResponses.push(response);
   }

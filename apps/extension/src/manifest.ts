@@ -14,7 +14,9 @@ export default defineManifest({
   // retains earlier ones for rollback, so a vault of a few hundred items crosses the default
   // 10 MB storage.local quota quickly. Once it does, every write fails while reads keep
   // working, which is how a quota error presents. Password managers universally hold this.
-  permissions: ["storage", "unlimitedStorage", "alarms", "idle"],
+  // activeTab: the popup reads the open tab's URL to suggest logins for it and asks that
+  // tab's content script to fill. Granted only while the person is using the popup.
+  permissions: ["storage", "unlimitedStorage", "alarms", "idle", "activeTab"],
   host_permissions: ["https://api.ente.io/*"],
   action: {
     default_popup: "popup/index.html",

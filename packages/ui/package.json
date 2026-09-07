@@ -11,6 +11,8 @@
     "./styles": "./src/styles/index.css"
   },
   "dependencies": {
+    "@fontsource/ibm-plex-mono": "catalog:",
+    "@fontsource/inter-tight": "catalog:",
     "@shardpass/domain": "workspace:*",
     "lucide-react": "catalog:",
     "react": "catalog:"
