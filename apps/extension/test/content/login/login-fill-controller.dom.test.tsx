@@ -2,7 +2,7 @@
 import "@testing-library/jest-dom/vitest";
 
 import { act, fireEvent, within } from "@testing-library/react";
-import type { LoginFillRequest, LoginFillResponse } from "@shardpass/messaging";
+import type { LoginFillRequest, LoginFillResponse, LoginFillSuggestion } from "@shardpass/messaging";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { LoginFillContentPlatform } from "../../../src/platform/extension-platform";
@@ -44,16 +44,69 @@ function loginForm(): Readonly<{
   return { form, username, password };
 }
 
+type MessageHandler = Parameters<LoginFillContentPlatform["onMessage"]>[0];
+
+const ack: LoginFillResponse = { version: 1, kind: "login.fillAck", ok: true };
+const noOffer: LoginFillResponse = { version: 1, kind: "login.pendingOfferResult", offer: null };
+const account: LoginFillSuggestion = {
+  itemId: "018f47a6-7d11-7c2f-8bd9-a1d37f147a20",
+  expectedRevision: 1,
+  name: "Account",
+  username: "user@example.test",
+  favorite: true,
+  tags: [],
+  hasLinkedOtp: false,
+};
+const release: LoginFillResponse = {
+  version: 1,
+  kind: "login.fillRelease",
+  username: "user@example.test",
+  password: "s3cret!",
+};
+
+/** A thrown handler rejects the request; unanswered kinds get "nothing held" or an acknowledgement. */
 function platform(
-  handler: (request: LoginFillRequest) => LoginFillResponse | Promise<LoginFillResponse>,
-): LoginFillContentPlatform {
+  handler: (request: LoginFillRequest) => LoginFillResponse | Promise<LoginFillResponse> | undefined,
+): LoginFillContentPlatform & { runtime: { handler: MessageHandler | null } } {
+  const runtime: { handler: MessageHandler | null } = { handler: null };
   return {
     extensionId: "extension-test",
-    onMessage: () => () => undefined,
+    onMessage: (listener) => {
+      runtime.handler = listener;
+      return () => {
+        runtime.handler = null;
+      };
+    },
     sendMessage: () => Promise.resolve(undefined),
     openVaultPage: () => Promise.resolve(),
-    sendLoginFillMessage: vi.fn((request: LoginFillRequest) => Promise.resolve(handler(request))),
+    sendLoginFillMessage: vi.fn(
+      (request: LoginFillRequest) =>
+        new Promise<LoginFillResponse>((resolve) => {
+          resolve(
+            Promise.resolve(handler(request)).then(
+              (response) => response ?? (request.kind === "login.pendingOffer" ? noOffer : ack),
+            ),
+          );
+        }),
+    ),
+    runtime,
   };
+}
+
+function suggestionRequests(candidate: LoginFillContentPlatform): number {
+  return vi
+    .mocked(candidate.sendLoginFillMessage)
+    .mock.calls.filter(([request]) => request.kind === "login.fillSuggestions").length;
+}
+
+function chipIn(root: ShadowRoot | undefined): HTMLElement {
+  return within(root as unknown as HTMLElement).getByRole("button", {
+    name: "Fill login with ShardPass",
+  });
+}
+
+function locked(): Error {
+  return Object.assign(new Error("locked"), { code: "VAULT_LOCKED" });
 }
 
 function start(candidate: LoginFillContentPlatform) {
@@ -90,6 +143,7 @@ afterEach(() => {
     for (const controller of controllers.splice(0)) controller.dispose();
   });
   document.body.replaceChildren();
+  vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
@@ -182,9 +236,9 @@ describe("Login fill controller", () => {
           .getAllByRole("button", { name: /Use login/u })
           .map((node) => node.textContent),
       ).toEqual([expect.stringContaining("Primary"), expect.stringContaining("Secondary")]);
-      // The picker renders from the same fetch that gated the trigger; opening it must not
-      // issue a second `login.fillSuggestions` request.
-      expect(candidate.sendLoginFillMessage).toHaveBeenCalledTimes(1);
+      // One fetch gated the trigger; opening the picker asks once more, so an unlock or a new
+      // login since the chip appeared is noticed.
+      expect(suggestionRequests(candidate)).toBe(2);
 
       fireEvent.change(within(pickerRoot).getByRole("searchbox", { name: "Search saved logins" }), {
         target: { value: "team" },
@@ -304,5 +358,165 @@ describe("Login fill controller", () => {
 
     expect(document.querySelector("shardpass-picker-host")).toBeNull();
     expect(document.body.textContent).not.toContain("Account");
+  });
+
+  it("shows the chip while the vault is locked, explains in the picker, and asks again on the next click", async () => {
+    const roots = captureClosedRoots();
+    const { username } = loginForm();
+    let vaultLocked = true;
+    const candidate = platform((request) => {
+      if (request.kind === "login.fillSuggestions") {
+        if (vaultLocked) throw locked();
+        return { version: 1, kind: "login.fillSuggestionsResult", suggestions: [account] };
+      }
+      return undefined;
+    });
+    start(candidate);
+    focusField(username);
+    await flush();
+
+    expect(chipIn(roots.at(-1))).toBeVisible();
+    await clickAndFlush(chipIn(roots.at(-1)));
+    const picker = within(roots.at(-1) as unknown as HTMLElement);
+    expect(picker.getByRole("status")).toHaveTextContent("ShardPass is locked");
+    expect(picker.getByRole("status")).toHaveTextContent("Unlock it from the toolbar, then click here again.");
+
+    vaultLocked = false;
+    await act(async () => {
+      fireEvent.keyDown(username, { key: "Escape" });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(chipIn(roots.at(-1))).toBeVisible();
+    await clickAndFlush(chipIn(roots.at(-1)));
+    expect(
+      within(roots.at(-1) as unknown as HTMLElement).getByRole("button", { name: /Account/u }),
+    ).toBeVisible();
+  });
+
+  it("keeps the field's chip after Escape closes the picker, and shows it again on a new focusin", async () => {
+    const roots = captureClosedRoots();
+    const { username } = loginForm();
+    const candidate = platform((request) =>
+      request.kind === "login.fillSuggestions"
+        ? { version: 1, kind: "login.fillSuggestionsResult", suggestions: [account] }
+        : undefined,
+    );
+    start(candidate);
+    focusField(username);
+    await flush();
+    await clickAndFlush(chipIn(roots.at(-1)));
+    const search = within(roots.at(-1) as unknown as HTMLElement).getByRole("searchbox", {
+      name: "Search saved logins",
+    });
+
+    await act(async () => {
+      fireEvent.keyDown(search, { key: "Escape" });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(chipIn(roots.at(-1))).toBeVisible();
+    expect(username).toHaveFocus();
+
+    // Escape on the chip itself closes it; coming back to the field brings it back, from cache.
+    await act(async () => {
+      fireEvent.keyDown(username, { key: "Escape" });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(document.querySelector("shardpass-picker-host")).toBeNull();
+    act(() => username.blur());
+    focusField(username);
+    await flush();
+    expect(chipIn(roots.at(-1))).toBeVisible();
+    expect(suggestionRequests(candidate)).toBe(2);
+  });
+
+  it("fills from the popup into a rendered form only, and says no-form after a moment when every form is hidden", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    captureClosedRoots();
+    const hidden = loginForm();
+    const shown = loginForm();
+    let shownRects: object[] = [{}];
+    Object.defineProperty(shown.password, "getClientRects", { value: () => shownRects });
+    const candidate = platform((request) => (request.kind === "login.fillSelect" ? release : undefined));
+    start(candidate);
+    const ask = () =>
+      candidate.runtime.handler?.(
+        { version: 1, kind: "login.fillFromPopup", itemId: account.itemId, expectedRevision: 1 },
+        { extensionId: "extension-test" },
+      );
+
+    const filled = ask();
+    await flush();
+    await expect(filled).resolves.toMatchObject({ status: "filled" });
+    expect(shown.password.value).toBe("s3cret!");
+    expect(shown.username.value).toBe("user@example.test");
+    expect(hidden.password.value).toBe("");
+
+    shownRects = [];
+    const none = ask();
+    await flush();
+    act(() => {
+      vi.advanceTimersByTime(1_000);
+    });
+    await expect(none).resolves.toMatchObject({ status: "no-form" });
+    expect(suggestionRequests(candidate)).toBe(0);
+  });
+
+  it("fills only the username of a username-only first step", async () => {
+    const roots = captureClosedRoots();
+    const form = document.createElement("form");
+    const email = document.createElement("input");
+    email.type = "email";
+    email.name = "email";
+    const next = document.createElement("button");
+    next.textContent = "Next";
+    form.append(email, next);
+    document.body.append(form);
+    const candidate = platform((request) => {
+      if (request.kind === "login.fillSuggestions")
+        return { version: 1, kind: "login.fillSuggestionsResult", suggestions: [account] };
+      if (request.kind === "login.fillSelect") return release;
+      return undefined;
+    });
+    start(candidate);
+    focusField(email);
+    await flush();
+    await clickAndFlush(chipIn(roots.at(-1)));
+    await clickAndFlush(
+      within(roots.at(-1) as unknown as HTMLElement).getByRole("button", { name: /Account/u }),
+    );
+
+    expect(email.value).toBe("user@example.test");
+    expect(document.body.innerHTML).not.toContain("s3cret!");
+    expect(candidate.sendLoginFillMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: "login.fillConfirm", itemId: account.itemId }),
+    );
+  });
+
+  it("keeps offering a password field after a show-password toggle flips it to text", async () => {
+    const roots = captureClosedRoots();
+    const { username, password } = loginForm();
+    const candidate = platform((request) =>
+      request.kind === "login.fillSuggestions"
+        ? { version: 1, kind: "login.fillSuggestionsResult", suggestions: [account] }
+        : undefined,
+    );
+    start(candidate);
+    focusField(password);
+    await flush();
+    expect(chipIn(roots.at(-1))).toBeVisible();
+
+    act(() => {
+      password.type = "text";
+    });
+    await flush();
+    focusField(username);
+    await flush();
+    focusField(password);
+    await flush();
+    expect(chipIn(roots.at(-1))).toBeVisible();
+    expect(password.type).toBe("text");
   });
 });

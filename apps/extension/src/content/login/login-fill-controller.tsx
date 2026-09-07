@@ -4,7 +4,7 @@ import type { LoginFieldSet } from "@shardpass/autofill";
 
 import type { LoginFillContentPlatform } from "../../platform/extension-platform";
 import { createPickerHost, type PickerHandle } from "../createPickerHost";
-import { LoginPicker, type LoginPickerSuggestion } from "./LoginPicker";
+import { LoginPicker, type LoginPickerState, type LoginPickerSuggestion } from "./LoginPicker";
 import { createSaveLoginPrompt, type SaveLoginPrompt } from "./save-login-prompt";
 
 export interface LoginFillController {
@@ -19,6 +19,17 @@ type Owner = Readonly<{
   url: string;
   origin: string;
 }>;
+
+type SuggestionsResult = Readonly<{
+  state: Exclude<LoginPickerState, "busy">;
+  suggestions: readonly LoginPickerSuggestion[];
+}>;
+
+/**
+ * A frame whose only login form is not shown answers the popup "no form", but only after a
+ * moment, so a frame that is filling a shown form gets to answer first.
+ */
+const NO_FORM_ANSWER_DELAY_MS = 1_000;
 
 function originOf(ownerWindow: Window): string | null {
   try {
@@ -40,6 +51,25 @@ function fieldSetFor(
   );
 }
 
+function fieldsReady(fieldSet: LoginFieldSet): boolean {
+  return (
+    (fieldSet.passwordField !== null || fieldSet.usernameField !== null) &&
+    (fieldSet.passwordField === null || fieldSet.passwordField.isConnected) &&
+    (fieldSet.usernameField === null || fieldSet.usernameField.isConnected)
+  );
+}
+
+/** Whether the field a fill would land in is laid out at all (not a collapsed or hidden form). */
+function isRendered(fieldSet: LoginFieldSet): boolean {
+  const field = fieldSet.passwordField ?? fieldSet.usernameField;
+  return field !== null && field.getClientRects().length > 0;
+}
+
+function errorCode(error: unknown): unknown {
+  if (typeof error !== "object" || error === null || !("code" in error)) return undefined;
+  return (error as { readonly code?: unknown }).code;
+}
+
 function LoginTrigger({ onActivate }: Readonly<{ onActivate: () => void }>) {
   return (
     <button
@@ -57,7 +87,7 @@ function LoginTrigger({ onActivate }: Readonly<{ onActivate: () => void }>) {
 function FocusedLoginPicker(
   props: Readonly<{
     suggestions: readonly LoginPickerSuggestion[];
-    state: "busy" | "ready" | "empty" | "error";
+    state: LoginPickerState;
     onClose: () => void;
     onSelect: (suggestion: LoginPickerSuggestion) => void;
   }>,
@@ -89,7 +119,13 @@ export function createLoginFillController(
   let owner: Owner | null = null;
   let host: PickerHandle | null = null;
   let cachedSuggestions: readonly LoginPickerSuggestion[] = [];
+  /** The vault was locked when last asked: the chip stays, and a click asks again. */
+  let locked = false;
+  let pickerRequest: object | null = null;
   let disposeRuntimeMessages: (() => void) | null = null;
+  // A "show password" toggle flips a password field to text; remembering the field keeps it
+  // a login field.
+  const seenPasswordFields = new WeakSet<HTMLInputElement>();
 
   const owns = (candidate: Owner): boolean =>
     !disposed &&
@@ -108,6 +144,8 @@ export function createLoginFillController(
     const previousInput = owner?.input ?? null;
     owner = null;
     cachedSuggestions = [];
+    locked = false;
+    pickerRequest = null;
     closeHost();
     if (restoreFocus && previousInput !== null && previousInput.isConnected) {
       previousInput.focus({ preventScroll: true });
@@ -117,7 +155,10 @@ export function createLoginFillController(
   const rescan = (): void => {
     rescanScheduled = false;
     if (disposed) return;
-    fieldSets = detectLoginFields(options.document);
+    fieldSets = detectLoginFields(options.document, { previousPasswordFields: seenPasswordFields });
+    for (const fieldSet of fieldSets) {
+      if (fieldSet.passwordField !== null) seenPasswordFields.add(fieldSet.passwordField);
+    }
   };
 
   const scheduleRescan = (): void => {
@@ -125,6 +166,8 @@ export function createLoginFillController(
     rescanScheduled = true;
     queueMicrotask(rescan);
   };
+
+  const chipAvailable = (): boolean => cachedSuggestions.length > 0 || locked;
 
   const showChip = (candidate: Owner): void => {
     if (!owns(candidate)) return;
@@ -136,9 +179,22 @@ export function createLoginFillController(
     });
   };
 
+  /** Escape or the close button: the picker goes, the field keeps its chip and its focus. */
+  const dismissPicker = (candidate: Owner): void => {
+    pickerRequest = null;
+    if (!owns(candidate)) {
+      invalidate(true);
+      return;
+    }
+    closeHost();
+    // Closing may have handed focus back to the field already, whose focusin restored the chip.
+    if (host === null && chipAvailable()) showChip(candidate);
+    candidate.input.focus({ preventScroll: true });
+  };
+
   const renderPicker = (
     candidate: Owner,
-    state: "busy" | "ready" | "empty" | "error",
+    state: LoginPickerState,
     suggestions: readonly LoginPickerSuggestion[],
   ): void => {
     if (!owns(candidate)) return;
@@ -146,29 +202,21 @@ export function createLoginFillController(
     if (!owns(candidate)) return;
     host = createPickerHost(candidate.input, {
       positionToAnchor: true,
+      onRequestClose: () => dismissPicker(candidate),
       content: (
         <FocusedLoginPicker
           suggestions={suggestions}
           state={state}
-          onClose={() => invalidate(true)}
+          onClose={() => dismissPicker(candidate)}
           onSelect={(suggestion) => void selectSuggestion(candidate, suggestion)}
         />
       ),
     });
   };
 
-  // Suggestions are already fetched once (in `loadSuggestions`) purely to decide
-  // whether a chip should appear at all — the chip only shows once we know there
-  // is something to offer, unlike OtpFillController's always-shown trigger. That
-  // same response is reused here so opening the picker never re-fetches.
-  const openPicker = (candidate: Owner): void => {
-    if (!owns(candidate) || options.document.activeElement !== candidate.input) return;
-    renderPicker(candidate, cachedSuggestions.length === 0 ? "empty" : "ready", cachedSuggestions);
-  };
-
   const domainFor = (): string => options.window.location.hostname;
 
-  const loadSuggestions = async (candidate: Owner): Promise<void> => {
+  const fetchSuggestions = async (): Promise<SuggestionsResult> => {
     try {
       const response = await options.platform.sendLoginFillMessage({
         version: 1,
@@ -176,13 +224,39 @@ export function createLoginFillController(
         domain: domainFor(),
         pageUrl: options.window.location.href,
       });
-      if (!owns(candidate) || response.kind !== "login.fillSuggestionsResult") return;
-      if (response.suggestions.length === 0) return;
-      cachedSuggestions = response.suggestions;
-      showChip(candidate);
-    } catch {
-      // No suggestions available for this field right now; leave no chip behind.
+      if (response.kind !== "login.fillSuggestionsResult") return { state: "error", suggestions: [] };
+      return {
+        state: response.suggestions.length === 0 ? "empty" : "ready",
+        suggestions: response.suggestions,
+      };
+    } catch (error) {
+      return { state: errorCode(error) === "VAULT_LOCKED" ? "locked" : "error", suggestions: [] };
     }
+  };
+
+  // Suggestions are fetched once on focus purely to decide whether a chip should appear at
+  // all: it shows once there is something to offer, or when the vault is locked (so the
+  // person learns why nothing is offered). Opening the picker asks again, since an unlock or
+  // a new login may have happened since the chip appeared.
+  const loadSuggestions = async (candidate: Owner): Promise<void> => {
+    const result = await fetchSuggestions();
+    if (!owns(candidate)) return;
+    cachedSuggestions = result.suggestions;
+    locked = result.state === "locked";
+    if (chipAvailable()) showChip(candidate);
+  };
+
+  const openPicker = (candidate: Owner): void => {
+    if (!owns(candidate) || options.document.activeElement !== candidate.input) return;
+    renderPicker(candidate, "busy", []);
+    const request = {};
+    pickerRequest = request;
+    void fetchSuggestions().then((result) => {
+      if (pickerRequest !== request || !owns(candidate)) return;
+      cachedSuggestions = result.suggestions;
+      locked = result.state === "locked";
+      renderPicker(candidate, result.state, result.suggestions);
+    });
   };
 
   const sendConfirm = async (itemId: string): Promise<void> => {
@@ -221,21 +295,25 @@ export function createLoginFillController(
         sendCancel(suggestion.itemId);
         return;
       }
-      const fieldsReady =
-        candidate.fieldSet.passwordField.isConnected &&
-        (candidate.fieldSet.usernameField === null || candidate.fieldSet.usernameField.isConnected);
-      if (!fieldsReady) {
+      if (!fieldsReady(candidate.fieldSet)) {
         sendCancel(suggestion.itemId);
         invalidate(false);
         return;
       }
       fillLoginFields(candidate.fieldSet, response.username, response.password);
-      closeHost();
+      // Focus first: a focusin on a chip-less owner would bring the chip straight back.
       candidate.input.focus({ preventScroll: true });
+      closeHost();
       await sendConfirm(suggestion.itemId);
       if (response.linkedOtpCode !== undefined) await offerOtpCode(candidate.input, response.linkedOtpCode);
-    } catch {
+    } catch (error) {
       sendCancel(suggestion.itemId);
+      if (errorCode(error) === "VAULT_LOCKED" && owns(candidate)) {
+        cachedSuggestions = [];
+        locked = true;
+        renderPicker(candidate, "locked", []);
+        return;
+      }
       invalidate(false);
     }
   };
@@ -255,7 +333,11 @@ export function createLoginFillController(
       invalidate(false);
       return;
     }
-    if (owner?.input === input) return;
+    if (owner?.input === input) {
+      // Back on the same field after Escape closed its chip: offer it again.
+      if ((host === null || host.status !== "open") && chipAvailable()) showChip(owner);
+      return;
+    }
     const origin = originOf(options.window);
     if (origin === null) return;
     invalidate(false);
@@ -272,12 +354,32 @@ export function createLoginFillController(
 
   const onPageInvalidated = (): void => invalidate(false);
 
+  const pageFocused = (): Promise<boolean> =>
+    new Promise((resolve) => {
+      if (options.window.document.hasFocus()) {
+        resolve(true);
+        return;
+      }
+      const onFocus = () => {
+        options.window.clearTimeout(timer);
+        resolve(true);
+      };
+      const timer = options.window.setTimeout(() => {
+        options.window.removeEventListener("focus", onFocus);
+        resolve(false);
+      }, 8_000);
+      options.window.addEventListener("focus", onFocus, { once: true });
+    });
+
   /**
    * After a fill, the login's one-time code goes to the clipboard so the site's next step is
    * a paste away -- what 1Password and Bitwarden do. Shown for a few seconds by the field;
    * a clipboard refusal (no gesture, a locked-down page) is simply not mentioned.
    */
   const offerOtpCode = async (anchor: HTMLInputElement, code: string): Promise<void> => {
+    // A fill from the popup lands while the popup still has focus; the clipboard write is
+    // refused from an unfocused document, so wait for focus to come back to the page.
+    if (!(await pageFocused())) return;
     try {
       await options.window.navigator.clipboard.writeText(code);
     } catch {
@@ -298,8 +400,10 @@ export function createLoginFillController(
   /**
    * The popup's "Fill" for a login. Only the extension's own pages may ask (no tab in the
    * sender), and the credential is still released to this frame under the content-only
-   * `login.fillSelect` policy. A frame without a login form never answers, so the popup hears
-   * from the frame that filled -- or from nobody, which its timeout reads as "no form".
+   * `login.fillSelect` policy, which hands it out only to a page the login was saved for.
+   * A frame without a login form never answers, so the popup hears from the frame that
+   * filled -- or from nobody, which its timeout reads as "no form". A frame whose forms are
+   * all hidden says so, after a moment.
    */
   const onRuntimeMessage = (payload: unknown, senderMetadata: unknown): Promise<unknown> => {
     const request = payload as { version?: unknown; kind?: unknown; itemId?: unknown; expectedRevision?: unknown } | null;
@@ -310,10 +414,21 @@ export function createLoginFillController(
     if (typeof request.itemId !== "string" || typeof request.expectedRevision !== "number")
       return Promise.resolve({ version: 1, kind: "login.fillFromPopupResult", status: "failed" });
     rescan();
+    if (fieldSets.length === 0) return new Promise(() => undefined);
     const active = options.document.activeElement;
+    const focused = active instanceof HTMLInputElement ? fieldSetFor(active, fieldSets) : null;
     const fieldSet =
-      (active instanceof HTMLInputElement ? fieldSetFor(active, fieldSets) : null) ?? fieldSets[0] ?? null;
-    if (fieldSet === null) return new Promise(() => undefined);
+      (focused !== null && isRendered(focused) ? focused : null) ??
+      fieldSets.find((candidate) => candidate.passwordField !== null && isRendered(candidate)) ??
+      fieldSets.find(isRendered) ??
+      null;
+    if (fieldSet === null)
+      return new Promise((resolve) =>
+        options.window.setTimeout(
+          () => resolve({ version: 1, kind: "login.fillFromPopupResult", status: "no-form" }),
+          NO_FORM_ANSWER_DELAY_MS,
+        ),
+      );
     return fillFromPopup(fieldSet, request.itemId, request.expectedRevision);
   };
 
@@ -327,17 +442,17 @@ export function createLoginFillController(
       });
       if (response.kind !== "login.fillRelease")
         return { version: 1, kind: "login.fillFromPopupResult", status: "failed" };
-      if (
-        !fieldSet.passwordField.isConnected ||
-        (fieldSet.usernameField !== null && !fieldSet.usernameField.isConnected)
-      ) {
+      if (!fieldsReady(fieldSet)) {
         sendCancel(itemId);
         return { version: 1, kind: "login.fillFromPopupResult", status: "no-form" };
       }
       fillLoginFields(fieldSet, response.username, response.password);
       invalidate(false);
       await sendConfirm(itemId);
-      if (response.linkedOtpCode !== undefined) await offerOtpCode(fieldSet.passwordField, response.linkedOtpCode);
+      // Answer first so the popup can close; the code offer waits for focus on its own.
+      const anchor = fieldSet.passwordField ?? fieldSet.usernameField;
+      if (response.linkedOtpCode !== undefined && anchor !== null)
+        void offerOtpCode(anchor, response.linkedOtpCode);
       return { version: 1, kind: "login.fillFromPopupResult", status: "filled" };
     } catch {
       sendCancel(itemId);
@@ -352,7 +467,12 @@ export function createLoginFillController(
       rescan();
       const Observer = options.document.defaultView?.MutationObserver ?? MutationObserver;
       observer = new Observer(scheduleRescan);
-      observer.observe(options.document.body, { childList: true, subtree: true });
+      observer.observe(options.document.body, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        attributeFilter: ["type", "autocomplete"],
+      });
       options.document.addEventListener("focusin", onFocusIn, true);
       options.window.addEventListener("pagehide", onPageInvalidated, { once: true });
       options.window.addEventListener("popstate", onPageInvalidated);

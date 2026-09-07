@@ -79,18 +79,61 @@ export const SaveLoginOfferRequestSchema = z.strictObject({
  * What the vault already holds for the offered credential. The background keeps the offer
  * (with its password) in memory for a few minutes; the page only ever names it by id.
  */
+export const SaveLoginOfferIdSchema = z.string().check(z.regex(/^[a-f0-9]{32}$/u));
+
+/**
+ * "locked": the vault could not be consulted; the offer is held all the same and is judged
+ * once the vault is open again.
+ */
+export const SaveLoginExistingSchema = z.enum(["none", "same", "different-password", "locked"]);
+
+export type SaveLoginExisting = z.infer<typeof SaveLoginExistingSchema>;
+
 export const SaveLoginOfferResultSchema = z.strictObject({
   version: z.literal(MESSAGE_VERSION),
   kind: z.literal("login.saveOfferResult"),
-  offerId: z.string().check(z.regex(/^[a-f0-9]{32}$/u)),
-  existing: z.enum(["none", "same", "different-password"]),
+  offerId: SaveLoginOfferIdSchema,
+  existing: SaveLoginExistingSchema,
   existingName: z.optional(z.string()),
+});
+
+/** Drops a held offer the person declined, so it does not come back on the next page. */
+export const SaveLoginDismissRequestSchema = z.strictObject({
+  version: z.literal(MESSAGE_VERSION),
+  kind: z.literal("login.saveDismiss"),
+  offerId: SaveLoginOfferIdSchema,
+});
+
+/**
+ * Asks for the offer held for the sender's tab, if any: a login that navigated away took its
+ * prompt with it, and the landing page picks it up here. Only the top frame is answered.
+ */
+export const LoginPendingOfferRequestSchema = z.strictObject({
+  version: z.literal(MESSAGE_VERSION),
+  kind: z.literal("login.pendingOffer"),
+});
+
+/** What a page may learn about a held offer. Never the password. */
+export const PendingSaveOfferSchema = z.strictObject({
+  offerId: SaveLoginOfferIdSchema,
+  domain: z.string(),
+  username: z.string(),
+  existing: SaveLoginExistingSchema,
+  existingName: z.optional(z.string()),
+});
+
+export type PendingSaveOffer = z.infer<typeof PendingSaveOfferSchema>;
+
+export const LoginPendingOfferResultSchema = z.strictObject({
+  version: z.literal(MESSAGE_VERSION),
+  kind: z.literal("login.pendingOfferResult"),
+  offer: z.nullable(PendingSaveOfferSchema),
 });
 
 export const SaveLoginConfirmRequestSchema = z.strictObject({
   version: z.literal(MESSAGE_VERSION),
   kind: z.literal("login.saveConfirm"),
-  offerId: z.string().check(z.regex(/^[a-f0-9]{32}$/u)),
+  offerId: SaveLoginOfferIdSchema,
   choice: z.enum(["new", "update"]),
 });
 
@@ -109,6 +152,8 @@ export const LoginFillRequestSchema = z.discriminatedUnion("kind", [
   LoginFillCancelRequestSchema,
   SaveLoginOfferRequestSchema,
   SaveLoginConfirmRequestSchema,
+  SaveLoginDismissRequestSchema,
+  LoginPendingOfferRequestSchema,
 ]);
 
 /** Acknowledges a fire-and-forget command (confirm, cancel, save-offer) that carries no data. */
@@ -124,6 +169,7 @@ export const LoginFillResponseSchema = z.discriminatedUnion("kind", [
   LoginFillAckSchema,
   SaveLoginOfferResultSchema,
   SaveLoginResultSchema,
+  LoginPendingOfferResultSchema,
 ]);
 
 export type LoginFillRequest = z.infer<typeof LoginFillRequestSchema>;
@@ -139,6 +185,8 @@ export const loginFillResponseKindByRequest = {
   "login.fillCancel": "login.fillAck",
   "login.saveOffer": "login.saveOfferResult",
   "login.saveConfirm": "login.saveResult",
+  "login.saveDismiss": "login.fillAck",
+  "login.pendingOffer": "login.pendingOfferResult",
 } as const satisfies Record<LoginFillCommandKind, LoginFillResponseKind>;
 
 export function parseLoginFillResponseForRequest(request: LoginFillRequest, candidate: unknown) {
@@ -166,4 +214,6 @@ export const loginFillSenderPolicy = {
   "login.fillCancel": contentOnly,
   "login.saveOffer": contentOnly,
   "login.saveConfirm": contentOnly,
+  "login.saveDismiss": contentOnly,
+  "login.pendingOffer": contentOnly,
 } satisfies Record<LoginFillCommandKind, CommandSenderPolicy>;

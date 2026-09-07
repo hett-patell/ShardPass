@@ -39,11 +39,20 @@ const requests = [
     username: "alice",
     password: "s3cret",
   },
+  { version: 1, kind: "login.saveDismiss", offerId: "a".repeat(32) },
+  { version: 1, kind: "login.pendingOffer" },
 ] as const;
 
 const responses = [
   { version: 1, kind: "login.fillSuggestionsResult", suggestions: [suggestion] },
   { version: 1, kind: "login.fillRelease", username: "alice", password: "s3cret" },
+  { version: 1, kind: "login.pendingOfferResult", offer: null },
+  {
+    version: 1,
+    kind: "login.pendingOfferResult",
+    offer: { offerId: "b".repeat(32), domain: "example.com", username: "alice", existing: "locked" },
+  },
+  { version: 1, kind: "login.saveOfferResult", offerId: "c".repeat(32), existing: "locked" },
 ] as const;
 
 describe("login fill messaging", () => {
@@ -105,6 +114,33 @@ describe("login fill messaging", () => {
         suggestions: Array.from({ length: 10_001 }, () => suggestion),
       }).success,
     ).toBe(false);
+  });
+});
+
+describe("held save offers", () => {
+  it("are asked for and dismissed by content scripts only, and never carry a password", () => {
+    expect(loginFillSenderPolicy["login.pendingOffer"].allowedContexts).toEqual(["content"]);
+    expect(loginFillSenderPolicy["login.saveDismiss"].allowedContexts).toEqual(["content"]);
+    const offer = { offerId: "b".repeat(32), domain: "example.com", username: "alice", existing: "none" };
+    expect(
+      LoginFillResponseSchema.safeParse({
+        version: 1,
+        kind: "login.pendingOfferResult",
+        offer: { ...offer, password: "s3cret" },
+      }).success,
+    ).toBe(false);
+    expect(
+      parseLoginFillResponseForRequest(
+        { version: 1, kind: "login.pendingOffer" },
+        { version: 1, kind: "login.pendingOfferResult", offer },
+      ).success,
+    ).toBe(true);
+    expect(
+      parseLoginFillResponseForRequest(
+        { version: 1, kind: "login.saveDismiss", offerId: "b".repeat(32) },
+        { version: 1, kind: "login.fillAck", ok: true },
+      ).success,
+    ).toBe(true);
   });
 });
 

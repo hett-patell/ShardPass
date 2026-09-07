@@ -56,13 +56,20 @@ export function createPasskeyBridge(
   };
   const fallback = (id: string) => reply(id, { fallback: true });
 
-  const show = (render: (busy: boolean) => ReactNode) => {
+  const show = (id: string, render: (busy: boolean) => ReactNode) => {
     if (!options.document.body.isConnected) return;
     closeHost();
     let busy = false;
     const paint = () => {
       closeHost();
-      host = createPickerHost(options.document.body, { positionToAnchor: false, content: render(busy) });
+      host = createPickerHost(options.document.body, {
+        positionToAnchor: false,
+        slot: "prompt",
+        content: render(busy),
+        // Escape answers the page (the browser's own passkey UI takes over) before closing;
+        // a silent close would leave the site waiting on a ceremony nobody is running.
+        onRequestClose: () => fallback(id),
+      });
     };
     paint();
     return () => {
@@ -85,13 +92,13 @@ export function createPasskeyBridge(
       }
     } catch (error) {
       if (errorCode(error) === "VAULT_LOCKED") {
-        show(() => <PasskeyPrompt mode="locked" rpId={rpId} onFallback={() => fallback(id)} />);
+        show(id, () => <PasskeyPrompt mode="locked" rpId={rpId} onFallback={() => fallback(id)} />);
         return;
       }
       return fallback(id);
     }
     if (activeId !== id) return;
-    const setBusy = show((busy) => (
+    const setBusy = show(id, (busy) => (
       <PasskeyPrompt
         mode="create"
         rpId={rpId}
@@ -155,14 +162,14 @@ export function createPasskeyBridge(
       if (response.kind === "passkey.candidatesResult") candidates = response.candidates;
     } catch (error) {
       if (errorCode(error) === "VAULT_LOCKED") {
-        show(() => <PasskeyPrompt mode="locked" rpId={rpId} onFallback={() => fallback(id)} />);
+        show(id, () => <PasskeyPrompt mode="locked" rpId={rpId} onFallback={() => fallback(id)} />);
         return;
       }
       return fallback(id);
     }
     if (activeId !== id) return;
     if (candidates.length === 0) return fallback(id);
-    const setBusy = show((busy) => (
+    const setBusy = show(id, (busy) => (
       <PasskeyPrompt
         mode="choose"
         rpId={rpId}

@@ -22,7 +22,9 @@
   --radius-sm: 6px;
   --control-height-sm: 32px;
   --elevation-picker: 0 1px 2px rgb(0 0 0 / 8%), 0 8px 24px rgb(0 0 0 / 16%);
-  --z-picker: 600;
+  /* Above every page modal and sticky header: this UI is the person's own tool, never a
+     page element to be covered by a backdrop. */
+  --z-picker: 2147483647;
   --motion-fast: 150ms;
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
 
@@ -31,6 +33,9 @@
   inset: 12px 12px auto auto;
   display: block;
   width: min(320px, calc(100vw - 24px), calc(100dvw - 24px));
+  /* The host box is transparent; only the surfaces inside it take clicks, so a chip beside a
+     field never swallows the page's own "Sign in" or "Forgot password" underneath. */
+  pointer-events: none;
   color: var(--color-text);
   font-family: var(--font-sans);
   font-size: 13px;
@@ -38,8 +43,30 @@
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
-  color-scheme: dark;
+  color-scheme: light;
   contain: content;
+}
+
+/* Everything drawn inside the host is interactive again. */
+.picker,
+.otpTrigger,
+.loginTrigger,
+.loginPicker,
+.saveBanner,
+.loginNotice,
+.passkeyPrompt {
+  pointer-events: auto;
+}
+
+/* The small caps line above a prompt's title ("SHARDPASS", "LOGIN"). */
+.eyebrow {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 *,
@@ -203,6 +230,7 @@
 
 @media (prefers-color-scheme: dark) {
   :host {
+    color-scheme: dark;
     --color-bg: #111113;
     --color-surface: #1a1a1e;
     --color-elevated: #232328;

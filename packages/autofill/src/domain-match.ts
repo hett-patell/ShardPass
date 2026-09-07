@@ -10,12 +10,74 @@ function extractDomain(urlOrDomain: string): string {
   return d;
 }
 
+/**
+ * Public suffixes of more than one label, plus hosting suffixes under which every subdomain is
+ * a different site. A short built-in list rather than the full public suffix list: it covers
+ * the common country second-level domains and the hosting services on which two unrelated apps
+ * must never see each other's logins.
+ */
+const MULTI_LABEL_SUFFIXES: ReadonlySet<string> = new Set([
+  "co.uk",
+  "org.uk",
+  "ac.uk",
+  "gov.uk",
+  "com.au",
+  "net.au",
+  "org.au",
+  "co.nz",
+  "co.in",
+  "co.jp",
+  "ne.jp",
+  "or.jp",
+  "com.br",
+  "com.mx",
+  "com.ar",
+  "co.za",
+  "com.sg",
+  "com.hk",
+  "com.tw",
+  "com.cn",
+  "com.tr",
+  "co.kr",
+  "com.ua",
+  "com.my",
+  "com.ph",
+  "co.id",
+  "com.vn",
+  "com.pk",
+  "com.bd",
+  "com.eg",
+  "com.ng",
+  "co.ke",
+  "com.sa",
+  "co.ae",
+  "github.io",
+  "gitlab.io",
+  "netlify.app",
+  "vercel.app",
+  "pages.dev",
+  "herokuapp.com",
+  "web.app",
+  "firebaseapp.com",
+]);
+
+/**
+ * The registrable domain (eTLD+1) of a host: "accounts.google.com" and "mail.google.com" both
+ * give "google.com", "shop.example.co.uk" gives "example.co.uk", and "a.github.io" stays
+ * "a.github.io". Single-label hosts and IP addresses are returned as they are.
+ */
+export function registrableDomain(host: string): string {
+  const labels = host.split(".");
+  const last = labels[labels.length - 1] ?? "";
+  if (labels.length <= 2 || /^\d+$/u.test(last)) return host;
+  const lastTwo = labels.slice(-2).join(".");
+  return MULTI_LABEL_SUFFIXES.has(lastTwo) ? labels.slice(-3).join(".") : lastTwo;
+}
+
 export function matchDomain(pageDomain: string, urls: readonly string[]): boolean {
-  const page = extractDomain(pageDomain);
-  return urls.some((url) => {
-    const target = extractDomain(url);
-    return page === target || page.endsWith("." + target);
-  });
+  const page = registrableDomain(extractDomain(pageDomain));
+  if (page === "") return false;
+  return urls.some((url) => registrableDomain(extractDomain(url)) === page);
 }
 
 export type UrlMatchMode = "domain" | "host" | "startsWith" | "exact" | "never";

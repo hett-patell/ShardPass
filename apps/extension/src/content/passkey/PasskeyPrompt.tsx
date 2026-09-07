@@ -34,12 +34,6 @@ export function PasskeyPrompt(props: PasskeyPromptProps) {
       className="loginPicker"
       role="region"
       aria-label="ShardPass passkey prompt"
-      onKeyDown={(event) => {
-        if (event.key === "Escape" && !event.defaultPrevented) {
-          event.preventDefault();
-          props.onFallback();
-        }
-      }}
     >
       <header className="loginHeading">
         <div>

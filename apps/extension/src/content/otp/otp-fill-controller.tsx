@@ -159,6 +159,7 @@ export function createOtpFillController(
     owner = candidate;
     host = createPickerHost(input, {
       positionToAnchor: true,
+      fit: "content",
       content: <OtpTrigger onActivate={() => void openPicker(candidate)} />,
     });
   };

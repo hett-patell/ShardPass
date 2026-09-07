@@ -283,3 +283,15 @@ export {
   passkeySenderPolicy,
 } from "./passkey";
 export type { PasskeyCandidate, PasskeyCommandKind, PasskeyRequest, PasskeyResponse } from "./passkey";
+export {
+  SaveLoginOfferIdSchema,
+  SaveLoginExistingSchema,
+  SaveLoginDismissRequestSchema,
+  LoginPendingOfferRequestSchema,
+  PendingSaveOfferSchema,
+  LoginPendingOfferResultSchema,
+} from "./login-fill";
+export type {
+  SaveLoginExisting,
+  PendingSaveOffer,
+} from "./login-fill";

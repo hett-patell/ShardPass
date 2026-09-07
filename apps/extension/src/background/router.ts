@@ -150,6 +150,7 @@ const loginFillErrorCodes = {
   LOGIN_FILL_UNAVAILABLE: "LOGIN_FILL_UNAVAILABLE",
   LOGIN_FILL_NOT_FOUND: "LOGIN_FILL_NOT_FOUND",
   LOGIN_FILL_ITEM_CHANGED: "LOGIN_FILL_ITEM_CHANGED",
+  VAULT_LOCKED: "VAULT_LOCKED",
 } satisfies Record<LoginFillServiceErrorCode, SafeErrorCode>;
 
 const passwordGenErrorCodes = {

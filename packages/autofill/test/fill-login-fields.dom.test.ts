@@ -35,6 +35,21 @@ describe("fillLoginFields", () => {
     expect(password?.value).toBe("hunter2");
   });
 
+  it("fills only the username of a username-only step", () => {
+    document.body.innerHTML = `
+      <form>
+        <input type="email" name="email" />
+        <button>Next</button>
+      </form>
+    `;
+    const [fieldSet] = detectLoginFields(document);
+    expect(fieldSet?.passwordField).toBeNull();
+    fillLoginFields(fieldSet!, "alice@example.com", "hunter2");
+    expect(document.querySelector<HTMLInputElement>('input[name="email"]')?.value).toBe(
+      "alice@example.com",
+    );
+  });
+
   it("leaves the username field untouched when the username is empty", () => {
     document.body.innerHTML = `
       <form>
@@ -61,8 +76,8 @@ describe("fillLoginFields", () => {
     expect(fieldSet).toBeDefined();
 
     const events: string[] = [];
-    fieldSet!.passwordField.addEventListener("input", () => events.push("input"));
-    fieldSet!.passwordField.addEventListener("change", () => events.push("change"));
+    fieldSet!.passwordField!.addEventListener("input", () => events.push("input"));
+    fieldSet!.passwordField!.addEventListener("change", () => events.push("change"));
 
     fillLoginFields(fieldSet!, "alice@example.com", "hunter2");
 

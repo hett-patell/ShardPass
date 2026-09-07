@@ -10,17 +10,23 @@ export interface LoginPickerSuggestion {
   readonly hasLinkedOtp: boolean;
 }
 
+/** "locked": the vault is closed; the chip stays so a click after unlocking asks again. */
+export type LoginPickerState = "busy" | "ready" | "empty" | "error" | "locked";
+
 export interface LoginPickerProps {
   readonly suggestions: readonly LoginPickerSuggestion[];
-  readonly state: "busy" | "ready" | "empty" | "error";
+  readonly state: LoginPickerState;
   readonly onClose: () => void;
   readonly onSelect: (suggestion: LoginPickerSuggestion) => void;
 }
 
-const STATUS = Object.freeze({
-  busy: "Loading logins",
-  empty: "No saved logins for this site",
-  error: "Saved logins are unavailable",
+const STATUS: Readonly<
+  Record<Exclude<LoginPickerState, "ready">, Readonly<{ text: string; hint?: string }>>
+> = Object.freeze({
+  busy: { text: "Loading logins" },
+  empty: { text: "No saved logins for this site" },
+  error: { text: "Saved logins are unavailable" },
+  locked: { text: "ShardPass is locked", hint: "Unlock it from the toolbar, then click here again." },
 });
 
 export function LoginPicker({ suggestions, state, onClose, onSelect }: LoginPickerProps) {
@@ -104,7 +110,13 @@ export function LoginPicker({ suggestions, state, onClose, onSelect }: LoginPick
         </>
       ) : (
         <p className="status" role="status">
-          {STATUS[state]}
+          {STATUS[state].text}
+          {STATUS[state].hint === undefined ? null : (
+            <>
+              <br />
+              {STATUS[state].hint}
+            </>
+          )}
         </p>
       )}
     </section>

@@ -17,7 +17,7 @@ describe("detectLoginFields", () => {
     const results = detectLoginFields(document);
     expect(results).toHaveLength(1);
     expect(results[0]?.usernameField?.name).toBe("username");
-    expect(results[0]?.passwordField.name).toBe("password");
+    expect(results[0]?.passwordField?.name).toBe("password");
     expect(results[0]?.form).not.toBeNull();
   });
 
@@ -44,15 +44,82 @@ describe("detectLoginFields", () => {
     expect(detectLoginFields(document)).toHaveLength(0);
   });
 
-  it("ignores a plain text field that doesn't look like a username", () => {
+  it("falls back to the nearest preceding visible text-like field when nothing is named like a username", () => {
     document.body.innerHTML = `
       <form>
-        <input type="text" name="promo_code" />
+        <input type="text" name="q1" />
+        <input type="text" name="q2" style="display: none" />
         <input type="password" name="pwd" />
       </form>
     `;
+    expect(detectLoginFields(document)[0]?.usernameField?.name).toBe("q1");
+  });
+
+  it("accepts a tel field as the username", () => {
+    document.body.innerHTML = `
+      <form>
+        <input type="tel" name="mobile" />
+        <input type="password" name="pwd" />
+      </form>
+    `;
+    expect(detectLoginFields(document)[0]?.usernameField?.name).toBe("mobile");
+  });
+
+  it("keeps a password field detected after a show-password toggle flips it to text", () => {
+    document.body.innerHTML = `
+      <form>
+        <input type="email" name="email" />
+        <input type="password" name="pwd" />
+      </form>
+    `;
+    const seen = new WeakSet<HTMLInputElement>();
+    const [first] = detectLoginFields(document);
+    const password = first?.passwordField;
+    if (!password) throw new Error("expected a password field");
+    seen.add(password);
+    password.type = "text";
+    expect(detectLoginFields(document)).toHaveLength(0);
+    const again = detectLoginFields(document, { previousPasswordFields: seen });
+    expect(again).toHaveLength(1);
+    expect(again[0]?.passwordField?.name).toBe("pwd");
+    expect(again[0]?.usernameField?.name).toBe("email");
+  });
+
+  it("treats a text field marked current-password or new-password as a password field", () => {
+    document.body.innerHTML = `
+      <form>
+        <input type="text" name="u" autocomplete="username" />
+        <input type="text" name="p" autocomplete="current-password" />
+      </form>
+    `;
     const results = detectLoginFields(document);
-    expect(results[0]?.usernameField).toBeNull();
+    expect(results).toHaveLength(1);
+    expect(results[0]?.passwordField?.name).toBe("p");
+    expect(results[0]?.usernameField?.name).toBe("u");
+  });
+
+  it("detects a username-only step: an email or username field in a form with a submit control", () => {
+    document.body.innerHTML = `
+      <form id="step"><input type="text" name="identifier" autocomplete="username" /><button>Next</button></form>
+      <form id="contact"><input type="email" name="from" /><textarea name="message"></textarea><button>Send</button></form>
+      <form id="bare"><input type="email" name="who" /></form>
+    `;
+    const results = detectLoginFields(document);
+    expect(results).toHaveLength(1);
+    expect(results[0]?.passwordField).toBeNull();
+    expect(results[0]?.usernameField?.name).toBe("identifier");
+    expect(results[0]?.form?.id).toBe("step");
+  });
+
+  it("adds no username-only set for a form that already has a password field", () => {
+    document.body.innerHTML = `
+      <form>
+        <input type="email" name="email" />
+        <input type="password" name="pwd" />
+        <button>Sign in</button>
+      </form>
+    `;
+    expect(detectLoginFields(document)).toHaveLength(1);
   });
 
   it("skips a hidden honeypot field when picking the username field", () => {

@@ -14,6 +14,10 @@ const originalAttachShadow = HTMLElement.prototype.attachShadow.call.bind(
 const prompts: Array<ReturnType<typeof createSaveLoginPrompt>> = [];
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
+const offerId = "a".repeat(32);
+const ack: LoginFillResponse = { version: 1, kind: "login.fillAck", ok: true };
+const noOffer: LoginFillResponse = { version: 1, kind: "login.pendingOfferResult", offer: null };
+
 function captureClosedRoots(): ShadowRoot[] {
   const roots: ShadowRoot[] = [];
   vi.spyOn(HTMLElement.prototype, "attachShadow").mockImplementation(function (
@@ -31,6 +35,7 @@ function loginForm(): Readonly<{
   form: HTMLFormElement;
   username: HTMLInputElement;
   password: HTMLInputElement;
+  button: HTMLButtonElement;
 }> {
   const form = document.createElement("form");
   form.addEventListener("submit", (event) => event.preventDefault());
@@ -40,21 +45,41 @@ function loginForm(): Readonly<{
   const password = document.createElement("input");
   password.type = "password";
   password.name = "password";
-  form.append(username, password);
+  const button = document.createElement("button");
+  button.type = "submit";
+  button.textContent = "Sign in";
+  form.append(username, password, button);
   document.body.append(form);
-  return { form, username, password };
+  return { form, username, password, button };
 }
 
+/** Requests the handler leaves unanswered get a plain "nothing held" or an acknowledgement. */
 function platform(
-  handler: (request: LoginFillRequest) => LoginFillResponse | Promise<LoginFillResponse>,
+  handler: (request: LoginFillRequest) => LoginFillResponse | Promise<LoginFillResponse> | undefined,
 ): LoginFillContentPlatform & { openVaultPage: ReturnType<typeof vi.fn> } {
   return {
     extensionId: "extension-test",
     onMessage: () => () => undefined,
     sendMessage: () => Promise.resolve(undefined),
     openVaultPage: vi.fn(() => Promise.resolve()),
-    sendLoginFillMessage: vi.fn((request: LoginFillRequest) => Promise.resolve(handler(request))),
+    sendLoginFillMessage: vi.fn(
+      (request: LoginFillRequest) =>
+        new Promise<LoginFillResponse>((resolve) => {
+          resolve(
+            Promise.resolve(handler(request)).then(
+              (response) => response ?? (request.kind === "login.pendingOffer" ? noOffer : ack),
+            ),
+          );
+        }),
+    ),
   };
+}
+
+function offers(candidate: LoginFillContentPlatform): LoginFillRequest[] {
+  return vi
+    .mocked(candidate.sendLoginFillMessage)
+    .mock.calls.map(([request]) => request)
+    .filter((request) => request.kind === "login.saveOffer");
 }
 
 function start(candidate: LoginFillContentPlatform) {
@@ -81,24 +106,29 @@ async function submitAndFlush(form: HTMLFormElement): Promise<void> {
   });
 }
 
+function banner(roots: readonly ShadowRoot[]) {
+  return within(roots.at(-1) as unknown as HTMLElement);
+}
+
 afterEach(() => {
   act(() => {
     for (const prompt of prompts.splice(0)) prompt.dispose();
   });
   document.body.replaceChildren();
+  vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
 describe("Save login prompt", () => {
-  it("offers to save a new credential with no matching saved login, and dismisses on request", async () => {
+  it("offers to save a new credential without taking focus, and Not now drops the held offer", async () => {
     const roots = captureClosedRoots();
     const { form, username, password } = loginForm();
     username.value = "new-user@example.test";
     password.value = "correct-horse";
     const candidate = platform((request) => {
       if (request.kind === "login.saveOffer")
-        return { version: 1, kind: "login.saveOfferResult", offerId: "a".repeat(32), existing: "none" };
-      return { version: 1, kind: "login.fillAck", ok: true };
+        return { version: 1, kind: "login.saveOfferResult", offerId, existing: "none" };
+      return undefined;
     });
     start(candidate);
 
@@ -111,38 +141,42 @@ describe("Save login prompt", () => {
       username: "new-user@example.test",
       password: "correct-horse",
     });
-    const bannerRoot = roots.at(-1) as unknown as HTMLElement;
-    expect(
-      within(bannerRoot).getByRole("region", { name: "ShardPass save login prompt" }),
-    ).toBeVisible();
-    expect(within(bannerRoot).getByText("new-user@example.test")).toBeVisible();
+    expect(banner(roots).getByRole("region", { name: "ShardPass save login prompt" })).toBeVisible();
+    expect(banner(roots).getByText("new-user@example.test")).toBeVisible();
+    expect(document.activeElement?.localName).not.toBe("shardpass-picker-host");
 
     await act(async () => {
-      fireEvent.click(within(bannerRoot).getByRole("button", { name: "Not now" }));
+      fireEvent.click(banner(roots).getByRole("button", { name: "Not now" }));
       await Promise.resolve();
     });
     expect(document.querySelector("shardpass-picker-host")).toBeNull();
+    expect(candidate.sendLoginFillMessage).toHaveBeenCalledWith({
+      version: 1,
+      kind: "login.saveDismiss",
+      offerId,
+    });
     expect(candidate.openVaultPage).not.toHaveBeenCalled();
   });
 
-  it("confirms the offer as a new login when Save is clicked, never opening the vault page", async () => {
+  it("confirms the offer as a new login when Save is clicked and says so for a moment, never opening the vault page", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     const roots = captureClosedRoots();
     const { form, username, password } = loginForm();
     username.value = "new-user@example.test";
     password.value = "correct-horse";
     const candidate = platform((request) => {
       if (request.kind === "login.saveOffer")
-        return { version: 1, kind: "login.saveOfferResult", offerId: "a".repeat(32), existing: "none" };
+        return { version: 1, kind: "login.saveOfferResult", offerId, existing: "none" };
       if (request.kind === "login.saveConfirm")
         return { version: 1, kind: "login.saveResult", itemId: "018f47a6-7d11-7c2f-8bd9-a1d37f147a21", saved: "created" };
-      return { version: 1, kind: "login.fillAck", ok: true };
+      return undefined;
     });
     start(candidate);
 
     await submitAndFlush(form);
-    const bannerRoot = roots.at(-1) as unknown as HTMLElement;
     await act(async () => {
-      fireEvent.click(within(bannerRoot).getByRole("button", { name: "Save new login" }));
+      fireEvent.click(banner(roots).getByRole("button", { name: "Save new login" }));
+      await Promise.resolve();
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -150,10 +184,14 @@ describe("Save login prompt", () => {
     expect(candidate.sendLoginFillMessage).toHaveBeenCalledWith({
       version: 1,
       kind: "login.saveConfirm",
-      offerId: "a".repeat(32),
+      offerId,
       choice: "new",
     });
     expect(candidate.openVaultPage).not.toHaveBeenCalled();
+    expect(banner(roots).getByRole("status")).toHaveTextContent("Saved to ShardPass");
+    act(() => {
+      vi.advanceTimersByTime(2_500);
+    });
     expect(document.querySelector("shardpass-picker-host")).toBeNull();
   });
 
@@ -173,15 +211,15 @@ describe("Save login prompt", () => {
         };
       if (request.kind === "login.saveConfirm")
         return { version: 1, kind: "login.saveResult", itemId: "018f47a6-7d11-7c2f-8bd9-a1d37f147a20", saved: "updated" };
-      return { version: 1, kind: "login.fillAck", ok: true };
+      return undefined;
     });
     start(candidate);
 
     await submitAndFlush(form);
-    const bannerRoot = roots.at(-1) as unknown as HTMLElement;
-    expect(within(bannerRoot).getByRole("heading", { name: "Update password for Existing?" })).toBeVisible();
+    expect(banner(roots).getByRole("heading", { name: "Update password for Existing?" })).toBeVisible();
     await act(async () => {
-      fireEvent.click(within(bannerRoot).getByRole("button", { name: "Update password" }));
+      fireEvent.click(banner(roots).getByRole("button", { name: "Update password" }));
+      await Promise.resolve();
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -191,6 +229,7 @@ describe("Save login prompt", () => {
       offerId: "b".repeat(32),
       choice: "update",
     });
+    expect(banner(roots).getByRole("status")).toHaveTextContent("Password updated");
   });
 
   it("does not prompt when the vault already holds this username with this password", async () => {
@@ -207,7 +246,7 @@ describe("Save login prompt", () => {
           existing: "same",
           existingName: "Existing",
         };
-      return { version: 1, kind: "login.fillAck", ok: true };
+      return undefined;
     });
     start(candidate);
 
@@ -226,18 +265,180 @@ describe("Save login prompt", () => {
     document.body.append(searchForm);
     const { form: loginFormEl, password } = loginForm();
     password.value = "";
-    const candidate = platform(() => ({
-      version: 1,
-      kind: "login.fillSuggestionsResult",
-      suggestions: [],
-    }));
+    const candidate = platform(() => undefined);
     start(candidate);
 
     await submitAndFlush(searchForm);
     await submitAndFlush(loginFormEl);
     await flush();
 
-    expect(candidate.sendLoginFillMessage).not.toHaveBeenCalled();
+    expect(offers(candidate)).toHaveLength(0);
     expect(document.querySelector("shardpass-picker-host")).toBeNull();
+  });
+
+  it("shows the offer held for this tab on the landing page after a sign-in navigated away", async () => {
+    const roots = captureClosedRoots();
+    const candidate = platform((request) => {
+      if (request.kind === "login.pendingOffer")
+        return {
+          version: 1,
+          kind: "login.pendingOfferResult",
+          offer: {
+            offerId,
+            domain: "accounts.example.test",
+            username: "alice@example.test",
+            existing: "different-password",
+            existingName: "Example",
+          },
+        };
+      return undefined;
+    });
+    start(candidate);
+    await flush();
+
+    expect(banner(roots).getByRole("heading", { name: "Update password for Example?" })).toBeVisible();
+    expect(banner(roots).getByText("alice@example.test")).toBeVisible();
+    expect(banner(roots).getByText("accounts.example.test")).toBeVisible();
+  });
+
+  it("arms on the submit control's click and on Enter in the password field, offering each credential once", async () => {
+    captureClosedRoots();
+    const { form, username, password, button } = loginForm();
+    username.value = "alice@example.test";
+    password.value = "first-try";
+    const candidate = platform((request) => {
+      if (request.kind === "login.saveOffer")
+        return { version: 1, kind: "login.saveOfferResult", offerId, existing: "none" };
+      return undefined;
+    });
+    start(candidate);
+
+    await act(async () => {
+      fireEvent.click(button);
+      await Promise.resolve();
+    });
+    await act(async () => {
+      fireEvent.keyDown(password, { key: "Enter" });
+      fireEvent.submit(form);
+      await Promise.resolve();
+    });
+    expect(offers(candidate)).toHaveLength(1);
+    expect(offers(candidate)[0]).toMatchObject({ username: "alice@example.test", password: "first-try" });
+
+    password.value = "second-try";
+    await act(async () => {
+      fireEvent.keyDown(password, { key: "Enter" });
+      await Promise.resolve();
+    });
+    expect(offers(candidate)).toHaveLength(2);
+    expect(offers(candidate)[1]).toMatchObject({ password: "second-try" });
+  });
+
+  it("offers a change-password form's new password, with the last username typed on the page", async () => {
+    captureClosedRoots();
+    document.body.innerHTML = `
+      <form id="step"><input type="email" name="email" /><button>Next</button></form>
+      <form id="change">
+        <input type="password" name="current" />
+        <input type="password" name="new" autocomplete="new-password" />
+        <input type="password" name="confirm" autocomplete="new-password" />
+        <button>Change password</button>
+      </form>
+    `;
+    for (const form of document.querySelectorAll("form"))
+      form.addEventListener("submit", (event) => event.preventDefault());
+    const field = (name: string) => document.querySelector<HTMLInputElement>(`input[name="${name}"]`)!;
+    const candidate = platform((request) => {
+      if (request.kind === "login.saveOffer")
+        return { version: 1, kind: "login.saveOfferResult", offerId, existing: "none" };
+      return undefined;
+    });
+    start(candidate);
+
+    fireEvent.input(field("email"), { target: { value: "alice@example.test" } });
+    field("current").value = "old-pw";
+    field("new").value = "new-pw";
+    field("confirm").value = "new-pw";
+    await submitAndFlush(document.querySelector<HTMLFormElement>("#change")!);
+
+    expect(offers(candidate)).toEqual([
+      {
+        version: 1,
+        kind: "login.saveOffer",
+        domain: "localhost",
+        username: "alice@example.test",
+        password: "new-pw",
+      },
+    ]);
+  });
+
+  it("offers only Not now while the vault is locked, and asks again once the page regains focus", async () => {
+    const roots = captureClosedRoots();
+    const { form, username, password } = loginForm();
+    username.value = "alice@example.test";
+    password.value = "pw";
+    let unlocked = false;
+    const candidate = platform((request) => {
+      if (request.kind === "login.saveOffer")
+        return { version: 1, kind: "login.saveOfferResult", offerId, existing: "locked" };
+      if (request.kind === "login.pendingOffer" && unlocked)
+        return {
+          version: 1,
+          kind: "login.pendingOfferResult",
+          offer: { offerId, domain: "localhost", username: "alice@example.test", existing: "none" },
+        };
+      return undefined;
+    });
+    start(candidate);
+
+    await submitAndFlush(form);
+    expect(banner(roots).getByRole("heading", { name: "Unlock ShardPass to save this login" })).toBeVisible();
+    expect(banner(roots).queryByRole("button", { name: /Save|Update/u })).toBeNull();
+    expect(banner(roots).getByRole("button", { name: "Not now" })).toBeVisible();
+
+    unlocked = true;
+    await act(async () => {
+      fireEvent(window, new Event("focus"));
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(banner(roots).getByRole("heading", { name: "Save this login?" })).toBeVisible();
+    expect(banner(roots).getByRole("button", { name: "Save new login" })).toBeVisible();
+  });
+
+  it("brings the banner back after a hash change closed it", async () => {
+    const roots = captureClosedRoots();
+    const { form, username, password } = loginForm();
+    username.value = "alice@example.test";
+    password.value = "pw";
+    let held = false;
+    const candidate = platform((request) => {
+      if (request.kind === "login.saveOffer") {
+        held = true;
+        return { version: 1, kind: "login.saveOfferResult", offerId, existing: "none" };
+      }
+      if (request.kind === "login.pendingOffer" && held)
+        return {
+          version: 1,
+          kind: "login.pendingOfferResult",
+          offer: { offerId, domain: "localhost", username: "alice@example.test", existing: "none" },
+        };
+      return undefined;
+    });
+    start(candidate);
+    await submitAndFlush(form);
+    const first = roots.at(-1);
+
+    await act(async () => {
+      fireEvent(window, new Event("hashchange"));
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(roots.at(-1)).not.toBe(first);
+    expect(banner(roots).getByRole("heading", { name: "Save this login?" })).toBeVisible();
+    expect(document.querySelectorAll("shardpass-picker-host")).toHaveLength(1);
   });
 });

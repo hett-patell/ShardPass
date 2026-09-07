@@ -1,5 +1,5 @@
 import type { LoginItem, OtpItem, VaultItem } from "@shardpass/domain";
-import type { LoginFillRequest } from "@shardpass/messaging";
+import type { LoginFillRequest, SenderContext } from "@shardpass/messaging";
 import { LoginFillResponseSchema } from "@shardpass/messaging";
 import { describe, expect, it } from "vitest";
 
@@ -65,6 +65,7 @@ class FakeRepository
 {
   readonly items = new Map<string, VaultItem>();
   listError: unknown;
+  createError: unknown;
 
   constructor(values: readonly VaultItem[] = []) {
     for (const value of values) this.items.set(value.id, structuredClone(value));
@@ -81,6 +82,7 @@ class FakeRepository
   }
 
   createItem(candidate: VaultItem): Promise<VaultItem> {
+    if (this.createError !== undefined) return Promise.reject(asError(this.createError));
     this.items.set(candidate.id, structuredClone(candidate));
     return Promise.resolve(structuredClone(candidate));
   }
@@ -106,6 +108,16 @@ function request(
   return { version: 1, kind, ...values } as LoginFillRequest;
 }
 
+/** The page at example.test, top frame of tab 7. */
+const sender: SenderContext = {
+  extensionId: "extension-test",
+  contextKind: "content",
+  tabId: 7,
+  frameId: 0,
+  documentId: "document-7",
+  senderUrl: "https://example.test/login",
+};
+
 function fixture(values: readonly VaultItem[] = [], now = 15_000) {
   const repository = new FakeRepository(values);
   const activity: string[] = [];
@@ -128,6 +140,7 @@ describe("LoginFillService", () => {
 
     const result = await service.handle(
       request("login.fillSuggestions", { domain: "example.test" }),
+      sender,
     );
     expect(result).toEqual({
       version: 1,
@@ -152,6 +165,7 @@ describe("LoginFillService", () => {
     const { service } = fixture([stored]);
     const result = await service.handle(
       request("login.fillSuggestions", { domain: "accounts.example.test" }),
+      sender,
     );
     if (result.kind !== "login.fillSuggestionsResult") throw new Error("expected suggestions");
     expect(result.suggestions).toHaveLength(1);
@@ -165,6 +179,7 @@ describe("LoginFillService", () => {
     const { service } = fixture(values);
     const result = await service.handle(
       request("login.fillSuggestions", { domain: "example.test" }),
+      sender,
     );
     if (result.kind !== "login.fillSuggestionsResult") throw new Error("expected suggestions");
     expect(result.suggestions.map((s) => s.itemId)).toEqual([ids.otherLogin, ids.login]);
@@ -175,6 +190,7 @@ describe("LoginFillService", () => {
     const { service } = fixture([stored]);
     const result = await service.handle(
       request("login.fillSuggestions", { domain: "example.test" }),
+      sender,
     );
     if (result.kind !== "login.fillSuggestionsResult") throw new Error("expected suggestions");
     expect(result.suggestions[0]).toMatchObject({ hasLinkedOtp: true });
@@ -185,6 +201,7 @@ describe("LoginFillService", () => {
     const { service } = fixture([stored]);
     const result = await service.handle(
       request("login.fillSuggestions", { domain: "example.test" }),
+      sender,
     );
     if (result.kind !== "login.fillSuggestionsResult") throw new Error("expected suggestions");
     expect(result.suggestions[0]).toMatchObject({ hasLinkedOtp: true });
@@ -196,6 +213,7 @@ describe("LoginFillService", () => {
     const { activity, service } = fixture([stored]);
     const result = await service.handle(
       request("login.fillSelect", { itemId: stored.id, expectedRevision: 1 }),
+      sender,
     );
     expect(result).toEqual({ version: 1, kind: "login.fillRelease", username: "alice", password: "s3cret" });
     expect(activity).toEqual(["noted"]);
@@ -207,6 +225,7 @@ describe("LoginFillService", () => {
     const { service } = fixture([stored, otp], 15_000);
     const result = await service.handle(
       request("login.fillSelect", { itemId: stored.id, expectedRevision: 1 }),
+      sender,
     );
     if (result.kind !== "login.fillRelease") throw new Error("expected release");
     expect(result.linkedOtpCode).toMatch(/^\d{6}$/u);
@@ -217,6 +236,7 @@ describe("LoginFillService", () => {
     const { service } = fixture([stored], 15_000);
     const result = await service.handle(
       request("login.fillSelect", { itemId: stored.id, expectedRevision: 1 }),
+      sender,
     );
     if (result.kind !== "login.fillRelease") throw new Error("expected release");
     expect(result.linkedOtpCode).toMatch(/^\d{6}$/u);
@@ -227,6 +247,7 @@ describe("LoginFillService", () => {
     const { service } = fixture([stored], 15_000);
     const result = await service.handle(
       request("login.fillSelect", { itemId: stored.id, expectedRevision: 1 }),
+      sender,
     );
     if (result.kind !== "login.fillRelease") throw new Error("expected release");
     expect(result.password).toBe("s3cret");
@@ -239,6 +260,7 @@ describe("LoginFillService", () => {
     const { service } = fixture([stored, hotp]);
     const result = await service.handle(
       request("login.fillSelect", { itemId: stored.id, expectedRevision: 1 }),
+      sender,
     );
     if (result.kind !== "login.fillRelease") throw new Error("expected release");
     expect(result.linkedOtpCode).toBeUndefined();
@@ -249,6 +271,7 @@ describe("LoginFillService", () => {
     const { service } = fixture([stored]);
     const result = await service.handle(
       request("login.fillSelect", { itemId: stored.id, expectedRevision: 1 }),
+      sender,
     );
     if (result.kind !== "login.fillRelease") throw new Error("expected release");
     expect(result.linkedOtpCode).toBeUndefined();
@@ -258,10 +281,10 @@ describe("LoginFillService", () => {
     const otp = otpItem();
     const { activity, service } = fixture([otp]);
     await expect(
-      service.handle(request("login.fillSelect", { itemId: ids.missing, expectedRevision: 1 })),
+      service.handle(request("login.fillSelect", { itemId: ids.missing, expectedRevision: 1 }), sender),
     ).rejects.toMatchObject({ code: "LOGIN_FILL_NOT_FOUND" });
     await expect(
-      service.handle(request("login.fillSelect", { itemId: otp.id, expectedRevision: 1 })),
+      service.handle(request("login.fillSelect", { itemId: otp.id, expectedRevision: 1 }), sender),
     ).rejects.toMatchObject({ code: "LOGIN_FILL_NOT_FOUND" });
     expect(activity).toEqual([]);
   });
@@ -270,7 +293,7 @@ describe("LoginFillService", () => {
     const stored = loginItem({ revision: 2 });
     const { activity, service } = fixture([stored]);
     await expect(
-      service.handle(request("login.fillSelect", { itemId: stored.id, expectedRevision: 1 })),
+      service.handle(request("login.fillSelect", { itemId: stored.id, expectedRevision: 1 }), sender),
     ).rejects.toMatchObject({ code: "LOGIN_FILL_ITEM_CHANGED" });
     expect(activity).toEqual([]);
   });
@@ -279,7 +302,7 @@ describe("LoginFillService", () => {
     "acknowledges %s for an id the repository has never seen",
     async (kind) => {
       const { service } = fixture();
-      const result = await service.handle(request(kind, { itemId: ids.missing }));
+      const result = await service.handle(request(kind, { itemId: ids.missing }), sender);
       expect(result).toEqual({ version: 1, kind: "login.fillAck", ok: true });
     },
   );
@@ -288,29 +311,35 @@ describe("LoginFillService", () => {
     const { repository, service } = fixture();
     const result = await service.handle(
       request("login.saveOffer", { domain: "example.test", username: "alice", password: "s3cret" }),
+      sender,
     );
     expect(result).toMatchObject({ version: 1, kind: "login.saveOfferResult", existing: "none" });
     expect(JSON.stringify(result)).not.toContain("s3cret");
     expect(repository.items.size).toBe(0);
   });
 
-  it("maps a locked vault to the opaque unavailable code without leaking storage detail", async () => {
+  it("names a locked vault, and maps every other storage failure to the opaque unavailable code", async () => {
     const { repository, service } = fixture();
     repository.listError = new VaultSessionError("VAULT_LOCKED");
-    const failure = await service
-      .handle(request("login.fillSuggestions", { domain: "example.test" }))
+    const locked = await service
+      .handle(request("login.fillSuggestions", { domain: "example.test" }), sender)
       .catch((error: unknown) => error);
-    expect(failure).toBeInstanceOf(LoginFillServiceError);
-    expect(failure).toEqual(expect.objectContaining({ code: "LOGIN_FILL_UNAVAILABLE" }));
+    expect(locked).toBeInstanceOf(LoginFillServiceError);
+    expect(locked).toEqual(expect.objectContaining({ code: "VAULT_LOCKED" }));
+    repository.listError = new Error("disk");
+    const other = await service
+      .handle(request("login.fillSuggestions", { domain: "example.test" }), sender)
+      .catch((error: unknown) => error);
+    expect(other).toEqual(expect.objectContaining({ code: "LOGIN_FILL_UNAVAILABLE" }));
   });
 
   it("returns responses accepted by the strict login fill messaging schema, deeply frozen", async () => {
     const stored = loginItem({ urls: ["https://example.test"] });
     const { service } = fixture([stored]);
     for (const result of [
-      await service.handle(request("login.fillSuggestions", { domain: "example.test" })),
-      await service.handle(request("login.fillSelect", { itemId: stored.id, expectedRevision: 1 })),
-      await service.handle(request("login.fillConfirm", { itemId: stored.id })),
+      await service.handle(request("login.fillSuggestions", { domain: "example.test" }), sender),
+      await service.handle(request("login.fillSelect", { itemId: stored.id, expectedRevision: 1 }), sender),
+      await service.handle(request("login.fillConfirm", { itemId: stored.id }), sender),
     ]) {
       expect(LoginFillResponseSchema.safeParse(result).success).toBe(true);
       expect(Object.isFrozen(result)).toBe(true);
@@ -323,10 +352,11 @@ describe("LoginFillService save offers", () => {
     const { repository, service } = fixture([loginItem({ id: ids.login, urls: ["https://example.test"] })]);
     const offer = (await service.handle(
       request("login.saveOffer", { domain: "example.test", username: "second@example.test", password: "pw-2" }),
+      sender,
     )) as { kind: string; offerId: string; existing: string };
     expect(offer).toMatchObject({ kind: "login.saveOfferResult", existing: "none" });
 
-    const saved = (await service.handle(request("login.saveConfirm", { offerId: offer.offerId, choice: "new" }))) as {
+    const saved = (await service.handle(request("login.saveConfirm", { offerId: offer.offerId, choice: "new" }), sender)) as {
       kind: string;
       itemId: string;
       saved: string;
@@ -337,7 +367,7 @@ describe("LoginFillService save offers", () => {
     // A second account on the same site coexists with the first.
     expect([...repository.items.values()].filter((item) => item.kind === "login")).toHaveLength(2);
     // The offer is single-use.
-    await expect(service.handle(request("login.saveConfirm", { offerId: offer.offerId, choice: "new" }))).rejects.toMatchObject({
+    await expect(service.handle(request("login.saveConfirm", { offerId: offer.offerId, choice: "new" }), sender)).rejects.toMatchObject({
       code: "LOGIN_FILL_NOT_FOUND",
     });
   });
@@ -347,9 +377,10 @@ describe("LoginFillService save offers", () => {
     const { repository, service } = fixture([stored]);
     const offer = (await service.handle(
       request("login.saveOffer", { domain: "www.example.test", username: "USER", password: "new" }),
+      sender,
     )) as { offerId: string; existing: string; existingName?: string };
     expect(offer).toMatchObject({ existing: "different-password", existingName: stored.name });
-    await service.handle(request("login.saveConfirm", { offerId: offer.offerId, choice: "update" }));
+    await service.handle(request("login.saveConfirm", { offerId: offer.offerId, choice: "update" }), sender);
     expect(repository.items.get(ids.login)).toMatchObject({
       password: "new",
       revision: 2,
@@ -364,11 +395,151 @@ describe("LoginFillService save offers", () => {
     const service = new LoginFillService({ repository, now: () => now, notePrivilegedActivity: () => Promise.resolve() });
     const same = (await service.handle(
       request("login.saveOffer", { domain: "example.test", username: "user", password: "same" }),
+      sender,
     )) as { existing: string; offerId: string };
     expect(same.existing).toBe("same");
     now += 6 * 60_000;
-    await expect(service.handle(request("login.saveConfirm", { offerId: same.offerId, choice: "new" }))).rejects.toMatchObject({
+    await expect(service.handle(request("login.saveConfirm", { offerId: same.offerId, choice: "new" }), sender)).rejects.toMatchObject({
       code: "LOGIN_FILL_NOT_FOUND",
     });
+  });
+});
+
+describe("LoginFillService sender binding", () => {
+  const popup: SenderContext = {
+    extensionId: "extension-test",
+    contextKind: "popup",
+    senderUrl: "chrome-extension://extension-test/popup/index.html",
+    documentId: "popup",
+  };
+  const elsewhere: SenderContext = {
+    ...sender,
+    frameId: 3,
+    documentId: "document-3",
+    senderUrl: "https://evil.test/embed",
+  };
+
+  function offerRequest(username: string, password: string): LoginFillRequest {
+    return request("login.saveOffer", { domain: "example.test", username, password });
+  }
+
+  it("hands a login only to a page it was saved for; the popup's reveal is not page-bound", async () => {
+    const stored = loginItem();
+    const { service } = fixture([stored]);
+    await expect(
+      service.handle(request("login.fillSelect", { itemId: stored.id, expectedRevision: 1 }), elsewhere),
+    ).rejects.toMatchObject({ code: "LOGIN_FILL_NOT_FOUND" });
+    const revealed = await service.handle(
+      request("login.reveal", { itemId: stored.id, expectedRevision: 1 }),
+      popup,
+    );
+    expect(revealed).toMatchObject({ kind: "login.fillRelease", password: "s3cret" });
+  });
+
+  it("neither suggests nor matches an archived login", async () => {
+    const archived = loginItem({ archivedAt: nowIso });
+    const { service } = fixture([archived]);
+    const suggestions = await service.handle(
+      request("login.fillSuggestions", { domain: "example.test" }),
+      sender,
+    );
+    expect(suggestions).toMatchObject({ suggestions: [] });
+    expect(await service.handle(offerRequest("alice", "s3cret"), sender)).toMatchObject({
+      existing: "none",
+    });
+  });
+
+  it("holds an offer for the tab that made it, answers only that tab's top frame, and drops it on dismiss", async () => {
+    const { service } = fixture();
+    const offer = (await service.handle(offerRequest("alice", "pw-hidden"), sender)) as {
+      offerId: string;
+    };
+    expect(
+      await service.handle(request("login.pendingOffer"), { ...sender, tabId: 8 }),
+    ).toMatchObject({ offer: null });
+    expect(
+      await service.handle(request("login.pendingOffer"), { ...sender, frameId: 2 }),
+    ).toMatchObject({ offer: null });
+    const pending = await service.handle(request("login.pendingOffer"), sender);
+    expect(pending).toEqual({
+      version: 1,
+      kind: "login.pendingOfferResult",
+      offer: { offerId: offer.offerId, domain: "example.test", username: "alice", existing: "none" },
+    });
+    expect(JSON.stringify(pending)).not.toContain("pw-hidden");
+    await service.handle(request("login.saveDismiss", { offerId: offer.offerId }), sender);
+    expect(await service.handle(request("login.pendingOffer"), sender)).toMatchObject({ offer: null });
+  });
+
+  it("forgets a held offer once confirmed, once superseded by a newer one, and once expired", async () => {
+    let now = 15_000;
+    const repository = new FakeRepository();
+    const service = new LoginFillService({
+      repository,
+      now: () => now,
+      notePrivilegedActivity: () => Promise.resolve(),
+    });
+    const first = (await service.handle(offerRequest("a", "p1"), sender)) as { offerId: string };
+    const second = (await service.handle(offerRequest("b", "p2"), sender)) as { offerId: string };
+    expect(await service.handle(request("login.pendingOffer"), sender)).toMatchObject({
+      offer: { offerId: second.offerId, username: "b" },
+    });
+    await expect(
+      service.handle(request("login.saveConfirm", { offerId: first.offerId, choice: "new" }), sender),
+    ).rejects.toMatchObject({ code: "LOGIN_FILL_NOT_FOUND" });
+    await service.handle(request("login.saveConfirm", { offerId: second.offerId, choice: "new" }), sender);
+    expect(await service.handle(request("login.pendingOffer"), sender)).toMatchObject({ offer: null });
+    await service.handle(offerRequest("c", "p3"), sender);
+    now += 5 * 60_000 + 1;
+    expect(await service.handle(request("login.pendingOffer"), sender)).toMatchObject({ offer: null });
+  });
+
+  it("holds an offer made while the vault is locked and judges it once the vault opens", async () => {
+    const stored = loginItem({ username: "alice", password: "old" });
+    const { repository, service } = fixture([stored]);
+    repository.listError = new VaultSessionError("VAULT_LOCKED");
+    const offer = (await service.handle(offerRequest("alice", "new"), sender)) as { offerId: string; existing: string };
+    expect(offer.existing).toBe("locked");
+    expect(await service.handle(request("login.pendingOffer"), sender)).toMatchObject({
+      offer: { existing: "locked" },
+    });
+    repository.listError = undefined;
+    expect(await service.handle(request("login.pendingOffer"), sender)).toMatchObject({
+      offer: { offerId: offer.offerId, existing: "different-password", existingName: "Example" },
+    });
+    await service.handle(request("login.saveConfirm", { offerId: offer.offerId, choice: "update" }), sender);
+    expect(repository.items.get(stored.id)).toMatchObject({ password: "new", revision: 2 });
+  });
+
+  it("drops a locked-time offer that turns out to be already saved, and keeps one whose confirm hit a locked vault", async () => {
+    const stored = loginItem({ username: "alice", password: "same" });
+    const { repository, service } = fixture([stored]);
+    repository.listError = new VaultSessionError("VAULT_LOCKED");
+    await service.handle(offerRequest("alice", "same"), sender);
+    repository.listError = undefined;
+    expect(await service.handle(request("login.pendingOffer"), sender)).toMatchObject({ offer: null });
+
+    const offer = (await service.handle(offerRequest("bob", "pw"), sender)) as { offerId: string };
+    repository.createError = new VaultSessionError("VAULT_LOCKED");
+    await expect(
+      service.handle(request("login.saveConfirm", { offerId: offer.offerId, choice: "new" }), sender),
+    ).rejects.toMatchObject({ code: "VAULT_LOCKED" });
+    expect(await service.handle(request("login.pendingOffer"), sender)).toMatchObject({
+      offer: { offerId: offer.offerId, username: "bob" },
+    });
+  });
+
+  it("judges an offer without a username by the domain's logins alone", async () => {
+    const one = loginItem({ id: ids.login, username: "alice", password: "same" });
+    const { service: single } = fixture([one]);
+    expect(await single.handle(offerRequest("", "same"), sender)).toMatchObject({ existing: "same" });
+    expect(await single.handle(offerRequest("", "changed"), sender)).toMatchObject({
+      existing: "different-password",
+      existingName: "Example",
+    });
+    const two = loginItem({ id: ids.otherLogin, name: "Bob", username: "bob", password: "other" });
+    const { service: several } = fixture([one, two]);
+    expect(await several.handle(offerRequest("", "changed"), sender)).toMatchObject({ existing: "none" });
+    expect(await several.handle(offerRequest("", "other"), sender)).toMatchObject({ existing: "same" });
   });
 });

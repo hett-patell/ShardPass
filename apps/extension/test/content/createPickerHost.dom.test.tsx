@@ -90,14 +90,64 @@ describe("createPickerHost", () => {
     const first = openPicker(anchor);
     const second = openPicker(anchor);
 
-    expect(first).toBe(second);
-    expect(roots).toHaveLength(1);
+    // A slot holds one host: the newcomer replaces the earlier one instead of being dropped.
+    expect(first).not.toBe(second);
+    expect(first.status).toBe("closed");
+    expect(second.status).toBe("open");
+    expect(document.body.querySelectorAll("shardpass-picker-host")).toHaveLength(1);
+    expect(roots).toHaveLength(2);
     const host = document.body.querySelector("shardpass-picker-host");
     expect(host).toBeInstanceOf(HTMLElement);
     expect(host?.shadowRoot).toBeNull();
-    expect(roots[0]?.querySelector("style")).toBeInstanceOf(HTMLStyleElement);
+    expect(roots[1]?.querySelector("style")).toBeInstanceOf(HTMLStyleElement);
     expect(document.head.querySelector("style")).toBeNull();
     expect(document.querySelector("[data-shardpass-picker]")).toBeNull();
+  });
+
+  it("lets hosts in different slots coexist: a banner does not evict the chip", () => {
+    installClosedShadowCapture();
+    const anchor = makeAnchor();
+    const chip = createPickerHost(anchor, { positionToAnchor: true, content: <button type="button">SP</button> });
+    const banner = createPickerHost(document.body, { positionToAnchor: false, slot: "banner", content: <p>Save?</p> });
+    const prompt = createPickerHost(document.body, { positionToAnchor: false, slot: "prompt", content: <p>Passkey?</p> });
+
+    expect(chip.status).toBe("open");
+    expect(banner.status).toBe("open");
+    expect(prompt.status).toBe("open");
+    expect(document.body.querySelectorAll("shardpass-picker-host")).toHaveLength(3);
+    banner.close();
+    expect(chip.status).toBe("open");
+    expect(prompt.status).toBe("open");
+    chip.close();
+    prompt.close();
+  });
+
+  it("sizes a fitted chip to its content and parks it inside the field's right edge", () => {
+    installClosedShadowCapture();
+    const anchor = makeAnchor();
+    anchor.getBoundingClientRect = () => ({ left: 100, right: 400, top: 200, bottom: 240, width: 300, height: 40, x: 100, y: 200, toJSON: () => ({}) });
+    const chip = createPickerHost(anchor, { positionToAnchor: true, fit: "content", content: <button type="button">SP</button> });
+    const host = document.body.querySelector<HTMLElement>("shardpass-picker-host");
+    expect(host?.style.width).toBe("max-content");
+    // jsdom measures 0x0, so the fallback 30px chip lands 6px inside the right edge.
+    expect(host?.style.left).toBe(`${400 - 6 - 30}px`);
+    expect(host?.style.top).toBe(`${200 + (40 - 30) / 2}px`);
+    chip.close();
+  });
+
+  it("answers Escape through onRequestClose and leaves the page's own Escape alone", () => {
+    installClosedShadowCapture();
+    const anchor = makeAnchor();
+    const onRequestClose = vi.fn();
+    const handle = createPickerHost(anchor, { positionToAnchor: true, content: <button type="button">SP</button>, onRequestClose });
+    anchor.focus();
+    const event = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
+    anchor.dispatchEvent(event);
+    expect(onRequestClose).toHaveBeenCalledTimes(1);
+    // Pressed in the page, not in the host: the page keeps its Escape (a dialog can still close).
+    expect(event.defaultPrevented).toBe(false);
+    expect(handle.status).toBe("open");
+    handle.close();
   });
 
   it("renders an origin as inert normalized text and exposes an accessible nonmodal region", () => {
@@ -345,7 +395,8 @@ describe("content entry and style packaging contracts", () => {
     expect(hostSource).toContain('from "./picker.css?raw"');
     expect(hostSource).not.toContain("dangerouslySetInnerHTML");
     expect(css).toMatch(/:host\s*\{/);
-    expect(css).toContain("--z-picker: 600");
+    expect(css).toContain("--z-picker: 2147483647");
+    expect(css).toContain("pointer-events: none");
     expect(css).toContain("z-index: var(--z-picker)");
     expect(css).not.toMatch(/@import|https?:\/\/|(^|[},]\s*)(html|body)(?=[\s,{])/m);
     expect(css).not.toMatch(
