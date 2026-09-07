@@ -20,6 +20,9 @@ export function getThemePreference(): ThemePreference {
   }
 }
 
+/** Stops following the OS scheme; one at a time, replaced on every apply. */
+let stopSystemWatch: (() => void) | null = null;
+
 /**
  * Stamps the preference onto the document root, where the tokens read it: an explicit
  * choice sets data-theme, "system" removes it so prefers-color-scheme decides. Call once
@@ -28,13 +31,20 @@ export function getThemePreference(): ThemePreference {
 export function applyThemePreference(preference: ThemePreference = getThemePreference()): void {
   const root = globalThis.document?.documentElement;
   if (root === undefined) return;
+  stopSystemWatch?.();
+  stopSystemWatch = null;
   // The tokens are dark by default and light under data-theme="light"; "system" resolves the
   // OS preference here so the stylesheet needs no media query of its own.
-  const light =
-    preference === "light" ||
-    (preference === "system" &&
-      globalThis.matchMedia?.("(prefers-color-scheme: light)").matches === true);
+  const query = globalThis.matchMedia?.("(prefers-color-scheme: light)");
+  const light = preference === "light" || (preference === "system" && query?.matches === true);
   root.dataset["theme"] = light ? "light" : "dark";
+  if (preference !== "system" || query === undefined) return;
+  // "system" has to keep up: the OS can switch schemes while the page stays open.
+  const follow = () => {
+    root.dataset["theme"] = query.matches ? "light" : "dark";
+  };
+  query.addEventListener("change", follow);
+  stopSystemWatch = () => query.removeEventListener("change", follow);
 }
 
 export function setThemePreference(preference: ThemePreference): void {

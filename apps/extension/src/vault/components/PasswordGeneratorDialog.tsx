@@ -44,7 +44,7 @@ export function PasswordGeneratorDialog({ platform, onUse, onClose }: PasswordGe
   const [uppercase, setUppercase] = useState(true);
   const [lowercase, setLowercase] = useState(true);
   const [digits, setDigits] = useState(true);
-  const [symbols, setSymbols] = useState(false);
+  const [symbols, setSymbols] = useState(true);
   const [excludeAmbiguous, setExcludeAmbiguous] = useState(false);
   const [wordCount, setWordCount] = useState(4);
   const [separator, setSeparator] = useState<Separator>("hyphen");

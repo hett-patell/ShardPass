@@ -58,7 +58,7 @@ const loginItem = {
 function createTestPlatform(options: { tab?: { id: number; url: string } | null; fill?: unknown } = {}) {
   let onState: (state: unknown) => void = () => undefined;
   const items = [loginProjection, otpProjection, noteProjection];
-  const sendMessage = vi.fn((payload: unknown) => {
+  const sendMessage = vi.fn((payload: unknown): Promise<unknown> => {
     const request = payload as { kind?: unknown; itemId?: unknown };
     if (request.kind === "item.list") return Promise.resolve({ version: 1, kind: "item.listResult", items });
     if (request.kind === "item.get" && request.itemId === LOGIN_ID)
@@ -242,6 +242,57 @@ describe("PopupApp screens", () => {
     await waitFor(() => expect(openVaultPage).toHaveBeenCalledWith({ view: "settings" }));
     fireEvent.click(screen.getByRole("button", { name: "New item" }));
     await waitFor(() => expect(openVaultPage).toHaveBeenCalledWith({ newItem: "login" }));
+  });
+
+  it("tells the person to reload a page that has no content script yet", async () => {
+    const fixture = createTestPlatform({ tab: { id: 7, url: "https://example.test/login" } });
+    fixture.sendToTab.mockImplementation(() =>
+      Promise.reject(new Error("Could not establish connection. Receiving end does not exist.")),
+    );
+    render(<PopupApp platform={fixture.platform} />);
+    act(() => fixture.publishVaultState(vaultState("unlocked", 1)));
+    fireEvent.click(await screen.findByRole("button", { name: "Fill" }));
+    expect(await screen.findByText("Reload the page, then try again.")).toBeVisible();
+  });
+
+  it("stays on the unlocked screen and says so when locking fails", async () => {
+    const { sendMessage } = await renderUnlocked();
+    sendMessage.mockImplementationOnce(() => Promise.reject(new Error("worker asleep")));
+    fireEvent.click(screen.getByRole("button", { name: "Lock vault" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("The vault could not be locked. Try again.");
+    expect(screen.getByRole("searchbox", { name: "Search ShardPass" })).toBeVisible();
+    // The lock screen stays mounted but hidden; it must not surface as a stray "unlocked" panel.
+    expect(screen.getByRole("heading", { name: "Vault unlocked", hidden: true })).not.toBeVisible();
+  });
+
+  it("gives search results the same quick actions as the lists", async () => {
+    const { writeAuthoritativeClipboardText } = await renderUnlocked({ tab: { id: 7, url: "https://example.test/login" } });
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search ShardPass" }), { target: { value: "north" } });
+    fireEvent.click(await screen.findByRole("button", { name: "Copy code 123456" }));
+    await waitFor(() => expect(writeAuthoritativeClipboardText).toHaveBeenCalledTimes(1));
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search ShardPass" }), { target: { value: "portal" } });
+    expect(await screen.findByRole("button", { name: "Copy password for Example Portal" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Fill" })).toBeVisible();
+  });
+
+  it("offers a retry when the vault list cannot be loaded", async () => {
+    const fixture = createTestPlatform();
+    let fail = true;
+    fixture.sendMessage.mockImplementation((payload: unknown) => {
+      const request = payload as { kind?: unknown };
+      if (request.kind === "item.list")
+        return fail
+          ? Promise.reject(new Error("asleep"))
+          : Promise.resolve({ version: 1, kind: "item.listResult", items: [loginProjection] });
+      return Promise.resolve(undefined);
+    });
+    render(<PopupApp platform={fixture.platform} />);
+    act(() => fixture.publishVaultState(vaultState("unlocked", 1)));
+    const retry = await screen.findByRole("button", { name: "Try again" });
+    fail = false;
+    fireEvent.click(retry);
+    expect(await screen.findByRole("button", { name: /Logins/ })).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Try again" })).not.toBeInTheDocument();
   });
 
   it("locks the vault from the title bar", async () => {

@@ -2,6 +2,7 @@ import { OtpEditableInputSchema, type OtpEditableInput } from "@shardpass/messag
 import { Button, Field } from "@shardpass/ui";
 import { useEffect, useLayoutEffect, useState } from "react";
 
+import { parseTags } from "../item-support";
 import styles from "./OtpVaultView.module.css";
 
 export interface OtpEditorProps {
@@ -16,7 +17,7 @@ export interface OtpEditorProps {
 }
 
 type FormValue = OtpEditableInput;
-type Errors = Partial<Record<"label" | "secret" | "period" | "counter" | "tags" | "form", string>>;
+type Errors = Partial<Record<"label" | "secret" | "period" | "counter" | "form", string>>;
 
 const normalizeSecret = (value: string) => value.toUpperCase().replace(/[\s-]/gu, "");
 const parseInteger = (value: string, fallback: number) => {
@@ -30,7 +31,6 @@ function validate(value: FormValue): Errors {
   if (value.label.trim().length === 0) errors.label = "Enter a label.";
   if (value.secret.length === 0 || !/^[A-Z2-7]+$/u.test(value.secret))
     errors.secret = "Enter a canonical Base32 secret.";
-  if (value.tags.some((tag) => tag.trim().length === 0)) errors.tags = "Remove empty tags.";
   if (value.otpType === "hotp" && value.counter === undefined)
     errors.counter = "Enter a nonnegative counter.";
   if (value.otpType !== "hotp" && value.period <= 0) errors.period = "Enter a positive period.";
@@ -105,7 +105,8 @@ export function OtpEditor({
           secret: secretChanged ? form.secret : value.secret,
           issuer: form.issuer.trim(),
           label: form.label.trim(),
-          tags: form.tags.map((tag) => tag.trim()),
+          // Same rules as every other form: blanks dropped, repeats folded.
+          tags: parseTags(form.tags.join(",")),
         };
         const nextErrors = validate(trimmed);
         setErrors(nextErrors);
@@ -296,7 +297,6 @@ export function OtpEditor({
         <Field
           id="otp-tags"
           label="Tags"
-          error={errors.tags}
           help="Comma-separated, up to the vault schema limit."
           inputProps={{
             value: form.tags.join(", "),

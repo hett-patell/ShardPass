@@ -7,6 +7,7 @@ import { ChevronRight, ExternalLink, KeyRound, LayoutGrid, Plus, Star, type Luci
 import type { ExtensionPlatform } from "../../platform/extension-platform";
 import { KIND_ICONS } from "../components/KindIcon";
 import { PopupRow } from "../components/PopupRow";
+import { RowActions } from "../components/RowActions";
 import { QuickAction } from "../components/QuickAction";
 import type { ActiveTab } from "../hooks/useActiveTab";
 import { itemsInCategory, projectionMatches, type CategoryId } from "../hooks/useVaultItems";
@@ -26,6 +27,18 @@ const CATEGORIES: readonly { id: CategoryId; label: string; icon: LucideIcon }[]
 export const CATEGORY_TITLES: Record<CategoryId, string> = Object.fromEntries(
   CATEGORIES.map((category) => [category.id, category.label]),
 ) as Record<CategoryId, string>;
+
+/** Empty-list copy per category, in the popup's own voice. */
+export const CATEGORY_EMPTY: Record<CategoryId, string> = {
+  favorites: "Nothing marked as a favorite yet.",
+  all: "Nothing in your vault yet.",
+  login: "No logins yet.",
+  otp: "No one-time codes yet.",
+  note: "No notes yet.",
+  card: "No cards yet.",
+  identity: "No identities yet.",
+  secret: "No secrets yet.",
+};
 
 const MAX_SEARCH_RESULTS = 60;
 
@@ -47,6 +60,9 @@ export interface HomeScreenProps {
   filling: string | null;
   onCopyPassword: (item: ItemListItemProjection) => void;
   onOpenVault: () => void;
+  /** Loads the vault again after "Items unavailable". */
+  onRetry: () => void;
+  onCopyCode: (item: ItemListItemProjection, code: string) => void;
   /** Opens the vault page at its import section. */
   onImport: () => void;
   onNewItem: (kind: VaultItemKind) => void;
@@ -68,6 +84,9 @@ export function HomeScreen({
   filling,
   onCopyPassword,
   onOpenVault,
+  platform,
+  onRetry,
+  onCopyCode,
   onImport,
   onNewItem,
   onGenerate,
@@ -80,7 +99,9 @@ export function HomeScreen({
           (item) =>
             item.kind === "login" && item.urls !== undefined && matchLoginUrls(tab.url, item.urls, item.urlMatches),
         );
-  const results = query === "" ? [] : items.filter((item) => projectionMatches(item, query)).slice(0, MAX_SEARCH_RESULTS);
+  const matches = query === "" ? [] : items.filter((item) => projectionMatches(item, query));
+  const results = matches.slice(0, MAX_SEARCH_RESULTS);
+  const resultCount = matches.length > MAX_SEARCH_RESULTS ? `${MAX_SEARCH_RESULTS}+` : String(matches.length);
   // The person's own identity sits above everything: the favourite one, else the first.
   const identity =
     items.filter((item) => item.kind === "identity").sort((left, right) => Number(right.favorite) - Number(left.favorite))[0] ??
@@ -95,13 +116,16 @@ export function HomeScreen({
       <div className={styles.scroll}>
         {status === "error" ? (
           <p className={styles.error} role="alert">
-            Items unavailable. Try again.
+            Items unavailable.{" "}
+            <button type="button" className={styles.retry} onClick={onRetry}>
+              Try again
+            </button>
           </p>
         ) : null}
 
         {query !== "" ? (
           <section aria-labelledby="results-label">
-            <SectionLabel id="results-label" className={styles.sectionLabel} trailing={String(results.length)}>
+            <SectionLabel id="results-label" className={styles.sectionLabel} trailing={resultCount}>
               Results
             </SectionLabel>
             {results.length === 0 ? (
@@ -110,7 +134,24 @@ export function HomeScreen({
               <ul className={styles.list}>
                 {results.map((item) => (
                   <li key={item.id}>
-                    <PopupRow item={item} onOpen={onOpenItem} />
+                    <PopupRow
+                      item={item}
+                      onOpen={onOpenItem}
+                      actions={
+                        <RowActions
+                          item={item}
+                          platform={platform}
+                          onCopyPassword={onCopyPassword}
+                          onCopyCode={onCopyCode}
+                          {...(item.kind === "login" &&
+                          tab !== null &&
+                          item.urls !== undefined &&
+                          matchLoginUrls(tab.url, item.urls, item.urlMatches)
+                            ? { onFill, filling: filling === item.id }
+                            : {})}
+                        />
+                      }
+                    />
                   </li>
                 ))}
               </ul>
@@ -159,7 +200,7 @@ export function HomeScreen({
                 <SectionLabel id="suggestions-label" className={styles.sectionLabel} trailing={tab.host}>
                   Suggestions
                 </SectionLabel>
-                {status !== "ready" ? (
+                {status === "loading" ? (
                   <ul className={styles.list} aria-busy="true">
                     <li className={styles.skeleton} />
                     <li className={styles.skeleton} />

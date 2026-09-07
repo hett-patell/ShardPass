@@ -27,6 +27,7 @@ export function useOtpCode(
   const [code, setCode] = useState<OtpCodeProjection | null>(null);
   const [failure, setFailure] = useState<"hotp" | "unavailable" | null>(null);
   const [time, setTime] = useState(() => now());
+  const [attempt, setAttempt] = useState(0);
   const generation = useRef(0);
 
   const fetchCode = useCallback(() => {
@@ -44,6 +45,7 @@ export function useOtpCode(
       (error: unknown) => {
         if (generation.current !== token) return;
         setFailure(errorCode(error) === "OTP_HOTP_REQUIRED" ? "hotp" : "unavailable");
+        setAttempt((count) => count + 1);
       },
     );
   }, [itemId, now, platform]);
@@ -68,6 +70,14 @@ export function useOtpCode(
     }, delay);
     return () => clearTimeout(timer);
   }, [code, fetchCode, now, time]);
+
+  // A refresh that failed once (the service worker restarting at the 30 s boundary, say)
+  // is tried again shortly, so the list does not sit on "Unavailable" for the session.
+  useEffect(() => {
+    if (failure !== "unavailable") return;
+    const timer = setTimeout(fetchCode, 2_000);
+    return () => clearTimeout(timer);
+  }, [failure, attempt, fetchCode]);
 
   if (failure !== null) return { status: failure };
   if (code === null) return { status: "loading" };

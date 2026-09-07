@@ -5,7 +5,10 @@ import type { ActiveTab } from "./useActiveTab";
 
 const FILL_TIMEOUT_MS = 3_000;
 
-export type FillOutcome = "filled" | "no-form" | "failed";
+export type FillOutcome = "filled" | "no-form" | "no-script" | "failed";
+
+/** Chrome's wording when no content script is listening: a tab opened before install or reload. */
+const NO_RECEIVER = /Receiving end does not exist|Could not establish connection/u;
 
 /**
  * Asks the open tab's content script to fill a login. The content script performs the
@@ -33,8 +36,8 @@ export function useFillIntoTab(
         ]);
         const status = (response as { status?: unknown } | undefined)?.status;
         return status === "filled" ? "filled" : status === "no-form" || status === undefined ? "no-form" : "failed";
-      } catch {
-        return "failed";
+      } catch (error) {
+        return error instanceof Error && NO_RECEIVER.test(error.message) ? "no-script" : "failed";
       } finally {
         setFilling(null);
       }

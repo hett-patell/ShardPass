@@ -162,6 +162,51 @@ function rawSenderMetadata(sender: chrome.runtime.MessageSender): RawSenderMetad
   return metadata as RawSenderMetadata;
 }
 
+type ExtensionContextLike = { contextType?: string; documentUrl?: string; tabId?: number; windowId?: number };
+
+/**
+ * Finds the open vault tab, if any. `chrome.runtime.getContexts` (Chromium 116+) needs no
+ * permission and sees every page of this extension; older runtimes fall back to
+ * `tabs.query`, which can read this extension's own URLs without the tabs permission.
+ */
+function findVaultTab(base: string, done: (tab: { id: number; windowId: number } | undefined) => void): void {
+  const runtime = chrome.runtime as { getContexts?: (filter: object, callback: (contexts: ExtensionContextLike[]) => void) => void };
+  const fromContexts = (contexts: ExtensionContextLike[]) =>
+    contexts.find(
+      (context) =>
+        context.contextType === "TAB" &&
+        typeof context.tabId === "number" &&
+        context.tabId >= 0 &&
+        typeof context.windowId === "number" &&
+        (context.documentUrl ?? "").startsWith(base),
+    );
+  if (typeof runtime.getContexts === "function") {
+    // Not `new URL(base).origin`: outside Chrome the extension scheme is opaque and reads "null".
+    const origin = base.slice(0, base.indexOf("/", "chrome-extension://".length));
+    runtime.getContexts({ contextTypes: ["TAB"], documentOrigins: [origin] }, (contexts) => {
+      if (runtimeError() !== null) {
+        done(undefined);
+        return;
+      }
+      const found = fromContexts(contexts);
+      done(found === undefined ? undefined : { id: found.tabId as number, windowId: found.windowId as number });
+    });
+    return;
+  }
+  if (typeof chrome.tabs.query !== "function") {
+    done(undefined);
+    return;
+  }
+  chrome.tabs.query({ url: `${base}*` }, (tabs) => {
+    if (runtimeError() !== null) {
+      done(undefined);
+      return;
+    }
+    const found = tabs.find((tab) => tab.id !== undefined);
+    done(found?.id === undefined ? undefined : { id: found.id, windowId: found.windowId });
+  });
+}
+
 export function createChromePlatform(): BackgroundExtensionPlatform &
   BackupUiExtensionPlatform &
   EnteUiPlatform &
@@ -500,19 +545,16 @@ export function createChromePlatform(): BackgroundExtensionPlatform &
           else reject(error);
         };
         const create = () => chrome.tabs.create({ url }, settle);
-        // A vault tab that is already open is moved and focused rather than duplicated; the
-        // page applies the hash without reloading. Anything odd falls back to a new tab.
-        if (typeof chrome.tabs.query !== "function" || typeof chrome.tabs.update !== "function") {
-          create();
-          return;
-        }
-        chrome.tabs.query({ url: `${base}*` }, (tabs) => {
-          const existing = runtimeError() === null ? tabs.find((tab) => tab.id !== undefined) : undefined;
-          if (existing?.id === undefined) {
+        // A vault tab that is already open is focused (and moved, when there is a target)
+        // rather than duplicated. Without a target only `active` changes: navigating a tab
+        // to the URL it already shows is a full reload, which would throw away a half-filled
+        // form. Anything odd falls back to a new tab.
+        findVaultTab(base, (existing) => {
+          if (existing === undefined) {
             create();
             return;
           }
-          chrome.tabs.update(existing.id, { url, active: true }, () => {
+          chrome.tabs.update(existing.id, target === undefined ? { active: true } : { url, active: true }, () => {
             if (runtimeError() !== null) {
               create();
               return;

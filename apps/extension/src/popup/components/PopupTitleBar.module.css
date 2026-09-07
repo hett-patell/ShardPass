@@ -42,3 +42,7 @@
   align-items: center;
   gap: 2px;
 }
+
+.screenTitle:focus {
+  outline: none;
+}

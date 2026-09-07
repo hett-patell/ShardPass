@@ -309,3 +309,8 @@
   color: var(--text-tertiary);
   font-size: var(--text-xs);
 }
+
+.completeActions {
+  display: flex;
+  gap: var(--space-2);
+}

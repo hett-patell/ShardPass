@@ -10,7 +10,7 @@ import {
   User,
   type LucideIcon,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 
 import styles from "./NewItemMenu.module.css";
 
@@ -37,16 +37,26 @@ export interface NewItemMenuProps {
 export function NewItemMenu({ onSelect }: NewItemMenuProps) {
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLUListElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+
+  const menuItems = () =>
+    Array.from(menuRef.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]') ?? []);
 
   useEffect(() => {
     if (!open) return;
+    // Opening hands focus to the first choice, so the menu can be worked from the keyboard.
+    menuItems()[0]?.focus();
     const onPointerDown = (event: PointerEvent) => {
       if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
         setOpen(false);
       }
     };
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOpen(false);
+      if (event.key === "Escape") {
+        setOpen(false);
+        triggerRef.current?.focus();
+      }
     };
     document.addEventListener("pointerdown", onPointerDown);
     document.addEventListener("keydown", onKeyDown);
@@ -56,10 +66,41 @@ export function NewItemMenu({ onSelect }: NewItemMenuProps) {
     };
   }, [open]);
 
+  const moveFocus = (event: ReactKeyboardEvent<HTMLUListElement>) => {
+    const items = menuItems();
+    if (items.length === 0) return;
+    const current = items.indexOf(event.target as HTMLButtonElement);
+    let next: number;
+    switch (event.key) {
+      case "ArrowDown":
+        next = current >= items.length - 1 ? 0 : current + 1;
+        break;
+      case "ArrowUp":
+        next = current <= 0 ? items.length - 1 : current - 1;
+        break;
+      case "Home":
+        next = 0;
+        break;
+      case "End":
+        next = items.length - 1;
+        break;
+      default:
+        return;
+    }
+    event.preventDefault();
+    items[next]?.focus();
+  };
+
   return (
     <div className={styles.container} ref={containerRef}>
       {open ? (
-        <ul className={styles.menu} role="menu" aria-label="New item">
+        <ul
+          className={styles.menu}
+          role="menu"
+          aria-label="New item"
+          ref={menuRef}
+          onKeyDown={moveFocus}
+        >
           {OPTIONS.map(({ kind, label, icon: Icon }) => (
             <li key={kind} role="none">
               <button
@@ -79,6 +120,7 @@ export function NewItemMenu({ onSelect }: NewItemMenuProps) {
         </ul>
       ) : null}
       <Button
+        ref={triggerRef}
         variant="secondary"
         onClick={() => setOpen((current) => !current)}
         aria-haspopup="menu"

@@ -1,7 +1,7 @@
 import type { Folder, OtpItem } from "@shardpass/domain";
 import type { OtpEditableInput, OtpResponse } from "@shardpass/messaging";
 import { Button, StatusBadge } from "@shardpass/ui";
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 
 import type { ExtensionPlatform } from "../../../platform/extension-platform";
 import { DeleteOtpDialog } from "../../otp/DeleteOtpDialog";
@@ -26,6 +26,7 @@ const otpTypeLabel: Record<OtpItem["otpType"], string> = {
 };
 
 const deleteUnavailable = "Could not delete this item. Try again.";
+const saveUnavailable = "Could not save this code. Try again.";
 
 function editableValue(item: OtpItem): OtpEditableInput {
   return {
@@ -61,10 +62,14 @@ export function OtpDetail({ item, platform, folders, onUpdate, onDeleted }: OtpD
   const [editing, setEditing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [conflict, setConflict] = useState(false);
+  const [saveError, setSaveError] = useState("");
   const [attempted, setAttempted] = useState<OtpEditableInput | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteError, setDeleteError] = useState("");
   const deleteOpener = useRef<HTMLButtonElement | null>(null);
+  // Stable per item: OtpEditor resets its form whenever this object's identity changes, so a
+  // fresh object on every render would wipe the edits mid-submit.
+  const baseline = useMemo(() => editableValue(item), [item]);
 
   const liveCodeEligible = item.otpType !== "hotp";
   const { code, remaining } = useOtpLiveCode(
@@ -76,6 +81,7 @@ export function OtpDetail({ item, platform, folders, onUpdate, onDeleted }: OtpD
   const submit = async (value: OtpEditableInput) => {
     setSubmitting(true);
     setConflict(false);
+    setSaveError("");
     try {
       const response: OtpResponse = await platform.sendOtpMessage({
         version: 1,
@@ -88,11 +94,18 @@ export function OtpDetail({ item, platform, folders, onUpdate, onDeleted }: OtpD
         setAttempted(null);
         setEditing(false);
         onUpdate();
+      } else {
+        setSaveError(saveUnavailable);
       }
     } catch (error) {
-      if (errorCode(error) === "OTP_CONFLICT") {
+      const code = errorCode(error);
+      if (code === "OTP_CONFLICT") {
         setAttempted(value);
         setConflict(true);
+      } else {
+        setSaveError(
+          code === "VAULT_LOCKED" ? "The vault is locked. Unlock and try again." : saveUnavailable,
+        );
       }
     } finally {
       setSubmitting(false);
@@ -128,23 +141,31 @@ export function OtpDetail({ item, platform, folders, onUpdate, onDeleted }: OtpD
 
   if (editing) {
     return (
-      <OtpEditor
-        mode="edit"
-        value={attempted ?? editableValue(item)}
-        revision={item.revision}
-        submitting={submitting}
-        conflict={conflict}
-        onSubmit={submit}
-        onCancel={() => {
-          setEditing(false);
-          setAttempted(null);
-          setConflict(false);
-        }}
-        onDelete={(opener) => {
-          deleteOpener.current = opener;
-          setDeleteOpen(true);
-        }}
-      />
+      <>
+        <OtpEditor
+          mode="edit"
+          value={attempted ?? baseline}
+          revision={item.revision}
+          submitting={submitting}
+          conflict={conflict}
+          onSubmit={submit}
+          onCancel={() => {
+            setEditing(false);
+            setAttempted(null);
+            setConflict(false);
+            setSaveError("");
+          }}
+          onDelete={(opener) => {
+            deleteOpener.current = opener;
+            setDeleteOpen(true);
+          }}
+        />
+        {saveError ? (
+          <p className={styles.error} role="alert">
+            {saveError}
+          </p>
+        ) : null}
+      </>
     );
   }
 

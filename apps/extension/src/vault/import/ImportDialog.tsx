@@ -154,6 +154,8 @@ export interface ImportDialogProps {
     Pick<ExtensionPlatform, "sendMessage">;
   active: boolean;
   onImported: () => void;
+  /** Called from "View vault" once an import is complete. */
+  onDone?: () => void;
 }
 
 /**
@@ -165,7 +167,7 @@ export interface ImportDialogProps {
  * are parsed locally, previewed with per-row checkboxes, and imported by calling
  * `item.create` once per selected item.
  */
-export function ImportDialog({ platform, active, onImported }: ImportDialogProps) {
+export function ImportDialog({ platform, active, onImported, onDone }: ImportDialogProps) {
   const [source, setSource] = useState<SourceId>("chrome");
   const [state, setState] = useState<ThirdPartyState>(INITIAL_THIRD_PARTY_STATE);
   const fileRef = useRef<HTMLInputElement | null>(null);
@@ -208,7 +210,11 @@ export function ImportDialog({ platform, active, onImported }: ImportDialogProps
   const selectFile = (parser: ThirdPartySource, file: File | undefined) => {
     if (fileRef.current !== null) fileRef.current.value = "";
     if (file === undefined) return;
-    if (file.size === 0 || file.size > MAX_THIRD_PARTY_IMPORT_BYTES) {
+    if (file.size === 0) {
+      setState({ ...INITIAL_THIRD_PARTY_STATE, error: "The file is empty." });
+      return;
+    }
+    if (file.size > MAX_THIRD_PARTY_IMPORT_BYTES) {
       setState({ ...INITIAL_THIRD_PARTY_STATE, error: "The file is too large to import safely." });
       return;
     }
@@ -480,9 +486,12 @@ export function ImportDialog({ platform, active, onImported }: ImportDialogProps
                   ) : null}
                 </ul>
               ) : null}
-              <Button variant="secondary" onClick={resetThirdParty}>
-                Import more
-              </Button>
+              <div className={styles.completeActions}>
+                {onDone ? <Button onClick={onDone}>View vault</Button> : null}
+                <Button variant="secondary" onClick={resetThirdParty}>
+                  Import more
+                </Button>
+              </div>
             </div>
           ) : (
             <div className={styles.preview}>
@@ -536,6 +545,9 @@ export function ImportDialog({ platform, active, onImported }: ImportDialogProps
                     {state.warnings.slice(0, MAX_VISIBLE_WARNINGS).map((warning) => (
                       <li key={warning}>{warning}</li>
                     ))}
+                    {state.warnings.length > MAX_VISIBLE_WARNINGS ? (
+                      <li className={styles.outcomeMore}>and {state.warnings.length - MAX_VISIBLE_WARNINGS} more</li>
+                    ) : null}
                   </ul>
                 </details>
               ) : null}

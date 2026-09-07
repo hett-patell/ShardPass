@@ -17,12 +17,13 @@ import {
   type LoginUrlMatchMode,
   type OtpItem,
 } from "@shardpass/domain";
+import { inlineTotpItem } from "@shardpass/otp";
 import { Button, Field, IconButton } from "@shardpass/ui";
 import { KeyRound, Plus, X } from "lucide-react";
 import { useState } from "react";
 
 import type { ExtensionPlatform } from "../../../platform/extension-platform";
-import { formatTags, newItemMetadata, parseTags } from "../../item-support";
+import { formatTags, newItemMetadata, parseTags, schemaErrors } from "../../item-support";
 import { PasswordGeneratorDialog } from "../PasswordGeneratorDialog";
 import styles from "./Form.module.css";
 import { SensitiveField } from "./SensitiveField";
@@ -57,7 +58,28 @@ interface FormValue {
   tags: string;
 }
 
-type Errors = Partial<Record<"name" | "customFields" | "form", string>>;
+type FieldKey =
+  | "name"
+  | "username"
+  | "password"
+  | "urls"
+  | "totp"
+  | "customFields"
+  | "notes"
+  | "tags";
+type Errors = Partial<Record<FieldKey | "form", string>>;
+
+/** Fields the form can show a schema error beside. */
+const FIELDS: readonly FieldKey[] = [
+  "name",
+  "username",
+  "password",
+  "urls",
+  "totp",
+  "customFields",
+  "notes",
+  "tags",
+];
 
 export const MATCH_MODE_LABELS: Record<LoginUrlMatchMode, string> = {
   domain: "Base domain",
@@ -200,9 +222,13 @@ export function LoginForm({ item, platform, otpItems, onSaved, onCancel }: Login
     const candidate = item
       ? { ...item, ...fields }
       : { ...newItemMetadata(), kind: "login" as const, ...fields };
-    if (Object.keys(nextErrors).length === 0 && !LoginItemSchema.safeParse(candidate).success) {
-      nextErrors.form = "Review the highlighted fields.";
-    }
+    // The detail view generates codes from this on the page, so a secret it cannot read
+    // must be refused here rather than stored.
+    if (totp !== undefined && inlineTotpItem(candidate) === null)
+      nextErrors.totp = "Enter a Base32 secret or an otpauth:// link.";
+    const parsed = LoginItemSchema.safeParse(candidate);
+    if (Object.keys(nextErrors).length === 0 && !parsed.success)
+      Object.assign(nextErrors, schemaErrors(parsed.error.issues, FIELDS));
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) return;
 
@@ -246,6 +272,7 @@ export function LoginForm({ item, platform, otpItems, onSaved, onCancel }: Login
         label="Name"
         error={errors.name}
         inputProps={{
+          autoFocus: true,
           value: value.name,
           maxLength: MAX_LOGIN_NAME_LENGTH,
           autoComplete: "off",
@@ -255,6 +282,7 @@ export function LoginForm({ item, platform, otpItems, onSaved, onCancel }: Login
 
       <Field
         label="Username"
+        error={errors.username}
         inputProps={{
           value: value.username,
           maxLength: MAX_LOGIN_USERNAME_LENGTH,
@@ -265,6 +293,7 @@ export function LoginForm({ item, platform, otpItems, onSaved, onCancel }: Login
 
       <SensitiveField
         label="Password"
+        error={errors.password}
         value={value.password}
         onChange={(next) => setValue({ ...value, password: next })}
         extraAction={
@@ -276,6 +305,11 @@ export function LoginForm({ item, platform, otpItems, onSaved, onCancel }: Login
 
       <div className={styles.field}>
         <span className={styles.label}>Websites</span>
+        {errors.urls ? (
+          <p className={styles.fieldError} role="alert">
+            {errors.urls}
+          </p>
+        ) : null}
         {value.urls.map((url, index) => (
           <div key={index} className={styles.listRow}>
             <input
@@ -315,6 +349,7 @@ export function LoginForm({ item, platform, otpItems, onSaved, onCancel }: Login
 
       <SensitiveField
         label="One-time code secret"
+        error={errors.totp}
         help="Paste an otpauth:// link or the Base32 secret. Codes appear on the login."
         value={value.totp}
         maxLength={MAX_LOGIN_TOTP_LENGTH}
@@ -433,12 +468,19 @@ export function LoginForm({ item, platform, otpItems, onSaved, onCancel }: Login
           value={value.notes}
           maxLength={MAX_LOGIN_NOTES_LENGTH}
           spellCheck={false}
+          aria-invalid={errors.notes ? true : undefined}
           onChange={(event) => setValue({ ...value, notes: event.target.value })}
         />
+        {errors.notes ? (
+          <p className={styles.fieldError} role="alert">
+            {errors.notes}
+          </p>
+        ) : null}
       </div>
 
       <Field
         label="Tags"
+        error={errors.tags}
         help="Comma-separated."
         inputProps={{
           value: value.tags,

@@ -1,6 +1,6 @@
 import { IconButton, ShardPassMark } from "@shardpass/ui";
 import { ArrowLeft, Lock, Settings } from "lucide-react";
-import type { ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 
 import styles from "./PopupTitleBar.module.css";
 
@@ -14,6 +14,12 @@ export interface PopupTitleBarProps {
 }
 
 export function PopupTitleBar({ back, title, trailing, onLock, onSettings }: PopupTitleBarProps) {
+  // A pushed screen replaces the whole body; the title takes focus so keyboard and screen
+  // reader users land on what just opened instead of on nothing.
+  const titleRef = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    if (back) titleRef.current?.focus();
+  }, [back, title]);
   return (
     <header className={styles.bar}>
       {back ? (
@@ -21,7 +27,9 @@ export function PopupTitleBar({ back, title, trailing, onLock, onSettings }: Pop
           <IconButton aria-label={back.label} onClick={back.onBack}>
             <ArrowLeft size={18} />
           </IconButton>
-          <h1 className={styles.screenTitle}>{title}</h1>
+          <h1 ref={titleRef} className={styles.screenTitle} tabIndex={-1}>
+            {title}
+          </h1>
         </>
       ) : (
         <div className={styles.identity}>

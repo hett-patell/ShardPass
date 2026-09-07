@@ -645,6 +645,31 @@ describe("Chrome extension platform", () => {
     await expect(platform.openVaultPage()).rejects.toThrow("tab failed");
   });
 
+  it("finds the vault tab through runtime.getContexts and only activates it when there is no target", async () => {
+    const platform = createChromePlatform();
+    const getContexts = vi.fn((_filter: unknown, callback: (contexts: unknown[]) => void) =>
+      callback([
+        { contextType: "POPUP", documentUrl: "chrome-extension://runtime-owned-extension-id/popup/index.html", tabId: -1, windowId: 1 },
+        { contextType: "TAB", documentUrl: "chrome-extension://runtime-owned-extension-id/vault/index.html", tabId: 4, windowId: 3 },
+      ]),
+    );
+    (runtimeStub as unknown as Record<string, unknown>).getContexts = getContexts;
+    const tabsUpdate = vi.fn((_id: number, _properties: unknown, callback: () => void) => callback());
+    (chrome.tabs as unknown as Record<string, unknown>).update = tabsUpdate;
+    try {
+      await expect(platform.openVaultPage()).resolves.toBeUndefined();
+      expect(getContexts).toHaveBeenCalledWith(
+        { contextTypes: ["TAB"], documentOrigins: ["chrome-extension://runtime-owned-extension-id"] },
+        expect.any(Function),
+      );
+      // No target: the tab is focused, never navigated, so nothing in it is lost to a reload.
+      expect(tabsUpdate).toHaveBeenCalledWith(4, { active: true }, expect.any(Function));
+      expect(tabsCreate).not.toHaveBeenCalled();
+    } finally {
+      delete (runtimeStub as unknown as Record<string, unknown>).getContexts;
+    }
+  });
+
   it("moves an already-open vault tab to the target instead of opening a second one", async () => {
     const platform = createChromePlatform();
     const tabsQuery = vi.fn((_query: unknown, callback: (tabs: chrome.tabs.Tab[]) => void) => {

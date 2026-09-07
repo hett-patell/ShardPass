@@ -3,7 +3,7 @@ import { Button, Field } from "@shardpass/ui";
 import { useState } from "react";
 
 import type { ExtensionPlatform } from "../../../platform/extension-platform";
-import { formatTags, newItemMetadata, parseTags } from "../../item-support";
+import { formatTags, newItemMetadata, parseTags, schemaErrors } from "../../item-support";
 import styles from "./Form.module.css";
 import { createItem, updateItem } from "./submit-item";
 
@@ -22,7 +22,11 @@ interface FormValue {
   tags: string;
 }
 
-type Errors = Partial<Record<"name" | "content" | "form", string>>;
+type FieldKey = "name" | "content" | "tags";
+type Errors = Partial<Record<FieldKey | "form", string>>;
+
+/** Fields the form can show a schema error beside. */
+const FIELDS: readonly FieldKey[] = ["name", "content", "tags"];
 
 function initialValue(item?: NoteItem): FormValue {
   return {
@@ -55,9 +59,9 @@ export function NoteForm({ item, platform, onSaved, onCancel }: NoteFormProps) {
           favorite: value.favorite,
           tags,
         };
-    if (Object.keys(nextErrors).length === 0 && !NoteItemSchema.safeParse(candidate).success) {
-      nextErrors.form = "Review the highlighted fields.";
-    }
+    const parsed = NoteItemSchema.safeParse(candidate);
+    if (Object.keys(nextErrors).length === 0 && !parsed.success)
+      Object.assign(nextErrors, schemaErrors(parsed.error.issues, FIELDS));
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) return;
 
@@ -106,6 +110,7 @@ export function NoteForm({ item, platform, onSaved, onCancel }: NoteFormProps) {
         label="Name"
         error={errors.name}
         inputProps={{
+          autoFocus: true,
           value: value.name,
           maxLength: MAX_NOTE_NAME_LENGTH,
           autoComplete: "off",
@@ -134,6 +139,7 @@ export function NoteForm({ item, platform, onSaved, onCancel }: NoteFormProps) {
 
       <Field
         label="Tags"
+        error={errors.tags}
         help="Comma-separated."
         inputProps={{
           value: value.tags,

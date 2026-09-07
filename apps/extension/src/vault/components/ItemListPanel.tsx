@@ -15,6 +15,8 @@ export interface ItemListPanelProps {
   category?: string;
   /** True when listing the archive; changes the empty-state copy. */
   archived?: boolean;
+  /** The active folder's display path, when a folder filter is on; changes the empty-state copy. */
+  folderName?: string;
   onRetry?: () => void;
   onCreate?: () => void;
   /** Opens the import flow; shown beside "add" when the vault is empty. */
@@ -23,11 +25,18 @@ export interface ItemListPanelProps {
 
 const SKELETON_ROWS = 6;
 
-function emptyCopy(search: string, category: string, archived: boolean): { title: string; body: string } {
+function emptyCopy(
+  search: string,
+  category: string,
+  archived: boolean,
+  folderName: string | undefined,
+): { title: string; body: string } {
   if (archived && search === "")
     return { title: "Nothing archived", body: "Archive an item from its detail view to tuck it away without deleting it." };
   if (search.trim() !== "")
     return { title: `No results for “${search.trim()}”`, body: "Check the spelling, or search a different field." };
+  if (folderName !== undefined)
+    return { title: `Nothing in “${folderName}” yet`, body: "Move items here from their Folder control, or add one from New item." };
   if (category !== "all" && category !== "")
     return { title: "Nothing in this category yet", body: "Add one from the New button, or import from another manager." };
   return { title: "Your vault is empty", body: "Add a login, or bring everything over from your browser, 1Password, Bitwarden or KeePass." };
@@ -45,6 +54,7 @@ export function ItemListPanel({
   onCreate,
   onImport,
   archived = false,
+  folderName,
 }: ItemListPanelProps) {
   if (status === "loading" && items.length === 0) {
     return (
@@ -77,7 +87,7 @@ export function ItemListPanel({
   }
 
   if (items.length === 0) {
-    const copy = emptyCopy(search, category, archived);
+    const copy = emptyCopy(search, category, archived, folderName);
     return (
       <div className={styles.stateBlock}>
         <strong>{copy.title}</strong>
@@ -89,7 +99,7 @@ export function ItemListPanel({
                 Add a login
               </Button>
             ) : null}
-            {onImport && (category === "all" || category === "") && !archived ? (
+            {onImport && (category === "all" || category === "") && !archived && folderName === undefined ? (
               <Button variant="secondary" onClick={onImport}>
                 Import passwords
               </Button>

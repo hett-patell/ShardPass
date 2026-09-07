@@ -27,7 +27,7 @@ import { EnteSettings } from "./ente/EnteSettings";
 import { useFolders } from "./hooks/useFolders";
 import { countByKind, useVaultState } from "./hooks/useVaultState";
 import { ImportDialog } from "./import/ImportDialog";
-import { countItemsByFolder } from "./item-support";
+import { countItemsByFolder, folderPath } from "./item-support";
 import { MigrationPanel } from "./migration/MigrationPanel";
 import { defaultOtpInput, OtpEditor } from "./otp/OtpEditor";
 import styles from "./VaultApp.module.css";
@@ -67,10 +67,12 @@ export function VaultApp({ platform }: VaultAppProps) {
 
   const folderState = useFolders(platform, vaultUnlocked);
   const vaultState = useVaultState(platform, vaultUnlocked, folderState.folders);
+  // From every loaded item, not the filtered list: a search that excludes the selected item
+  // must not unmount its detail (and any edit in progress) under the person.
   const selectedItem =
-    creatingKind === null ? (vaultState.items.find((item) => item.id === vaultState.selectedId) ?? null) : null;
+    creatingKind === null ? (vaultState.allItems.find((item) => item.id === vaultState.selectedId) ?? null) : null;
   const otpItems = vaultState.allItems.filter((item): item is OtpItem => item.kind === "otp");
-  const folderCounts = countItemsByFolder(vaultState.allItems);
+  const folderCounts = countItemsByFolder(vaultState.liveItems);
 
   const goToVaultView = useCallback(() => {
     setView("vault");
@@ -122,6 +124,11 @@ export function VaultApp({ platform }: VaultAppProps) {
   );
 
   const handleUpdate = useCallback(() => vaultState.refresh(), [vaultState]);
+  // An import can create folders too; the sidebar must learn about them.
+  const handleImported = useCallback(() => {
+    folderState.refresh();
+    vaultState.refresh();
+  }, [folderState, vaultState]);
   const handleDeleted = useCallback(() => {
     vaultState.setSelectedId(null);
     vaultState.refresh();
@@ -178,6 +185,7 @@ export function VaultApp({ platform }: VaultAppProps) {
       const folderId = vaultState.folderId;
       setCreatingKind(null);
       vaultState.setCategory("all");
+      vaultState.setSearch("");
       const filed =
         folderId === null
           ? Promise.resolve()
@@ -238,7 +246,7 @@ export function VaultApp({ platform }: VaultAppProps) {
               <VaultSidebar
                 category={vaultState.category}
                 onCategoryChange={handleCategoryChange}
-                itemCounts={countByKind(vaultState.allItems)}
+                itemCounts={countByKind(vaultState.liveItems)}
                 folders={folderState.folders}
                 folderCounts={folderCounts}
                 selectedFolderId={vaultState.folderId}
@@ -276,6 +284,7 @@ export function VaultApp({ platform }: VaultAppProps) {
                       category={vaultState.category}
                       archived={vaultState.archived}
                       onRetry={vaultState.refresh}
+                      {...(vaultState.folderId === null ? {} : { folderName: folderPath(folderState.folders, vaultState.folderId) })}
                       {...(vaultState.archived ? {} : { onCreate: () => startCreate("login"), onImport: () => setView("settings") })}
                     />
                   </div>
@@ -312,6 +321,9 @@ export function VaultApp({ platform }: VaultAppProps) {
                     <SecretForm platform={platform} onSaved={handleCreated} onCancel={cancelCreate} />
                   ) : selectedItem ? (
                     <ItemDetailPanel
+                      // Keyed by item: an edit form or a revealed field must never survive a
+                      // click onto a different item of the same kind.
+                      key={selectedItem.id}
                       item={selectedItem}
                       platform={platform}
                       otpItems={otpItems}
@@ -335,8 +347,8 @@ export function VaultApp({ platform }: VaultAppProps) {
                       <ThemeToggle />
                     </section>
                     <VaultAccess platform={platform} securityControls onUnlockedChange={setVaultUnlocked} />
-                    <MigrationPanel platform={platform} active onCompleted={handleUpdate} />
-                    <ImportDialog platform={platform} active onImported={handleUpdate} />
+                    <MigrationPanel platform={platform} active onCompleted={vaultState.refresh} />
+                    <ImportDialog platform={platform} active onImported={handleImported} onDone={goToVaultView} />
                   </>
                 ) : (
                   <EnteSettings platform={platform} active onSynced={handleUpdate} />

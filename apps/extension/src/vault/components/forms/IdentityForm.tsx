@@ -8,7 +8,7 @@ import { Button, Field } from "@shardpass/ui";
 import { useState } from "react";
 
 import type { ExtensionPlatform } from "../../../platform/extension-platform";
-import { formatTags, newItemMetadata, parseTags } from "../../item-support";
+import { formatTags, newItemMetadata, parseTags, schemaErrors } from "../../item-support";
 import styles from "./Form.module.css";
 import { createItem, updateItem } from "./submit-item";
 
@@ -43,7 +43,52 @@ interface FormValue {
   tags: string;
 }
 
-type Errors = Partial<Record<"name" | "form", string>>;
+type FieldKey =
+  | "name"
+  | "firstName"
+  | "middleName"
+  | "lastName"
+  | "company"
+  | "username"
+  | "birthDate"
+  | "email"
+  | "phone"
+  | "street"
+  | "address2"
+  | "city"
+  | "state"
+  | "zip"
+  | "country"
+  | "passportNumber"
+  | "licenseNumber"
+  | "nationalId"
+  | "notes"
+  | "tags";
+type Errors = Partial<Record<FieldKey | "form", string>>;
+
+/** Fields the form can show a schema error beside. */
+const FIELDS: readonly FieldKey[] = [
+  "name",
+  "firstName",
+  "middleName",
+  "lastName",
+  "company",
+  "username",
+  "birthDate",
+  "email",
+  "phone",
+  "street",
+  "address2",
+  "city",
+  "state",
+  "zip",
+  "country",
+  "passportNumber",
+  "licenseNumber",
+  "nationalId",
+  "notes",
+  "tags",
+];
 
 function initialValue(item?: IdentityItem): FormValue {
   return {
@@ -110,9 +155,9 @@ export function IdentityForm({ item, platform, onSaved, onCancel }: IdentityForm
     const candidate = item
       ? { ...item, ...fields }
       : { ...newItemMetadata(), kind: "identity" as const, ...fields };
-    if (Object.keys(nextErrors).length === 0 && !IdentityItemSchema.safeParse(candidate).success) {
-      nextErrors.form = "Review the highlighted fields.";
-    }
+    const parsed = IdentityItemSchema.safeParse(candidate);
+    if (Object.keys(nextErrors).length === 0 && !parsed.success)
+      Object.assign(nextErrors, schemaErrors(parsed.error.issues, FIELDS));
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) return;
 
@@ -157,6 +202,7 @@ export function IdentityForm({ item, platform, onSaved, onCancel }: IdentityForm
         help="A label for this identity entry, e.g. “Personal ID”."
         error={errors.name}
         inputProps={{
+          autoFocus: true,
           value: value.name,
           maxLength: MAX_IDENTITY_NAME_LENGTH,
           autoComplete: "off",
@@ -167,6 +213,7 @@ export function IdentityForm({ item, platform, onSaved, onCancel }: IdentityForm
       <div className={styles.grid}>
         <Field
           label="First name"
+          error={errors.firstName}
           inputProps={{
             value: value.firstName,
             autoComplete: "given-name",
@@ -175,6 +222,7 @@ export function IdentityForm({ item, platform, onSaved, onCancel }: IdentityForm
         />
         <Field
           label="Middle name"
+          error={errors.middleName}
           inputProps={{
             value: value.middleName,
             autoComplete: "additional-name",
@@ -183,6 +231,7 @@ export function IdentityForm({ item, platform, onSaved, onCancel }: IdentityForm
         />
         <Field
           label="Last name"
+          error={errors.lastName}
           inputProps={{
             value: value.lastName,
             autoComplete: "family-name",
@@ -194,6 +243,7 @@ export function IdentityForm({ item, platform, onSaved, onCancel }: IdentityForm
       <div className={styles.grid}>
         <Field
           label="Company"
+          error={errors.company}
           inputProps={{
             value: value.company,
             autoComplete: "organization",
@@ -202,6 +252,7 @@ export function IdentityForm({ item, platform, onSaved, onCancel }: IdentityForm
         />
         <Field
           label="Username"
+          error={errors.username}
           inputProps={{
             value: value.username,
             autoComplete: "username",
@@ -210,6 +261,7 @@ export function IdentityForm({ item, platform, onSaved, onCancel }: IdentityForm
         />
         <Field
           label="Date of birth"
+          error={errors.birthDate}
           inputProps={{
             value: value.birthDate,
             placeholder: "YYYY-MM-DD",
@@ -222,6 +274,7 @@ export function IdentityForm({ item, platform, onSaved, onCancel }: IdentityForm
       <div className={styles.grid}>
         <Field
           label="Email"
+          error={errors.email}
           inputProps={{
             type: "email",
             value: value.email,
@@ -231,6 +284,7 @@ export function IdentityForm({ item, platform, onSaved, onCancel }: IdentityForm
         />
         <Field
           label="Phone"
+          error={errors.phone}
           inputProps={{
             type: "tel",
             value: value.phone,
@@ -242,6 +296,7 @@ export function IdentityForm({ item, platform, onSaved, onCancel }: IdentityForm
 
       <Field
         label="Street"
+        error={errors.street}
         inputProps={{
           value: value.street,
           autoComplete: "address-line1",
@@ -250,6 +305,7 @@ export function IdentityForm({ item, platform, onSaved, onCancel }: IdentityForm
       />
       <Field
         label="Address line 2"
+        error={errors.address2}
         inputProps={{
           value: value.address2,
           autoComplete: "address-line2",
@@ -260,6 +316,7 @@ export function IdentityForm({ item, platform, onSaved, onCancel }: IdentityForm
       <div className={styles.grid}>
         <Field
           label="City"
+          error={errors.city}
           inputProps={{
             value: value.city,
             autoComplete: "address-level2",
@@ -268,6 +325,7 @@ export function IdentityForm({ item, platform, onSaved, onCancel }: IdentityForm
         />
         <Field
           label="State / province"
+          error={errors.state}
           inputProps={{
             value: value.state,
             autoComplete: "address-level1",
@@ -279,6 +337,7 @@ export function IdentityForm({ item, platform, onSaved, onCancel }: IdentityForm
       <div className={styles.grid}>
         <Field
           label="ZIP / postal code"
+          error={errors.zip}
           inputProps={{
             value: value.zip,
             autoComplete: "postal-code",
@@ -287,6 +346,7 @@ export function IdentityForm({ item, platform, onSaved, onCancel }: IdentityForm
         />
         <Field
           label="Country"
+          error={errors.country}
           inputProps={{
             value: value.country,
             autoComplete: "country-name",
@@ -298,6 +358,7 @@ export function IdentityForm({ item, platform, onSaved, onCancel }: IdentityForm
       <div className={styles.grid}>
         <Field
           label="Passport number"
+          error={errors.passportNumber}
           inputProps={{
             value: value.passportNumber,
             autoComplete: "off",
@@ -306,6 +367,7 @@ export function IdentityForm({ item, platform, onSaved, onCancel }: IdentityForm
         />
         <Field
           label="Driving licence"
+          error={errors.licenseNumber}
           inputProps={{
             value: value.licenseNumber,
             autoComplete: "off",
@@ -314,6 +376,7 @@ export function IdentityForm({ item, platform, onSaved, onCancel }: IdentityForm
         />
         <Field
           label="National ID"
+          error={errors.nationalId}
           help="SSN, NI number, Aadhaar, and similar."
           inputProps={{
             value: value.nationalId,
@@ -333,12 +396,19 @@ export function IdentityForm({ item, platform, onSaved, onCancel }: IdentityForm
           value={value.notes}
           maxLength={MAX_IDENTITY_NOTES_LENGTH}
           spellCheck={false}
+          aria-invalid={errors.notes ? true : undefined}
           onChange={(event) => setValue({ ...value, notes: event.target.value })}
         />
+        {errors.notes ? (
+          <p className={styles.fieldError} role="alert">
+            {errors.notes}
+          </p>
+        ) : null}
       </div>
 
       <Field
         label="Tags"
+        error={errors.tags}
         help="Comma-separated."
         inputProps={{
           value: value.tags,

@@ -2,6 +2,7 @@ import type { LoginItem, OtpItem, Folder } from "@shardpass/domain";
 import { useState } from "react";
 
 import type { ExtensionPlatform } from "../../../platform/extension-platform";
+import { DeleteItemDialog } from "../DeleteItemDialog";
 import { LoginForm, MATCH_MODE_LABELS } from "../forms/LoginForm";
 import { updateItem } from "../forms/submit-item";
 import { CopyButton } from "./CopyButton";
@@ -24,6 +25,8 @@ function normalizeUrl(url: string): string {
   return /^[a-z][a-z0-9+.-]*:\/\//iu.test(url) ? url : `https://${url}`;
 }
 
+type Passkey = NonNullable<LoginItem["passkeys"]>[number];
+
 function formatChangedAt(iso: string): string {
   const date = new Date(iso);
   return Number.isNaN(date.getTime()) ? iso : date.toLocaleString();
@@ -32,11 +35,37 @@ function formatChangedAt(iso: string): string {
 export function LoginDetail({ item, platform, otpItems, folders, onUpdate, onDeleted }: LoginDetailProps) {
   const [editing, setEditing] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [passkeyToRemove, setPasskeyToRemove] = useState<Passkey | null>(null);
+  const [removingPasskey, setRemovingPasskey] = useState(false);
+  const [passkeyError, setPasskeyError] = useState("");
   const linkedOtp =
     item.linkedOtpId === undefined ? null : (otpItems.find((otp) => otp.id === item.linkedOtpId) ?? null);
   const liveCodeItemId = linkedOtp !== null && linkedOtp.otpType !== "hotp" ? linkedOtp.id : null;
   const { code, remaining } = useOtpLiveCode(platform, liveCodeItemId, liveCodeItemId !== null && !editing);
   const inline = useInlineTotp(item, !editing);
+
+  const confirmRemovePasskey = async () => {
+    if (passkeyToRemove === null) return;
+    setRemovingPasskey(true);
+    setPasskeyError("");
+    const kept = (item.passkeys ?? []).filter(
+      (candidate) => candidate.credentialId !== passkeyToRemove.credentialId,
+    );
+    const result = await updateItem(platform, item.id, item.revision, {
+      passkeys: kept.length === 0 ? undefined : kept,
+    });
+    setRemovingPasskey(false);
+    if (result.status === "saved") {
+      setPasskeyToRemove(null);
+      onUpdate();
+      return;
+    }
+    setPasskeyError(
+      result.status === "conflict"
+        ? "This item changed elsewhere. Reload and try again."
+        : "Could not remove the passkey. Try again.",
+    );
+  };
 
   if (editing) {
     return (
@@ -229,12 +258,8 @@ export function LoginDetail({ item, platform, otpItems, folders, onUpdate, onDel
                   className={styles.link}
                   aria-label={`Remove passkey for ${passkey.rpId}`}
                   onClick={() => {
-                    const remaining = (item.passkeys ?? []).filter((candidate) => candidate.credentialId !== passkey.credentialId);
-                    void updateItem(platform, item.id, item.revision, { passkeys: remaining.length === 0 ? undefined : remaining }).then(
-                      (result) => {
-                        if (result.status === "saved") onUpdate();
-                      },
-                    );
+                    setPasskeyError("");
+                    setPasskeyToRemove(passkey);
                   }}
                 >
                   Remove
@@ -242,6 +267,27 @@ export function LoginDetail({ item, platform, otpItems, folders, onUpdate, onDel
               </div>
             ))}
           </div>
+          {passkeyToRemove !== null ? (
+            <DeleteItemDialog
+              itemName={passkeyToRemove.rpId}
+              title="Remove passkey"
+              description={
+                <>
+                  Remove the passkey for <strong>{passkeyToRemove.rpId}</strong>? Sites that only
+                  accept this passkey will no longer sign you in with it.
+                </>
+              }
+              confirmLabel="Remove passkey"
+              submitting={removingPasskey}
+              error={passkeyError}
+              onCancel={() => {
+                if (removingPasskey) return;
+                setPasskeyToRemove(null);
+                setPasskeyError("");
+              }}
+              onConfirm={() => void confirmRemovePasskey()}
+            />
+          ) : null}
         </div>
       ) : null}
 

@@ -11,6 +11,8 @@ export type VaultStateStatus = "idle" | "loading" | "ready" | "error";
 export interface UseVaultStateResult {
   /** Every non-deleted item in the vault, unfiltered — the source for sidebar counts. */
   allItems: readonly VaultItem[];
+  /** The live vault, unaffected by the Archive view's own query; drives sidebar counts. */
+  liveItems: readonly VaultItem[];
   /** `allItems` narrowed by the current category, folder, and search text. */
   items: readonly VaultItem[];
   status: VaultStateStatus;
@@ -53,6 +55,10 @@ export function useVaultState(
   folders: readonly Folder[] = noFolders,
 ): UseVaultStateResult {
   const [allItems, setAllItems] = useState<readonly VaultItem[]>(emptyItems);
+  // The live (non-archived) vault, kept while the Archive view runs its own query, so
+  // sidebar counts never turn into archived-only numbers.
+  const [liveItems, setLiveItems] = useState<readonly VaultItem[]>(emptyItems);
+  const loadedArchived = useRef<boolean | null>(null);
   const [status, setStatus] = useState<VaultStateStatus>(active ? "loading" : "idle");
   const [category, setCategory] = useState<CategoryKey>("all");
   const [folderId, setFolderId] = useState<string | null>(null);
@@ -71,7 +77,9 @@ export function useVaultState(
 
   const load = useCallback(() => {
     const token = ++generation.current;
-    setStatus((current) => (current === "ready" ? current : "loading"));
+    // A refresh keeps the current list on screen; switching between live and archive shows
+    // the loading state instead of the other view's rows under the new heading.
+    setStatus((current) => (current === "ready" && loadedArchived.current === archived ? current : "loading"));
     const queryRequest = { version: 1 as const, kind: "item.query" as const, ...(archived ? { archived: true } : {}) };
     platform.sendMessage(queryRequest).then(
       (candidate) => {
@@ -79,6 +87,8 @@ export function useVaultState(
         const parsed = parseItemCrudResponseForRequest(queryRequest, candidate);
         if (parsed.success && parsed.data.kind === "item.queryResult") {
           setAllItems(parsed.data.items);
+          if (!archived) setLiveItems(parsed.data.items);
+          loadedArchived.current = archived;
           setStatus("ready");
         } else {
           setAllItems(emptyItems);
@@ -97,6 +107,8 @@ export function useVaultState(
     if (!active) {
       generation.current += 1;
       setAllItems(emptyItems);
+      setLiveItems(emptyItems);
+      loadedArchived.current = null;
       setStatus("idle");
       setSelectedId(null);
       setCategory("all");
@@ -113,29 +125,39 @@ export function useVaultState(
   }, [active, load]);
 
   const query = normalizeSearch(search);
-  const items = allItems.filter((item) => {
-    if (category !== "all" && item.kind !== category) return false;
-    if (folderId !== null && (item.folderId === undefined || !folderScope.has(item.folderId)))
-      return false;
-    return matchesSearch(item, query);
-  });
+  const items = useMemo(
+    () =>
+      allItems.filter((item) => {
+        if (category !== "all" && item.kind !== category) return false;
+        if (folderId !== null && (item.folderId === undefined || !folderScope.has(item.folderId)))
+          return false;
+        return matchesSearch(item, query);
+      }),
+    [allItems, category, folderId, folderScope, query],
+  );
 
-  return {
-    allItems,
-    items,
-    status,
-    category,
-    setCategory,
-    folderId,
-    setFolderId,
-    search,
-    setSearch,
-    selectedId,
-    setSelectedId,
-    refresh,
-    archived,
-    setArchived,
-  };
+  // One stable object per change: callers hang useCallback/useEffect dependencies on it,
+  // and a fresh literal every render would re-run those on every keystroke.
+  return useMemo(
+    () => ({
+      allItems,
+      liveItems,
+      items,
+      status,
+      category,
+      setCategory,
+      folderId,
+      setFolderId,
+      search,
+      setSearch,
+      selectedId,
+      setSelectedId,
+      refresh,
+      archived,
+      setArchived,
+    }),
+    [allItems, liveItems, items, status, category, folderId, search, selectedId, refresh, archived],
+  );
 }
 
 /** Item counts per category (plus "all"), used to annotate the sidebar's CategoryNav. */

@@ -10,7 +10,7 @@ import { Plus, X } from "lucide-react";
 import { useState } from "react";
 
 import type { ExtensionPlatform } from "../../../platform/extension-platform";
-import { formatTags, newItemMetadata, parseTags } from "../../item-support";
+import { formatTags, newItemMetadata, parseTags, schemaErrors } from "../../item-support";
 import styles from "./Form.module.css";
 import { createItem, updateItem } from "./submit-item";
 
@@ -36,7 +36,11 @@ interface FormValue {
   tags: string;
 }
 
-type Errors = Partial<Record<"name" | "form", string>>;
+type FieldKey = "name" | "value" | "metadata" | "notes" | "tags";
+type Errors = Partial<Record<FieldKey | "form", string>>;
+
+/** Fields the form can show a schema error beside. */
+const FIELDS: readonly FieldKey[] = ["name", "value", "metadata", "notes", "tags"];
 
 const secretTypeOptions: readonly { value: SecretItem["secretType"]; label: string }[] = [
   { value: "api_key", label: "API key" },
@@ -106,9 +110,9 @@ export function SecretForm({ item, platform, onSaved, onCancel }: SecretFormProp
     const candidate = item
       ? { ...item, ...fields }
       : { ...newItemMetadata(), kind: "secret" as const, ...fields };
-    if (Object.keys(nextErrors).length === 0 && !SecretItemSchema.safeParse(candidate).success) {
-      nextErrors.form = "Review the highlighted fields.";
-    }
+    const parsed = SecretItemSchema.safeParse(candidate);
+    if (Object.keys(nextErrors).length === 0 && !parsed.success)
+      Object.assign(nextErrors, schemaErrors(parsed.error.issues, FIELDS));
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) return;
 
@@ -152,6 +156,7 @@ export function SecretForm({ item, platform, onSaved, onCancel }: SecretFormProp
         label="Name"
         error={errors.name}
         inputProps={{
+          autoFocus: true,
           value: value.name,
           maxLength: MAX_SECRET_NAME_LENGTH,
           autoComplete: "off",
@@ -190,12 +195,23 @@ export function SecretForm({ item, platform, onSaved, onCancel }: SecretFormProp
           maxLength={MAX_SECRET_VALUE_LENGTH}
           spellCheck={false}
           autoComplete="off"
+          aria-invalid={errors.value ? true : undefined}
           onChange={(event) => setValue({ ...value, value: event.target.value })}
         />
+        {errors.value ? (
+          <p className={styles.fieldError} role="alert">
+            {errors.value}
+          </p>
+        ) : null}
       </div>
 
       <div className={styles.field}>
         <span className={styles.label}>Metadata</span>
+        {errors.metadata ? (
+          <p className={styles.fieldError} role="alert">
+            {errors.metadata}
+          </p>
+        ) : null}
         {value.metadata.map((row, index) => (
           <div key={index} className={styles.listRow}>
             <input
@@ -236,12 +252,19 @@ export function SecretForm({ item, platform, onSaved, onCancel }: SecretFormProp
           value={value.notes}
           maxLength={MAX_SECRET_NOTES_LENGTH}
           spellCheck={false}
+          aria-invalid={errors.notes ? true : undefined}
           onChange={(event) => setValue({ ...value, notes: event.target.value })}
         />
+        {errors.notes ? (
+          <p className={styles.fieldError} role="alert">
+            {errors.notes}
+          </p>
+        ) : null}
       </div>
 
       <Field
         label="Tags"
+        error={errors.tags}
         help="Comma-separated."
         inputProps={{
           value: value.tags,

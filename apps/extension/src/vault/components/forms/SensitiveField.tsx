@@ -8,7 +8,7 @@ import styles from "./Form.module.css";
 export interface SensitiveFieldProps {
   label: string;
   value: string;
-  error?: string;
+  error?: string | undefined;
   help?: string;
   maxLength?: number;
   autoComplete?: string;

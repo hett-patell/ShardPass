@@ -95,6 +95,14 @@ describe("ImportDialog", () => {
     expect(screen.getByText(/chrome:\/\/password-manager\/settings/i)).toBeVisible();
   });
 
+  it("says an empty file is empty rather than too large", async () => {
+    const { platform } = createPlatform();
+    render(<ImportDialog platform={platform} active onImported={() => undefined} />);
+    const fileInput = screen.getByLabelText("Choose a local Chrome CSV file");
+    fireEvent.change(fileInput, { target: { files: [new File([], "empty.csv", { type: "text/csv" })] } });
+    expect(await screen.findByText("The file is empty.")).toBeVisible();
+  });
+
   it("parses a Chrome CSV export, previews rows, and imports only the checked ones", async () => {
     const { platform, createRequests } = createPlatform();
     const onImported = vi.fn();

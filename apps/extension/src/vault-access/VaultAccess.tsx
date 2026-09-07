@@ -314,6 +314,7 @@ export function VaultAccess({
           setError("The vault change was saved, but the vault is locked. Unlock again.");
         } else {
           setError(safeError(response));
+          setPassword("");
         }
       } finally {
         key.fill(0);

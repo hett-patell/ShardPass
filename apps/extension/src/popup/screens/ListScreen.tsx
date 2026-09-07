@@ -1,10 +1,8 @@
 import type { ItemListItemProjection } from "@shardpass/messaging";
-import { KeyRound } from "lucide-react";
 
 import type { ExtensionPlatform } from "../../platform/extension-platform";
-import { LiveCode } from "../components/LiveCode";
 import { PopupRow } from "../components/PopupRow";
-import { QuickAction } from "../components/QuickAction";
+import { RowActions } from "../components/RowActions";
 import styles from "./ListScreen.module.css";
 
 export interface ListScreenProps {
@@ -26,25 +24,7 @@ export function ListScreen({ items, emptyText, platform, onOpenItem, onCopyPassw
           <PopupRow
             item={item}
             onOpen={onOpenItem}
-            {...(item.kind === "otp"
-              ? {
-                  actions: (
-                    <LiveCode platform={platform} itemId={item.id} onCopy={(code) => onCopyCode(item, code)} />
-                  ),
-                }
-              : item.kind === "login"
-                ? {
-                    actions: (
-                      <QuickAction
-                        aria-label={`Copy password for ${item.name}`}
-                        title="Copy password"
-                        onClick={() => onCopyPassword(item)}
-                      >
-                        <KeyRound size={15} />
-                      </QuickAction>
-                    ),
-                  }
-                : {})}
+            actions={<RowActions item={item} platform={platform} onCopyPassword={onCopyPassword} onCopyCode={onCopyCode} />}
           />
         </li>
       ))}

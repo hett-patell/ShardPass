@@ -257,6 +257,46 @@ describe("VaultApp foundation shell", () => {
     expect(screen.getByRole("button", { name: "Edit" })).toBeVisible();
   });
 
+  it("asks before removing a passkey and sends the update only on confirm", async () => {
+    const passkey = {
+      credentialId: "Y3JlZC0x",
+      rpId: "example.test",
+      userHandle: "dXNlci0x",
+      userName: "alice",
+      algorithm: -7,
+      privateKey: "cHJpdg",
+      publicKey: "cHVi",
+      counter: 0,
+      createdAt: "2026-01-01T00:00:00.000Z",
+    };
+    const withPasskey = { ...loginItem, passkeys: [passkey] };
+    const platform = new FakeExtensionPlatform("vault-test-id");
+    platform.queueSendResponse(foundationStatus);
+    platform.queueSendResponse(unlockedVaultState(1));
+    platform.queueSendResponse(noFolders);
+    platform.queueSendResponse({ version: 1, kind: "item.queryResult", items: [withPasskey, noteItem] });
+    render(<VaultApp platform={platform} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /Example Login/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Remove passkey for example.test" }));
+    expect(await screen.findByRole("heading", { name: "Remove passkey" })).toBeVisible();
+    expect(platform.sentMessages).not.toContainEqual(expect.objectContaining({ kind: "item.update" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(screen.queryByRole("heading", { name: "Remove passkey" })).not.toBeInTheDocument());
+    expect(platform.sentMessages).not.toContainEqual(expect.objectContaining({ kind: "item.update" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Remove passkey for example.test" }));
+    platform.queueSendResponse({ version: 1, kind: "item.mutationResult", item: { ...loginItem, revision: 2 } });
+    platform.queueSendResponse({ version: 1, kind: "item.queryResult", items: [{ ...loginItem, revision: 2 }, noteItem] });
+    fireEvent.click(await screen.findByRole("button", { name: "Remove passkey" }));
+    await waitFor(() =>
+      expect(platform.sentMessages).toContainEqual(
+        expect.objectContaining({ kind: "item.update", itemId: loginItem.id, expectedRevision: 1 }),
+      ),
+    );
+  });
+
   it("creates a folder inline from the sidebar and shows it in the tree", async () => {
     const platform = readyUnlockedPlatform();
     render(<VaultApp platform={platform} />);

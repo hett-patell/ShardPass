@@ -12,7 +12,7 @@ import { Button, Field } from "@shardpass/ui";
 import { useState } from "react";
 
 import type { ExtensionPlatform } from "../../../platform/extension-platform";
-import { formatTags, newItemMetadata, parseTags } from "../../item-support";
+import { formatTags, newItemMetadata, parseTags, schemaErrors } from "../../item-support";
 import styles from "./Form.module.css";
 import { SensitiveField } from "./SensitiveField";
 import { createItem, updateItem } from "./submit-item";
@@ -38,7 +38,30 @@ interface FormValue {
   tags: string;
 }
 
-type Errors = Partial<Record<"name" | "expMonth" | "expYear" | "form", string>>;
+type FieldKey =
+  | "name"
+  | "cardholderName"
+  | "number"
+  | "expMonth"
+  | "expYear"
+  | "cvv"
+  | "pin"
+  | "notes"
+  | "tags";
+type Errors = Partial<Record<FieldKey | "form", string>>;
+
+/** Fields the form can show a schema error beside. */
+const FIELDS: readonly FieldKey[] = [
+  "name",
+  "cardholderName",
+  "number",
+  "expMonth",
+  "expYear",
+  "cvv",
+  "pin",
+  "notes",
+  "tags",
+];
 
 export const CARD_BRAND_LABELS: Record<CardBrand, string> = {
   visa: "Visa",
@@ -78,6 +101,8 @@ export function CardForm({ item, platform, onSaved, onCancel }: CardFormProps) {
     if (name.length === 0) nextErrors.name = "Enter a name.";
     if (value.expMonth.length > 0 && !/^\d{1,2}$/u.test(value.expMonth))
       nextErrors.expMonth = "Use a two-digit month.";
+    else if (value.expMonth.length > 0 && (Number(value.expMonth) < 1 || Number(value.expMonth) > 12))
+      nextErrors.expMonth = "Enter a month from 01 to 12.";
     if (value.expYear.length > 0 && !/^\d{2,4}$/u.test(value.expYear))
       nextErrors.expYear = "Use a two- or four-digit year.";
 
@@ -99,9 +124,9 @@ export function CardForm({ item, platform, onSaved, onCancel }: CardFormProps) {
     const candidate = item
       ? { ...item, ...fields }
       : { ...newItemMetadata(), kind: "card" as const, ...fields };
-    if (Object.keys(nextErrors).length === 0 && !CardItemSchema.safeParse(candidate).success) {
-      nextErrors.form = "Review the highlighted fields.";
-    }
+    const parsed = CardItemSchema.safeParse(candidate);
+    if (Object.keys(nextErrors).length === 0 && !parsed.success)
+      Object.assign(nextErrors, schemaErrors(parsed.error.issues, FIELDS));
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) return;
 
@@ -145,6 +170,7 @@ export function CardForm({ item, platform, onSaved, onCancel }: CardFormProps) {
         label="Name"
         error={errors.name}
         inputProps={{
+          autoFocus: true,
           value: value.name,
           maxLength: MAX_CARD_NAME_LENGTH,
           autoComplete: "off",
@@ -173,6 +199,7 @@ export function CardForm({ item, platform, onSaved, onCancel }: CardFormProps) {
 
       <Field
         label="Cardholder name"
+        error={errors.cardholderName}
         inputProps={{
           value: value.cardholderName,
           maxLength: MAX_CARD_HOLDER_LENGTH,
@@ -183,6 +210,7 @@ export function CardForm({ item, platform, onSaved, onCancel }: CardFormProps) {
 
       <Field
         label="Card number"
+        error={errors.number}
         inputProps={{
           value: value.number,
           maxLength: MAX_CARD_NUMBER_LENGTH,
@@ -221,11 +249,13 @@ export function CardForm({ item, platform, onSaved, onCancel }: CardFormProps) {
 
       <SensitiveField
         label="CVV"
+        error={errors.cvv}
         value={value.cvv}
         onChange={(next) => setValue({ ...value, cvv: next })}
       />
       <SensitiveField
         label="PIN"
+        error={errors.pin}
         value={value.pin}
         onChange={(next) => setValue({ ...value, pin: next })}
       />
@@ -240,12 +270,19 @@ export function CardForm({ item, platform, onSaved, onCancel }: CardFormProps) {
           value={value.notes}
           maxLength={MAX_CARD_NOTES_LENGTH}
           spellCheck={false}
+          aria-invalid={errors.notes ? true : undefined}
           onChange={(event) => setValue({ ...value, notes: event.target.value })}
         />
+        {errors.notes ? (
+          <p className={styles.fieldError} role="alert">
+            {errors.notes}
+          </p>
+        ) : null}
       </div>
 
       <Field
         label="Tags"
+        error={errors.tags}
         help="Comma-separated."
         inputProps={{
           value: value.tags,

@@ -1,5 +1,5 @@
 import { Button } from "@shardpass/ui";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
 import styles from "./detail/Detail.module.css";
@@ -9,15 +9,25 @@ export interface DeleteItemDialogProps {
   itemName: string;
   submitting: boolean;
   error?: string;
+  /** Heading, question and confirm label. Default to deleting the whole item. */
+  title?: string;
+  description?: ReactNode;
+  confirmLabel?: string;
   onCancel: () => void;
   onConfirm: () => void;
 }
 
-/** Delete confirmation for every item kind. A native dialog: focus, inertness and Escape come from the element. */
+/**
+ * Destructive confirmation for every item kind, and for removing part of one (a passkey).
+ * A native dialog: focus, inertness and Escape come from the element.
+ */
 export function DeleteItemDialog({
   itemName,
   submitting,
   error,
+  title = "Delete item",
+  description,
+  confirmLabel = "Delete",
   onCancel,
   onConfirm,
 }: DeleteItemDialogProps) {
@@ -38,9 +48,13 @@ export function DeleteItemDialog({
       // Destructive: dismiss on Escape only, never by an outside click.
       {...({ closedby: "closerequest" } as Record<string, string>)}
     >
-      <h3 id="delete-item-heading">Delete item</h3>
+      <h3 id="delete-item-heading">{title}</h3>
       <p id="delete-item-description">
-        Delete <strong>{itemName}</strong>? This removes it from the vault.
+        {description ?? (
+          <>
+            Delete <strong>{itemName}</strong>? This removes it from the vault.
+          </>
+        )}
       </p>
       {error ? (
         <p className={styles.error} role="alert">
@@ -52,7 +66,7 @@ export function DeleteItemDialog({
           Cancel
         </Button>
         <Button variant="destructive" onClick={onConfirm} loading={submitting}>
-          Delete
+          {confirmLabel}
         </Button>
       </div>
     </dialog>,

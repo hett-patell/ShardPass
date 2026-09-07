@@ -26,17 +26,40 @@ export function newItemMetadata(): ItemMetadata {
   };
 }
 
-/** Splits a comma-separated tag input into trimmed, non-empty tags. */
+/**
+ * Splits a comma-separated tag input into trimmed, non-empty tags. A tag repeated in another
+ * case is dropped, keeping the first spelling.
+ */
 export function parseTags(value: string): string[] {
-  return value
-    .split(",")
-    .map((tag) => tag.trim())
-    .filter((tag) => tag.length > 0);
+  const seen = new Set<string>();
+  const tags: string[] = [];
+  for (const raw of value.split(",")) {
+    const tag = raw.trim();
+    const key = tag.toLocaleLowerCase("en-US");
+    if (tag.length === 0 || seen.has(key)) continue;
+    seen.add(key);
+    tags.push(tag);
+  }
+  return tags;
 }
 
 /** Formats tags back into the comma-separated form the tag input displays. */
 export function formatTags(tags: readonly string[]): string {
   return tags.join(", ");
+}
+
+/**
+ * Where a failed schema parse is reported: beside the first issue's top-level field when the
+ * form shows an error there, otherwise as the generic form-level message.
+ */
+export function schemaErrors<K extends string>(
+  issues: readonly { readonly path: readonly PropertyKey[] }[],
+  fields: readonly K[],
+): Partial<Record<K | "form", string>> {
+  const head = issues[0]?.path[0];
+  const field = fields.find((candidate) => candidate === head);
+  if (field === undefined) return { form: "Review the highlighted fields." } as Partial<Record<K | "form", string>>;
+  return { [field]: "This value isn’t valid." } as Partial<Record<K | "form", string>>;
 }
 
 /** Display name for a vault item, matching the background item.list projection. */
