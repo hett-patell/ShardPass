@@ -1,8 +1,8 @@
-import { LoginItemSchema } from "@shardpass/domain";
-
 import { parseCsv } from "../common/csv-parser";
+import { warningLabel } from "../common/clamp";
 import { newItemBase } from "../common/item-base";
 import type { ImportResult } from "../common/import-result";
+import { emitLogin } from "../common/login-candidate";
 import { IMPORT_LIMITS } from "../import-model";
 
 /**
@@ -15,13 +15,12 @@ export function importChromeCsv(text: string): ImportResult {
   const items: ImportResult["items"] = [];
   const warnings: string[] = [];
 
-  const truncated = rows.length > IMPORT_LIMITS.maxEntries;
-  const bounded = truncated ? rows.slice(0, IMPORT_LIMITS.maxEntries) : rows;
+  const limit = IMPORT_LIMITS.maxThirdPartyEntries;
+  const truncated = rows.length > limit;
+  const bounded = truncated ? rows.slice(0, limit) : rows;
   if (truncated)
     warnings.push(
-      `Only the first ${IMPORT_LIMITS.maxEntries} rows were imported; ${
-        rows.length - IMPORT_LIMITS.maxEntries
-      } row(s) were skipped.`,
+      `Only the first ${limit} rows were imported; ${rows.length - limit} row(s) were skipped.`,
     );
 
   for (const row of bounded) {
@@ -30,29 +29,20 @@ export function importChromeCsv(text: string): ImportResult {
     const username = row["username"] ?? "";
     const password = row["password"] ?? "";
     const note = row["note"] ?? "";
-    const label = name || url || "unnamed";
+    const label = warningLabel(name || url, "unnamed");
 
     if (!password) {
       warnings.push(`Skipped "${label}": empty password`);
       continue;
     }
 
-    const candidate = {
-      ...newItemBase(),
-      kind: "login" as const,
-      name: name || url || "Imported login",
-      username,
-      password,
-      urls: url ? [url] : [],
-      notes: note,
-    };
-
-    const parsed = LoginItemSchema.safeParse(candidate);
-    if (!parsed.success) {
-      warnings.push(`Skipped "${label}": invalid login item`);
-      continue;
-    }
-    items.push(parsed.data);
+    emitLogin(
+      newItemBase(),
+      { name: name || url || "Imported login", username, password, urls: url ? [url] : [], notes: note },
+      label,
+      warnings,
+      items,
+    );
   }
 
   return { items, warnings };

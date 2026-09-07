@@ -60,6 +60,7 @@ describe("bounded OTP import model", () => {
       maxInputBytes: 1_048_576,
       maxTextScalars: 262_144,
       maxEntries: 1_000,
+      maxThirdPartyEntries: 5_000,
       maxMigrationBatches: 16,
       maxImageBytes: 8_388_608,
       maxImageDimension: 4_096,

@@ -1,7 +1,14 @@
 import {
   CardItemSchema,
   IdentityItemSchema,
-  LoginItemSchema,
+  MAX_CARD_HOLDER_LENGTH,
+  MAX_CARD_NAME_LENGTH,
+  MAX_CARD_NOTES_LENGTH,
+  MAX_CARD_NUMBER_LENGTH,
+  MAX_IDENTITY_NAME_LENGTH,
+  MAX_IDENTITY_NOTES_LENGTH,
+  MAX_NOTE_CONTENT_LENGTH,
+  MAX_NOTE_NAME_LENGTH,
   NoteItemSchema,
   type CardBrand,
   type LoginCustomField,
@@ -9,8 +16,10 @@ import {
   type LoginUrlMatchMode,
 } from "@shardpass/domain";
 
+import { clampName, clampText, keepIfValid, warningLabel } from "../common/clamp";
 import { newItemBase } from "../common/item-base";
 import { createFolderIndex, type ImportResult } from "../common/import-result";
+import { emitLogin } from "../common/login-candidate";
 import { IMPORT_LIMITS } from "../import-model";
 
 const BITWARDEN_TYPE_LOGIN = 1;
@@ -45,6 +54,9 @@ const CARD_BRAND: Record<string, CardBrand> = {
  * notes, card, identity, secureNote }] }`. Bitwarden `type` values map as
  * 1=login, 2=secure note, 3=card, 4=identity; any other value (or a
  * malformed entry) is reported as a warning rather than aborting the import.
+ *
+ * Folders and, for an organisation vault, collections both become folders here: an item
+ * with no folder is filed under its first collection, so a shared vault keeps its shape.
  */
 export function importBitwardenJson(text: string): ImportResult {
   const items: ImportResult["items"] = [];
@@ -69,26 +81,21 @@ export function importBitwardenJson(text: string): ImportResult {
     warnings.push('Invalid Bitwarden export: missing top-level "items" array');
     return { items, warnings };
   }
-  // Bitwarden folders are flat records whose names may carry a path ("Work/Clients").
+  // Bitwarden folders and collections are flat records whose names may carry a path
+  // ("Work/Clients").
   const folderIndex = createFolderIndex();
-  const folderIdByBitwardenId = new Map<string, string>();
-  const rawFolders = isRecord(root) && Array.isArray(root["folders"]) ? root["folders"] : [];
-  for (const folder of rawFolders) {
-    if (!isRecord(folder)) continue;
-    const id = asString(folder["id"]);
-    const name = asString(folder["name"]);
-    if (id === "" || name.trim() === "") continue;
-    const provisional = folderIndex.idFor(name.split("/"));
-    if (provisional !== undefined) folderIdByBitwardenId.set(id, provisional);
-  }
+  const folderIdByBitwardenId = indexNamedRecords(isRecord(root) ? root["folders"] : undefined, folderIndex);
+  const folderIdByCollectionId = indexNamedRecords(
+    isRecord(root) ? root["collections"] : undefined,
+    folderIndex,
+  );
 
-  const truncated = rawItems.length > IMPORT_LIMITS.maxEntries;
-  const bounded = truncated ? rawItems.slice(0, IMPORT_LIMITS.maxEntries) : rawItems;
+  const limit = IMPORT_LIMITS.maxThirdPartyEntries;
+  const truncated = rawItems.length > limit;
+  const bounded = truncated ? rawItems.slice(0, limit) : rawItems;
   if (truncated)
     warnings.push(
-      `Only the first ${IMPORT_LIMITS.maxEntries} items were imported; ${
-        rawItems.length - IMPORT_LIMITS.maxEntries
-      } item(s) were skipped.`,
+      `Only the first ${limit} items were imported; ${rawItems.length - limit} item(s) were skipped.`,
     );
 
   for (const [index, raw] of bounded.entries()) {
@@ -97,11 +104,13 @@ export function importBitwardenJson(text: string): ImportResult {
       continue;
     }
 
-    const label = asString(raw["name"]) || `unnamed entry ${index + 1}`;
-    const name = asString(raw["name"]).trim() || "Imported item";
+    const label = warningLabel(asString(raw["name"]), `unnamed entry ${index + 1}`);
+    const rawName = asString(raw["name"]);
     const notes = asString(raw["notes"]);
     const favorite = raw["favorite"] === true;
-    const folderId = folderIdByBitwardenId.get(asString(raw["folderId"]));
+    const folderId =
+      folderIdByBitwardenId.get(asString(raw["folderId"])) ??
+      firstCollectionFolder(raw["collectionIds"], folderIdByCollectionId);
     const fresh = newItemBase();
     const createdAt = isoOf(raw["creationDate"]) ?? fresh.createdAt;
     const base = {
@@ -123,48 +132,42 @@ export function importBitwardenJson(text: string): ImportResult {
               : { uri: "", match: "domain" as const },
           )
           .filter((entry) => entry.uri.length > 0);
-        const urls = kept.map((entry) => entry.uri);
-        const urlMatches = kept.some((entry) => entry.match !== "domain")
-          ? kept.map((entry) => entry.match)
-          : undefined;
         const totp = asString(login["totp"]);
         const customFields = customFieldsOf(raw["fields"], warnings, label);
         const passwordHistory = passwordHistoryOf(raw["passwordHistory"]);
+        const passkeys = Array.isArray(login["fido2Credentials"]) ? login["fido2Credentials"].length : 0;
+        if (passkeys > 0)
+          warnings.push(
+            `"${label}": ${passkeys === 1 ? "passkey" : `${passkeys} passkeys`} not imported.`,
+          );
 
-        const candidate = {
-          ...base,
-          kind: "login" as const,
-          name,
-          username: asString(login["username"]),
-          password: asString(login["password"]),
-          urls,
-          ...(urlMatches === undefined ? {} : { urlMatches }),
-          ...(totp === "" ? {} : { totp }),
-          ...(customFields.length === 0 ? {} : { customFields }),
-          ...(passwordHistory.length === 0 ? {} : { passwordHistory }),
-          notes,
-        };
-        const parsed = LoginItemSchema.safeParse(candidate);
-        if (!parsed.success) {
-          warnings.push(`Skipped "${label}": invalid login item`);
-          continue;
-        }
-        items.push(parsed.data);
+        emitLogin(
+          base,
+          {
+            name: rawName || "Imported item",
+            username: asString(login["username"]),
+            password: asString(login["password"]),
+            urls: kept.map((entry) => entry.uri),
+            urlMatches: kept.map((entry) => entry.match),
+            ...(totp === "" ? {} : { totp }),
+            customFields,
+            passwordHistory,
+            notes,
+          },
+          label,
+          warnings,
+          items,
+        );
         break;
       }
       case BITWARDEN_TYPE_NOTE: {
         const candidate = {
           ...base,
           kind: "note" as const,
-          name,
-          content: notes,
+          name: clampName(rawName, MAX_NOTE_NAME_LENGTH, "Imported item", label, warnings),
+          content: clampText(notes, MAX_NOTE_CONTENT_LENGTH, "content", label, warnings),
         };
-        const parsed = NoteItemSchema.safeParse(candidate);
-        if (!parsed.success) {
-          warnings.push(`Skipped "${label}": invalid note item`);
-          continue;
-        }
-        items.push(parsed.data);
+        keepIfValid(NoteItemSchema, candidate, "note", label, warnings, items);
         break;
       }
       case BITWARDEN_TYPE_CARD: {
@@ -172,22 +175,23 @@ export function importBitwardenJson(text: string): ImportResult {
         const candidate = {
           ...base,
           kind: "card" as const,
-          name,
+          name: clampName(rawName, MAX_CARD_NAME_LENGTH, "Imported item", label, warnings),
           ...brandOf(asString(card["brand"])),
-          cardholderName: asString(card["cardholderName"]),
-          number: asString(card["number"]),
+          cardholderName: clampText(
+            asString(card["cardholderName"]),
+            MAX_CARD_HOLDER_LENGTH,
+            "cardholder name",
+            label,
+            warnings,
+          ),
+          number: clampText(asString(card["number"]), MAX_CARD_NUMBER_LENGTH, "card number", label, warnings),
           expMonth: asString(card["expMonth"]),
           expYear: asString(card["expYear"]),
           cvv: asString(card["code"]),
           pin: "",
-          notes,
+          notes: clampText(notes, MAX_CARD_NOTES_LENGTH, "notes", label, warnings),
         };
-        const parsed = CardItemSchema.safeParse(candidate);
-        if (!parsed.success) {
-          warnings.push(`Skipped "${label}": invalid card item`);
-          continue;
-        }
-        items.push(parsed.data);
+        keepIfValid(CardItemSchema, candidate, "card", label, warnings, items);
         break;
       }
       case BITWARDEN_TYPE_IDENTITY: {
@@ -195,7 +199,7 @@ export function importBitwardenJson(text: string): ImportResult {
         const candidate = {
           ...base,
           kind: "identity" as const,
-          name,
+          name: clampName(rawName, MAX_IDENTITY_NAME_LENGTH, "Imported item", label, warnings),
           firstName: asString(identity["firstName"]),
           ...optional("middleName", asString(identity["middleName"])),
           lastName: asString(identity["lastName"]),
@@ -212,14 +216,9 @@ export function importBitwardenJson(text: string): ImportResult {
           ...optional("passportNumber", asString(identity["passportNumber"])),
           ...optional("licenseNumber", asString(identity["licenseNumber"])),
           ...optional("nationalId", asString(identity["ssn"])),
-          notes,
+          notes: clampText(notes, MAX_IDENTITY_NOTES_LENGTH, "notes", label, warnings),
         };
-        const parsed = IdentityItemSchema.safeParse(candidate);
-        if (!parsed.success) {
-          warnings.push(`Skipped "${label}": invalid identity item`);
-          continue;
-        }
-        items.push(parsed.data);
+        keepIfValid(IdentityItemSchema, candidate, "identity", label, warnings, items);
         break;
       }
       default:
@@ -229,6 +228,36 @@ export function importBitwardenJson(text: string): ImportResult {
 
   const folders = folderIndex.folders();
   return folders.length === 0 ? { items, warnings } : { items, warnings, folders };
+}
+
+/** Maps Bitwarden `{ id, name }` records (folders, collections) to provisional folder ids. */
+function indexNamedRecords(
+  raw: unknown,
+  folderIndex: ReturnType<typeof createFolderIndex>,
+): Map<string, string> {
+  const byId = new Map<string, string>();
+  if (!Array.isArray(raw)) return byId;
+  for (const record of raw) {
+    if (!isRecord(record)) continue;
+    const id = asString(record["id"]);
+    const name = asString(record["name"]);
+    if (id === "" || name.trim() === "") continue;
+    const provisional = folderIndex.idFor(name.split("/"));
+    if (provisional !== undefined) byId.set(id, provisional);
+  }
+  return byId;
+}
+
+function firstCollectionFolder(
+  collectionIds: unknown,
+  byCollectionId: ReadonlyMap<string, string>,
+): string | undefined {
+  if (!Array.isArray(collectionIds)) return undefined;
+  for (const id of collectionIds) {
+    const folderId = byCollectionId.get(asString(id));
+    if (folderId !== undefined) return folderId;
+  }
+  return undefined;
 }
 
 function isoOf(value: unknown): string | undefined {

@@ -1,4 +1,4 @@
-import type { Folder, VaultItem } from "@shardpass/domain";
+import { MAX_FOLDERS, MAX_FOLDER_DEPTH, type Folder, type VaultItem } from "@shardpass/domain";
 import {
   type ImportFolder,
   importBitwardenJson,
@@ -21,10 +21,13 @@ import { itemDisplayName, itemDisplaySubtitle } from "../item-support";
 import { OtpImportView } from "../otp/import/OtpImportView";
 import { runKeePassImport } from "../keepass/keepass-executor";
 import { BackupView } from "../settings/BackupView";
+import { planFolders, sameFolderName, type FolderPlan } from "./folder-plan";
 import styles from "./ImportDialog.module.css";
 
 /** Local file read cap for a third-party export: generous for thousands of rows, still bounded. */
 const MAX_THIRD_PARTY_IMPORT_BYTES = 4 * 1024 * 1024;
+/** KeePass accepts any file as a key file; a photo is common, a video is not. */
+const MAX_KEY_FILE_BYTES = 8 * 1024 * 1024;
 const MAX_VISIBLE_WARNINGS = 20;
 /** Rows per item.createMany call: bounds message size and gives the progress bar steps. */
 const IMPORT_BATCH_SIZE = 100;
@@ -75,7 +78,9 @@ const THIRD_PARTY_SOURCES: readonly ThirdPartySource[] = Object.freeze([
     label: "1Password CSV",
     accept: ".csv,text/csv",
     instructions:
-      "In 1Password, select the items to export, choose File → Export, pick the CSV format, then select the downloaded file below.",
+      "In 1Password, select the items to export, choose File → Export, pick the CSV format, then select the downloaded file below. " +
+      "1Password 8 writes only logins to CSV: cards, identities and secure notes are not in that file and have to be added by hand. " +
+      "Older exports with a Type column are sorted by it.",
     parse: importOnePasswordCsv,
   },
   {
@@ -83,8 +88,8 @@ const THIRD_PARTY_SOURCES: readonly ThirdPartySource[] = Object.freeze([
     label: "KeePass database",
     accept: ".kdbx,application/x-keepass",
     instructions:
-      "Choose your .kdbx database, then enter its master password. The file is decrypted on this " +
-      "device and neither it nor the password ever leaves your machine.",
+      "Choose your .kdbx database, then enter its master password and, if the database uses one, " +
+      "its key file. Everything is decrypted on this device and nothing leaves your machine.",
     encrypted: true,
   },
 ]);
@@ -100,11 +105,11 @@ const SOURCE_OPTIONS: readonly Readonly<{ id: SourceId; label: string }>[] = Obj
 ]);
 
 type Row = Readonly<{ id: string; item: VaultItem; selected: boolean }>;
-/** One row that did not become a vault item, and why. */
+/** One row that did not become a vault item, or became one with something missing, and why. */
 type ImportOutcome = Readonly<{
   name: string;
   kind: VaultItem["kind"];
-  status: "duplicate" | "invalid" | "conflict";
+  status: "duplicate" | "invalid" | "conflict" | "unfiled";
   reason?: string;
 }>;
 type ThirdPartyState = Readonly<{
@@ -112,11 +117,16 @@ type ThirdPartyState = Readonly<{
   rows: readonly Row[];
   /** Provisional folders from the source; created for real, parents first, on confirm. */
   folders: readonly ImportFolder[];
+  /** Folders already in the vault, fetched once per preview; null until known. */
+  existingFolders: readonly Folder[] | null;
+  /** Rows that repeat an earlier row of the same file: same kind, name and account. */
+  duplicateRowIds: ReadonlySet<string>;
   warnings: readonly string[];
   error: string | null;
   imported: number;
   failed: number;
   duplicates: number;
+  unfiled: number;
   outcomes: readonly ImportOutcome[];
   progress: Readonly<{ done: number; total: number }> | null;
 }>;
@@ -125,11 +135,14 @@ const INITIAL_THIRD_PARTY_STATE: ThirdPartyState = Object.freeze({
   phase: "pick",
   rows: [],
   folders: [],
+  existingFolders: null,
+  duplicateRowIds: new Set<string>(),
   warnings: [],
   error: null,
   imported: 0,
   failed: 0,
   duplicates: 0,
+  unfiled: 0,
   outcomes: [],
   progress: null,
 });
@@ -145,7 +158,76 @@ function describeOutcome(outcome: ImportOutcome): string {
       return outcome.reason === undefined
         ? "Rejected: did not pass validation."
         : `Rejected: ${outcome.reason}`;
+    case "unfiled":
+      return outcome.reason === undefined
+        ? "Imported without a folder."
+        : `Imported without a folder: ${outcome.reason}`;
   }
+}
+
+function plural(count: number, singular: string, pluralForm = `${singular}s`): string {
+  return `${count.toLocaleString("en-US")} ${count === 1 ? singular : pluralForm}`;
+}
+
+/**
+ * Rows that repeat an earlier row of the same file. Cheap and local: it never asks the vault,
+ * so it is a hint to look twice, not a verdict.
+ */
+function findInFileDuplicates(rows: readonly Row[]): ReadonlySet<string> {
+  const seen = new Set<string>();
+  const duplicates = new Set<string>();
+  for (const row of rows) {
+    const item = row.item;
+    const name = itemDisplayName(item).normalize("NFKC").toLocaleLowerCase("en-US");
+    const account =
+      item.kind === "login"
+        ? `${item.username.normalize("NFKC").toLocaleLowerCase("en-US")} ${item.urls[0] ?? ""}`
+        : item.kind === "otp"
+          ? `${item.label} ${item.secret}`
+          : "";
+    const key = `${item.kind} ${name} ${account}`;
+    if (seen.has(key)) duplicates.add(row.id);
+    else seen.add(key);
+  }
+  return duplicates;
+}
+
+function previewState(
+  result: Readonly<{
+    items: readonly VaultItem[];
+    warnings: readonly string[];
+    folders?: readonly ImportFolder[];
+  }>,
+  emptyMessage: string,
+): ThirdPartyState {
+  const rows = result.items.map((item) => ({ id: item.id, item, selected: true }));
+  return {
+    ...INITIAL_THIRD_PARTY_STATE,
+    phase: "preview",
+    rows,
+    folders: result.folders ?? [],
+    duplicateRowIds: findInFileDuplicates(rows),
+    warnings: [...result.warnings],
+    error: result.items.length === 0 ? emptyMessage : null,
+  };
+}
+
+/** What the preview says about folders, given the plan for the current selection. */
+function describeFolderPlan(plan: FolderPlan): string {
+  const parts: string[] = [`${plural(plan.creatable.length, "folder")} will be created`];
+  if (plan.reused.size > 0) parts.push(`${plan.reused.size} already exist`);
+  let sentence = parts.join(", ");
+  if (plan.collapsed > 0)
+    sentence += `; ${plan.collapsed} nested deeper than ${MAX_FOLDER_DEPTH} levels ${
+      plan.collapsed === 1 ? "was" : "were"
+    } folded into ${plan.collapsed === 1 ? "its" : "their"} parent's name`;
+  sentence += ".";
+  if (plan.overLimit.size > 0)
+    sentence += ` ${plan.overLimit.size} cannot be created: a vault holds at most ${MAX_FOLDERS} folders, so ${plural(
+      plan.unfiledItems,
+      "item",
+    )} will be imported without a folder.`;
+  return sentence;
 }
 
 export interface ImportDialogProps {
@@ -163,16 +245,20 @@ export interface ImportDialogProps {
  * (QR image / otpauth:// / other supported text formats, via the existing
  * {@link OtpImportView}) and ShardPass encrypted backup restore (via the existing
  * {@link BackupView}), alongside the new third-party password-manager importers from
- * `@shardpass/importers` (Chrome, Firefox, Bitwarden, 1Password). Third-party sources
- * are parsed locally, previewed with per-row checkboxes, and imported by calling
- * `item.create` once per selected item.
+ * `@shardpass/importers` (Chrome, Firefox, Bitwarden, 1Password, KeePass). Third-party
+ * sources are parsed locally, previewed with per-row checkboxes, and imported in batches of
+ * `item.createMany`.
  */
 export function ImportDialog({ platform, active, onImported, onDone }: ImportDialogProps) {
   const [source, setSource] = useState<SourceId>("chrome");
   const [state, setState] = useState<ThirdPartyState>(INITIAL_THIRD_PARTY_STATE);
   const fileRef = useRef<HTMLInputElement | null>(null);
   const ownerRef = useRef(0);
+  const mountedRef = useRef(true);
+  // An import that has started runs to its summary; nothing on this surface cancels it.
+  const importingRef = useRef(false);
   const [password, setPassword] = useState("");
+  const [keyFile, setKeyFile] = useState<File | null>(null);
   // Held only between choosing an encrypted file and unlocking it.
   const pendingFileRef = useRef<File | null>(null);
 
@@ -181,6 +267,7 @@ export function ImportDialog({ platform, active, onImported, onDone }: ImportDia
     if (fileRef.current !== null) fileRef.current.value = "";
     pendingFileRef.current = null;
     setPassword("");
+    setKeyFile(null);
     setState(INITIAL_THIRD_PARTY_STATE);
   }, []);
 
@@ -193,15 +280,30 @@ export function ImportDialog({ platform, active, onImported, onDone }: ImportDia
   );
 
   useEffect(() => {
-    if (!active) resetThirdParty();
+    // Leaving mid-import must not lose the summary: the import finishes and reports
+    // whenever the person comes back.
+    if (!active && !importingRef.current) resetThirdParty();
   }, [active, resetThirdParty]);
   // Cancels any in-flight file read on unmount, without updating state on an
   // unmounting component.
   useEffect(() => {
+    mountedRef.current = true;
     return () => {
+      mountedRef.current = false;
       ownerRef.current += 1;
     };
   }, []);
+  // One round trip per preview so the folder summary can count what already exists.
+  useEffect(() => {
+    if (state.phase !== "preview" || state.folders.length === 0 || state.existingFolders !== null) return;
+    const owner = ownerRef.current;
+    void sendFolderRequest(platform, { version: 1, kind: "folder.list" }).then((folders) => {
+      if (!mountedRef.current || owner !== ownerRef.current) return;
+      setState((current) =>
+        current.phase === "preview" ? { ...current, existingFolders: folders ?? [] } : current,
+      );
+    });
+  }, [platform, state.phase, state.folders.length, state.existingFolders]);
 
   if (!active) return null;
 
@@ -221,6 +323,7 @@ export function ImportDialog({ platform, active, onImported, onDone }: ImportDia
     if (parser.encrypted === true) {
       pendingFileRef.current = file;
       setPassword("");
+      setKeyFile(null);
       setState({ ...INITIAL_THIRD_PARTY_STATE, phase: "password" });
       return;
     }
@@ -237,25 +340,27 @@ export function ImportDialog({ platform, active, onImported, onDone }: ImportDia
           setState({ ...INITIAL_THIRD_PARTY_STATE, error: "The file could not be read." });
           return;
         }
-        setState({
-          phase: "preview",
-          rows: result.items.map((item) => ({ id: item.id, item, selected: true })),
-          folders: result.folders ?? [],
-          warnings: result.warnings,
-          error:
-            result.items.length === 0 ? "No importable entries were found in this file." : null,
-          imported: 0,
-          failed: 0,
-          duplicates: 0,
-          outcomes: [],
-          progress: null,
-        });
+        setState(previewState(result, "No importable entries were found in this file."));
       },
       () => {
         if (owner !== ownerRef.current) return;
         setState({ ...INITIAL_THIRD_PARTY_STATE, error: "The file could not be read." });
       },
     );
+  };
+
+  const selectKeyFile = (file: File | undefined) => {
+    if (file === undefined) {
+      setKeyFile(null);
+      return;
+    }
+    if (file.size > MAX_KEY_FILE_BYTES) {
+      setKeyFile(null);
+      setState((current) => ({ ...current, error: "The key file is too large to use." }));
+      return;
+    }
+    setKeyFile(file);
+    setState((current) => ({ ...current, error: null }));
   };
 
   const unlockDatabase = async () => {
@@ -265,23 +370,14 @@ export function ImportDialog({ platform, active, onImported, onDone }: ImportDia
     setState((current) => ({ ...current, phase: "unlocking", error: null }));
     try {
       const buffer = await file.arrayBuffer();
-      const outcome = await runKeePassImport(buffer, password);
+      const keyBytes = keyFile === null ? undefined : await keyFile.arrayBuffer();
+      const outcome = await runKeePassImport(buffer, password, keyBytes);
       if (owner !== ownerRef.current) return;
-      // Cleared as soon as it has been used; the worker has already terminated.
+      // Cleared as soon as they have been used; the worker has already terminated.
       setPassword("");
+      setKeyFile(null);
       pendingFileRef.current = null;
-      setState({
-        phase: "preview",
-        rows: outcome.items.map((item) => ({ id: item.id, item, selected: true })),
-        folders: outcome.folders,
-        warnings: [...outcome.warnings],
-        error: outcome.items.length === 0 ? "No importable entries were found in this database." : null,
-        imported: 0,
-        failed: 0,
-        duplicates: 0,
-        outcomes: [],
-        progress: null,
-      });
+      setState(previewState(outcome, "No importable entries were found in this database."));
     } catch (error) {
       if (owner !== ownerRef.current) return;
       setState({
@@ -304,8 +400,13 @@ export function ImportDialog({ platform, active, onImported, onDone }: ImportDia
   };
 
   const confirmImport = async () => {
-    const owner = ++ownerRef.current;
     const selected = state.rows.filter((row) => row.selected);
+    const plan = planFolders(
+      state.folders,
+      selected.map((row) => row.item.folderId),
+      state.existingFolders ?? [],
+    );
+    importingRef.current = true;
     setState((current) => ({
       ...current,
       phase: "importing",
@@ -314,55 +415,81 @@ export function ImportDialog({ platform, active, onImported, onDone }: ImportDia
     let imported = 0;
     let duplicates = 0;
     let failed = 0;
+    let unfiled = 0;
     const outcomes: ImportOutcome[] = [];
-    // The source's folders come first so every item can be filed as it is created. A folder
-    // that cannot be created leaves its items unfiled rather than failing the import.
-    const folderIds = await realizeFolders(platform, state.folders, selected);
-    if (owner !== ownerRef.current) return;
-    // Batched: each call is one vault commit, so a large import is seconds rather than
-    // minutes and cannot be left half-written. Chunking keeps messages bounded and gives
-    // the progress bar something to show.
-    for (let start = 0; start < selected.length; start += IMPORT_BATCH_SIZE) {
-      const chunk = selected.slice(start, start + IMPORT_BATCH_SIZE);
-      const results = await createItems(
-        platform,
-        chunk.map((row) => refile(row.item, folderIds)),
-      );
-      if (owner !== ownerRef.current) return;
-      for (const entry of results) {
-        const row = chunk[entry.index];
-        if (row === undefined) continue;
-        if (entry.status === "created") {
-          imported += 1;
-          continue;
+    try {
+      // The source's folders come first so every item can be filed as it is created. A folder
+      // that cannot be created leaves its items unfiled rather than failing the import, and
+      // each such item is listed in the summary.
+      const folderIds = await realizeFolders(platform, plan);
+      if (!mountedRef.current) return;
+      // Batched: each call is one vault commit, so a large import is seconds rather than
+      // minutes and cannot be left half-written. Chunking keeps messages bounded and gives
+      // the progress bar something to show.
+      for (let start = 0; start < selected.length; start += IMPORT_BATCH_SIZE) {
+        const chunk = selected.slice(start, start + IMPORT_BATCH_SIZE);
+        const refiled = chunk.map((row) => refile(row.item, plan, folderIds));
+        const results = await createItems(
+          platform,
+          refiled.map((entry) => entry.item),
+        );
+        if (!mountedRef.current) return;
+        for (const entry of results) {
+          const row = chunk[entry.index];
+          const filing = refiled[entry.index];
+          if (row === undefined || filing === undefined) continue;
+          if (entry.status === "created") {
+            imported += 1;
+            if (filing.unfiled !== undefined) {
+              unfiled += 1;
+              outcomes.push({
+                name: itemDisplayName(row.item),
+                kind: row.item.kind,
+                status: "unfiled",
+                reason: filing.unfiled,
+              });
+            }
+            continue;
+          }
+          if (entry.status === "duplicate") duplicates += 1;
+          else failed += 1;
+          outcomes.push({
+            name: itemDisplayName(row.item),
+            kind: row.item.kind,
+            status: entry.status,
+            ...(entry.status === "invalid" && entry.reason !== undefined ? { reason: entry.reason } : {}),
+          });
         }
-        if (entry.status === "duplicate") duplicates += 1;
-        else failed += 1;
-        outcomes.push({
-          name: itemDisplayName(row.item),
-          kind: row.item.kind,
-          status: entry.status,
-          ...(entry.status === "invalid" && entry.reason !== undefined ? { reason: entry.reason } : {}),
-        });
+        const done = Math.min(start + chunk.length, selected.length);
+        setState((current) => ({ ...current, progress: { done, total: selected.length } }));
       }
-      const done = Math.min(start + chunk.length, selected.length);
-      setState((current) => ({ ...current, progress: { done, total: selected.length } }));
+    } finally {
+      importingRef.current = false;
     }
-    if (owner !== ownerRef.current) return;
+    if (!mountedRef.current) return;
     setState({
+      ...INITIAL_THIRD_PARTY_STATE,
       phase: "done",
-      rows: [],
-      folders: [],
-      warnings: [],
       error: failed > 0 ? `${failed} item(s) could not be imported.` : null,
       imported,
       failed,
       duplicates,
+      unfiled,
       outcomes,
-      progress: null,
     });
     if (imported > 0) onImported();
   };
+
+  const importing = state.phase === "importing";
+  const selectedRows = state.rows.filter((row) => row.selected);
+  const folderPlan =
+    (state.phase === "preview" || importing) && state.folders.length > 0
+      ? planFolders(
+          state.folders,
+          selectedRows.map((row) => row.item.folderId),
+          state.existingFolders ?? [],
+        )
+      : null;
 
   return (
     <section className={styles.region} aria-labelledby="import-dialog-heading">
@@ -380,6 +507,7 @@ export function ImportDialog({ platform, active, onImported, onDone }: ImportDia
             aria-current={source === option.id ? "true" : undefined}
             className={styles.sourceButton}
             data-selected={source === option.id ? "true" : "false"}
+            disabled={importing}
             onClick={() => changeSource(option.id)}
           >
             {option.label}
@@ -417,17 +545,31 @@ export function ImportDialog({ platform, active, onImported, onDone }: ImportDia
                 className={styles.unlockInput}
                 autoComplete="current-password"
                 autoFocus
-                required
+                required={keyFile === null}
                 disabled={state.phase === "unlocking"}
                 value={password}
                 onChange={(event) => setPassword(event.currentTarget.value)}
               />
+              <label className={styles.unlockLabel} htmlFor="import-dialog-kdbx-keyfile">
+                Key file (optional)
+              </label>
+              <input
+                id="import-dialog-kdbx-keyfile"
+                className={styles.unlockFile}
+                type="file"
+                disabled={state.phase === "unlocking"}
+                onChange={(event) => selectKeyFile(event.currentTarget.files?.[0])}
+              />
               <p className={styles.unlockHint}>
-                Opening a database is deliberately slow: KeePass key derivation can take several
-                seconds.
+                Only needed when the database was locked with a key file as well as, or instead
+                of, a password. Opening a database is deliberately slow: KeePass key derivation
+                can take several seconds.
               </p>
               <div className={styles.unlockActions}>
-                <Button type="submit" disabled={state.phase === "unlocking" || password === ""}>
+                <Button
+                  type="submit"
+                  disabled={state.phase === "unlocking" || (password === "" && keyFile === null)}
+                >
                   {state.phase === "unlocking" ? "Opening…" : "Open database"}
                 </Button>
                 <Button variant="secondary" type="button" onClick={resetThirdParty}>
@@ -464,15 +606,15 @@ export function ImportDialog({ platform, active, onImported, onDone }: ImportDia
             <div className={styles.complete} role="status">
               <strong>Import complete</strong>
               <span>
-                {state.imported.toLocaleString("en-US")}{" "}
-                {state.imported === 1 ? "item" : "items"} imported
+                {plural(state.imported, "item")} imported
                 {state.duplicates > 0
                   ? `, ${state.duplicates} already in your vault`
                   : ""}
-                {state.failed > 0 ? `, ${state.failed} failed` : ""}.
+                {state.failed > 0 ? `, ${state.failed} failed` : ""}
+                {state.unfiled > 0 ? `, ${state.unfiled} without a folder` : ""}.
               </span>
               {state.outcomes.length > 0 ? (
-                <ul className={styles.outcomes} aria-label="Items that were not imported">
+                <ul className={styles.outcomes} aria-label="Items that need attention">
                   {state.outcomes.slice(0, MAX_VISIBLE_WARNINGS).map((outcome, index) => (
                     <li key={`${outcome.name}-${index}`}>
                       <span className={styles.outcomeName}>{outcome.name}</span>
@@ -497,12 +639,13 @@ export function ImportDialog({ platform, active, onImported, onDone }: ImportDia
             <div className={styles.preview}>
               <div className={styles.previewHeading}>
                 <span>
-                  {state.rows.filter((row) => row.selected).length} of {state.rows.length} selected
+                  {selectedRows.length} of {state.rows.length} selected
                 </span>
                 <div className={styles.previewActions}>
                   <button
                     type="button"
                     className={styles.previewActionButton}
+                    disabled={importing}
                     onClick={() => toggleAll(true)}
                   >
                     Select all
@@ -510,21 +653,18 @@ export function ImportDialog({ platform, active, onImported, onDone }: ImportDia
                   <button
                     type="button"
                     className={styles.previewActionButton}
+                    disabled={importing}
                     onClick={() => toggleAll(false)}
                   >
                     Select none
                   </button>
-                  <Button
-                    variant="secondary"
-                    onClick={resetThirdParty}
-                    disabled={state.phase === "importing"}
-                  >
+                  <Button variant="secondary" onClick={resetThirdParty} disabled={importing}>
                     Cancel
                   </Button>
                 </div>
               </div>
 
-              {state.phase === "importing" && state.progress !== null ? (
+              {importing && state.progress !== null ? (
                 <div className={styles.progress} role="status" aria-live="polite">
                   <progress
                     className={styles.progressBar}
@@ -538,9 +678,13 @@ export function ImportDialog({ platform, active, onImported, onDone }: ImportDia
                 </div>
               ) : null}
 
+              {folderPlan !== null ? (
+                <p className={styles.folderSummary}>{describeFolderPlan(folderPlan)}</p>
+              ) : null}
+
               {state.warnings.length > 0 ? (
                 <details className={styles.warnings}>
-                  <summary>{state.warnings.length} row(s) were skipped</summary>
+                  <summary>{plural(state.warnings.length, "notice")}</summary>
                   <ul>
                     {state.warnings.slice(0, MAX_VISIBLE_WARNINGS).map((warning) => (
                       <li key={warning}>{warning}</li>
@@ -569,13 +713,23 @@ export function ImportDialog({ platform, active, onImported, onDone }: ImportDia
                           <input
                             type="checkbox"
                             checked={row.selected}
-                            disabled={state.phase === "importing"}
+                            disabled={importing}
                             onChange={() => toggleRow(row.id)}
                             aria-label={`Import ${itemDisplayName(row.item)}`}
                           />
                         </td>
                         <td>{itemDisplayName(row.item)}</td>
-                        <td>{itemDisplaySubtitle(row.item) ?? "—"}</td>
+                        <td>
+                          {itemDisplaySubtitle(row.item) ?? "—"}
+                          {state.duplicateRowIds.has(row.id) ? (
+                            <span
+                              className={styles.hint}
+                              title="Another row in this file has the same name and account."
+                            >
+                              Duplicate?
+                            </span>
+                          ) : null}
+                        </td>
                         <td className={styles.kind}>{row.item.kind.toUpperCase()}</td>
                       </tr>
                     ))}
@@ -585,8 +739,8 @@ export function ImportDialog({ platform, active, onImported, onDone }: ImportDia
 
               <Button
                 onClick={() => void confirmImport()}
-                loading={state.phase === "importing"}
-                disabled={state.rows.every((row) => !row.selected)}
+                loading={importing}
+                disabled={importing || selectedRows.length === 0}
               >
                 Import selected
               </Button>
@@ -598,85 +752,69 @@ export function ImportDialog({ platform, active, onImported, onDone }: ImportDia
   );
 }
 
-/** Swaps an item's provisional folder id for the real one; unfiled when the folder failed. */
-function refile(item: VaultItem, folderIds: ReadonlyMap<string, string>): VaultItem {
-  if (item.folderId === undefined) return item;
-  const real = folderIds.get(item.folderId);
+const FOLDER_LIMIT_REASON = "the vault's folder limit was reached.";
+const FOLDER_FAILED_REASON = "the folder could not be created.";
+
+/**
+ * Swaps an item's provisional folder id for the real one. When the folder does not exist
+ * the item goes in unfiled, and the reason travels with it into the summary.
+ */
+function refile(
+  item: VaultItem,
+  plan: FolderPlan,
+  folderIds: ReadonlyMap<string, string>,
+): Readonly<{ item: VaultItem; unfiled?: string }> {
+  if (item.folderId === undefined) return { item };
+  const planned = plan.remap.get(item.folderId);
+  const real = planned === undefined ? undefined : folderIds.get(planned);
   if (real === undefined) {
     const { folderId: _dropped, ...rest } = item;
     void _dropped;
-    return rest;
+    return {
+      item: rest,
+      unfiled:
+        planned !== undefined && plan.overLimit.has(planned) ? FOLDER_LIMIT_REASON : FOLDER_FAILED_REASON,
+    };
   }
-  return real === item.folderId ? item : { ...item, folderId: real };
+  return { item: real === item.folderId ? item : { ...item, folderId: real } };
+}
+
+async function sendFolderRequest(
+  platform: Pick<ExtensionPlatform, "sendMessage">,
+  request: FolderRequest,
+): Promise<readonly Folder[] | null> {
+  try {
+    const parsed = parseFolderResponseForRequest(request, await platform.sendMessage(request));
+    return parsed.success ? parsed.data.folders : null;
+  } catch {
+    return null;
+  }
 }
 
 /**
- * Creates the folders the selected items reference, parents before children, reusing an
- * existing folder with the same name under the same parent. Returns provisional → real ids.
+ * Creates the folders the plan calls for, parents before children. Returns planned to real
+ * ids, including the folders the plan found already in the vault.
  */
 async function realizeFolders(
   platform: Pick<ExtensionPlatform, "sendMessage">,
-  folders: readonly ImportFolder[],
-  selected: readonly Row[],
+  plan: FolderPlan,
 ): Promise<ReadonlyMap<string, string>> {
-  const resolved = new Map<string, string>();
-  if (folders.length === 0) return resolved;
-  const wanted = new Set<string>();
-  const byId = new Map(folders.map((folder) => [folder.id, folder]));
-  for (const row of selected) {
-    let id = row.item.folderId;
-    while (id !== undefined && !wanted.has(id)) {
-      wanted.add(id);
-      id = byId.get(id)?.parentId;
-    }
-  }
-  if (wanted.size === 0) return resolved;
-  const send = async (request: FolderRequest): Promise<readonly Folder[] | null> => {
-    try {
-      const parsed = parseFolderResponseForRequest(request, await platform.sendMessage(request));
-      return parsed.success ? parsed.data.folders : null;
-    } catch {
-      return null;
-    }
-  };
-  let existing = (await send({ version: 1, kind: "folder.list" })) ?? [];
-  const sameName = (left: string, right: string) =>
-    left.normalize("NFKC").toLocaleLowerCase("en-US") === right.normalize("NFKC").toLocaleLowerCase("en-US");
-  const pending = folders.filter((folder) => wanted.has(folder.id));
-  // Parents first: a child is only creatable once its parent has a real id.
-  let progress = true;
-  while (pending.length > 0 && progress) {
-    progress = false;
-    for (let index = 0; index < pending.length; index += 1) {
-      const folder = pending[index]!;
-      const parentReal = folder.parentId === undefined ? undefined : resolved.get(folder.parentId);
-      if (folder.parentId !== undefined && parentReal === undefined) {
-        // The parent failed (or is not created yet); once the loop stalls it is dropped.
-        continue;
-      }
-      pending.splice(index, 1);
-      index -= 1;
-      progress = true;
-      const match = existing.find(
-        (candidate) => candidate.parentId === parentReal && sameName(candidate.name, folder.name),
-      );
-      if (match !== undefined) {
-        resolved.set(folder.id, match.id);
-        continue;
-      }
-      const created = await send({
-        version: 1,
-        kind: "folder.create",
-        name: folder.name,
-        ...(parentReal === undefined ? {} : { parentId: parentReal }),
-      });
-      if (created === null) continue;
-      existing = created;
-      const real = created.find(
-        (candidate) => candidate.parentId === parentReal && sameName(candidate.name, folder.name),
-      );
-      if (real !== undefined) resolved.set(folder.id, real.id);
-    }
+  const resolved = new Map<string, string>(plan.reused);
+  for (const folder of plan.creatable) {
+    const parentReal = folder.parentId === undefined ? undefined : resolved.get(folder.parentId);
+    // The parent could not be created, so neither can this one.
+    if (folder.parentId !== undefined && parentReal === undefined) continue;
+    const created = await sendFolderRequest(platform, {
+      version: 1,
+      kind: "folder.create",
+      name: folder.name,
+      ...(parentReal === undefined ? {} : { parentId: parentReal }),
+    });
+    if (created === null) continue;
+    const real = created.find(
+      (candidate) => candidate.parentId === parentReal && sameFolderName(candidate.name, folder.name),
+    );
+    if (real !== undefined) resolved.set(folder.id, real.id);
   }
   return resolved;
 }

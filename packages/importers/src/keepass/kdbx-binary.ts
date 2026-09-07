@@ -73,8 +73,12 @@ export class KdbxFormatError extends Error {
 }
 
 export class KdbxPasswordError extends Error {
-  constructor() {
-    super("Incorrect master password, or the file is corrupt.");
+  constructor(usedKeyFile = false) {
+    super(
+      usedKeyFile
+        ? "Incorrect master password or key file, or the file is corrupt."
+        : "Incorrect master password, or the file is corrupt.",
+    );
     this.name = "KdbxPasswordError";
   }
 }

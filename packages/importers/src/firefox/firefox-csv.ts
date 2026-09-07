@@ -1,8 +1,8 @@
-import { LoginItemSchema } from "@shardpass/domain";
-
 import { parseCsv } from "../common/csv-parser";
+import { warningLabel } from "../common/clamp";
 import { newItemBase } from "../common/item-base";
 import type { ImportResult } from "../common/import-result";
+import { emitLogin } from "../common/login-candidate";
 import { IMPORT_LIMITS } from "../import-model";
 
 /**
@@ -19,20 +19,19 @@ export function importFirefoxCsv(text: string): ImportResult {
   const items: ImportResult["items"] = [];
   const warnings: string[] = [];
 
-  const truncated = rows.length > IMPORT_LIMITS.maxEntries;
-  const bounded = truncated ? rows.slice(0, IMPORT_LIMITS.maxEntries) : rows;
+  const limit = IMPORT_LIMITS.maxThirdPartyEntries;
+  const truncated = rows.length > limit;
+  const bounded = truncated ? rows.slice(0, limit) : rows;
   if (truncated)
     warnings.push(
-      `Only the first ${IMPORT_LIMITS.maxEntries} rows were imported; ${
-        rows.length - IMPORT_LIMITS.maxEntries
-      } row(s) were skipped.`,
+      `Only the first ${limit} rows were imported; ${rows.length - limit} row(s) were skipped.`,
     );
 
   for (const row of bounded) {
     const url = (row["url"] ?? "").trim();
     const username = row["username"] ?? "";
     const password = row["password"] ?? "";
-    const label = url || "unnamed";
+    const label = warningLabel(url, "unnamed");
 
     if (!password) {
       warnings.push(`Skipped "${label}": empty password`);
@@ -46,24 +45,13 @@ export function importFirefoxCsv(text: string): ImportResult {
       epochMillisToIso(row["timeLastUsed"]) ??
       createdAt;
 
-    const candidate = {
-      ...base,
-      createdAt,
-      updatedAt,
-      kind: "login" as const,
-      name: deriveName(url),
-      username,
-      password,
-      urls: url ? [url] : [],
-      notes: "",
-    };
-
-    const parsed = LoginItemSchema.safeParse(candidate);
-    if (!parsed.success) {
-      warnings.push(`Skipped "${label}": invalid login item`);
-      continue;
-    }
-    items.push(parsed.data);
+    emitLogin(
+      { ...base, createdAt, updatedAt },
+      { name: deriveName(url), username, password, urls: url ? [url] : [], notes: "" },
+      label,
+      warnings,
+      items,
+    );
   }
 
   return { items, warnings };

@@ -112,7 +112,7 @@ export function parseOtpAuthUri(uri: string): OtpImportCandidate {
 
   if (
     parsed.protocol !== "otpauth:" ||
-    (parsed.hostname !== "totp" && parsed.hostname !== "hotp") ||
+    (parsed.hostname !== "totp" && parsed.hostname !== "hotp" && parsed.hostname !== "steam") ||
     parsed.username !== "" ||
     parsed.password !== "" ||
     parsed.port !== "" ||
@@ -160,13 +160,20 @@ export function parseOtpAuthUri(uri: string): OtpImportCandidate {
 
   const authority = parsed.hostname;
   const issuer = queryIssuer ?? labelIssuer;
-  const steam =
-    authority === "totp" &&
-    (issuer.toLowerCase() === "steam" || labelIssuer.toLowerCase() === "steam");
   const algorithm = normalizeAlgorithm(parsed.searchParams.get("algorithm"));
   const digitsValue = parsed.searchParams.get("digits");
   const periodValue = parsed.searchParams.get("period");
   const counterValue = parsed.searchParams.get("counter");
+  // Steam Guard travels under several conventions: its own authority, KeePassXC's
+  // `encoder=steam`, the "Steam" issuer that older exporters used, or simply five digits,
+  // which no other scheme produces.
+  const steam =
+    authority === "steam" ||
+    (authority === "totp" &&
+      (parsed.searchParams.get("encoder")?.trim().toLowerCase() === "steam" ||
+        issuer.toLowerCase() === "steam" ||
+        labelIssuer.toLowerCase() === "steam" ||
+        digitsValue === "5"));
 
   if (authority === "hotp") {
     if (periodValue !== null) fail("IMPORT_UNSUPPORTED");
@@ -188,7 +195,11 @@ export function parseOtpAuthUri(uri: string): OtpImportCandidate {
   }
 
   try {
-    const item = parseStrictOtpAuthUri(uri, SYNTHETIC_METADATA);
+    // The strict parser only knows Steam by its authority, so the other spellings are
+    // rewritten onto it; everything else in the URI is left as it was.
+    const strictUri =
+      steam && authority !== "steam" ? `otpauth://steam${parsed.pathname}${parsed.search}` : uri;
+    const item = parseStrictOtpAuthUri(strictUri, SYNTHETIC_METADATA);
     const candidate: OtpImportCandidate = {
       issuer: item.issuer,
       label: item.label,

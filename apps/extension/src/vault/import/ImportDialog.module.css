@@ -314,3 +314,42 @@
   display: flex;
   gap: var(--space-2);
 }
+
+.sourceButton:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.previewActionButton:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.folderSummary {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: var(--line-body);
+}
+
+.hint {
+  display: inline-block;
+  margin-left: var(--space-2);
+  padding: 0 var(--space-1);
+  color: var(--text-secondary);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  vertical-align: middle;
+}
+
+.unlockFile {
+  max-width: 100%;
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: var(--text-sm);
+}

@@ -15,6 +15,8 @@ export const IMPORT_LIMITS = Object.freeze({
   maxInputBytes: 1_048_576,
   maxTextScalars: 262_144,
   maxEntries: 1_000,
+  /** Password-manager exports run far past the OTP ceiling; the dialog batches them in hundreds. */
+  maxThirdPartyEntries: 5_000,
   maxMigrationBatches: 16,
   maxImageBytes: 8_388_608,
   maxImageDimension: 4_096,

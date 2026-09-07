@@ -5,17 +5,22 @@ import { readKdbx } from "./kdbx-read";
 
 export { KdbxFormatError, KdbxPasswordError } from "./kdbx-binary";
 export { classifyEntry, convertEntry } from "./classify";
-export { readKdbx, type KeePassEntry } from "./kdbx-read";
+export { keyFileKey } from "./kdbx-decrypt";
+export { kdbxTime, readKdbx, type KeePassEntry, type KeePassHistoryEntry } from "./kdbx-read";
 
 /**
  * Imports a KeePass KDBX 4 database.
  *
- * Unlike the CSV importers this can fail as a whole: a wrong password or a corrupt file yields
+ * Unlike the CSV importers this can fail as a whole: wrong credentials or a corrupt file yield
  * no items at all, so those surface as thrown errors ({@link KdbxPasswordError},
  * {@link KdbxFormatError}) rather than warnings. Per-entry problems remain warnings.
  */
-export async function importKeePassKdbx(file: Uint8Array, password: string): Promise<ImportResult> {
-  const database = await readKdbx(file, password);
+export async function importKeePassKdbx(
+  file: Uint8Array,
+  password: string,
+  keyFile?: Uint8Array,
+): Promise<ImportResult> {
+  const database = await readKdbx(file, password, keyFile);
   const items: ImportResult["items"] = [];
   const warnings: string[] = [];
 
@@ -26,11 +31,10 @@ export async function importKeePassKdbx(file: Uint8Array, password: string): Pro
 
   // KeePass groups become folders, mirroring the database's own tree.
   const folderIndex = createFolderIndex();
+  const limit = IMPORT_LIMITS.maxThirdPartyEntries;
   for (const entry of database.entries) {
-    if (items.length >= IMPORT_LIMITS.maxEntries) {
-      warnings.push(
-        `Only the first ${IMPORT_LIMITS.maxEntries} entries were imported; the rest were skipped.`,
-      );
+    if (items.length >= limit) {
+      warnings.push(`Only the first ${limit} entries were imported; the rest were skipped.`);
       break;
     }
     const folderId = folderIndex.idFor(entry.path);

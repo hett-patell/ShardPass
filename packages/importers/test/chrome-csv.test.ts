@@ -60,4 +60,42 @@ AWS Console,https://aws.amazon.com,admin,s3cret,production account`;
     expect(result.items).toHaveLength(0);
     expect(result.warnings).toHaveLength(0);
   });
+
+  it("truncates over-long name, username, URL and note instead of dropping the row", () => {
+    const csv = `name,url,username,password,note\n${"n".repeat(300)},https://example.test/${"p".repeat(2100)},${"u".repeat(300)},pw,${"x".repeat(9000)}`;
+    const result = importChromeCsv(csv);
+    expect(result.items).toHaveLength(1);
+    const item = result.items[0]!;
+    if (item.kind !== "login") throw new Error("expected login");
+    expect(item.name).toHaveLength(256);
+    expect(item.username).toHaveLength(256);
+    expect(item.urls[0]).toHaveLength(2048);
+    expect(item.notes).toHaveLength(8192);
+    expect(result.warnings).toHaveLength(4);
+    for (const warning of result.warnings) expect(warning).toContain("truncated");
+  });
+
+  it("imports a password longer than a login can hold as a secret, keeping the site", () => {
+    const key = "-----BEGIN OPENSSH PRIVATE KEY-----\n" + "k".repeat(5000) + "\n-----END OPENSSH PRIVATE KEY-----";
+    const csv = `name,url,username,password,note\nDeploy key,https://git.example,deploy,"${key}",`;
+    const result = importChromeCsv(csv);
+    expect(result.items).toHaveLength(1);
+    const item = result.items[0]!;
+    if (item.kind !== "secret") throw new Error("expected secret");
+    expect(item.secretType).toBe("ssh_key");
+    expect(item.value).toBe(key);
+    expect(item.metadata).toEqual({ username: "deploy", url: "https://git.example" });
+    expect(result.warnings).toEqual([
+      '"Deploy key": the password is longer than a login can hold, so it was imported as a secret.',
+    ]);
+  });
+
+  it("names the field that failed when a row still cannot be imported", () => {
+    const csv = `name,url,username,password,note\nBroken,https://example.test,user\ud800,pw,`;
+    const result = importChromeCsv(csv);
+    expect(result.items).toHaveLength(0);
+    expect(result.warnings).toEqual([
+      'Skipped "Broken": invalid login item (username did not pass validation).',
+    ]);
+  });
 });

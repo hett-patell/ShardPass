@@ -50,4 +50,23 @@ https://github.com,user@example.com,hunter2,,https://github.com,{guid-1},1700000
     if (item.kind !== "login") throw new Error("expected login");
     expect(item.name).toBe("not-a-valid-url");
   });
+
+  it("truncates an over-long username rather than dropping the login", () => {
+    const csv = `${HEADER}\nhttps://example.com,${"u".repeat(300)},pw,,,{guid-5},,,`;
+    const result = importFirefoxCsv(csv);
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0]?.kind === "login" && result.items[0].username).toHaveLength(256);
+    expect(result.warnings).toEqual([
+      '"https://example.com": username was longer than 256 characters and was truncated.',
+    ]);
+  });
+
+  it("routes a password longer than the login limit to a secret with the timestamps kept", () => {
+    const csv = `${HEADER}\nhttps://example.com,user,${"p".repeat(4097)},,,{guid-6},1700000000000,,`;
+    const result = importFirefoxCsv(csv);
+    expect(result.items).toHaveLength(1);
+    const item = result.items[0]!;
+    expect(item.kind).toBe("secret");
+    expect(item.createdAt).toBe(new Date(1700000000000).toISOString());
+  });
 });

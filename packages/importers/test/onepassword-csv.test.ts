@@ -88,4 +88,50 @@ Old site,https://old.example,me,pw2,,false,true,,gone`;
     expect(result.items).toHaveLength(0);
     expect(result.warnings).toHaveLength(0);
   });
+
+  it("reads every website from a cell holding several, split on newlines or commas", () => {
+    const csv = `Title,Username,Password,URL,Notes
+Multi,user,pw,"https://a.example
+https://b.example, www.c.example,https://d.example/path?ids=1,2",`;
+    const result = importOnePasswordCsv(csv);
+    const item = result.items[0];
+    if (item?.kind !== "login") throw new Error("expected login");
+    expect(item.urls).toEqual([
+      "https://a.example",
+      "https://b.example",
+      "www.c.example",
+      "https://d.example/path?ids=1,2",
+    ]);
+  });
+
+  it("collapses tags that differ only by case", () => {
+    const csv = `Title,Username,Password,URL,Tags\nTagged,user,pw,https://t.example,"Work, work; WORK, home"`;
+    const result = importOnePasswordCsv(csv);
+    expect(result.warnings).toHaveLength(0);
+    expect(result.items[0]?.tags).toEqual(["Work", "home"]);
+  });
+
+  it("keeps a one-time-code secret only when it can be read", () => {
+    const csv = `Title,Username,Password,URL,OTPAuth
+Good,user,pw,https://g.example,JBSWY3DPEHPK3PXP
+Bad,user,pw,https://b.example,not a secret at all`;
+    const result = importOnePasswordCsv(csv);
+    const [good, bad] = result.items;
+    if (good?.kind !== "login" || bad?.kind !== "login") throw new Error("expected logins");
+    expect(good.totp).toBe("JBSWY3DPEHPK3PXP");
+    expect(bad.totp).toBeUndefined();
+    expect(result.warnings).toEqual([
+      '"Bad": the one-time-code secret could not be read and was left out.',
+    ]);
+  });
+
+  it("keeps more than the URL limit by dropping the extras with a warning", () => {
+    const urls = Array.from({ length: 20 }, (_, index) => `https://site${index}.example`).join("\n");
+    const csv = `Title,Username,Password,URL,Notes\nMany,user,pw,"${urls}",`;
+    const result = importOnePasswordCsv(csv);
+    const item = result.items[0];
+    if (item?.kind !== "login") throw new Error("expected login");
+    expect(item.urls).toHaveLength(16);
+    expect(result.warnings).toEqual(['"Many": only the first 16 URLs were kept.']);
+  });
 });

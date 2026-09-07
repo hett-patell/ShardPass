@@ -1,14 +1,23 @@
 import {
   CardItemSchema,
   IdentityItemSchema,
-  LoginItemSchema,
+  MAX_CARD_HOLDER_LENGTH,
+  MAX_CARD_NAME_LENGTH,
+  MAX_CARD_NOTES_LENGTH,
+  MAX_CARD_NUMBER_LENGTH,
+  MAX_IDENTITY_NAME_LENGTH,
+  MAX_IDENTITY_NOTES_LENGTH,
+  MAX_NOTE_CONTENT_LENGTH,
+  MAX_NOTE_NAME_LENGTH,
   NoteItemSchema,
 } from "@shardpass/domain";
 
+import { clampName, clampText, keepIfValid, normalizeTags, warningLabel } from "../common/clamp";
 import { buildHeaderIndex, pickField } from "../common/csv-fields";
 import { parseCsv } from "../common/csv-parser";
 import { newItemBase } from "../common/item-base";
 import type { ImportResult } from "../common/import-result";
+import { emitLogin } from "../common/login-candidate";
 import { IMPORT_LIMITS } from "../import-model";
 
 type OnePasswordKind = "login" | "note" | "card" | "identity";
@@ -19,6 +28,9 @@ type OnePasswordKind = "login" | "note" | "card" | "identity";
  * known aliases. The optional `Type` column selects the item kind (login,
  * secure note, credit card, identity); when absent, every row is treated as
  * a login, which covers the common single-category login export.
+ *
+ * 1Password 8 writes only logins to CSV, and its file has no `Type` column;
+ * cards, identities and notes never reach this importer from that version.
  */
 export function importOnePasswordCsv(text: string): ImportResult {
   const { headers, rows } = parseCsv(text);
@@ -26,54 +38,51 @@ export function importOnePasswordCsv(text: string): ImportResult {
   const warnings: string[] = [];
   const headerIndex = buildHeaderIndex(headers);
 
-  const truncated = rows.length > IMPORT_LIMITS.maxEntries;
-  const bounded = truncated ? rows.slice(0, IMPORT_LIMITS.maxEntries) : rows;
+  const limit = IMPORT_LIMITS.maxThirdPartyEntries;
+  const truncated = rows.length > limit;
+  const bounded = truncated ? rows.slice(0, limit) : rows;
   if (truncated)
     warnings.push(
-      `Only the first ${IMPORT_LIMITS.maxEntries} rows were imported; ${
-        rows.length - IMPORT_LIMITS.maxEntries
-      } row(s) were skipped.`,
+      `Only the first ${limit} rows were imported; ${rows.length - limit} row(s) were skipped.`,
     );
 
   for (const row of bounded) {
     const title = pickField(row, headerIndex, "title", "name").trim();
-    const label = title || "unnamed";
+    const label = warningLabel(title, "unnamed");
     const kind = classifyRow(pickField(row, headerIndex, "type"));
-    const base = newItemBase();
-    const name = title || "Imported item";
+    const fresh = newItemBase();
 
     const favorite = truthy(pickField(row, headerIndex, "favorite", "favourite"));
     const archived = truthy(pickField(row, headerIndex, "archived"));
-    const tags = splitTags(pickField(row, headerIndex, "tags"));
-    Object.assign(base, {
+    const tags = normalizeTags(splitTags(pickField(row, headerIndex, "tags")), label, warnings);
+    const base = {
+      ...fresh,
       favorite,
       tags,
-      ...(archived ? { archivedAt: base.updatedAt } : {}),
-    });
+      ...(archived ? { archivedAt: fresh.updatedAt } : {}),
+    };
+    const notes = pickField(row, headerIndex, "notesplain", "notes", "note");
 
     if (kind === "login") {
       const password = pickField(row, headerIndex, "password");
       // A login without a password (passkey-only, username-only) is still worth keeping:
       // the username, site and notes are what the person will look for.
       if (!password) warnings.push(`"${label}": imported without a password (the export has none).`);
-      const url = pickField(row, headerIndex, "url", "website", "login_uri", "urls").trim();
       const totp = pickField(row, headerIndex, "otpauth", "one-time password", "totp").trim();
-      const candidate = {
-        ...base,
-        kind: "login" as const,
-        name,
-        username: pickField(row, headerIndex, "username", "user name"),
-        password,
-        urls: url ? [url] : [],
-        ...(totp === "" ? {} : { totp }),
-        notes: pickField(row, headerIndex, "notes", "notesplain", "note"),
-      };
-      const parsed = LoginItemSchema.safeParse(candidate);
-      if (!parsed.success) {
-        warnings.push(`Skipped "${label}": invalid login item`);
-        continue;
-      }
-      items.push(parsed.data);
+      emitLogin(
+        base,
+        {
+          name: title || "Imported item",
+          username: pickField(row, headerIndex, "username", "user name"),
+          password,
+          urls: splitUrls(pickField(row, headerIndex, "url", "website", "login_uri", "urls")),
+          ...(totp === "" ? {} : { totp }),
+          notes: pickField(row, headerIndex, "notes", "notesplain", "note"),
+        },
+        label,
+        warnings,
+        items,
+      );
       continue;
     }
 
@@ -81,15 +90,10 @@ export function importOnePasswordCsv(text: string): ImportResult {
       const candidate = {
         ...base,
         kind: "note" as const,
-        name,
-        content: pickField(row, headerIndex, "notesplain", "notes", "note"),
+        name: clampName(title, MAX_NOTE_NAME_LENGTH, "Imported item", label, warnings),
+        content: clampText(notes, MAX_NOTE_CONTENT_LENGTH, "content", label, warnings),
       };
-      const parsed = NoteItemSchema.safeParse(candidate);
-      if (!parsed.success) {
-        warnings.push(`Skipped "${label}": invalid note item`);
-        continue;
-      }
-      items.push(parsed.data);
+      keepIfValid(NoteItemSchema, candidate, "note", label, warnings, items);
       continue;
     }
 
@@ -102,21 +106,28 @@ export function importOnePasswordCsv(text: string): ImportResult {
       const candidate = {
         ...base,
         kind: "card" as const,
-        name,
-        cardholderName: pickField(row, headerIndex, "cardholder name", "cardholdername"),
-        number: pickField(row, headerIndex, "ccnum", "number", "card number"),
+        name: clampName(title, MAX_CARD_NAME_LENGTH, "Imported item", label, warnings),
+        cardholderName: clampText(
+          pickField(row, headerIndex, "cardholder name", "cardholdername"),
+          MAX_CARD_HOLDER_LENGTH,
+          "cardholder name",
+          label,
+          warnings,
+        ),
+        number: clampText(
+          pickField(row, headerIndex, "ccnum", "number", "card number"),
+          MAX_CARD_NUMBER_LENGTH,
+          "card number",
+          label,
+          warnings,
+        ),
         expMonth: month,
         expYear: year,
         cvv: pickField(row, headerIndex, "cvv", "security code"),
         pin: pickField(row, headerIndex, "pin"),
-        notes: pickField(row, headerIndex, "notesplain", "notes", "note"),
+        notes: clampText(notes, MAX_CARD_NOTES_LENGTH, "notes", label, warnings),
       };
-      const parsed = CardItemSchema.safeParse(candidate);
-      if (!parsed.success) {
-        warnings.push(`Skipped "${label}": invalid card item`);
-        continue;
-      }
-      items.push(parsed.data);
+      keepIfValid(CardItemSchema, candidate, "card", label, warnings, items);
       continue;
     }
 
@@ -124,7 +135,7 @@ export function importOnePasswordCsv(text: string): ImportResult {
     const candidate = {
       ...base,
       kind: "identity" as const,
-      name,
+      name: clampName(title, MAX_IDENTITY_NAME_LENGTH, "Imported item", label, warnings),
       firstName: pickField(row, headerIndex, "first name", "firstname"),
       lastName: pickField(row, headerIndex, "last name", "lastname"),
       email: pickField(row, headerIndex, "email"),
@@ -134,14 +145,9 @@ export function importOnePasswordCsv(text: string): ImportResult {
       state: pickField(row, headerIndex, "state", "state/province"),
       zip: pickField(row, headerIndex, "zip", "zip/postal code", "postal code"),
       country: pickField(row, headerIndex, "country"),
-      notes: pickField(row, headerIndex, "notesplain", "notes", "note"),
+      notes: clampText(notes, MAX_IDENTITY_NOTES_LENGTH, "notes", label, warnings),
     };
-    const parsed = IdentityItemSchema.safeParse(candidate);
-    if (!parsed.success) {
-      warnings.push(`Skipped "${label}": invalid identity item`);
-      continue;
-    }
-    items.push(parsed.data);
+    keepIfValid(IdentityItemSchema, candidate, "identity", label, warnings, items);
   }
 
   return { items, warnings };
@@ -154,7 +160,32 @@ function truthy(value: string): boolean {
 
 /** 1Password writes tags comma- or semicolon-separated in one cell. */
 function splitTags(value: string): string[] {
-  return [...new Set(value.split(/[,;]/u).map((tag) => tag.trim()).filter((tag) => tag !== ""))];
+  return value.split(/[,;]/u).map((tag) => tag.trim()).filter((tag) => tag !== "");
+}
+
+const URL_START = /^(?:[a-z][a-z0-9+.-]*:\/\/|www\.|[\w-]+(?:\.[\w-]+)+)/iu;
+
+/**
+ * A 1Password item with several websites lands in one cell, separated by newlines or
+ * commas. Commas also appear inside query strings, so a comma only splits when every piece
+ * around it starts like an address of its own.
+ */
+function splitUrls(cell: string): string[] {
+  const urls: string[] = [];
+  for (const token of cell.split(/\s+/u)) {
+    let current = "";
+    for (const piece of token.split(",")) {
+      if (piece === "") continue;
+      if (current !== "" && !URL_START.test(piece)) {
+        current = `${current},${piece}`;
+        continue;
+      }
+      if (current !== "") urls.push(current);
+      current = piece;
+    }
+    if (current !== "") urls.push(current);
+  }
+  return urls;
 }
 
 function classifyRow(rawType: string): OnePasswordKind {

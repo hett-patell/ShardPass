@@ -17,11 +17,15 @@ function createWorker(): Worker {
 /**
  * Decrypts a KeePass database in a worker.
  *
- * The password is handed over once and the worker closes itself when done, so it is not
- * retained anywhere on the page. The file is transferred rather than copied, which also
- * detaches the caller's buffer.
+ * The password and key file are handed over once and the worker closes itself when done, so
+ * neither is retained anywhere on the page. The buffers are transferred rather than copied,
+ * which also detaches the caller's copies.
  */
-export function runKeePassImport(file: ArrayBuffer, password: string): Promise<KeePassImportOutcome> {
+export function runKeePassImport(
+  file: ArrayBuffer,
+  password: string,
+  keyFile?: ArrayBuffer,
+): Promise<KeePassImportOutcome> {
   return new Promise((resolve, reject) => {
     const worker = createWorker();
     let settled = false;
@@ -74,6 +78,9 @@ export function runKeePassImport(file: ArrayBuffer, password: string): Promise<K
     };
     worker.onerror = () => finish(() => reject(new Error("The database could not be read.")));
 
-    worker.postMessage({ file, password }, [file]);
+    worker.postMessage(
+      { file, password, ...(keyFile === undefined ? {} : { keyFile }) },
+      keyFile === undefined ? [file] : [file, keyFile],
+    );
   });
 }

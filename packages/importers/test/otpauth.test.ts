@@ -82,7 +82,8 @@ describe("strict otpauth import parsing", () => {
     }
   });
 
-  it("recognizes Steam only through the established explicit TOTP marker", () => {
+  it("recognizes Steam through the issuer marker, the steam authority, encoder=steam and five digits", () => {
+    const steam = { otpType: "steam", algorithm: "SHA1", digits: 5, period: 30 };
     expect(
       parseOtpAuthUri(
         uri("Steam%3AAccount", [
@@ -90,17 +91,42 @@ describe("strict otpauth import parsing", () => {
           ["issuer", "Steam"],
         ]),
       ),
-    ).toMatchObject({
+    ).toMatchObject({ issuer: "Steam", label: "Account", ...steam });
+
+    // The steam authority, as the otp package and Aegis write it; the issuer defaults to Steam.
+    expect(parseOtpAuthUri(uri("Account", undefined, "steam"))).toMatchObject({
       issuer: "Steam",
       label: "Account",
-      otpType: "steam",
-      algorithm: "SHA1",
-      digits: 5,
-      period: 30,
+      ...steam,
     });
+    // KeePassXC's spelling: a plain TOTP URI carrying encoder=steam under any issuer.
+    expect(
+      parseOtpAuthUri(
+        uri("Valve%3AAccount", [
+          ["secret", SYNTHETIC_SECRET],
+          ["issuer", "Valve"],
+          ["encoder", "steam"],
+        ]),
+      ),
+    ).toMatchObject({ issuer: "Valve", label: "Account", ...steam });
+    // Five digits are Steam's alone.
+    expect(
+      parseOtpAuthUri(
+        uri("Account", [
+          ["secret", SYNTHETIC_SECRET],
+          ["digits", "5"],
+        ]),
+      ),
+    ).toMatchObject({ issuer: "Steam", label: "Account", ...steam });
 
-    expectSafeFailure(() => parseOtpAuthUri(uri("Account", undefined, "steam")));
     expect(parseOtpAuthUri(uri("Steam%20account"))).toMatchObject({ otpType: "totp" });
+    // Steam never uses eight digits or another hash; the strict shape still holds.
+    expectSafeFailure(() =>
+      parseOtpAuthUri(uri("Account", [["secret", SYNTHETIC_SECRET], ["digits", "8"]], "steam")),
+    );
+    expectSafeFailure(() =>
+      parseOtpAuthUri(uri("Account", [["secret", SYNTHETIC_SECRET], ["algorithm", "SHA256"]], "steam")),
+    );
   });
 
   it.each([
