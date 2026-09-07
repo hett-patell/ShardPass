@@ -29,6 +29,12 @@ export const CATEGORY_TITLES: Record<CategoryId, string> = Object.fromEntries(
 
 const MAX_SEARCH_RESULTS = 60;
 
+function initials(name: string): string {
+  const parts = name.trim().split(/\s+/u).filter(Boolean);
+  const letters = parts.length >= 2 ? `${parts[0]![0] ?? ""}${parts[parts.length - 1]![0] ?? ""}` : (parts[0] ?? "").slice(0, 2);
+  return letters.toUpperCase();
+}
+
 export interface HomeScreenProps {
   items: readonly ItemListItemProjection[];
   status: "error" | "loading" | "locked" | "ready";
@@ -69,6 +75,10 @@ export function HomeScreen({
             item.kind === "login" && item.urls !== undefined && matchLoginUrls(tab.url, item.urls, item.urlMatches),
         );
   const results = query === "" ? [] : items.filter((item) => projectionMatches(item, query)).slice(0, MAX_SEARCH_RESULTS);
+  // The person's own identity sits above everything: the favourite one, else the first.
+  const identity =
+    items.filter((item) => item.kind === "identity").sort((left, right) => Number(right.favorite) - Number(left.favorite))[0] ??
+    null;
 
   return (
     <div className={styles.screen}>
@@ -102,6 +112,24 @@ export function HomeScreen({
           </section>
         ) : (
           <>
+            {identity !== null ? (
+              <button
+                type="button"
+                className={styles.identity}
+                aria-label={`Your identity: ${identity.name}`}
+                onClick={() => onOpenItem(identity)}
+              >
+                <span className={styles.avatar} aria-hidden="true">
+                  {initials(identity.name)}
+                </span>
+                <span className={styles.identityText}>
+                  <span className={styles.identityName}>{identity.name}</span>
+                  {identity.subtitle ? <span className={styles.identityEmail}>{identity.subtitle}</span> : null}
+                </span>
+                <ChevronRight size={16} className={styles.chevron} aria-hidden="true" />
+              </button>
+            ) : null}
+
             {tab !== null ? (
               <section aria-labelledby="suggestions-label">
                 <SectionLabel id="suggestions-label" className={styles.sectionLabel} trailing={tab.host}>

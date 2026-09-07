@@ -70,9 +70,35 @@ export const LoginFillCancelRequestSchema = z.strictObject({
 export const SaveLoginOfferRequestSchema = z.strictObject({
   version: z.literal(MESSAGE_VERSION),
   kind: z.literal("login.saveOffer"),
-  domain: z.string(),
-  username: z.string(),
-  password: z.string(),
+  domain: z.string().check(z.minLength(1), z.maxLength(2048)),
+  username: z.string().check(z.maxLength(1024)),
+  password: z.string().check(z.minLength(1), z.maxLength(4096)),
+});
+
+/**
+ * What the vault already holds for the offered credential. The background keeps the offer
+ * (with its password) in memory for a few minutes; the page only ever names it by id.
+ */
+export const SaveLoginOfferResultSchema = z.strictObject({
+  version: z.literal(MESSAGE_VERSION),
+  kind: z.literal("login.saveOfferResult"),
+  offerId: z.string().check(z.regex(/^[a-f0-9]{32}$/u)),
+  existing: z.enum(["none", "same", "different-password"]),
+  existingName: z.optional(z.string()),
+});
+
+export const SaveLoginConfirmRequestSchema = z.strictObject({
+  version: z.literal(MESSAGE_VERSION),
+  kind: z.literal("login.saveConfirm"),
+  offerId: z.string().check(z.regex(/^[a-f0-9]{32}$/u)),
+  choice: z.enum(["new", "update"]),
+});
+
+export const SaveLoginResultSchema = z.strictObject({
+  version: z.literal(MESSAGE_VERSION),
+  kind: z.literal("login.saveResult"),
+  itemId: z.uuid(),
+  saved: z.enum(["created", "updated"]),
 });
 
 export const LoginFillRequestSchema = z.discriminatedUnion("kind", [
@@ -82,6 +108,7 @@ export const LoginFillRequestSchema = z.discriminatedUnion("kind", [
   LoginFillConfirmRequestSchema,
   LoginFillCancelRequestSchema,
   SaveLoginOfferRequestSchema,
+  SaveLoginConfirmRequestSchema,
 ]);
 
 /** Acknowledges a fire-and-forget command (confirm, cancel, save-offer) that carries no data. */
@@ -95,6 +122,8 @@ export const LoginFillResponseSchema = z.discriminatedUnion("kind", [
   LoginFillSuggestionsResponseSchema,
   LoginFillReleaseResponseSchema,
   LoginFillAckSchema,
+  SaveLoginOfferResultSchema,
+  SaveLoginResultSchema,
 ]);
 
 export type LoginFillRequest = z.infer<typeof LoginFillRequestSchema>;
@@ -108,7 +137,8 @@ export const loginFillResponseKindByRequest = {
   "login.reveal": "login.fillRelease",
   "login.fillConfirm": "login.fillAck",
   "login.fillCancel": "login.fillAck",
-  "login.saveOffer": "login.fillAck",
+  "login.saveOffer": "login.saveOfferResult",
+  "login.saveConfirm": "login.saveResult",
 } as const satisfies Record<LoginFillCommandKind, LoginFillResponseKind>;
 
 export function parseLoginFillResponseForRequest(request: LoginFillRequest, candidate: unknown) {
@@ -135,4 +165,5 @@ export const loginFillSenderPolicy = {
   "login.fillConfirm": contentOnly,
   "login.fillCancel": contentOnly,
   "login.saveOffer": contentOnly,
+  "login.saveConfirm": contentOnly,
 } satisfies Record<LoginFillCommandKind, CommandSenderPolicy>;

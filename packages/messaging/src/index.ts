@@ -200,6 +200,9 @@ export {
   loginFillSenderPolicy,
   parseLoginFillResponseForRequest,
   SaveLoginOfferRequestSchema,
+  SaveLoginOfferResultSchema,
+  SaveLoginConfirmRequestSchema,
+  SaveLoginResultSchema,
 } from "./login-fill";
 export type {
   LoginFillCommandKind,

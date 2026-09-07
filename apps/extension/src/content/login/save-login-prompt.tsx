@@ -9,14 +9,14 @@ export interface SaveLoginPrompt {
   dispose(): void;
 }
 
-function normalize(value: string): string {
-  return value.normalize("NFKC").toLocaleLowerCase("en-US");
-}
-
 function SaveLoginBanner(
   props: Readonly<{
     domain: string;
     username: string;
+    /** "update" when the vault already has this username here with another password. */
+    mode: "new" | "update";
+    existingName: string | undefined;
+    busy: boolean;
     onSave: () => void;
     onDismiss: () => void;
   }>,
@@ -40,7 +40,9 @@ function SaveLoginBanner(
       <div className="headingRow">
         <div>
           <p className="eyebrow">SHARDPASS / SAVE LOGIN</p>
-          <h2 className="title">Save this login?</h2>
+          <h2 className="title">
+            {props.mode === "update" ? `Update password for ${props.existingName ?? props.domain}?` : "Save this login?"}
+          </h2>
         </div>
         <button
           className="closeButton"
@@ -58,8 +60,8 @@ function SaveLoginBanner(
         <span className="saveDomain">{props.domain}</span>
       </p>
       <div className="saveActions">
-        <button type="button" className="saveButton" onClick={props.onSave}>
-          Save to ShardPass
+        <button type="button" className="saveButton" disabled={props.busy} onClick={props.onSave}>
+          {props.mode === "update" ? "Update password" : "Save new login"}
         </button>
         <button
           ref={dismissButton}
@@ -75,18 +77,11 @@ function SaveLoginBanner(
 }
 
 /**
- * Watches form submissions for a username/password pair that has no saved
- * match for the current domain, and offers to save it.
- *
- * `login.saveOffer` (see `login-fill-service.ts`) is deliberately a
- * fire-and-forget acknowledgement — it signals that a credential was
- * observed, but does not report whether a match already exists, and it does
- * not create a vault item. Actually creating an item is `item.create`, which
- * is restricted to the trusted vault UI (`vaultOnly` sender policy) and
- * cannot be called from a content script. So this module independently asks
- * `login.fillSuggestions` for the same domain to decide whether to show the
- * banner, and "Save" hands off to the vault tab (`openVaultPage`) rather
- * than writing a vault item directly.
+ * Watches form submissions for a username/password pair and offers to keep it. The
+ * background holds the credential as an offer and says what the vault already has for
+ * this host and username: nothing (offer "save new"), the same password (say nothing),
+ * or a different one (offer "update"). Several accounts on one site are simply several
+ * logins with different usernames.
  */
 export function createSaveLoginPrompt(
   options: Readonly<{
@@ -111,24 +106,41 @@ export function createSaveLoginPrompt(
     closeHost();
   };
 
-  const showBanner = (token: object, domain: string, username: string): void => {
+  const showBanner = (
+    token: object,
+    domain: string,
+    username: string,
+    offerId: string,
+    mode: "new" | "update",
+    existingName: string | undefined,
+  ): void => {
     if (disposed || pending !== token || !options.document.body.isConnected) return;
     closeHost();
     if (pending !== token) return;
-    host = createPickerHost(options.document.body, {
-      positionToAnchor: false,
-      content: (
-        <SaveLoginBanner
-          domain={domain}
-          username={username}
-          onSave={() => {
-            void options.platform.openVaultPage().catch(() => undefined);
-            dismiss();
-          }}
-          onDismiss={dismiss}
-        />
-      ),
-    });
+    let busy = false;
+    const render = () =>
+      createPickerHost(options.document.body, {
+        positionToAnchor: false,
+        content: (
+          <SaveLoginBanner
+            domain={domain}
+            username={username}
+            mode={mode}
+            existingName={existingName}
+            busy={busy}
+            onSave={() => {
+              if (busy) return;
+              busy = true;
+              void options.platform
+                .sendLoginFillMessage({ version: 1, kind: "login.saveConfirm", offerId, choice: mode })
+                .catch(() => undefined)
+                .finally(dismiss);
+            }}
+            onDismiss={dismiss}
+          />
+        ),
+      });
+    host = render();
   };
 
   const handleSubmit = (event: Event): void => {
@@ -150,24 +162,24 @@ export function createSaveLoginPrompt(
     if (password === "") return;
     const domain = options.window.location.hostname;
 
-    void options.platform
-      .sendLoginFillMessage({ version: 1, kind: "login.saveOffer", domain, username, password })
-      .catch(() => undefined);
-
     const token = {};
     pending = token;
     void options.platform
-      .sendLoginFillMessage({ version: 1, kind: "login.fillSuggestions", domain })
+      .sendLoginFillMessage({ version: 1, kind: "login.saveOffer", domain, username, password })
       .then((response) => {
-        if (pending !== token) return;
-        const hasMatch =
-          response.kind === "login.fillSuggestionsResult" &&
-          response.suggestions.some((item) => normalize(item.username) === normalize(username));
-        if (hasMatch) {
+        if (pending !== token || response.kind !== "login.saveOfferResult") return;
+        if (response.existing === "same") {
           pending = null;
           return;
         }
-        showBanner(token, domain, username);
+        showBanner(
+          token,
+          domain,
+          username,
+          response.offerId,
+          response.existing === "different-password" ? "update" : "new",
+          response.existingName,
+        );
       })
       .catch(() => {
         if (pending === token) pending = null;

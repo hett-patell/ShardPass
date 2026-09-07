@@ -1,4 +1,5 @@
 import { matchLoginUrls } from "@shardpass/autofill";
+import { ITEM_SCHEMA_VERSION, type LoginItem } from "@shardpass/domain";
 import {
   LoginFillRequestSchema,
   LoginFillResponseSchema,
@@ -10,7 +11,21 @@ import { generateOtp } from "@shardpass/otp";
 
 import type { SessionVaultRepository } from "../vault/session-vault-repository";
 
-type LoginFillRepository = Pick<SessionVaultRepository, "listAllItems" | "getItem">;
+type LoginFillRepository = Pick<
+  SessionVaultRepository,
+  "listAllItems" | "getItem" | "createItem" | "updateItem"
+>;
+
+const OFFER_TTL_MS = 5 * 60_000;
+const MAX_OFFERS = 16;
+
+type SaveOffer = Readonly<{
+  domain: string;
+  username: string;
+  password: string;
+  existingId: string | undefined;
+  expiresAt: number;
+}>;
 
 export type LoginFillServiceErrorCode =
   | "LOGIN_FILL_INVALID"
@@ -29,9 +44,13 @@ type LoginFillServiceDependencies = Readonly<{
   repository: LoginFillRepository;
   now(): number;
   notePrivilegedActivity(): Promise<void>;
+  /** 32 hex characters; the offer id the page names later. */
+  nextOfferId?(): string;
 }>;
 
 export class LoginFillService {
+  private readonly offers = new Map<string, SaveOffer>();
+
   constructor(private readonly dependencies: LoginFillServiceDependencies) {}
 
   // The router already authorizes the sender per command kind before dispatching here
@@ -50,15 +69,13 @@ export class LoginFillService {
         case "login.fillSelect":
         case "login.reveal":
           return validated(await this.select(command.itemId, command.expectedRevision));
+        case "login.saveOffer":
+          return validated(await this.offer(command.domain, command.username, command.password));
+        case "login.saveConfirm":
+          return validated(await this.confirm(command.offerId, command.choice));
         case "login.fillConfirm":
         case "login.fillCancel":
-        case "login.saveOffer":
-          // Fire-and-forget acknowledgements: unlike `fillSelect`, none of these three
-          // commands reveal a secret or mutate the vault, so they need no capability or
-          // session state to acknowledge. `saveOffer` in particular does not create a
-          // vault item on its own — it only signals that a new credential was observed
-          // on a page; turning that into a saved login is a user-facing decision left to
-          // a later, UI-driving task.
+          // Fire-and-forget acknowledgements: neither reveals a secret nor mutates the vault.
           return validated({ version: 1, kind: "login.fillAck", ok: true });
       }
     } catch (error) {
@@ -122,6 +139,81 @@ export class LoginFillService {
     };
   }
 
+  /**
+   * Holds a credential the page just submitted and says what the vault has for it, so the
+   * in-page prompt can offer "save new" or "update password". The password never leaves the
+   * worker's memory; the page only learns an id.
+   */
+  private async offer(domain: string, username: string, password: string): Promise<LoginFillResponse> {
+    const now = this.dependencies.now();
+    for (const [id, offer] of this.offers) if (offer.expiresAt <= now) this.offers.delete(id);
+    if (this.offers.size >= MAX_OFFERS) throw new LoginFillServiceError("LOGIN_FILL_UNAVAILABLE");
+    const items = await this.dependencies.repository.listAllItems();
+    const wanted = normalize(username);
+    const match = items.find(
+      (item): item is LoginItem =>
+        item.kind === "login" &&
+        item.deletedAt === undefined &&
+        normalize(item.username) === wanted &&
+        matchLoginUrls(domain, item.urls, item.urlMatches),
+    );
+    const existing = match === undefined ? "none" : match.password === password ? "same" : "different-password";
+    const offerId = this.dependencies.nextOfferId?.() ?? randomOfferId();
+    this.offers.set(offerId, {
+      domain,
+      username,
+      password,
+      existingId: match?.id,
+      expiresAt: now + OFFER_TTL_MS,
+    });
+    return {
+      version: 1,
+      kind: "login.saveOfferResult",
+      offerId,
+      existing,
+      ...(match === undefined ? {} : { existingName: match.name }),
+    };
+  }
+
+  private async confirm(offerId: string, choice: "new" | "update"): Promise<LoginFillResponse> {
+    const offer = this.offers.get(offerId);
+    this.offers.delete(offerId);
+    if (offer === undefined || offer.expiresAt <= this.dependencies.now())
+      throw new LoginFillServiceError("LOGIN_FILL_NOT_FOUND");
+    if (choice === "update" && offer.existingId !== undefined) {
+      const current = await this.dependencies.repository.getItem(offer.existingId);
+      if (current === null || current.kind !== "login") throw new LoginFillServiceError("LOGIN_FILL_NOT_FOUND");
+      const history = [
+        { password: current.password, changedAt: current.updatedAt },
+        ...(current.passwordHistory ?? []),
+      ].slice(0, 10);
+      const updated = await this.dependencies.repository.updateItem(
+        { ...current, password: offer.password, passwordHistory: history },
+        current.revision,
+      );
+      await this.noteActivity();
+      return { version: 1, kind: "login.saveResult", itemId: updated.id, saved: "updated" };
+    }
+    const stamp = new Date(this.dependencies.now()).toISOString();
+    const created = await this.dependencies.repository.createItem({
+      id: crypto.randomUUID(),
+      kind: "login",
+      schemaVersion: ITEM_SCHEMA_VERSION,
+      revision: 1,
+      createdAt: stamp,
+      updatedAt: stamp,
+      favorite: false,
+      tags: [],
+      name: offer.domain.replace(/^www\./u, ""),
+      username: offer.username,
+      password: offer.password,
+      urls: [`https://${offer.domain}`],
+      notes: "",
+    });
+    await this.noteActivity();
+    return { version: 1, kind: "login.saveResult", itemId: created.id, saved: "created" };
+  }
+
   private async noteActivity(): Promise<void> {
     try {
       await this.dependencies.notePrivilegedActivity();
@@ -146,6 +238,11 @@ function normalize(value: string): string {
 
 function compareText(left: string, right: string): number {
   return left < right ? -1 : left > right ? 1 : 0;
+}
+
+function randomOfferId(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  return [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 function validated(candidate: LoginFillResponse): LoginFillResponse {

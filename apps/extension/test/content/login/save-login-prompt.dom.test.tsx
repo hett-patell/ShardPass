@@ -96,8 +96,8 @@ describe("Save login prompt", () => {
     username.value = "new-user@example.test";
     password.value = "correct-horse";
     const candidate = platform((request) => {
-      if (request.kind === "login.fillSuggestions")
-        return { version: 1, kind: "login.fillSuggestionsResult", suggestions: [] };
+      if (request.kind === "login.saveOffer")
+        return { version: 1, kind: "login.saveOfferResult", offerId: "a".repeat(32), existing: "none" };
       return { version: 1, kind: "login.fillAck", ok: true };
     });
     start(candidate);
@@ -125,14 +125,16 @@ describe("Save login prompt", () => {
     expect(candidate.openVaultPage).not.toHaveBeenCalled();
   });
 
-  it("hands off to the vault tab when Save is clicked", async () => {
+  it("confirms the offer as a new login when Save is clicked, never opening the vault page", async () => {
     const roots = captureClosedRoots();
     const { form, username, password } = loginForm();
     username.value = "new-user@example.test";
     password.value = "correct-horse";
     const candidate = platform((request) => {
-      if (request.kind === "login.fillSuggestions")
-        return { version: 1, kind: "login.fillSuggestionsResult", suggestions: [] };
+      if (request.kind === "login.saveOffer")
+        return { version: 1, kind: "login.saveOfferResult", offerId: "a".repeat(32), existing: "none" };
+      if (request.kind === "login.saveConfirm")
+        return { version: 1, kind: "login.saveResult", itemId: "018f47a6-7d11-7c2f-8bd9-a1d37f147a21", saved: "created" };
       return { version: 1, kind: "login.fillAck", ok: true };
     });
     start(candidate);
@@ -140,35 +142,70 @@ describe("Save login prompt", () => {
     await submitAndFlush(form);
     const bannerRoot = roots.at(-1) as unknown as HTMLElement;
     await act(async () => {
-      fireEvent.click(within(bannerRoot).getByRole("button", { name: "Save to ShardPass" }));
+      fireEvent.click(within(bannerRoot).getByRole("button", { name: "Save new login" }));
+      await Promise.resolve();
       await Promise.resolve();
     });
 
-    expect(candidate.openVaultPage).toHaveBeenCalledTimes(1);
+    expect(candidate.sendLoginFillMessage).toHaveBeenCalledWith({
+      version: 1,
+      kind: "login.saveConfirm",
+      offerId: "a".repeat(32),
+      choice: "new",
+    });
+    expect(candidate.openVaultPage).not.toHaveBeenCalled();
     expect(document.querySelector("shardpass-picker-host")).toBeNull();
   });
 
-  it("does not prompt when a saved login already matches the submitted username", async () => {
+  it("offers a password update when the same username already exists here with another password", async () => {
+    const roots = captureClosedRoots();
+    const { form, username, password } = loginForm();
+    username.value = "existing@example.test";
+    password.value = "brand-new";
+    const candidate = platform((request) => {
+      if (request.kind === "login.saveOffer")
+        return {
+          version: 1,
+          kind: "login.saveOfferResult",
+          offerId: "b".repeat(32),
+          existing: "different-password",
+          existingName: "Existing",
+        };
+      if (request.kind === "login.saveConfirm")
+        return { version: 1, kind: "login.saveResult", itemId: "018f47a6-7d11-7c2f-8bd9-a1d37f147a20", saved: "updated" };
+      return { version: 1, kind: "login.fillAck", ok: true };
+    });
+    start(candidate);
+
+    await submitAndFlush(form);
+    const bannerRoot = roots.at(-1) as unknown as HTMLElement;
+    expect(within(bannerRoot).getByRole("heading", { name: "Update password for Existing?" })).toBeVisible();
+    await act(async () => {
+      fireEvent.click(within(bannerRoot).getByRole("button", { name: "Update password" }));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(candidate.sendLoginFillMessage).toHaveBeenCalledWith({
+      version: 1,
+      kind: "login.saveConfirm",
+      offerId: "b".repeat(32),
+      choice: "update",
+    });
+  });
+
+  it("does not prompt when the vault already holds this username with this password", async () => {
     captureClosedRoots();
     const { form, username, password } = loginForm();
     username.value = "Existing@Example.test";
     password.value = "correct-horse";
     const candidate = platform((request) => {
-      if (request.kind === "login.fillSuggestions")
+      if (request.kind === "login.saveOffer")
         return {
           version: 1,
-          kind: "login.fillSuggestionsResult",
-          suggestions: [
-            {
-              itemId: "018f47a6-7d11-7c2f-8bd9-a1d37f147a20",
-              expectedRevision: 1,
-              name: "Existing",
-              username: "existing@example.test",
-              favorite: false,
-              tags: [],
-              hasLinkedOtp: false,
-            },
-          ],
+          kind: "login.saveOfferResult",
+          offerId: "c".repeat(32),
+          existing: "same",
+          existingName: "Existing",
         };
       return { version: 1, kind: "login.fillAck", ok: true };
     });

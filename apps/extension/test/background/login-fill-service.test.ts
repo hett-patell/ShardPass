@@ -60,7 +60,9 @@ function otpItem(overrides: Partial<OtpItem> = {}): OtpItem {
   };
 }
 
-class FakeRepository implements Pick<SessionVaultRepository, "listAllItems" | "getItem"> {
+class FakeRepository
+  implements Pick<SessionVaultRepository, "listAllItems" | "getItem" | "createItem" | "updateItem">
+{
   readonly items = new Map<string, VaultItem>();
   listError: unknown;
 
@@ -76,6 +78,20 @@ class FakeRepository implements Pick<SessionVaultRepository, "listAllItems" | "g
   getItem(itemId: string): Promise<VaultItem | null> {
     const value = this.items.get(itemId);
     return Promise.resolve(value === undefined ? null : structuredClone(value));
+  }
+
+  createItem(candidate: VaultItem): Promise<VaultItem> {
+    this.items.set(candidate.id, structuredClone(candidate));
+    return Promise.resolve(structuredClone(candidate));
+  }
+
+  updateItem(candidate: VaultItem, expectedRevision: number): Promise<VaultItem> {
+    const current = this.items.get(candidate.id);
+    if (current === undefined || current.revision !== expectedRevision)
+      return Promise.reject(Object.assign(new Error("conflict"), { code: "REVISION_CONFLICT" }));
+    const next = { ...structuredClone(candidate), revision: current.revision + 1 };
+    this.items.set(candidate.id, next);
+    return Promise.resolve(structuredClone(next));
   }
 }
 
@@ -236,12 +252,13 @@ describe("LoginFillService", () => {
     },
   );
 
-  it("acknowledges saveOffer without creating a vault item", async () => {
+  it("answers saveOffer with an offer and creates nothing until it is confirmed", async () => {
     const { repository, service } = fixture();
     const result = await service.handle(
       request("login.saveOffer", { domain: "example.test", username: "alice", password: "s3cret" }),
     );
-    expect(result).toEqual({ version: 1, kind: "login.fillAck", ok: true });
+    expect(result).toMatchObject({ version: 1, kind: "login.saveOfferResult", existing: "none" });
+    expect(JSON.stringify(result)).not.toContain("s3cret");
     expect(repository.items.size).toBe(0);
   });
 
@@ -266,5 +283,60 @@ describe("LoginFillService", () => {
       expect(LoginFillResponseSchema.safeParse(result).success).toBe(true);
       expect(Object.isFrozen(result)).toBe(true);
     }
+  });
+});
+
+describe("LoginFillService save offers", () => {
+  it("offers a new login when the host has no account with that username, and creates it on confirm", async () => {
+    const { repository, service } = fixture([loginItem({ id: ids.login, urls: ["https://example.test"] })]);
+    const offer = (await service.handle(
+      request("login.saveOffer", { domain: "example.test", username: "second@example.test", password: "pw-2" }),
+    )) as { kind: string; offerId: string; existing: string };
+    expect(offer).toMatchObject({ kind: "login.saveOfferResult", existing: "none" });
+
+    const saved = (await service.handle(request("login.saveConfirm", { offerId: offer.offerId, choice: "new" }))) as {
+      kind: string;
+      itemId: string;
+      saved: string;
+    };
+    expect(saved).toMatchObject({ kind: "login.saveResult", saved: "created" });
+    const created = repository.items.get(saved.itemId);
+    expect(created).toMatchObject({ kind: "login", username: "second@example.test", password: "pw-2", urls: ["https://example.test"] });
+    // A second account on the same site coexists with the first.
+    expect([...repository.items.values()].filter((item) => item.kind === "login")).toHaveLength(2);
+    // The offer is single-use.
+    await expect(service.handle(request("login.saveConfirm", { offerId: offer.offerId, choice: "new" }))).rejects.toMatchObject({
+      code: "LOGIN_FILL_NOT_FOUND",
+    });
+  });
+
+  it("offers a password update for the matching username, keeping the old password in history", async () => {
+    const stored = loginItem({ id: ids.login, username: "user", password: "old", urls: ["https://example.test"] });
+    const { repository, service } = fixture([stored]);
+    const offer = (await service.handle(
+      request("login.saveOffer", { domain: "www.example.test", username: "USER", password: "new" }),
+    )) as { offerId: string; existing: string; existingName?: string };
+    expect(offer).toMatchObject({ existing: "different-password", existingName: stored.name });
+    await service.handle(request("login.saveConfirm", { offerId: offer.offerId, choice: "update" }));
+    expect(repository.items.get(ids.login)).toMatchObject({
+      password: "new",
+      revision: 2,
+      passwordHistory: [{ password: "old", changedAt: stored.updatedAt }],
+    });
+  });
+
+  it("reports an unchanged credential as already saved, and forgets an expired offer", async () => {
+    const stored = loginItem({ id: ids.login, username: "user", password: "same", urls: ["https://example.test"] });
+    let now = 15_000;
+    const repository = new FakeRepository([stored]);
+    const service = new LoginFillService({ repository, now: () => now, notePrivilegedActivity: () => Promise.resolve() });
+    const same = (await service.handle(
+      request("login.saveOffer", { domain: "example.test", username: "user", password: "same" }),
+    )) as { existing: string; offerId: string };
+    expect(same.existing).toBe("same");
+    now += 6 * 60_000;
+    await expect(service.handle(request("login.saveConfirm", { offerId: same.offerId, choice: "new" }))).rejects.toMatchObject({
+      code: "LOGIN_FILL_NOT_FOUND",
+    });
   });
 });

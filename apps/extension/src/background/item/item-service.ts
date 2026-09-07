@@ -341,7 +341,7 @@ function listDisplayFields(item: VaultItem): Pick<ItemListItemProjection, "name"
       return masked === undefined ? { name: item.name } : { name: item.name, subtitle: masked };
     }
     case "identity":
-      return { name: item.name };
+      return item.email.length > 0 ? { name: item.name, subtitle: item.email } : { name: item.name };
     case "secret":
       return { name: item.name, subtitle: secretTypeLabel(item.secretType) };
   }
