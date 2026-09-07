@@ -270,6 +270,50 @@ describe("Login fill controller", () => {
     expect(roots.some((root) => root.querySelector(".signIn"))).toBe(true);
   });
 
+  it("offers a generated password on a sign-up form and fills both password fields with it", async () => {
+    const roots = captureClosedRoots();
+    const form = document.createElement("form");
+    const email = document.createElement("input");
+    email.type = "email";
+    email.name = "email";
+    const password = document.createElement("input");
+    password.type = "password";
+    password.name = "new-password";
+    password.autocomplete = "new-password";
+    const confirm = document.createElement("input");
+    confirm.type = "password";
+    confirm.name = "confirm";
+    form.append(email, password, confirm);
+    document.body.append(form);
+    const candidate = platform((request) =>
+      request.kind === "login.fillSuggestions"
+        ? { version: 1, kind: "login.fillSuggestionsResult", suggestions: [] }
+        : undefined,
+    );
+    start(candidate);
+    focusField(password);
+    await flush();
+
+    // Nothing is saved for the site, yet the chip is there: this is where a password is chosen.
+    await clickAndFlush(chipIn(roots.at(-1)));
+    await flush();
+    const picker = within(roots.at(-1) as unknown as HTMLElement);
+    const use = picker.getByRole("button", { name: /Use suggested password/u });
+    const first = use.getAttribute("aria-label")?.replace("Use suggested password ", "") ?? "";
+    expect(first).toMatch(/^[A-Za-z0-9!@#$%^&*\-_=+?]{20}$/u);
+    await clickAndFlush(picker.getByRole("button", { name: "Generate a different password" }));
+    const second = within(roots.at(-1) as unknown as HTMLElement)
+      .getByRole("button", { name: /Use suggested password/u })
+      .getAttribute("aria-label")
+      ?.replace("Use suggested password ", "");
+    expect(second).not.toBe(first);
+
+    await clickAndFlush(within(roots.at(-1) as unknown as HTMLElement).getByRole("button", { name: /Use suggested password/u }));
+    expect(password.value).toBe(second);
+    expect(confirm.value).toBe(second);
+    expect(document.querySelector("shardpass-picker-host")).toBeNull();
+  });
+
   it("dismisses the sign-in banner for the rest of the page load", async () => {
     const roots = captureClosedRoots();
     const { password } = loginForm();

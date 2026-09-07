@@ -364,3 +364,57 @@
   outline: 2px solid var(--color-focus);
   outline-offset: 2px;
 }
+
+/* A fresh password for a sign-up form, offered above any saved login. */
+.suggestRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 34px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.suggestUse {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  padding: 6px var(--space-3);
+  color: var(--color-text);
+  font: inherit;
+  text-align: left;
+  background: var(--color-surface);
+  border: 0;
+  cursor: pointer;
+}
+
+.suggestUse:hover,
+.suggestAnother:hover {
+  background: var(--color-elevated);
+}
+
+.suggestCaption {
+  color: var(--color-text-muted);
+  font-size: 11px;
+}
+
+.suggestValue {
+  overflow: hidden;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.suggestAnother {
+  color: var(--color-text-muted);
+  font: inherit;
+  font-size: 16px;
+  background: var(--color-surface);
+  border: 0;
+  border-left: 1px solid var(--color-border);
+  cursor: pointer;
+}
+
+.suggestUse:focus-visible,
+.suggestAnother:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: -2px;
+}

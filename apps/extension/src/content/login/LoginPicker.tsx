@@ -19,6 +19,8 @@ export interface LoginPickerProps {
   readonly filter?: string;
   /** The row the arrow keys have reached; -1 for none. */
   readonly activeIndex?: number;
+  /** On a sign-up form: a fresh password to offer, before any saved login. */
+  readonly generated?: Readonly<{ password: string; onUse: () => void; onAnother: () => void }> | undefined;
   readonly onClose: () => void;
   readonly onSelect: (suggestion: LoginPickerSuggestion) => void;
 }
@@ -61,8 +63,32 @@ export function filterSuggestions(
  * The on-page login list: a slim bar and the rows, nothing else. It never takes focus from
  * the field; typing there narrows the rows and the arrow keys walk them.
  */
-export function LoginPicker({ suggestions, state, filter = "", activeIndex = -1, onClose, onSelect }: LoginPickerProps) {
+export function LoginPicker({ suggestions, state, filter = "", activeIndex = -1, generated, onClose, onSelect }: LoginPickerProps) {
   const visible = filterSuggestions(suggestions, filter);
+  const suggestion = generated ? (
+    <div className="suggestRow">
+      <button
+        className="suggestUse"
+        type="button"
+        aria-label={`Use suggested password ${generated.password}`}
+        onMouseDown={(event) => event.preventDefault()}
+        onClick={generated.onUse}
+      >
+        <span className="suggestCaption">Use suggested password</span>
+        <span className="suggestValue">{generated.password}</span>
+      </button>
+      <button
+        className="suggestAnother"
+        type="button"
+        aria-label="Generate a different password"
+        title="Generate a different password"
+        onMouseDown={(event) => event.preventDefault()}
+        onClick={generated.onAnother}
+      >
+        ↻
+      </button>
+    </div>
+  ) : null;
   return (
     <section className="loginPicker" role="region" aria-label="ShardPass login picker">
       <div className="pickerBar">
@@ -71,7 +97,8 @@ export function LoginPicker({ suggestions, state, filter = "", activeIndex = -1,
           <span aria-hidden="true">×</span>
         </button>
       </div>
-      {state !== "ready" ? (
+      {suggestion}
+      {generated && (state === "empty" || (state === "ready" && visible.length === 0)) ? null : state !== "ready" ? (
         <p className="status" role="status">
           {STATUS[state].text}
           {STATUS[state].hint === undefined ? null : (

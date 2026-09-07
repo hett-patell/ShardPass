@@ -6,6 +6,7 @@ import type { LoginFillContentPlatform } from "../../platform/extension-platform
 import { createPickerHost, type PickerHandle } from "../createPickerHost";
 import { filterSuggestions, LoginPicker, type LoginPickerState, type LoginPickerSuggestion } from "./LoginPicker";
 import { SignInBanner } from "./SignInBanner";
+import { suggestPassword } from "./suggest-password";
 import { createSaveLoginPrompt, type SaveLoginPrompt } from "./save-login-prompt";
 
 export interface LoginFillController {
@@ -87,6 +88,8 @@ function LoginTrigger({ onActivate }: Readonly<{ onActivate: () => void }>) {
 
 type PickerView = {
   candidate: Owner;
+  /** A sign-up form's suggested password, when this is one. */
+  generated: string | null;
   state: LoginPickerState;
   suggestions: readonly LoginPickerSuggestion[];
   /** What the person typed into the field since the picker opened; a prefill does not count. */
@@ -94,6 +97,27 @@ type PickerView = {
   typed: boolean;
   activeIndex: number;
 };
+
+const SIGNUP_WORDS = /\b(?:sign\s?up|create (?:an? |your )?account|register|registration|join|get started)\b/iu;
+
+/**
+ * Whether this field set is where a password gets chosen rather than entered: the browser's
+ * own new-password hint, a confirm field beside it, or a form that calls itself a sign-up.
+ * Returns the fields a chosen password must go into.
+ */
+function signupFieldsOf(fieldSet: LoginFieldSet): HTMLInputElement[] | null {
+  const password = fieldSet.passwordField;
+  if (password === null) return null;
+  const scope: ParentNode = fieldSet.form ?? password.ownerDocument;
+  const passwords = Array.from(scope.querySelectorAll<HTMLInputElement>('input[type="password"]')).filter(
+    (field) => !field.disabled,
+  );
+  const twins = passwords.filter((field) => field === password || field.autocomplete === "new-password" || passwords.length >= 2);
+  const hinted = password.autocomplete === "new-password";
+  const text = `${fieldSet.form?.textContent ?? ""} ${fieldSet.form?.querySelector("h1, h2, h3")?.textContent ?? ""}`.slice(0, 2_000);
+  if (!hinted && passwords.length < 2 && !SIGNUP_WORDS.test(text)) return null;
+  return twins.length > 0 ? twins : [password];
+}
 
 const CAPTCHA_SELECTOR =
   'iframe[src*="recaptcha" i], iframe[src*="hcaptcha" i], iframe[src*="turnstile" i], [class*="captcha" i], [id*="captcha" i]';
@@ -192,7 +216,8 @@ export function createLoginFillController(
     queueMicrotask(rescan);
   };
 
-  const chipAvailable = (): boolean => cachedSuggestions.length > 0 || locked;
+  const chipAvailable = (): boolean =>
+    cachedSuggestions.length > 0 || locked || (owner !== null && signupFieldsOf(owner.fieldSet) !== null);
 
   const showChip = (candidate: Owner): void => {
     if (!owns(candidate)) return;
@@ -218,12 +243,32 @@ export function createLoginFillController(
     candidate.input.focus({ preventScroll: true });
   };
 
+  const useGenerated = (view: PickerView): void => {
+    const fields = signupFieldsOf(view.candidate.fieldSet);
+    if (view.generated === null || fields === null || !owns(view.candidate)) return;
+    for (const field of fields) fillLoginFields({ usernameField: null, passwordField: field, form: null }, "", view.generated);
+    view.candidate.input.focus({ preventScroll: true });
+    closeHost();
+  };
+
   const pickerContent = (view: PickerView) => (
     <LoginPicker
       suggestions={view.suggestions}
       state={view.state}
       filter={view.typed ? view.filter : ""}
       activeIndex={view.activeIndex}
+      generated={
+        view.generated === null
+          ? undefined
+          : {
+              password: view.generated,
+              onUse: () => useGenerated(view),
+              onAnother: () => {
+                view.generated = suggestPassword();
+                refreshPicker();
+              },
+            }
+      }
       onClose={() => dismissPicker(view.candidate)}
       onSelect={(suggestion) => void selectSuggestion(view.candidate, suggestion)}
     />
@@ -282,6 +327,7 @@ export function createLoginFillController(
     if (!owns(candidate)) return;
     const view: PickerView = {
       candidate,
+      generated: previous?.generated ?? (signupFieldsOf(candidate.fieldSet) === null ? null : suggestPassword()),
       state,
       suggestions,
       filter: previous?.filter ?? "",
