@@ -576,6 +576,23 @@ export function createEnteOperationalCycle(dependencies: OperationalDependencies
         budget,
       );
       await executeHead(dependencies, merged, token, authKey, signal, budget);
+    } catch (error) {
+      // An expired Ente session found on the read path was never recorded before, so
+      // background sync failed forever while the panel said "idle". Record it once, with
+      // the attempt time, so the panel asks the person to sign in again.
+      if (error instanceof EnteProtocolError && error.code === "ENTE_REAUTH_REQUIRED") {
+        const latest = await dependencies.repository.read().catch(() => null);
+        if (latest !== null && !latest.state.needsReauth)
+          await commitMutation(dependencies, latest, {
+            items: latest.items,
+            state: {
+              ...latest.state,
+              needsReauth: true,
+              scheduler: { ...latest.state.scheduler, lastAttemptAt: dependencies.now() },
+            },
+          }).catch(() => undefined);
+      }
+      throw error;
     } finally {
       authKey?.fill(0);
     }

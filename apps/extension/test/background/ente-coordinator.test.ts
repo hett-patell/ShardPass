@@ -166,6 +166,24 @@ describe("operational Ente coordinator cycle", () => {
     expect(client.deleteEntity).not.toHaveBeenCalled();
   });
 
+  it("records an expired Ente session met on the read path, so the panel asks to sign in again", async () => {
+    const repo = repository(snapshot());
+    const client = {
+      getAuthenticatorKey: vi.fn(() => Promise.reject(new EnteProtocolError("ENTE_REAUTH_REQUIRED"))),
+      getEntityDiff: vi.fn(),
+      createEntity: vi.fn(),
+      updateEntity: vi.fn(),
+      deleteEntity: vi.fn(),
+    };
+    const cycle = createEnteOperationalCycle({ repository: repo, client, crypto, now: () => 4_242, nextId: () => localId });
+    await expect(cycle("alarm", new AbortController().signal)).rejects.toMatchObject({ code: "ENTE_REAUTH_REQUIRED" });
+    expect(repo.commit).toHaveBeenCalledTimes(1);
+    expect(repo.current().state).toMatchObject({ needsReauth: true, scheduler: { lastAttemptAt: 4_242 } });
+    // Already recorded: a second failing cycle does not rewrite the vault again.
+    await expect(cycle("alarm", new AbortController().signal)).rejects.toMatchObject({ code: "ENTE_REAUTH_REQUIRED" });
+    expect(repo.commit).toHaveBeenCalledTimes(1);
+  });
+
   it("fails closed with ENTE_AUTH_KEY_MISSING and never POSTs when the key is absent", async () => {
     const repo = repository(snapshot());
     const client = {
