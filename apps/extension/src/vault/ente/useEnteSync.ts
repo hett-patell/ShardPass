@@ -123,6 +123,28 @@ export function useEnteSync(input: { platform: EnteUiPlatform; active: boolean; 
     };
   }, [clearSensitive, input.active, send]);
 
+  // While the background is busy (connecting, first sync, a cycle in flight) the panel asks
+  // again every few seconds, so "syncing" turns into "idle" or a named failure on its own.
+  const busy =
+    input.active &&
+    (state.state === "connecting" ||
+      state.state === "srp-checking" ||
+      state.state === "initial-sync" ||
+      state.state === "syncing" ||
+      state.state.startsWith("syncing-"));
+  useEffect(() => {
+    if (!busy) return;
+    const timer = setInterval(() => {
+      void platformRef.current.sendEnteMessage({ version: 1, kind: "ente.status" }).then(
+        (next) => {
+          if (mounted.current) setState(next);
+        },
+        () => undefined,
+      );
+    }, 3_000);
+    return () => clearInterval(timer);
+  }, [busy]);
+
   const connect = useCallback(() => {
     const emailValue = emailRef.current?.value ?? "";
     const passwordValue = passwordRef.current?.value ?? "";
