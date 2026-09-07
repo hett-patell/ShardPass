@@ -478,6 +478,11 @@ export function VaultAccess({
         <Button type="submit" loading={working}>
           {setup ? "Create vault" : "Unlock vault"}
         </Button>
+        {working ? (
+          <p className={styles.working} role="status">
+            Unlocking takes a few seconds: your key is derived on this device, never fetched.
+          </p>
+        ) : null}
       </form>
     </section>
   );

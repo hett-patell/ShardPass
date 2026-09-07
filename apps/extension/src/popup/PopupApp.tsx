@@ -14,12 +14,31 @@ import { useFillIntoTab } from "./hooks/useFillIntoTab";
 import { itemsInCategory, useVaultItems, type CategoryId } from "./hooks/useVaultItems";
 import { DetailScreen } from "./screens/DetailScreen";
 import { GeneratorScreen } from "./screens/GeneratorScreen";
+import { IdentityScreen } from "./screens/IdentityScreen";
 import { CATEGORY_EMPTY, CATEGORY_TITLES, HomeScreen } from "./screens/HomeScreen";
 import { ListScreen } from "./screens/ListScreen";
 import styles from "./PopupApp.module.css";
 
 export interface PopupAppProps {
   platform: ExtensionPlatform & Partial<EnteUiPlatform>;
+}
+
+const PINNED_IDENTITY_KEY = "shardpass:popup:pinnedIdentity";
+
+/** The pinned identity's id: a preference, not a secret, so plain page storage will do. */
+function readPinnedIdentity(): string | null {
+  try {
+    return globalThis.localStorage?.getItem(PINNED_IDENTITY_KEY) ?? null;
+  } catch {
+    return null;
+  }
+}
+function writePinnedIdentity(id: string): void {
+  try {
+    globalThis.localStorage?.setItem(PINNED_IDENTITY_KEY, id);
+  } catch {
+    // A refused write only means the choice does not outlive this popup.
+  }
 }
 
 const safeVaultError = "The vault could not be opened. Try again.";
@@ -62,6 +81,7 @@ type Screen =
   | { kind: "home" }
   | { kind: "list"; category: CategoryId }
   | { kind: "generator" }
+  | { kind: "identity" }
   | { kind: "detail"; itemId: string; name: string; kindOf: VaultItemKind; urls?: readonly string[]; urlMatches?: readonly UrlMatchMode[] };
 
 /**
@@ -76,6 +96,7 @@ export function PopupApp({ platform }: PopupAppProps) {
   const [search, setSearch] = useState("");
   const [feedback, setFeedback] = useState("");
   const [feedbackTick, setFeedbackTick] = useState(0);
+  const [pinnedIdentityId, setPinnedIdentityId] = useState<string | null>(readPinnedIdentity);
   const notify = useCallback((message: string) => {
     setFeedback(message);
     setFeedbackTick((tick) => tick + 1);
@@ -191,7 +212,13 @@ export function PopupApp({ platform }: PopupAppProps) {
               : {
                   back: { label: "Back", onBack: pop },
                   title:
-                    screen.kind === "list" ? CATEGORY_TITLES[screen.category] : screen.kind === "generator" ? "Generate password" : screen.name,
+                    screen.kind === "list"
+                      ? CATEGORY_TITLES[screen.category]
+                      : screen.kind === "generator"
+                        ? "Generate password"
+                        : screen.kind === "identity"
+                          ? "Your identity"
+                          : screen.name,
                 })}
           />
           {actionError ? (
@@ -224,6 +251,8 @@ export function PopupApp({ platform }: PopupAppProps) {
                 onImport={() => void openVault({ view: "import" })}
                 onNewItem={(kind) => void openVault({ newItem: kind })}
                 onGenerate={() => push({ kind: "generator" })}
+                pinnedIdentityId={pinnedIdentityId}
+                onChooseIdentity={() => push({ kind: "identity" })}
                 platform={platform}
               />
             ) : screen.kind === "list" ? (
@@ -237,6 +266,17 @@ export function PopupApp({ platform }: PopupAppProps) {
               />
             ) : screen.kind === "generator" ? (
               <GeneratorScreen platform={platform} onCopy={(value, label) => void copy(value, label)} />
+            ) : screen.kind === "identity" ? (
+              <IdentityScreen
+                identities={vaultItems.items.filter((item) => item.kind === "identity")}
+                pinnedId={pinnedIdentityId}
+                onPick={(id) => {
+                  setPinnedIdentityId(id);
+                  writePinnedIdentity(id);
+                  pop();
+                }}
+                onCreate={() => void openVault({ newItem: "identity" })}
+              />
             ) : (
               <DetailScreen
                 itemId={screen.itemId}

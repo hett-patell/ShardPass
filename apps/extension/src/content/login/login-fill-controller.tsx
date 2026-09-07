@@ -1,10 +1,11 @@
-import { useEffect, useRef } from "react";
+import type { ReactNode } from "react";
 import { detectLoginFields, fillLoginFields } from "@shardpass/autofill";
 import type { LoginFieldSet } from "@shardpass/autofill";
 
 import type { LoginFillContentPlatform } from "../../platform/extension-platform";
 import { createPickerHost, type PickerHandle } from "../createPickerHost";
-import { LoginPicker, type LoginPickerState, type LoginPickerSuggestion } from "./LoginPicker";
+import { filterSuggestions, LoginPicker, type LoginPickerState, type LoginPickerSuggestion } from "./LoginPicker";
+import { SignInBanner } from "./SignInBanner";
 import { createSaveLoginPrompt, type SaveLoginPrompt } from "./save-login-prompt";
 
 export interface LoginFillController {
@@ -84,24 +85,18 @@ function LoginTrigger({ onActivate }: Readonly<{ onActivate: () => void }>) {
   );
 }
 
-function FocusedLoginPicker(
-  props: Readonly<{
-    suggestions: readonly LoginPickerSuggestion[];
-    state: LoginPickerState;
-    onClose: () => void;
-    onSelect: (suggestion: LoginPickerSuggestion) => void;
-  }>,
-) {
-  const container = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    container.current?.querySelector<HTMLInputElement>('input[type="search"]')?.focus();
-  }, [props.state]);
-  return (
-    <div ref={container}>
-      <LoginPicker {...props} />
-    </div>
-  );
-}
+type PickerView = {
+  candidate: Owner;
+  state: LoginPickerState;
+  suggestions: readonly LoginPickerSuggestion[];
+  /** What the person typed into the field since the picker opened; a prefill does not count. */
+  filter: string;
+  typed: boolean;
+  activeIndex: number;
+};
+
+const CAPTCHA_SELECTOR =
+  'iframe[src*="recaptcha" i], iframe[src*="hcaptcha" i], iframe[src*="turnstile" i], [class*="captcha" i], [id*="captcha" i]';
 
 export function createLoginFillController(
   options: Readonly<{
@@ -122,7 +117,16 @@ export function createLoginFillController(
   /** The vault was locked when last asked: the chip stays, and a click asks again. */
   let locked = false;
   let pickerRequest: object | null = null;
+  let picker: PickerView | null = null;
   let disposeRuntimeMessages: (() => void) | null = null;
+  // The sign-in banner: one per page load, for the page's own login form, until dismissed
+  // or used. Only the top frame offers it, so a page with login iframes shows one.
+  let bannerHost: PickerHandle | null = null;
+  let bannerFor: HTMLInputElement | null = null;
+  let bannerDismissed = false;
+  let bannerBusy = false;
+  let bannerRender: (() => ReactNode) | null = null;
+  const bannerAsked = new WeakSet<HTMLInputElement>();
   // A "show password" toggle flips a password field to text; remembering the field keeps it
   // a login field.
   const seenPasswordFields = new WeakSet<HTMLInputElement>();
@@ -134,9 +138,26 @@ export function createLoginFillController(
     options.window.location.href === candidate.url &&
     originOf(options.window) === candidate.origin;
 
+  const detachPickerKeys = (): void => {
+    const view = picker;
+    picker = null;
+    if (view === null) return;
+    view.candidate.input.removeEventListener("keydown", onPickerKeyDown, true);
+    view.candidate.input.removeEventListener("input", onPickerInput);
+  };
+
   const closeHost = (): void => {
+    detachPickerKeys();
     const current = host;
     host = null;
+    current?.close();
+  };
+
+  const closeBanner = (): void => {
+    const current = bannerHost;
+    bannerHost = null;
+    bannerFor = null;
+    bannerRender = null;
     current?.close();
   };
 
@@ -159,6 +180,9 @@ export function createLoginFillController(
     for (const fieldSet of fieldSets) {
       if (fieldSet.passwordField !== null) seenPasswordFields.add(fieldSet.passwordField);
     }
+    if (bannerHost !== null && (bannerFor === null || !bannerFor.isConnected || bannerFor.getClientRects().length === 0))
+      closeBanner();
+    maybeOfferSignIn();
   };
 
   const scheduleRescan = (): void => {
@@ -175,6 +199,7 @@ export function createLoginFillController(
     if (!owns(candidate)) return;
     host = createPickerHost(candidate.input, {
       positionToAnchor: true,
+      fit: "content",
       content: <LoginTrigger onActivate={() => openPicker(candidate)} />,
     });
   };
@@ -192,25 +217,84 @@ export function createLoginFillController(
     candidate.input.focus({ preventScroll: true });
   };
 
+  const pickerContent = (view: PickerView) => (
+    <LoginPicker
+      suggestions={view.suggestions}
+      state={view.state}
+      filter={view.typed ? view.filter : ""}
+      activeIndex={view.activeIndex}
+      onClose={() => dismissPicker(view.candidate)}
+      onSelect={(suggestion) => void selectSuggestion(view.candidate, suggestion)}
+    />
+  );
+
+  const visibleRows = (view: PickerView): LoginPickerSuggestion[] =>
+    view.state === "ready" ? filterSuggestions(view.suggestions, view.typed ? view.filter : "") : [];
+
+  const refreshPicker = (): void => {
+    if (picker !== null) host?.update(pickerContent(picker));
+  };
+
+  /** Typing in the page's field narrows the rows; a value nothing matches sends the picker away. */
+  function onPickerInput(): void {
+    const view = picker;
+    if (view === null) return;
+    view.typed = true;
+    view.filter = view.candidate.input.value;
+    view.activeIndex = -1;
+    if (view.state === "ready" && view.filter.trim() !== "" && visibleRows(view).length === 0) {
+      dismissPicker(view.candidate);
+      return;
+    }
+    refreshPicker();
+  }
+
+  /** Arrow keys walk the rows and Enter takes one, all without leaving the field. */
+  function onPickerKeyDown(event: KeyboardEvent): void {
+    const view = picker;
+    if (view === null || view.state !== "ready") return;
+    const rows = visibleRows(view);
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      if (rows.length === 0) return;
+      const step = event.key === "ArrowDown" ? 1 : -1;
+      view.activeIndex = (view.activeIndex + step + rows.length) % rows.length;
+      refreshPicker();
+    } else if (event.key === "Enter" && view.activeIndex >= 0) {
+      const chosen = rows[view.activeIndex];
+      if (chosen === undefined) return;
+      event.preventDefault();
+      void selectSuggestion(view.candidate, chosen);
+    } else if (event.key === "Tab") {
+      dismissPicker(view.candidate);
+    }
+  }
+
   const renderPicker = (
     candidate: Owner,
     state: LoginPickerState,
     suggestions: readonly LoginPickerSuggestion[],
   ): void => {
     if (!owns(candidate)) return;
+    const previous = picker !== null && picker.candidate === candidate ? picker : null;
     closeHost();
     if (!owns(candidate)) return;
+    const view: PickerView = {
+      candidate,
+      state,
+      suggestions,
+      filter: previous?.filter ?? "",
+      typed: previous?.typed ?? false,
+      activeIndex: -1,
+    };
+    picker = view;
+    candidate.input.addEventListener("keydown", onPickerKeyDown, true);
+    candidate.input.addEventListener("input", onPickerInput);
     host = createPickerHost(candidate.input, {
       positionToAnchor: true,
+      fit: "anchor",
       onRequestClose: () => dismissPicker(candidate),
-      content: (
-        <FocusedLoginPicker
-          suggestions={suggestions}
-          state={state}
-          onClose={() => dismissPicker(candidate)}
-          onSelect={(suggestion) => void selectSuggestion(candidate, suggestion)}
-        />
-      ),
+      content: pickerContent(view),
     });
   };
 
@@ -278,9 +362,21 @@ export function createLoginFillController(
       .catch(() => undefined);
   };
 
+  /** A visible CAPTCHA means the site wants a human on the submit; filling still helps. */
+  const captchaPresent = (): boolean =>
+    Array.from(options.document.querySelectorAll(CAPTCHA_SELECTOR)).some((element) => element.getClientRects().length > 0);
+
+  const submitForm = (fieldSet: LoginFieldSet): void => {
+    const form = fieldSet.passwordField?.form ?? fieldSet.usernameField?.form ?? null;
+    if (form === null || captchaPresent()) return;
+    if (typeof form.requestSubmit === "function") form.requestSubmit();
+    else form.submit();
+  };
+
   const selectSuggestion = async (
     candidate: Owner,
     suggestion: LoginPickerSuggestion,
+    mode: Readonly<{ submit: boolean }> = { submit: false },
   ): Promise<void> => {
     if (!owns(candidate)) return;
     try {
@@ -304,7 +400,10 @@ export function createLoginFillController(
       // Focus first: a focusin on a chip-less owner would bring the chip straight back.
       candidate.input.focus({ preventScroll: true });
       closeHost();
+      bannerDismissed = true;
+      closeBanner();
       await sendConfirm(suggestion.itemId);
+      if (mode.submit) submitForm(candidate.fieldSet);
       if (response.linkedOtpCode !== undefined) await offerOtpCode(candidate.input, response.linkedOtpCode);
     } catch (error) {
       sendCancel(suggestion.itemId);
@@ -353,6 +452,98 @@ export function createLoginFillController(
   };
 
   const onPageInvalidated = (): void => invalidate(false);
+
+  const topFrame = (): boolean => {
+    try {
+      return options.window.top === options.window;
+    } catch {
+      return false;
+    }
+  };
+
+  const bestSuggestion = (fieldSet: LoginFieldSet, suggestions: readonly LoginPickerSuggestion[]) => {
+    const typed = fieldSet.usernameField?.value.trim().toLocaleLowerCase() ?? "";
+    const sorted = filterSuggestions(suggestions, "");
+    return sorted.find((item) => typed !== "" && item.username.toLocaleLowerCase() === typed) ?? sorted[0] ?? null;
+  };
+
+  const ownerFor = (fieldSet: LoginFieldSet): Owner | null => {
+    const input = fieldSet.usernameField ?? fieldSet.passwordField;
+    const origin = originOf(options.window);
+    if (input === null || origin === null) return null;
+    return { token: Object.freeze({}), input, fieldSet, url: options.window.location.href, origin };
+  };
+
+  const signInFromBanner = async (fieldSet: LoginFieldSet, suggestion: LoginPickerSuggestion): Promise<void> => {
+    if (bannerBusy || disposed) return;
+    const candidate = ownerFor(fieldSet);
+    if (candidate === null) return;
+    bannerBusy = true;
+    if (bannerRender !== null) bannerHost?.update(bannerRender());
+    invalidate(false);
+    owner = candidate;
+    try {
+      await selectSuggestion(candidate, suggestion, { submit: true });
+    } finally {
+      bannerBusy = false;
+      if (bannerRender !== null) bannerHost?.update(bannerRender());
+    }
+  };
+
+  const otherOptions = (fieldSet: LoginFieldSet): void => {
+    bannerDismissed = true;
+    closeBanner();
+    const input = fieldSet.usernameField ?? fieldSet.passwordField;
+    if (input === null) return;
+    input.focus({ preventScroll: true });
+    onFocusIn();
+    if (owner !== null && owner.input === input) openPicker(owner);
+  };
+
+  const showBanner = (fieldSet: LoginFieldSet, suggestions: readonly LoginPickerSuggestion[]): void => {
+    const best = bestSuggestion(fieldSet, suggestions);
+    if (best === null || fieldSet.passwordField === null || !options.document.body.isConnected) return;
+    const render = () => (
+      <SignInBanner
+        name={best.name}
+        username={best.username}
+        otherCount={suggestions.length - 1}
+        busy={bannerBusy}
+        onSignIn={() => void signInFromBanner(fieldSet, best)}
+        onOtherOptions={() => otherOptions(fieldSet)}
+        onClose={() => {
+          bannerDismissed = true;
+          closeBanner();
+        }}
+      />
+    );
+    bannerRender = render;
+    bannerFor = fieldSet.passwordField;
+    bannerHost = createPickerHost(options.document.body, {
+      positionToAnchor: false,
+      slot: "signin",
+      placement: "top-center",
+      content: render(),
+    });
+  };
+
+  /**
+   * The banner is offered once per password field, when the page has a shown login form and
+   * the vault has something for it. Nothing is drawn while the vault is locked: the chip by
+   * the field already explains that.
+   */
+  function maybeOfferSignIn(): void {
+    if (disposed || bannerDismissed || bannerHost !== null || !topFrame()) return;
+    const fieldSet = fieldSets.find((candidate) => candidate.passwordField !== null && isRendered(candidate)) ?? null;
+    const field = fieldSet?.passwordField ?? null;
+    if (fieldSet === null || field === null || bannerAsked.has(field)) return;
+    bannerAsked.add(field);
+    void fetchSuggestions().then((result) => {
+      if (disposed || bannerDismissed || bannerHost !== null || result.state !== "ready") return;
+      if (!field.isConnected || !isRendered(fieldSet)) return;
+      showBanner(fieldSet, result.suggestions);
+    });
+  }
 
   const pageFocused = (): Promise<boolean> =>
     new Promise((resolve) => {
@@ -448,6 +639,8 @@ export function createLoginFillController(
       }
       fillLoginFields(fieldSet, response.username, response.password);
       invalidate(false);
+      bannerDismissed = true;
+      closeBanner();
       await sendConfirm(itemId);
       // Answer first so the popup can close; the code offer waits for focus on its own.
       const anchor = fieldSet.passwordField ?? fieldSet.usernameField;
@@ -494,6 +687,7 @@ export function createLoginFillController(
       disposeRuntimeMessages?.();
       disposeRuntimeMessages = null;
       invalidate(false);
+      closeBanner();
       savePrompt.dispose();
     },
   };

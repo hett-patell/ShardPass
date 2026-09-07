@@ -12,13 +12,15 @@ import pickerCss from "./picker.css?raw";
 export interface PickerHandle {
   close(): void;
   readonly status: "open" | "closed";
+  /** Re-renders the host's content in place; a no-op once closed. */
+  update(content: ReactNode): void;
 }
 
 /**
  * What a host is for. Hosts in different slots coexist -- a save banner above a login chip, a
  * passkey prompt over both -- while a new host in an occupied slot replaces the one there.
  */
-export type PickerSlot = "chip" | "banner" | "prompt" | "notice";
+export type PickerSlot = "chip" | "banner" | "prompt" | "notice" | "signin";
 
 interface PickerRecord {
   readonly handle: PickerHandle;
@@ -63,7 +65,9 @@ export function createPickerHost(
      * anchor's height -- for the small chip beside a field. Pickers, banners and notices keep
      * the host's full width and hang below the anchor. Only meaningful with positionToAnchor.
      */
-    fit?: "content";
+    fit?: "content" | "anchor";
+    /** Where a host that is not anchored to a field sits; the default is the top-right corner. */
+    placement?: "top-center";
     /**
      * Runs on Escape instead of closing outright, so a prompt can answer its caller first (a
      * passkey ceremony falls back to the browser, a banner dismisses its offer) and then close.
@@ -89,6 +93,14 @@ export function createPickerHost(
   const mount = ownerDocument.createElement("div");
   shadow.append(createStyle(ownerDocument), mount);
   if (options.fit === "content") host.style.width = "max-content";
+  if (!options.positionToAnchor && options.placement === "top-center") {
+    host.style.left = "50%";
+    host.style.right = "auto";
+    host.style.top = "12px";
+    host.style.transform = "translateX(-50%)";
+    host.style.width = "max-content";
+    host.style.maxWidth = "calc(100vw - 24px)";
+  }
   ownerDocument.body.append(host);
 
   let status: "open" | "closed" = "open";
@@ -100,8 +112,11 @@ export function createPickerHost(
   const position = (): void => {
     if (!options.positionToAnchor || !anchor.isConnected || !host.isConnected) return;
     const rect = anchor.getBoundingClientRect();
-    const measured = host.getBoundingClientRect();
     const viewportWidth = ownerWindow?.innerWidth ?? 320;
+    // A picker takes the field's own width (within reason), so it reads as part of the form.
+    if (options.fit === "anchor")
+      host.style.width = `${Math.round(Math.min(Math.max(rect.width, 260), 360, Math.max(0, viewportWidth - margin * 2)))}px`;
+    const measured = host.getBoundingClientRect();
     const viewportHeight = ownerWindow?.innerHeight ?? 640;
     let left: number;
     let top: number;
@@ -130,8 +145,11 @@ export function createPickerHost(
     host.style.right = "auto";
   };
 
+  // Never dismiss on a question the engine cannot answer: without checkVisibility (jsdom, an
+  // old engine) a 0x0 box says nothing, so the host stays.
   const anchorRendered = (): boolean => {
-    if (typeof anchor.checkVisibility === "function" && !anchor.checkVisibility()) return false;
+    if (typeof anchor.checkVisibility !== "function") return true;
+    if (!anchor.checkVisibility()) return false;
     const rect = anchor.getBoundingClientRect();
     return rect.width > 0 || rect.height > 0;
   };
@@ -222,6 +240,11 @@ export function createPickerHost(
     close,
     get status() {
       return status;
+    },
+    update(content) {
+      if (status === "closed" || root === null) return;
+      flushSync(() => root?.render(content));
+      schedulePosition();
     },
   };
 

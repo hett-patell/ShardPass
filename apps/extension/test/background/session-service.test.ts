@@ -514,6 +514,26 @@ describe("SessionService", () => {
     expect((await local.get([ACTIVE_ROOT_KEY]))[ACTIVE_ROOT_KEY]).toEqual(external);
   });
 
+  it("keeps the saved session in step with its own writes, so a worker restart after a save still restores", async () => {
+    const values = fixture();
+    await setup(values.service);
+    // A write moves the root to a new generation; the session record must move with it.
+    await values.service.vaultRepository.create(hotpItem);
+    const restart = () =>
+      new SessionService({
+        local: values.local,
+        session: values.session,
+        random: createDeterministicRandomSource(new Uint8Array(1024)),
+        now: () => 2_000,
+        isoNow: () => new Date(2_000).toISOString(),
+        nextId: () => "10000000-0000-4000-8000-000000000002",
+      });
+    const survived = restart();
+    expect(await survived.restoreSession()).toBe("restored");
+    expect(await survived.getState()).toMatchObject({ state: "unlocked" });
+    await expect(survived.vaultRepository.get(hotpItem.id)).resolves.toMatchObject({ id: hotpItem.id });
+  });
+
   it("keeps the session unlocked when Chrome reports a stale root after migration commit", async () => {
     const { local, service } = fixture();
     await setup(service);

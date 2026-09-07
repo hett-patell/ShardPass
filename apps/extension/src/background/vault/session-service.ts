@@ -1280,6 +1280,7 @@ export class SessionService {
       this.repositoryRevision += 1;
       this.rebindBackupAuthorities(activated);
       this.commitCandidate = null;
+      await this.rememberSession();
     } catch {
       this.lockWhileMutationHeld();
       throw new VaultSessionError("VAULT_LOCKED");
@@ -1296,8 +1297,10 @@ export class SessionService {
       this.assertEpoch(operationEpoch);
       const active = await this.generations.readActive(context);
       this.assertEpoch(operationEpoch);
-      if (active !== null && canonicalJson(active.root) === canonicalCandidate)
+      if (active !== null && canonicalJson(active.root) === canonicalCandidate) {
         this.expectedRoot = active.root;
+        await this.rememberSession();
+      }
     } catch {
       // Any uncertainty is handled by fail-closed locking below.
     } finally {
@@ -1480,6 +1483,9 @@ export class SessionService {
       }
       this.expectedRoot = activated;
       this.rebindBackupAuthorities(activated);
+      // The root just moved on; the saved session must follow it, or the next worker restart
+      // finds a stale binding and the vault shows up locked minutes after a save.
+      await this.rememberSession();
       return { committed: true, state: "unlocked" };
     } catch {
       let exactTargetAuthenticated = false;

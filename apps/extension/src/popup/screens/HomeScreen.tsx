@@ -2,7 +2,7 @@ import type { VaultItemKind } from "@shardpass/domain";
 import type { ItemListItemProjection } from "@shardpass/messaging";
 import { matchLoginUrls } from "@shardpass/autofill";
 import { Button, SearchBar, SectionLabel } from "@shardpass/ui";
-import { ChevronRight, ExternalLink, KeyRound, LayoutGrid, Plus, Star, type LucideIcon } from "lucide-react";
+import { ChevronRight, ExternalLink, KeyRound, LayoutGrid, Plus, Star, type LucideIcon, UserCog, UserPlus } from "lucide-react";
 
 import type { ExtensionPlatform } from "../../platform/extension-platform";
 import { KIND_ICONS } from "../components/KindIcon";
@@ -68,6 +68,9 @@ export interface HomeScreenProps {
   onNewItem: (kind: VaultItemKind) => void;
   /** Opens the password generator screen. */
   onGenerate: () => void;
+  /** The identity the person chose to pin; null falls back to the favourite, then the first. */
+  pinnedIdentityId: string | null;
+  onChooseIdentity: () => void;
   platform: Pick<ExtensionPlatform, "sendOtpMessage">;
 }
 
@@ -90,6 +93,8 @@ export function HomeScreen({
   onImport,
   onNewItem,
   onGenerate,
+  pinnedIdentityId,
+  onChooseIdentity,
 }: HomeScreenProps) {
   const query = search.trim();
   const suggestions =
@@ -103,8 +108,10 @@ export function HomeScreen({
   const results = matches.slice(0, MAX_SEARCH_RESULTS);
   const resultCount = matches.length > MAX_SEARCH_RESULTS ? `${MAX_SEARCH_RESULTS}+` : String(matches.length);
   // The person's own identity sits above everything: the favourite one, else the first.
+  const identities = items.filter((item) => item.kind === "identity");
   const identity =
-    items.filter((item) => item.kind === "identity").sort((left, right) => Number(right.favorite) - Number(left.favorite))[0] ??
+    identities.find((item) => item.id === pinnedIdentityId) ??
+    identities.slice().sort((left, right) => Number(right.favorite) - Number(left.favorite))[0] ??
     null;
 
   return (
@@ -178,20 +185,30 @@ export function HomeScreen({
             ) : null}
 
             {identity !== null ? (
-              <button
-                type="button"
-                className={styles.identity}
-                aria-label={`Your identity: ${identity.name}`}
-                onClick={() => onOpenItem(identity)}
-              >
-                <span className={styles.avatar} aria-hidden="true">
-                  {initials(identity.name)}
-                </span>
-                <span className={styles.identityText}>
-                  <span className={styles.identityName}>{identity.name}</span>
-                  {identity.subtitle ? <span className={styles.identityEmail}>{identity.subtitle}</span> : null}
-                </span>
-                <ChevronRight size={16} className={styles.chevron} aria-hidden="true" />
+              <div className={styles.identityRow}>
+                <button
+                  type="button"
+                  className={styles.identity}
+                  aria-label={`Your identity: ${identity.name}`}
+                  onClick={() => onOpenItem(identity)}
+                >
+                  <span className={styles.avatar} aria-hidden="true">
+                    {initials(identity.name)}
+                  </span>
+                  <span className={styles.identityText}>
+                    <span className={styles.identityName}>{identity.name}</span>
+                    {identity.subtitle ? <span className={styles.identityEmail}>{identity.subtitle}</span> : null}
+                  </span>
+                  <ChevronRight size={16} className={styles.chevron} aria-hidden="true" />
+                </button>
+                <QuickAction aria-label="Choose identity" title="Choose identity" onClick={onChooseIdentity}>
+                  <UserCog size={15} />
+                </QuickAction>
+              </div>
+            ) : status === "ready" && items.length > 0 ? (
+              <button type="button" className={styles.identityAdd} onClick={() => onNewItem("identity")}>
+                <UserPlus size={15} aria-hidden="true" />
+                Add your identity
               </button>
             ) : null}
 

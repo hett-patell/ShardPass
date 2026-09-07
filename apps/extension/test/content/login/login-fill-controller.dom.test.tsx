@@ -148,6 +148,134 @@ afterEach(() => {
 });
 
 describe("Login fill controller", () => {
+  it("offers one-click sign-in at the top of the page, then fills and submits the form", async () => {
+    const roots = captureClosedRoots();
+    const { form, username, password } = loginForm();
+    password.getClientRects = () => [{} as DOMRect] as unknown as DOMRectList;
+    const submitted = vi.fn((event: Event) => event.preventDefault());
+    form.addEventListener("submit", submitted);
+    const other: LoginFillSuggestion = { ...account, itemId: "018f47a6-7d11-7c2f-8bd9-a1d37f147a21", name: "Other", favorite: false };
+    const candidate = platform((request) => {
+      if (request.kind === "login.fillSuggestions")
+        return { version: 1, kind: "login.fillSuggestionsResult", suggestions: [other, account] };
+      if (request.kind === "login.fillSelect") return release;
+      return undefined;
+    });
+    start(candidate);
+    await flush();
+
+    const bannerRoot = roots.find((root) => root.querySelector(".signIn"));
+    expect(bannerRoot).toBeDefined();
+    const banner = within(bannerRoot as unknown as HTMLElement);
+    // The favourite leads; the rest are a click away.
+    expect(banner.getByText("Account")).toBeInTheDocument();
+    expect(banner.getByRole("button", { name: "Other options (1)" })).toBeInTheDocument();
+
+    await clickAndFlush(banner.getByRole("button", { name: "Sign in" }));
+    expect(username.value).toBe("user@example.test");
+    expect(password.value).toBe("s3cret!");
+    expect(submitted).toHaveBeenCalledTimes(1);
+    expect(bannerRoot?.querySelector(".signIn")).toBeNull();
+  });
+
+  it("fills but does not submit from the banner while a CAPTCHA is on the page, and stays away once dismissed", async () => {
+    const roots = captureClosedRoots();
+    const { form, password } = loginForm();
+    password.getClientRects = () => [{} as DOMRect] as unknown as DOMRectList;
+    const captcha = document.createElement("div");
+    captcha.className = "g-recaptcha";
+    captcha.getClientRects = () => [{} as DOMRect] as unknown as DOMRectList;
+    document.body.append(captcha);
+    const submitted = vi.fn((event: Event) => event.preventDefault());
+    form.addEventListener("submit", submitted);
+    const candidate = platform((request) => {
+      if (request.kind === "login.fillSuggestions")
+        return { version: 1, kind: "login.fillSuggestionsResult", suggestions: [account] };
+      if (request.kind === "login.fillSelect") return release;
+      return undefined;
+    });
+    start(candidate);
+    await flush();
+    const bannerRoot = roots.find((root) => root.querySelector(".signIn"));
+    const banner = within(bannerRoot as unknown as HTMLElement);
+    expect(banner.queryByRole("button", { name: /Other options/ })).toBeNull();
+    await clickAndFlush(banner.getByRole("button", { name: "Sign in" }));
+    expect(password.value).toBe("s3cret!");
+    expect(submitted).not.toHaveBeenCalled();
+  });
+
+  it("dismisses the sign-in banner for the rest of the page load", async () => {
+    const roots = captureClosedRoots();
+    const { password } = loginForm();
+    password.getClientRects = () => [{} as DOMRect] as unknown as DOMRectList;
+    const candidate = platform((request) => {
+      if (request.kind === "login.fillSuggestions")
+        return { version: 1, kind: "login.fillSuggestionsResult", suggestions: [account] };
+      return undefined;
+    });
+    start(candidate);
+    await flush();
+    const bannerRoot = roots.find((root) => root.querySelector(".signIn"));
+    await clickAndFlush(within(bannerRoot as unknown as HTMLElement).getByRole("button", { name: "Dismiss ShardPass sign-in" }));
+    expect(bannerRoot?.querySelector(".signIn")).toBeNull();
+    // A later DOM change does not bring it back.
+    document.body.append(document.createElement("p"));
+    await flush();
+    expect(roots.filter((root) => root.querySelector(".signIn"))).toHaveLength(0);
+  });
+
+  it("narrows the picker as the person types in the field and picks a row with the arrow keys", async () => {
+    const roots = captureClosedRoots();
+    const { username } = loginForm();
+    const other: LoginFillSuggestion = {
+      ...account,
+      itemId: "018f47a6-7d11-7c2f-8bd9-a1d37f147a21",
+      name: "Beta",
+      username: "beta@example.test",
+      favorite: false,
+    };
+    const candidate = platform((request) => {
+      if (request.kind === "login.fillSuggestions")
+        return { version: 1, kind: "login.fillSuggestionsResult", suggestions: [account, other] };
+      if (request.kind === "login.fillSelect") return release;
+      return undefined;
+    });
+    start(candidate);
+    focusField(username);
+    await flush();
+    await clickAndFlush(chipIn(roots.at(-1)));
+    // The picker opens busy and re-renders once the suggestions arrive.
+    await flush();
+
+    const pickerRoot = roots.at(-1);
+    const picker = within(pickerRoot as unknown as HTMLElement);
+    expect(picker.getAllByRole("button", { name: /Use login/u })).toHaveLength(2);
+    expect(picker.queryByRole("searchbox")).toBeNull();
+    expect(document.activeElement).toBe(username);
+
+    await act(async () => {
+      fireEvent.input(username, { target: { value: "be" } });
+      await Promise.resolve();
+    });
+    expect(picker.getAllByRole("button", { name: /Use login/u })).toHaveLength(1);
+    expect(picker.getByRole("button", { name: /Use login/u })).toHaveTextContent("Beta");
+
+    await act(async () => {
+      fireEvent.keyDown(username, { key: "ArrowDown" });
+      await Promise.resolve();
+    });
+    expect(picker.getByRole("button", { name: /Use login/u })).toHaveAttribute("data-active", "true");
+    await act(async () => {
+      fireEvent.keyDown(username, { key: "Enter" });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    const selected = vi
+      .mocked(candidate.sendLoginFillMessage)
+      .mock.calls.find(([request]) => request.kind === "login.fillSelect");
+    expect(selected?.[0]).toMatchObject({ kind: "login.fillSelect", itemId: other.itemId });
+  });
+
   it("shows no trigger for a login field when no saved logins match the domain", async () => {
     captureClosedRoots();
     const { password } = loginForm();
@@ -180,8 +308,10 @@ describe("Login fill controller", () => {
       const { username, password } = loginForm();
       let usernameEvents = 0;
       let passwordEvents = 0;
-      username.addEventListener("input", () => usernameEvents++);
-      password.addEventListener("input", () => passwordEvents++);
+      // Only the fill's own writes count (they carry inputType); the test types too.
+      const fillWrite = (event: Event) => event instanceof InputEvent && event.inputType === "insertText";
+      username.addEventListener("input", (event) => fillWrite(event) && usernameEvents++);
+      password.addEventListener("input", (event) => fillWrite(event) && passwordEvents++);
       const candidate = platform((request) => {
         if (request.kind === "login.fillSuggestions")
           return {
@@ -240,12 +370,16 @@ describe("Login fill controller", () => {
       // login since the chip appeared is noticed.
       expect(suggestionRequests(candidate)).toBe(2);
 
-      fireEvent.change(within(pickerRoot).getByRole("searchbox", { name: "Search saved logins" }), {
-        target: { value: "team" },
+      // Typing in the page's own field narrows the rows; there is no search box to reach for.
+      await act(async () => {
+        fireEvent.input(username, { target: { value: "second" } });
+        await Promise.resolve();
       });
       expect(within(pickerRoot).getByRole("button", { name: /Secondary/u })).toBeVisible();
-      fireEvent.change(within(pickerRoot).getByRole("searchbox", { name: "Search saved logins" }), {
-        target: { value: "" },
+      expect(within(pickerRoot).queryByRole("button", { name: /Primary/u })).toBeNull();
+      await act(async () => {
+        fireEvent.input(username, { target: { value: "" } });
+        await Promise.resolve();
       });
       await clickAndFlush(within(pickerRoot).getByRole("button", { name: /Primary/u }));
 
@@ -406,12 +540,11 @@ describe("Login fill controller", () => {
     focusField(username);
     await flush();
     await clickAndFlush(chipIn(roots.at(-1)));
-    const search = within(roots.at(-1) as unknown as HTMLElement).getByRole("searchbox", {
-      name: "Search saved logins",
-    });
+    expect(within(roots.at(-1) as unknown as HTMLElement).getByRole("button", { name: /Account/u })).toBeVisible();
 
+    // Escape lands on the field, which keeps focus while the picker is open.
     await act(async () => {
-      fireEvent.keyDown(search, { key: "Escape" });
+      fireEvent.keyDown(username, { key: "Escape" });
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -461,7 +594,9 @@ describe("Login fill controller", () => {
       vi.advanceTimersByTime(1_000);
     });
     await expect(none).resolves.toMatchObject({ status: "no-form" });
-    expect(suggestionRequests(candidate)).toBe(0);
+    // The popup path never asks for suggestions; the one request is the sign-in banner's,
+    // made once for the shown form when the page loaded.
+    expect(suggestionRequests(candidate)).toBe(1);
   });
 
   it("fills only the username of a username-only first step", async () => {

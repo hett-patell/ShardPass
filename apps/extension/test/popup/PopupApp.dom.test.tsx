@@ -295,6 +295,34 @@ describe("PopupApp screens", () => {
     expect(screen.queryByRole("button", { name: "Try again" })).not.toBeInTheDocument();
   });
 
+  it("lets the person choose which identity is pinned, and remembers the choice", async () => {
+    const ID_A = "10000000-0000-4000-8000-000000000040";
+    const ID_B = "10000000-0000-4000-8000-000000000041";
+    const identities = [
+      { id: ID_A, kind: "identity", revision: 1, name: "Het Patel", subtitle: "het@example.test", favorite: true, tags: [] },
+      { id: ID_B, kind: "identity", revision: 1, name: "Work Het", subtitle: "het@work.test", favorite: false, tags: [] },
+    ];
+    const fixture = createTestPlatform();
+    fixture.sendMessage.mockImplementation((payload: unknown) => {
+      const request = payload as { kind?: unknown };
+      if (request.kind === "item.list")
+        return Promise.resolve({ version: 1, kind: "item.listResult", items: [loginProjection, ...identities] });
+      return Promise.resolve(undefined);
+    });
+    try {
+      render(<PopupApp platform={fixture.platform} />);
+      act(() => fixture.publishVaultState(vaultState("unlocked", 1)));
+      expect(await screen.findByRole("button", { name: "Your identity: Het Patel" })).toBeVisible();
+
+      fireEvent.click(screen.getByRole("button", { name: "Choose identity" }));
+      fireEvent.click(await screen.findByRole("button", { name: /Work Het/ }));
+      expect(await screen.findByRole("button", { name: "Your identity: Work Het" })).toBeVisible();
+      expect(localStorage.getItem("shardpass:popup:pinnedIdentity")).toBe(ID_B);
+    } finally {
+      localStorage.removeItem("shardpass:popup:pinnedIdentity");
+    }
+  });
+
   it("locks the vault from the title bar", async () => {
     const { sendMessage } = await renderUnlocked();
     fireEvent.click(screen.getByRole("button", { name: "Lock vault" }));

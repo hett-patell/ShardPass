@@ -54,7 +54,8 @@
 .loginPicker,
 .saveBanner,
 .loginNotice,
-.passkeyPrompt {
+.passkeyPrompt,
+.signIn {
   pointer-events: auto;
 }
 
