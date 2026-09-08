@@ -51,6 +51,48 @@ describe("VaultAccess", () => {
     expect(sendMessage).toHaveBeenCalledTimes(1);
   });
 
+  it("offers the weak-password box only once the password is long enough, and honours it", async () => {
+    const sendMessage = vi.fn((request: { kind: string }) =>
+      Promise.resolve(
+        request.kind === "vault.getState"
+          ? {
+              version: 1,
+              kind: "vault.state",
+              state: "unconfigured",
+              autoLockMinutes: 15,
+              lockOnScreenLock: true,
+              retryAfterMs: 0,
+              streamId: "00000000000000000000000000000001",
+              sequence: 1,
+            }
+          : challenge,
+      ),
+    );
+    render(<VaultAccess platform={{ sendMessage }} deriveKey={vi.fn(() => Promise.resolve(new Uint8Array(32)))} />);
+    await screen.findByRole("heading", { name: "Create your vault" });
+    const password = screen.getByLabelText("Master password");
+    const confirm = screen.getByLabelText("Confirm master password");
+
+    // Too short: the length rule is the only thing to say; no box that cannot help.
+    fireEvent.change(password, { target: { value: "short" } });
+    expect(screen.getByText(/Use at least 12 characters/)).toBeVisible();
+    expect(screen.queryByRole("checkbox", { name: "Use this password anyway" })).not.toBeInTheDocument();
+
+    // Long enough but weak: the box appears, and without it the submit is refused.
+    fireEvent.change(password, { target: { value: "aaaaaaaaaaaaaaaa" } });
+    fireEvent.change(confirm, { target: { value: "aaaaaaaaaaaaaaaa" } });
+    const box = screen.getByRole("checkbox", { name: "Use this password anyway" });
+    fireEvent.click(screen.getByRole("button", { name: "Create vault" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Tick the box to use it anyway");
+    expect(sendMessage).not.toHaveBeenCalledWith(expect.objectContaining({ kind: "vault.getKdfChallenge" }));
+
+    fireEvent.click(box);
+    fireEvent.click(screen.getByRole("button", { name: "Create vault" }));
+    await waitFor(() =>
+      expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({ kind: "vault.getKdfChallenge", purpose: "setup" })),
+    );
+  });
+
   it("derives in the trusted page worker and submits only base64 KEK", async () => {
     const sendMessage = vi.fn((request: { kind: string }) => {
       if (request.kind === "vault.getState")

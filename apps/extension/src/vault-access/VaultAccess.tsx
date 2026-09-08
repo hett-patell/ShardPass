@@ -477,7 +477,12 @@ export function VaultAccess({
             <span className={styles.strengthLabel}>{strength.label}</span>
           </div>
         ) : null}
-        {setup && password.length > 0 && strength.level < 2 ? (
+        {setup && password.length > 0 && Array.from(password).length < MIN_SETUP_PASSWORD_CODE_POINTS ? (
+          <p className={styles.weakNote}>
+            {`Use at least ${MIN_SETUP_PASSWORD_CODE_POINTS} characters. A few unrelated words are easy to remember and hard to guess.`}
+          </p>
+        ) : null}
+        {setup && password.length > 0 && Array.from(password).length >= MIN_SETUP_PASSWORD_CODE_POINTS && strength.level < 2 ? (
           <>
             <p className={styles.weakNote}>
               This password is weak. Anyone who gets your vault file could crack it offline. A few unrelated words are both easier to remember and much stronger.
