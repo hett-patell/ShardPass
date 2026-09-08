@@ -1,0 +1,203 @@
+import type { SignInProvider } from "@shardpass/domain";
+
+/**
+ * A 1PUX section field's value is an object with one key naming its type (`string`,
+ * `concealed`, `totp`, `sso`, ...). This decodes each into text plus what kind of thing it was,
+ * so the item converters can file it as a custom field, a one-time secret, a card number, and so
+ * on, without each of them knowing the encoding.
+ */
+export type FieldValueKind =
+  | "text"
+  | "hidden"
+  | "boolean"
+  | "totp"
+  | "sso"
+  | "passkey"
+  | "attachment"
+  | "reference"
+  | "unsupported";
+
+export type DecodedField = Readonly<{
+  /** The template id ("username", "ccnum"), stable across 1Password's languages. */
+  id: string;
+  /** What the person sees; falls back to the id. */
+  title: string;
+  kind: FieldValueKind;
+  text: string;
+  /** The parts of an address field, so identities can fill their own columns. */
+  address?: Readonly<Record<string, string>>;
+}>;
+
+/** One `details.loginFields` entry: the web form fields 1Password captured. */
+export type LoginField = Readonly<{
+  name: string;
+  designation: string;
+  fieldType: string;
+  value: string;
+}>;
+
+export type SignInWith = Readonly<{
+  provider: SignInProvider;
+  /** How the export named the provider, for a warning when it is one ShardPass does not list. */
+  name: string;
+  /** The section field that said so, when one did; it is not repeated as a custom field. */
+  field?: DecodedField;
+}>;
+
+const ADDRESS_PARTS = ["street", "city", "state", "zip", "country"] as const;
+const SSO_PROVIDER_KEYS = ["provider", "ssoProvider", "identityProvider", "name", "issuer", "idp"] as const;
+const SIGN_IN_WITH = /(?:sign|log)[\s-]?in[\s-]?with\b/iu;
+
+/** Provider names as people and exports write them, matched loosely. */
+const PROVIDER_PATTERNS: readonly (readonly [RegExp, SignInProvider])[] = [
+  [/google|gmail|youtube/iu, "google"],
+  [/apple|icloud/iu, "apple"],
+  [/microsoft|azure|entra|outlook|hotmail|live\.com|xbox/iu, "microsoft"],
+  [/github/iu, "github"],
+  [/facebook|\bmeta\b/iu, "facebook"],
+  [/twitter|\bx\b|x\.com/iu, "twitter"],
+  [/amazon/iu, "amazon"],
+  [/linkedin/iu, "linkedin"],
+  [/slack/iu, "slack"],
+];
+
+export function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+export function asString(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
+/** Names the provider a free-text label refers to, or nothing when it is not one ShardPass lists. */
+export function providerOf(name: string): SignInProvider | undefined {
+  const trimmed = name.trim();
+  if (trimmed === "") return undefined;
+  return PROVIDER_PATTERNS.find(([pattern]) => pattern.test(trimmed))?.[1];
+}
+
+export function decodeField(raw: unknown): DecodedField | undefined {
+  if (!isRecord(raw)) return undefined;
+  const id = asString(raw["id"]).trim();
+  const title = asString(raw["title"]).trim() || id;
+  const value = raw["value"];
+  if (typeof value === "string") return { id, title, kind: "text", text: value };
+  if (!isRecord(value)) return undefined;
+  const entry = Object.entries(value)[0];
+  if (entry === undefined) return undefined;
+  return { id, title, ...decodeValue(entry[0], entry[1]) };
+}
+
+function decodeValue(key: string, payload: unknown): Pick<DecodedField, "kind" | "text" | "address"> {
+  if (key === "concealed") return { kind: "hidden", text: asString(payload) };
+  if (key === "totp") return { kind: "totp", text: asString(payload) };
+  if (key === "sso") return { kind: "sso", text: ssoProviderName(payload) };
+  if (key === "passkey" || looksLikePasskey(payload)) return { kind: "passkey", text: "" };
+  if (key === "file") return { kind: "attachment", text: attachmentName(payload) };
+  if (key === "reference") return { kind: "reference", text: asString(payload) };
+  if (key === "date" && typeof payload === "number") return { kind: "text", text: isoDateOf(payload) };
+  if (key === "monthYear" && typeof payload === "number") return { kind: "text", text: monthYearOf(payload) };
+  if (key === "address" && isRecord(payload)) return decodeAddress(payload);
+  if (key === "email" && isRecord(payload))
+    return { kind: "text", text: asString(payload["email_address"]) || asString(payload["email"]) };
+  if (typeof payload === "string") return { kind: "text", text: payload };
+  if (typeof payload === "number" && Number.isFinite(payload)) return { kind: "text", text: String(payload) };
+  if (typeof payload === "boolean") return { kind: "boolean", text: payload ? "true" : "false" };
+  return { kind: "unsupported", text: "" };
+}
+
+function decodeAddress(payload: Record<string, unknown>): Pick<DecodedField, "kind" | "text" | "address"> {
+  const address: Record<string, string> = {};
+  for (const part of ADDRESS_PARTS) address[part] = asString(payload[part]).trim();
+  const text = ADDRESS_PARTS.map((part) => address[part] ?? "")
+    .filter((part) => part !== "")
+    .join(", ");
+  return { kind: "text", text, address };
+}
+
+/** A passkey is an object carrying a credential id and a private key, whatever key it hangs from. */
+function looksLikePasskey(payload: unknown): boolean {
+  if (!isRecord(payload)) return false;
+  const hasKey = "privateKey" in payload || "credentialId" in payload;
+  const hasParty = "rpId" in payload || "userHandle" in payload || "userName" in payload;
+  return hasKey && hasParty;
+}
+
+function attachmentName(payload: unknown): string {
+  if (!isRecord(payload)) return "";
+  return asString(payload["fileName"]) || asString(payload["name"]) || asString(payload["documentId"]);
+}
+
+/**
+ * The provider inside an `sso` value: a string, or an object naming it under one of several
+ * plausible keys (1Password does not document this value; every shape seen is accepted).
+ */
+function ssoProviderName(payload: unknown): string {
+  if (typeof payload === "string") return payload;
+  if (!isRecord(payload)) return "";
+  for (const key of SSO_PROVIDER_KEYS) {
+    const candidate = payload[key];
+    if (typeof candidate === "string" && candidate.trim() !== "") return candidate;
+    if (isRecord(candidate) && typeof candidate["name"] === "string") return candidate["name"];
+  }
+  return "";
+}
+
+/** 1Password dates are Unix seconds at noon UTC; only the calendar day is meaningful. */
+export function isoDateOf(seconds: number): string {
+  const date = new Date(seconds * 1000);
+  return Number.isNaN(date.getTime()) ? "" : date.toISOString().slice(0, 10);
+}
+
+/** A `monthYear` is the number YYYYMM (203012 for December 2030). */
+function monthYearOf(value: number): string {
+  const digits = String(Math.trunc(value));
+  if (digits.length !== 6) return digits;
+  return `${digits.slice(0, 4)}-${digits.slice(4)}`;
+}
+
+/**
+ * Whether the login signs in through a provider rather than a password. 1Password 8 does not
+ * document how it writes this, so every plausible shape is checked: an `sso` field value, a
+ * field titled "Sign in with …" whose value or title names the provider, or a captured form
+ * field typed SSO. A username at a provider's e-mail domain is deliberately not a signal.
+ */
+export function detectSignInWith(
+  loginFields: readonly LoginField[],
+  fields: readonly DecodedField[],
+): SignInWith | undefined {
+  const sso = fields.find((field) => field.kind === "sso");
+  if (sso !== undefined) return { ...resolveProvider(sso.text), field: sso };
+
+  const titled = fields.find(
+    (field) =>
+      (field.kind === "text" || field.kind === "hidden") &&
+      (SIGN_IN_WITH.test(field.title) || SIGN_IN_WITH.test(field.id)),
+  );
+  if (titled !== undefined) {
+    const remainder = titled.title.replace(SIGN_IN_WITH, "").trim();
+    // An e-mail address as the value is the account, not the provider.
+    const fromValue = titled.text.includes("@") ? undefined : providerOf(titled.text);
+    const provider = fromValue ?? providerOf(remainder);
+    const name = fromValue !== undefined || remainder === "" ? titled.text.trim() : remainder;
+    return { provider: provider ?? "other", name, field: titled };
+  }
+
+  const captured = loginFields.find(
+    (field) => field.fieldType.toUpperCase() === "SSO" || field.designation.toLowerCase() === "sso",
+  );
+  if (captured !== undefined) {
+    const fromValue = captured.value.includes("@") ? undefined : providerOf(captured.value);
+    const fromName = providerOf(captured.name.replace(SIGN_IN_WITH, ""));
+    const provider = fromValue ?? fromName;
+    return {
+      provider: provider ?? "other",
+      name: fromValue !== undefined ? captured.value.trim() : captured.name.trim() || captured.value.trim(),
+    };
+  }
+  return undefined;
+}
+
+function resolveProvider(name: string): Pick<SignInWith, "provider" | "name"> {
+  return { provider: providerOf(name) ?? "other", name: name.trim() };
+}

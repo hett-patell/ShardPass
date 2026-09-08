@@ -4,8 +4,10 @@ import {
   importBitwardenJson,
   importChromeCsv,
   importFirefoxCsv,
+  importOnePassword1pux,
   importOnePasswordCsv,
   type ImportResult,
+  OnePassword1puxFormatError,
 } from "@shardpass/importers";
 import { parseFolderResponseForRequest, type FolderRequest } from "@shardpass/messaging";
 import { Button, PasswordInput } from "@shardpass/ui";
@@ -32,7 +34,7 @@ const MAX_VISIBLE_WARNINGS = 20;
 /** Rows per item.createMany call: bounds message size and gives the progress bar steps. */
 const IMPORT_BATCH_SIZE = 100;
 
-type ThirdPartySourceId = "chrome" | "firefox" | "bitwarden" | "onepassword" | "keepass";
+type ThirdPartySourceId = "chrome" | "firefox" | "bitwarden" | "onepassword" | "onepassword-1pux" | "keepass";
 type SourceId = "otp" | "backup" | ThirdPartySourceId;
 
 interface ThirdPartySource {
@@ -41,10 +43,12 @@ interface ThirdPartySource {
   readonly accept: string;
   readonly instructions: string;
   /**
-   * Plain-text exports parse synchronously from the file's text. Encrypted sources leave this
-   * undefined and are decrypted in a worker after the user supplies a password instead.
+   * Plain-text exports parse synchronously from the file's text. Archives are read as bytes and
+   * parsed asynchronously through `parseBytes`. Encrypted sources leave both undefined and are
+   * decrypted in a worker after the user supplies a password instead.
    */
   readonly parse?: (text: string) => ImportResult;
+  readonly parseBytes?: (bytes: ArrayBuffer) => Promise<ImportResult>;
   readonly encrypted?: true;
 }
 
@@ -84,6 +88,15 @@ const THIRD_PARTY_SOURCES: readonly ThirdPartySource[] = Object.freeze([
     parse: importOnePasswordCsv,
   },
   {
+    id: "onepassword-1pux",
+    label: "1Password 1PUX",
+    accept: ".1pux,application/zip",
+    instructions:
+      "In 1Password, File → Export → 1PUX. It keeps every field, tags, several URLs, one-time secrets and " +
+      "which accounts sign in with Google or Apple; the CSV export keeps only logins. Then select the .1pux file below.",
+    parseBytes: importOnePassword1pux,
+  },
+  {
     id: "keepass",
     label: "KeePass database",
     accept: ".kdbx,application/x-keepass",
@@ -99,6 +112,7 @@ const SOURCE_OPTIONS: readonly Readonly<{ id: SourceId; label: string }>[] = Obj
   { id: "firefox", label: "Firefox CSV" },
   { id: "bitwarden", label: "Bitwarden JSON" },
   { id: "onepassword", label: "1Password CSV" },
+  { id: "onepassword-1pux", label: "1Password 1PUX" },
   { id: "keepass", label: "KeePass database" },
   { id: "otp", label: "QR code / otpauth://" },
   { id: "backup", label: "ShardPass backup" },
@@ -109,7 +123,7 @@ type Row = Readonly<{ id: string; item: VaultItem; selected: boolean }>;
 type ImportOutcome = Readonly<{
   name: string;
   kind: VaultItem["kind"];
-  status: "duplicate" | "invalid" | "conflict" | "unfiled";
+  status: "duplicate" | "invalid" | "conflict" | "unfiled" | "updated";
   reason?: string;
 }>;
 type ThirdPartyState = Readonly<{
@@ -124,6 +138,7 @@ type ThirdPartyState = Readonly<{
   warnings: readonly string[];
   error: string | null;
   imported: number;
+  updated: number;
   failed: number;
   duplicates: number;
   unfiled: number;
@@ -140,6 +155,7 @@ const INITIAL_THIRD_PARTY_STATE: ThirdPartyState = Object.freeze({
   warnings: [],
   error: null,
   imported: 0,
+  updated: 0,
   failed: 0,
   duplicates: 0,
   unfiled: 0,
@@ -162,6 +178,8 @@ function describeOutcome(outcome: ImportOutcome): string {
       return outcome.reason === undefined
         ? "Imported without a folder."
         : `Imported without a folder: ${outcome.reason}`;
+    case "updated":
+      return "Updated: the copy already in your vault now has what this row knew.";
   }
 }
 
@@ -329,22 +347,19 @@ export function ImportDialog({ platform, active, onImported, onDone }: ImportDia
     }
     const owner = ++ownerRef.current;
     setState({ ...INITIAL_THIRD_PARTY_STATE, phase: "reading" });
-    void file.text().then(
-      (text) => {
+    void parseFile(parser, file).then(
+      (result) => {
         if (owner !== ownerRef.current) return;
-        let result: ImportResult;
-        try {
-          if (parser.parse === undefined) throw new Error("Source has no text parser.");
-          result = parser.parse(text);
-        } catch {
-          setState({ ...INITIAL_THIRD_PARTY_STATE, error: "The file could not be read." });
-          return;
-        }
         setState(previewState(result, "No importable entries were found in this file."));
       },
-      () => {
+      (error: unknown) => {
         if (owner !== ownerRef.current) return;
-        setState({ ...INITIAL_THIRD_PARTY_STATE, error: "The file could not be read." });
+        // A format error names what the file is not (not a ZIP, no export.data); anything else
+        // is an unreadable file.
+        setState({
+          ...INITIAL_THIRD_PARTY_STATE,
+          error: error instanceof OnePassword1puxFormatError ? error.message : "The file could not be read.",
+        });
       },
     );
   };
@@ -414,6 +429,7 @@ export function ImportDialog({ platform, active, onImported, onDone }: ImportDia
     }));
     let imported = 0;
     let duplicates = 0;
+    let updated = 0;
     let failed = 0;
     let unfiled = 0;
     const outcomes: ImportOutcome[] = [];
@@ -451,6 +467,11 @@ export function ImportDialog({ platform, active, onImported, onDone }: ImportDia
             }
             continue;
           }
+          if (entry.status === "updated") {
+            updated += 1;
+            outcomes.push({ name: itemDisplayName(row.item), kind: row.item.kind, status: "updated" });
+            continue;
+          }
           if (entry.status === "duplicate") duplicates += 1;
           else failed += 1;
           outcomes.push({
@@ -473,6 +494,7 @@ export function ImportDialog({ platform, active, onImported, onDone }: ImportDia
       error: failed > 0 ? `${failed} item(s) could not be imported.` : null,
       imported,
       failed,
+      updated,
       duplicates,
       unfiled,
       outcomes,
@@ -607,6 +629,7 @@ export function ImportDialog({ platform, active, onImported, onDone }: ImportDia
               <strong>Import complete</strong>
               <span>
                 {plural(state.imported, "item")} imported
+                {state.updated > 0 ? `, ${state.updated} brought up to date` : ""}
                 {state.duplicates > 0
                   ? `, ${state.duplicates} already in your vault`
                   : ""}
@@ -750,6 +773,13 @@ export function ImportDialog({ platform, active, onImported, onDone }: ImportDia
       ) : null}
     </section>
   );
+}
+
+/** Runs a source's parser over the file, as text or as bytes, whichever the source reads. */
+async function parseFile(parser: ThirdPartySource, file: File): Promise<ImportResult> {
+  if (parser.parseBytes !== undefined) return parser.parseBytes(await file.arrayBuffer());
+  if (parser.parse === undefined) throw new Error("Source has no text parser.");
+  return parser.parse(await file.text());
 }
 
 const FOLDER_LIMIT_REASON = "the vault's folder limit was reached.";

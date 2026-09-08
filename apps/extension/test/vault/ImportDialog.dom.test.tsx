@@ -102,6 +102,88 @@ function bitwardenFile(folders: readonly { id: string; name: string }[], items: 
   return new File([JSON.stringify(json)], "bitwarden.json", { type: "application/json" });
 }
 
+/** A stored-only ZIP, enough for a 1PUX fixture: local headers, central directory, end record. */
+function storedZip(entries: readonly { name: string; data: string }[]): Uint8Array<ArrayBuffer> {
+  const encoder = new TextEncoder();
+  const parts: Uint8Array[] = [];
+  const central: Uint8Array[] = [];
+  let offset = 0;
+  for (const entry of entries) {
+    const name = encoder.encode(entry.name);
+    const data = encoder.encode(entry.data);
+    const local = new Uint8Array(30 + name.length + data.length);
+    const localView = new DataView(local.buffer);
+    localView.setUint32(0, 0x04034b50, true);
+    localView.setUint32(18, data.length, true);
+    localView.setUint32(22, data.length, true);
+    localView.setUint16(26, name.length, true);
+    local.set(name, 30);
+    local.set(data, 30 + name.length);
+    const record = new Uint8Array(46 + name.length);
+    const recordView = new DataView(record.buffer);
+    recordView.setUint32(0, 0x02014b50, true);
+    recordView.setUint32(20, data.length, true);
+    recordView.setUint32(24, data.length, true);
+    recordView.setUint16(28, name.length, true);
+    recordView.setUint32(42, offset, true);
+    record.set(name, 46);
+    parts.push(local);
+    central.push(record);
+    offset += local.length;
+  }
+  const directorySize = central.reduce((sum, part) => sum + part.length, 0);
+  const end = new Uint8Array(22);
+  const endView = new DataView(end.buffer);
+  endView.setUint32(0, 0x06054b50, true);
+  endView.setUint16(8, entries.length, true);
+  endView.setUint16(10, entries.length, true);
+  endView.setUint32(12, directorySize, true);
+  endView.setUint32(16, offset, true);
+  const all = [...parts, ...central, end];
+  const out = new Uint8Array(all.reduce((sum, part) => sum + part.length, 0));
+  let cursor = 0;
+  for (const part of all) {
+    out.set(part, cursor);
+    cursor += part.length;
+  }
+  return out;
+}
+
+function onePasswordFile(vaults: readonly { name: string; items: readonly { title: string; sso?: string }[] }[]): File {
+  const data = {
+    accounts: [
+      {
+        attrs: { name: "Personal" },
+        vaults: vaults.map((vault) => ({
+          attrs: { name: vault.name },
+          items: vault.items.map((entry, index) => ({
+            uuid: `item-${vault.name}-${index}`,
+            favIndex: 0,
+            createdAt: 1_700_000_000,
+            updatedAt: 1_700_000_000,
+            state: "active",
+            categoryUuid: "001",
+            details: {
+              loginFields: [
+                { value: `user${index}@example.com`, name: "email", fieldType: "E", designation: "username" },
+                ...(entry.sso === undefined ? [{ value: "pw", name: "password", fieldType: "P", designation: "password" }] : []),
+              ],
+              notesPlain: "",
+              sections: entry.sso === undefined ? [] : [{ title: "", fields: [{ title: "", id: "sso", value: { sso: entry.sso } }] }],
+            },
+            overview: { title: entry.title, urls: [{ label: "website", url: "https://example.com" }], tags: [] },
+          })),
+        })),
+      },
+    ],
+  };
+  const bytes = storedZip([
+    { name: "export.data", data: JSON.stringify(data) },
+    { name: "files/", data: "" },
+  ]);
+  return new File([bytes], "export.1pux");
+}
+
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
@@ -125,6 +207,7 @@ describe("ImportDialog", () => {
       "Firefox CSV",
       "Bitwarden JSON",
       "1Password CSV",
+      "1Password 1PUX",
       "QR code / otpauth://",
       "ShardPass backup",
     ]) {
@@ -271,6 +354,56 @@ describe("ImportDialog", () => {
     expect(screen.getAllByText("Imported without a folder: the vault's folder limit was reached.")).toHaveLength(3);
     const sent = createRequests.flatMap((request) => (request as { items: { folderId?: string }[] }).items);
     expect(sent.filter((item) => item.folderId === undefined)).toHaveLength(3);
+  });
+
+  it("reads a 1Password 1PUX archive as bytes, keeps the provider, and files vaults as folders", async () => {
+    const background = folderBackground();
+    const { platform, createRequests } = createPlatform((payload) => {
+      const answered = background.answer(payload);
+      if (answered !== undefined) return answered;
+      const request = payload as { items: { id: string }[] };
+      return Promise.resolve({
+        version: 1,
+        kind: "item.createManyResult",
+        results: request.items.map((entry, index) => ({ index, status: "created", itemId: entry.id })),
+      });
+    });
+    render(<ImportDialog platform={platform} active onImported={() => undefined} />);
+    fireEvent.click(screen.getByRole("button", { name: "1Password 1PUX" }));
+    expect(screen.getByText(/File → Export → 1PUX/u)).toBeVisible();
+    fireEvent.change(screen.getByLabelText("Choose a local 1Password 1PUX file"), {
+      target: {
+        files: [
+          onePasswordFile([
+            { name: "Personal", items: [{ title: "Google-backed", sso: "Google" }] },
+            { name: "Work", items: [{ title: "Office" }] },
+          ]),
+        ],
+      },
+    });
+
+    await waitFor(() => expect(screen.getByText("Google-backed")).toBeVisible());
+    expect(screen.getByText("Office")).toBeVisible();
+    expect(await screen.findByText(/2 folders will be created/u)).toBeVisible();
+
+    fireEvent.click(screen.getByRole("button", { name: "Import selected" }));
+    await waitFor(() => expect(screen.getByText(/2 items imported/u)).toBeVisible());
+    expect(background.created).toEqual(["Personal", "Work"]);
+    const sent = createRequests.flatMap(
+      (request) => (request as { items: { name: string; signInWith?: string; password?: string }[] }).items,
+    );
+    expect(sent.find((entry) => entry.name === "Google-backed")).toMatchObject({ signInWith: "google", password: "" });
+    expect(sent.find((entry) => entry.name === "Office")?.signInWith).toBeUndefined();
+  });
+
+  it("names the problem when a 1PUX file is not an archive", async () => {
+    const { platform } = createPlatform();
+    render(<ImportDialog platform={platform} active onImported={() => undefined} />);
+    fireEvent.click(screen.getByRole("button", { name: "1Password 1PUX" }));
+    fireEvent.change(screen.getByLabelText("Choose a local 1Password 1PUX file"), {
+      target: { files: [new File([new Uint8Array([1, 2, 3, 4])], "broken.1pux")] },
+    });
+    expect(await screen.findByRole("alert")).toHaveTextContent("This file is not a ZIP archive.");
   });
 
   it("offers a key file for a KeePass database and hands it to the worker", async () => {
