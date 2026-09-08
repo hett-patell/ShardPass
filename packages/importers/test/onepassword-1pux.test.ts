@@ -23,6 +23,8 @@ type ItemSpec = Readonly<{
   urls?: readonly string[];
   tags?: readonly string[];
   ainfo?: string;
+  uuid?: string;
+  urlEntries?: readonly { url: string; mode?: string }[];
 }>;
 
 let counter = 0;
@@ -35,7 +37,7 @@ function nameOf(entry: VaultItem): string {
 function item(spec: ItemSpec): Record<string, unknown> {
   counter += 1;
   return {
-    uuid: `item-${counter}`,
+    uuid: spec.uuid ?? `item-${counter}`,
     favIndex: spec.favIndex ?? 0,
     createdAt: spec.createdAt ?? 1_700_000_000,
     updatedAt: spec.updatedAt ?? 1_710_000_000,
@@ -53,7 +55,7 @@ function item(spec: ItemSpec): Record<string, unknown> {
       title: spec.title,
       subtitle: "",
       ...(spec.url === undefined ? {} : { url: spec.url }),
-      urls: (spec.urls ?? []).map((url) => ({ label: "website", url })),
+      urls: spec.urlEntries ?? (spec.urls ?? []).map((url) => ({ label: "website", url })),
       tags: spec.tags ?? [],
       ainfo: spec.ainfo ?? "",
     },
@@ -526,5 +528,24 @@ describe("importOnePassword1pux", () => {
     expect(warnings).toEqual([
       '"API Credentials": field "weird" has a value ShardPass cannot store (hologram: object with keys a, b) and was left out.',
     ]);
+  });
+
+  it("gives a provider login the username of the account item it links to, and keeps URL match modes", async () => {
+    const google = item({ uuid: "google-account", title: "Google", loginFields: [{ value: "het@gmail.test", name: "identifier", fieldType: "T", designation: "username" }] });
+    const shodan = item({
+      title: "Shodan",
+      urlEntries: [{ url: "https://account.shodan.io/login", mode: "exact" }],
+      fields: [{ title: "sign in with", id: "signin", value: { ssoLogin: { provider: "Google", item: { vaultUuid: "v", itemUuid: "google-account" } } } }],
+    });
+    const orphan = item({
+      title: "Tailscale",
+      fields: [{ title: "sign in with", id: "signin", value: { ssoLogin: { provider: "Google", item: { vaultUuid: "v", itemUuid: "not-exported" } } } }],
+    });
+    const result = await importOnePassword1pux(archive(exportData([{ name: "Personal", items: [google, shodan, orphan] }])));
+    const byName = new Map(result.items.map((entry) => [nameOf(entry), entry]));
+    expect(byName.get("Shodan")).toMatchObject({ kind: "login", signInWith: "google", username: "het@gmail.test", password: "", urlMatches: ["exact"] });
+    expect(byName.get("Tailscale")).toMatchObject({ kind: "login", signInWith: "google", username: "" });
+    expect(byName.get("Google")).toMatchObject({ kind: "login", username: "het@gmail.test" });
+    expect((byName.get("Google") as { urlMatches?: unknown }).urlMatches).toBeUndefined();
   });
 });

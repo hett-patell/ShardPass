@@ -18,6 +18,8 @@ export type FieldValueKind =
   | "unsupported";
 
 export type DecodedField = Readonly<{
+  /** For a provider sign-in: the uuid of the provider account's own item in the export. */
+  linkedItemUuid?: string;
   /** For an unsupported value: its key and type, for the notice (never the value itself). */
   detail?: string;
   /** For a provider sign-in: the account e-mail the export attached to it, when any. */
@@ -48,6 +50,8 @@ export type SignInWith = Readonly<{
   name: string;
   /** The account e-mail the export attached to the provider sign-in, when any. */
   account?: string;
+  /** The uuid of the provider account's item, when the export links one. */
+  linkedItemUuid?: string;
   /** The section field that said so, when one did; it is not repeated as a custom field. */
   field?: DecodedField;
 }>;
@@ -98,14 +102,21 @@ export function decodeField(raw: unknown): DecodedField | undefined {
   return { id, title, valueKey: entry[0], ...decodeValue(entry[0], entry[1]) };
 }
 
-function decodeValue(key: string, payload: unknown): Pick<DecodedField, "kind" | "text" | "address" | "account" | "detail"> {
+function decodeValue(key: string, payload: unknown): Pick<DecodedField, "kind" | "text" | "address" | "account" | "detail" | "linkedItemUuid"> {
   if (key === "concealed") return { kind: "hidden", text: asString(payload) };
   if (key === "totp") return { kind: "totp", text: asString(payload) };
   // 1Password 8 writes "Sign in with" as a field titled "sign in with" whose value key is
   // ssoLogin; older builds used sso. Any key naming SSO is read the same way.
   if (key === "sso" || /sso/iu.test(key)) {
     const account = ssoAccount(payload);
-    return { kind: "sso", text: ssoProviderName(payload), ...(account === "" ? {} : { account }) };
+    // 1Password 8 links the field to the provider account's own item ({ item: { itemUuid } }).
+    const linked = isRecord(payload) && isRecord(payload["item"]) ? asString(payload["item"]["itemUuid"]).trim() : "";
+    return {
+      kind: "sso",
+      text: ssoProviderName(payload),
+      ...(account === "" ? {} : { account }),
+      ...(linked === "" ? {} : { linkedItemUuid: linked }),
+    };
   }
   if (key === "passkey" || looksLikePasskey(payload)) return { kind: "passkey", text: "" };
   if (key === "file") return { kind: "attachment", text: attachmentName(payload) };
@@ -205,7 +216,13 @@ export function detectSignInWith(
   fields: readonly DecodedField[],
 ): SignInWith | undefined {
   const sso = fields.find((field) => field.kind === "sso");
-  if (sso !== undefined) return { ...resolveProvider(sso.text), field: sso, ...(sso.account === undefined ? {} : { account: sso.account }) };
+  if (sso !== undefined)
+    return {
+      ...resolveProvider(sso.text),
+      field: sso,
+      ...(sso.account === undefined ? {} : { account: sso.account }),
+      ...(sso.linkedItemUuid === undefined ? {} : { linkedItemUuid: sso.linkedItemUuid }),
+    };
 
   const titled = fields.find(
     (field) =>

@@ -24,6 +24,7 @@ import {
   type LoginPasswordHistoryEntry,
   type SecretItem,
   type VaultItem,
+  type LoginUrlMatchMode,
 } from "@shardpass/domain";
 
 import { clampList, clampName, clampText, keepIfValid, normalizeTags, warningLabel } from "../common/clamp";
@@ -125,10 +126,13 @@ const CARD_BRANDS: Readonly<Record<string, CardBrand>> = {
 };
 
 type ParsedItem = Readonly<{
+  uuid: string;
   title: string;
   categoryUuid: string;
   kind: ItemKind | undefined;
   urls: readonly string[];
+  /** 1Password's per-URL match mode, mapped: default → domain, exact → exact, host → host. */
+  urlMatches: readonly LoginUrlMatchMode[];
   tags: readonly string[];
   notes: string;
   /** 1Password's "additional info" line: the username for logins. */
@@ -203,6 +207,22 @@ function convertExport(root: unknown): ImportResult {
   let trashed = 0;
   let ordinal = 0;
 
+  // A "sign in with" field links to the provider account's own item; its username (the
+  // Google address, say) is the username the provider login should carry.
+  const usernameByUuid = new Map<string, string>();
+  for (const { vault } of vaults)
+    for (const raw of Array.isArray(vault["items"]) ? vault["items"] : []) {
+      if (!isRecord(raw)) continue;
+      const uuid = asString(raw["uuid"]).trim();
+      const details = isRecord(raw["details"]) ? raw["details"] : {};
+      const loginFields = Array.isArray(details["loginFields"]) ? details["loginFields"] : [];
+      const username = loginFields.find(
+        (field) => isRecord(field) && asString(field["designation"]).toLowerCase() === "username" && asString(field["value"]).trim() !== "",
+      );
+      if (uuid !== "" && isRecord(username)) usernameByUuid.set(uuid, asString(username["value"]).trim());
+    }
+  const context: ConvertContext = { usernameOf: (uuid) => usernameByUuid.get(uuid) };
+
   for (const { account, vault } of vaults) {
     // A single vault is the whole export; a folder named after it would wrap everything.
     const folderId =
@@ -225,7 +245,7 @@ function convertExport(root: unknown): ImportResult {
         continue;
       }
       kept += 1;
-      convertItem(parsed, ordinal, folderId, items, warnings);
+      convertItem(parsed, ordinal, folderId, items, warnings, context);
     }
   }
 
@@ -275,10 +295,11 @@ function parseItem(raw: Record<string, unknown>): ParsedItem {
   }
 
   return {
+    uuid: asString(raw["uuid"]).trim(),
     title: asString(overview["title"]).trim(),
     categoryUuid,
     kind: CATEGORY_KINDS[categoryUuid],
-    urls: urlsOf(overview),
+    ...urlsOf(overview),
     tags: Array.isArray(overview["tags"]) ? overview["tags"].filter((tag): tag is string => typeof tag === "string") : [],
     notes: asString(details["notesPlain"]),
     ainfo: asString(overview["ainfo"]).trim(),
@@ -296,17 +317,25 @@ function parseItem(raw: Record<string, unknown>): ParsedItem {
   };
 }
 
-/** The primary `url` plus every `urls[].url`, in order and without repeats. */
-function urlsOf(overview: Record<string, unknown>): string[] {
+/** The primary `url` plus every `urls[].url`, in order and without repeats, each with its match mode. */
+function urlsOf(overview: Record<string, unknown>): { urls: string[]; urlMatches: LoginUrlMatchMode[] } {
   const urls: string[] = [];
+  const urlMatches: LoginUrlMatchMode[] = [];
+  const list = Array.isArray(overview["urls"]) ? overview["urls"] : Array.isArray(overview["URLs"]) ? overview["URLs"] : [];
+  const modeOf = (url: string): LoginUrlMatchMode => {
+    const entry = list.find((candidate) => isRecord(candidate) && asString(candidate["url"]).trim() === url);
+    const mode = isRecord(entry) ? asString(entry["mode"]).trim().toLowerCase() : "";
+    return mode === "exact" ? "exact" : mode === "host" ? "host" : "domain";
+  };
   const add = (value: unknown) => {
     const url = asString(value).trim();
-    if (url !== "" && !urls.includes(url)) urls.push(url);
+    if (url === "" || urls.includes(url)) return;
+    urls.push(url);
+    urlMatches.push(modeOf(url));
   };
   add(overview["url"]);
-  const list = Array.isArray(overview["urls"]) ? overview["urls"] : Array.isArray(overview["URLs"]) ? overview["URLs"] : [];
   for (const entry of list) add(isRecord(entry) ? entry["url"] : entry);
-  return urls;
+  return { urls, urlMatches };
 }
 
 /** 1PUX timestamps are Unix seconds; milliseconds are accepted in case an export writes them. */
@@ -332,12 +361,15 @@ function passwordHistoryOf(raw: unknown): LoginPasswordHistoryEntry[] {
     .slice(0, MAX_LOGIN_PASSWORD_HISTORY);
 }
 
+type ConvertContext = Readonly<{ usernameOf(uuid: string): string | undefined }>;
+
 function convertItem(
   parsed: ParsedItem,
   ordinal: number,
   folderId: string | undefined,
   items: VaultItem[],
   warnings: string[],
+  context: ConvertContext,
 ): void {
   const label = warningLabel(parsed.title, `unnamed item ${ordinal}`);
   if (parsed.kind === "document") {
@@ -375,7 +407,7 @@ function convertItem(
     case "router":
     case "server":
     case "email":
-      emitLoginLike(parsed, parsed.kind, base, label, warnings, items);
+      emitLoginLike(parsed, parsed.kind, base, label, warnings, items, context);
       return;
     case "card":
       emitCard(parsed, base, label, warnings, items);
@@ -421,6 +453,7 @@ function emitLoginLike(
   label: string,
   warnings: string[],
   items: VaultItem[],
+  context: ConvertContext,
 ): void {
   const route = LOGIN_ROUTES[kind];
   const consumed = new Set<DecodedField>();
@@ -449,10 +482,13 @@ function emitLoginLike(
     capturedLogin(parsed.loginFields, "username") ||
     sectionUsername ||
     signInWith?.account ||
+    (signInWith?.linkedItemUuid === undefined ? "" : (context.usernameOf(signInWith.linkedItemUuid) ?? "")) ||
     (kind === "login" ? parsed.ainfo : "");
   const password = capturedLogin(parsed.loginFields, "password") || parsed.detailsPassword || sectionPassword;
   const urlField = take(route.url);
-  const urls = urlField === "" || parsed.urls.includes(urlField) ? parsed.urls : [urlField, ...parsed.urls];
+  const prepended = urlField !== "" && !parsed.urls.includes(urlField);
+  const urls = prepended ? [urlField, ...parsed.urls] : parsed.urls;
+  const urlMatches = prepended ? ["domain" as const, ...parsed.urlMatches] : parsed.urlMatches;
   const totpField = parsed.fields.find((field) => field.kind === "totp" && field.text.trim() !== "");
   if (totpField !== undefined) consumed.add(totpField);
 
@@ -497,6 +533,8 @@ function emitLoginLike(
     username,
     password,
     urls,
+    // Only when a mode says more than the default: an all-domain list is the same as none.
+    ...(urlMatches.some((mode) => mode !== "domain") ? { urlMatches } : {}),
     notes: parsed.notes,
     ...(totpField === undefined ? {} : { totp: totpField.text }),
     customFields,
