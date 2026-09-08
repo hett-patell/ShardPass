@@ -668,6 +668,28 @@ describe("item.createMany", () => {
     });
   });
 
+  it("brings a stored login up to date from a richer copy instead of skipping it", async () => {
+    const { service, repository } = fixture([loginItem({ password: "" })]);
+    const response = await service.handle(
+      request("item.createMany", {
+        items: [
+          loginItem({ id: ids.created, password: "", signInWith: "google", urls: ["https://example.test", "https://mail.example.test"], tags: ["Work"] }),
+          loginItem({ id: ids.missing, password: "" }),
+        ],
+      }),
+      vaultSender,
+    );
+    expect(response).toMatchObject({
+      results: [
+        { index: 0, status: "updated", itemId: ids.login },
+        { index: 1, status: "duplicate" },
+      ],
+    });
+    const stored = repository.items.get(ids.login);
+    expect(stored).toMatchObject({ signInWith: "google", urls: ["https://example.test", "https://mail.example.test"], tags: ["Work"] });
+    expect(repository.items.has(ids.created)).toBe(false);
+  });
+
   it("treats a login on a different host as a different account", async () => {
     const { service } = fixture([loginItem()]);
     const response = await service.handle(

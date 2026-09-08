@@ -88,6 +88,9 @@ export const ItemCreateManyRequestSchema = z.strictObject({
 const batchIndex = z.int().check(z.nonnegative(), z.maximum(MAX_ITEM_CREATE_MANY));
 export const ItemCreateManyEntrySchema = z.discriminatedUnion("status", [
   z.strictObject({ index: batchIndex, status: z.literal("created"), itemId }),
+  // The vault already held this item; the candidate knew more (a provider, a one-time
+  // secret, notes, more sites) and the stored item was brought up to date.
+  z.strictObject({ index: batchIndex, status: z.literal("updated"), itemId }),
   // Something equivalent is already in the vault; the candidate was not written.
   z.strictObject({ index: batchIndex, status: z.literal("duplicate") }),
   // The candidate's own id is already taken.

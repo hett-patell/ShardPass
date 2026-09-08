@@ -5,6 +5,8 @@ import {
   type LoginItem,
   type SecretItem,
   type VaultItem,
+  MAX_LOGIN_URLS,
+  MAX_ITEM_TAGS,
 } from "@shardpass/domain";
 import {
   ItemCrudRequestSchema,
@@ -164,9 +166,11 @@ export class ItemService {
    */
   private async createMany(rawItems: readonly unknown[]): Promise<ItemCrudResponse> {
     const existing = await this.dependencies.repository.listAllItems();
-    const seen = new Set(existing.map(duplicateKey));
+    const stored = new Map(existing.map((item) => [duplicateKey(item), item] as const));
+    const seen = new Set(stored.keys());
     const results: ItemCreateManyEntry[] = [];
     const survivors: { index: number; item: VaultItem }[] = [];
+    const upgrades: { index: number; item: VaultItem; revision: number }[] = [];
 
     rawItems.forEach((raw, index) => {
       const parsed = VaultItemSchema.safeParse(raw);
@@ -176,12 +180,29 @@ export class ItemService {
       }
       const key = duplicateKey(parsed.data);
       if (seen.has(key)) {
-        results[index] = { index, status: "duplicate" };
+        // The same account again, from a richer export (1PUX after CSV, say): what the vault
+        // copy lacks is taken from the candidate rather than thrown away with it.
+        const current = stored.get(key);
+        const enriched = current === undefined ? null : enrich(current, parsed.data);
+        if (enriched === null) results[index] = { index, status: "duplicate" };
+        else {
+          stored.delete(key);
+          upgrades.push({ index, item: enriched, revision: current!.revision });
+        }
         return;
       }
       seen.add(key);
       survivors.push({ index, item: parsed.data });
     });
+
+    for (const upgrade of upgrades) {
+      try {
+        const saved = await this.dependencies.repository.updateItem(upgrade.item, upgrade.revision);
+        results[upgrade.index] = { index: upgrade.index, status: "updated", itemId: saved.id };
+      } catch {
+        results[upgrade.index] = { index: upgrade.index, status: "duplicate" };
+      }
+    }
 
     const outcomes =
       survivors.length === 0
@@ -391,6 +412,38 @@ function secretTypeLabel(secretType: SecretItem["secretType"]): string {
  * are two items, as are two SSH keys with the same title. The key lives only in memory for
  * the length of one request and is never logged.
  */
+/**
+ * What a second copy of the same login can add to the stored one: a sign-in provider, a
+ * one-time secret, notes, more sites, tags, custom fields, history. Returns null when the
+ * candidate brings nothing new. Only logins are merged; other kinds stay duplicates.
+ */
+function enrich(current: VaultItem, candidate: VaultItem): VaultItem | null {
+  if (current.kind !== "login" || candidate.kind !== "login") return null;
+  const urls = [...current.urls];
+  const urlMatches = current.urlMatches === undefined ? undefined : [...current.urlMatches];
+  candidate.urls.forEach((url, index) => {
+    if (urls.length >= MAX_LOGIN_URLS || urls.includes(url)) return;
+    urls.push(url);
+    if (urlMatches !== undefined) urlMatches.push(candidate.urlMatches?.[index] ?? "domain");
+  });
+  const tagKeys = new Set(current.tags.map((tag) => tag.toLocaleLowerCase("en-US")));
+  const tags = [...current.tags, ...candidate.tags.filter((tag) => !tagKeys.has(tag.toLocaleLowerCase("en-US")))].slice(0, MAX_ITEM_TAGS);
+  const next: VaultItem = {
+    ...current,
+    urls,
+    ...(urlMatches === undefined ? {} : { urlMatches }),
+    tags,
+    favorite: current.favorite || candidate.favorite,
+    notes: current.notes === "" ? candidate.notes : current.notes,
+    ...(current.signInWith === undefined && candidate.signInWith !== undefined ? { signInWith: candidate.signInWith } : {}),
+    ...((current.totp ?? "") === "" && (candidate.totp ?? "") !== "" ? { totp: candidate.totp } : {}),
+    ...(current.linkedOtpId === undefined && candidate.linkedOtpId !== undefined ? { linkedOtpId: candidate.linkedOtpId } : {}),
+    ...((current.customFields?.length ?? 0) === 0 && (candidate.customFields?.length ?? 0) > 0 ? { customFields: candidate.customFields } : {}),
+    ...((current.passwordHistory?.length ?? 0) === 0 && (candidate.passwordHistory?.length ?? 0) > 0 ? { passwordHistory: candidate.passwordHistory } : {}),
+  };
+  return JSON.stringify(next) === JSON.stringify(current) ? null : next;
+}
+
 function duplicateKey(item: VaultItem): string {
   const norm = normalizeItemSearch;
   const folder = item.folderId ?? "";
