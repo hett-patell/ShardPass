@@ -47,6 +47,11 @@ export const OtpFillSuggestionSchema = z.strictObject({
   tags,
   /** The account belongs to the page's site (issuer, label, or a login saved for it says so). */
   siteMatch: z.optional(z.boolean()),
+  /**
+   * The current code, only for a time-based account bound to this page's site: the page
+   * would receive it on a pick anyway, and the dropdown can show it the way the popup does.
+   */
+  preview: z.optional(z.strictObject({ code: z.string().check(z.minLength(5), z.maxLength(10)), expiresAt: timestamp })),
 });
 
 export const OtpFillSuggestionsRequestSchema = z.strictObject({

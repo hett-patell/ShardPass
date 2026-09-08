@@ -1,3 +1,5 @@
+import { SIGN_IN_PROVIDER_LABELS, type SignInProvider } from "@shardpass/domain";
+
 export interface LoginPickerSuggestion {
   readonly itemId: string;
   readonly expectedRevision: number;
@@ -7,6 +9,7 @@ export interface LoginPickerSuggestion {
   readonly tags: readonly string[];
   readonly hasLinkedOtp: boolean;
   readonly lastUsedAt?: string | undefined;
+  readonly signInWith?: SignInProvider | undefined;
 }
 
 /** "locked": the vault is closed; the chip stays so a click after unlocking asks again. */
@@ -128,7 +131,11 @@ export function LoginPicker({ suggestions, state, filter = "", activeIndex = -1,
             >
               <span className="loginName">{item.name}</span>
               <span className="loginUsername">{item.username}</span>
-              {item.hasLinkedOtp ? (
+              {item.signInWith !== undefined ? (
+                <span className="loginOtpBadge" aria-label={`Signs in with ${SIGN_IN_PROVIDER_LABELS[item.signInWith]}`}>
+                  {SIGN_IN_PROVIDER_LABELS[item.signInWith]}
+                </span>
+              ) : item.hasLinkedOtp ? (
                 <span className="loginOtpBadge" aria-label="Has a linked one-time code">
                   2FA
                 </span>

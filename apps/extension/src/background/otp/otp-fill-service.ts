@@ -182,7 +182,19 @@ export class OtpFillService {
       for (const candidate of candidates) {
         const parsed = OtpItemSchema.safeParse(candidate);
         if (!parsed.success || parsed.data.deletedAt !== undefined || parsed.data.archivedAt !== undefined) continue;
-        all.push(project(parsed.data, linked.has(parsed.data.id) || namesSite(parsed.data, site)));
+        const siteMatch = linked.has(parsed.data.id) || namesSite(parsed.data, site);
+        // A time-based code for the page's own account is shown in the dropdown; a
+        // counter-based one is never generated before a pick (it would burn the counter).
+        let preview: OtpFillSuggestion["preview"];
+        if (siteMatch && parsed.data.otpType !== "hotp") {
+          try {
+            const generated = await generateOtp(parsed.data, this.dependencies.now());
+            preview = { code: generated.code, expiresAt: generated.expiresAt ?? this.dependencies.now() };
+          } catch {
+            preview = undefined;
+          }
+        }
+        all.push(project(parsed.data, siteMatch, preview));
       }
       all.sort(compareSuggestions);
       const projected = all.slice(0, OTP_FILL_LIMITS.maxSuggestions);
@@ -570,7 +582,7 @@ function bindingKey(binding: Binding): string {
     binding.fieldHandle,
   ].join("\u0000");
 }
-function project(item: OtpItem, siteMatch: boolean): OtpFillSuggestion {
+function project(item: OtpItem, siteMatch: boolean, preview: OtpFillSuggestion["preview"]): OtpFillSuggestion {
   return Object.freeze({
     itemId: item.id,
     expectedRevision: item.revision,
@@ -580,6 +592,7 @@ function project(item: OtpItem, siteMatch: boolean): OtpFillSuggestion {
     favorite: item.favorite,
     tags: [...item.tags],
     siteMatch,
+    ...(preview === undefined ? {} : { preview: Object.freeze(preview) }),
   });
 }
 
@@ -597,14 +610,16 @@ function siteOf(origin: string): Site {
   return { host, domain, brand: domain.split(".")[0] ?? "" };
 }
 
-/** "GitHub" names github.com; "Amazon Web Services" names amazon.com; a label holding the domain counts too. */
+/**
+ * "GitHub" names github.com, and a label holding the registrable domain counts too. Strict on
+ * purpose: this decides which codes are shown to the page before a pick, so a look-alike
+ * domain ("evil-github.com") must not qualify by containing the brand.
+ */
 function namesSite(item: OtpItem, site: Site): boolean {
   if (site.brand.length < 3) return false;
   const issuer = normalize(item.issuer).replace(/[^a-z0-9]/gu, "");
-  const label = normalize(item.label);
   if (issuer === site.brand) return true;
-  if (issuer.length >= 4 && site.brand.length >= 4 && (issuer.includes(site.brand) || site.brand.includes(issuer))) return true;
-  return site.domain !== "" && label.includes(site.domain);
+  return site.domain !== "" && normalize(item.label).includes(site.domain);
 }
 
 function compareSuggestions(left: OtpFillSuggestion, right: OtpFillSuggestion): number {

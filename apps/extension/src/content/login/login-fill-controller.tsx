@@ -5,6 +5,8 @@ import type { LoginFieldSet } from "@shardpass/autofill";
 import type { LoginFillContentPlatform } from "../../platform/extension-platform";
 import { createPickerHost, type PickerHandle } from "../createPickerHost";
 import { filterSuggestions, LoginPicker, type LoginPickerState, type LoginPickerSuggestion } from "./LoginPicker";
+import { SIGN_IN_PROVIDER_LABELS } from "@shardpass/domain";
+import { findProviderButton } from "./provider-button";
 import { SignInBanner } from "./SignInBanner";
 import { suggestPassword } from "./suggest-password";
 import { createSaveLoginPrompt, type SaveLoginPrompt } from "./save-login-prompt";
@@ -420,12 +422,46 @@ export function createLoginFillController(
     else form.submit();
   };
 
+  /**
+   * A provider account has nothing to fill: the page's own "Continue with Google" button is
+   * pressed instead. When the page has no such button, the person is told where to look.
+   */
+  const signInThroughProvider = (candidate: Owner, suggestion: LoginPickerSuggestion): void => {
+    const provider = suggestion.signInWith;
+    if (provider === undefined) return;
+    closeHost();
+    bannerDismissedBy = bannerDismissedBy ?? "fill";
+    closeBanner();
+    const label = SIGN_IN_PROVIDER_LABELS[provider];
+    const button = findProviderButton(options.document, provider);
+    void sendConfirm(suggestion.itemId);
+    if (button !== null) {
+      button.focus({ preventScroll: true });
+      button.click();
+      return;
+    }
+    const notice = createPickerHost(candidate.input, {
+      positionToAnchor: true,
+      slot: "notice",
+      content: (
+        <p className="loginNotice" role="status">
+          {`This account signs in with ${label}. Use the page's ${label} button; ShardPass could not find it.`}
+        </p>
+      ),
+    });
+    options.window.setTimeout(() => notice.close(), 6_000);
+  };
+
   const selectSuggestion = async (
     candidate: Owner,
     suggestion: LoginPickerSuggestion,
     mode: Readonly<{ submit: boolean }> = { submit: false },
   ): Promise<void> => {
     if (!owns(candidate)) return;
+    if (suggestion.signInWith !== undefined) {
+      signInThroughProvider(candidate, suggestion);
+      return;
+    }
     try {
       const response = await options.platform.sendLoginFillMessage({
         version: 1,
@@ -561,8 +597,15 @@ export function createLoginFillController(
         username={best.username}
         otherCount={suggestions.length - 1}
         busy={bannerBusy}
-        // A username-only first step only gets the name in; the password step follows.
-        action={fieldSet.passwordField === null ? "Continue" : "Sign in"}
+        // A username-only first step only gets the name in; the password step follows. A
+        // provider account gets its own verb.
+        action={
+          best.signInWith !== undefined
+            ? `Continue with ${SIGN_IN_PROVIDER_LABELS[best.signInWith]}`
+            : fieldSet.passwordField === null
+              ? "Continue"
+              : "Sign in"
+        }
         onSignIn={() => void signInFromBanner(fieldSet, best)}
         onOtherOptions={() => otherOptions(fieldSet)}
         onClose={() => {
@@ -695,6 +738,14 @@ export function createLoginFillController(
       });
       if (response.kind !== "login.fillRelease")
         return { version: 1, kind: "login.fillFromPopupResult", status: "failed" };
+      if (response.signInWith !== undefined) {
+        const button = findProviderButton(options.document, response.signInWith);
+        if (button === null) return { version: 1, kind: "login.fillFromPopupResult", status: "no-form" };
+        button.focus({ preventScroll: true });
+        button.click();
+        await sendConfirm(itemId);
+        return { version: 1, kind: "login.fillFromPopupResult", status: "filled" };
+      }
       if (!fieldsReady(fieldSet)) {
         sendCancel(itemId);
         return { version: 1, kind: "login.fillFromPopupResult", status: "no-form" };

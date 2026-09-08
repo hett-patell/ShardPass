@@ -89,3 +89,4 @@ export {
   type ParsedQuery,
   type VaultSort,
 } from "./search";
+export { SIGN_IN_PROVIDERS, SIGN_IN_PROVIDER_LABELS, type SignInProvider } from "./login-item";

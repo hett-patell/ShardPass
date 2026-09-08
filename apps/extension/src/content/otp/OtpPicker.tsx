@@ -9,11 +9,14 @@ export interface OtpPickerSuggestion {
   readonly favorite: boolean;
   readonly tags: readonly string[];
   readonly siteMatch?: boolean | undefined;
+  readonly preview?: Readonly<{ code: string; expiresAt: number }> | undefined;
 }
 
 export interface OtpPickerProps {
   readonly suggestions: readonly OtpPickerSuggestion[];
-  readonly state: "busy" | "ready" | "empty" | "error";
+  readonly state: "busy" | "ready" | "empty" | "error" | "failed";
+  /** Seconds left on the shown codes, from the controller's clock. */
+  readonly now?: number;
   readonly onClose: () => void;
   readonly onSelect: (suggestion: OtpPickerSuggestion) => void;
 }
@@ -22,10 +25,15 @@ const STATUS = Object.freeze({
   busy: "Loading accounts",
   empty: "No OTP accounts available",
   error: "OTP accounts are unavailable",
+  failed: "This field would not take the code. It was copied instead: paste it.",
 });
 
+function grouped(code: string): string {
+  return code.length === 6 ? `${code.slice(0, 3)} ${code.slice(3)}` : code;
+}
+
 /** The on-page one-time-code list: favourites first, a slim bar, no search box to take focus. */
-export function OtpPicker({ suggestions, state, onClose, onSelect }: OtpPickerProps) {
+export function OtpPicker({ suggestions, state, now = Date.now(), onClose, onSelect }: OtpPickerProps) {
   const [showAll, setShowAll] = useState(false);
   const sorted = suggestions
     .slice()
@@ -71,7 +79,14 @@ export function OtpPicker({ suggestions, state, onClose, onSelect }: OtpPickerPr
             >
               <span className="otpIssuer">{item.issuer}</span>
               <span className="otpLabel">{item.label}</span>
-              <span className="otpType">{item.otpType.toUpperCase()}</span>
+              {item.preview ? (
+                <span className="otpCode" aria-hidden="true">
+                  {grouped(item.preview.code)}
+                  <span className="otpLeft">{Math.max(0, Math.ceil((item.preview.expiresAt - now) / 1_000))}s</span>
+                </span>
+              ) : (
+                <span className="otpType">{item.otpType.toUpperCase()}</span>
+              )}
             </button>
           ))}
           {hidden > 0 ? (

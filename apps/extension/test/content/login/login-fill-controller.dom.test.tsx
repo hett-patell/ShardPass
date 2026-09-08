@@ -314,6 +314,34 @@ describe("Login fill controller", () => {
     expect(document.querySelector("shardpass-picker-host")).toBeNull();
   });
 
+  it("presses the page's provider button for an account that signs in with Google", async () => {
+    const roots = captureClosedRoots();
+    const { password } = loginForm();
+    password.getClientRects = () => [{} as DOMRect] as unknown as DOMRectList;
+    const google = document.createElement("button");
+    google.type = "button";
+    google.textContent = "Continue with Google";
+    google.getClientRects = () => [{} as DOMRect] as unknown as DOMRectList;
+    const pressed = vi.fn();
+    google.addEventListener("click", pressed);
+    document.body.append(google);
+    const viaGoogle: LoginFillSuggestion = { ...account, username: "het@gmail.test", signInWith: "google" };
+    const candidate = platform((request) => {
+      if (request.kind === "login.fillSuggestions")
+        return { version: 1, kind: "login.fillSuggestionsResult", suggestions: [viaGoogle] };
+      if (request.kind === "login.fillSelect") throw new Error("a provider account releases nothing");
+      return undefined;
+    });
+    start(candidate);
+    await flush();
+    const bannerRoot = roots.find((root) => root.querySelector(".signIn"));
+    const banner = within(bannerRoot as unknown as HTMLElement);
+    await clickAndFlush(banner.getByRole("button", { name: "Continue with Google" }));
+    expect(pressed).toHaveBeenCalledTimes(1);
+    expect(password.value).toBe("");
+    expect(vi.mocked(candidate.sendLoginFillMessage).mock.calls.some(([request]) => request.kind === "login.fillConfirm")).toBe(true);
+  });
+
   it("dismisses the sign-in banner for the rest of the page load", async () => {
     const roots = captureClosedRoots();
     const { password } = loginForm();

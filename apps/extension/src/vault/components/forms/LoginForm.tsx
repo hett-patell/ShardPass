@@ -16,6 +16,9 @@ import {
   type LoginItem,
   type LoginUrlMatchMode,
   type OtpItem,
+  SIGN_IN_PROVIDERS,
+  SIGN_IN_PROVIDER_LABELS,
+  type SignInProvider,
 } from "@shardpass/domain";
 import { inlineTotpItem } from "@shardpass/otp";
 import { Button, Field, IconButton } from "@shardpass/ui";
@@ -53,6 +56,7 @@ interface FormValue {
   totp: string;
   customFields: CustomFieldDraft[];
   linkedOtpId: string;
+  signInWith: string;
   notes: string;
   favorite: boolean;
   tags: string;
@@ -112,6 +116,7 @@ function initialValue(item?: LoginItem): FormValue {
       linkedTo: field.linkedTo ?? "username",
     })),
     linkedOtpId: item?.linkedOtpId ?? "",
+    signInWith: item?.signInWith ?? "",
     notes: item?.notes ?? "",
     favorite: item?.favorite ?? false,
     tags: formatTags(item?.tags ?? []),
@@ -215,6 +220,9 @@ export function LoginForm({ item, platform, otpItems, onSaved, onCancel }: Login
       totp,
       customFields,
       linkedOtpId,
+      signInWith: (SIGN_IN_PROVIDERS as readonly string[]).includes(value.signInWith)
+        ? (value.signInWith as SignInProvider)
+        : undefined,
       notes: value.notes,
       favorite: value.favorite,
       tags,
@@ -355,6 +363,28 @@ export function LoginForm({ item, platform, otpItems, onSaved, onCancel }: Login
         maxLength={MAX_LOGIN_TOTP_LENGTH}
         onChange={(next) => setValue({ ...value, totp: next })}
       />
+
+      <div className={styles.field}>
+        <label className={styles.label} htmlFor="login-sign-in-with">
+          Signs in with
+        </label>
+        <select
+          id="login-sign-in-with"
+          className={styles.select}
+          value={value.signInWith}
+          onChange={(event) => setValue({ ...value, signInWith: event.target.value })}
+        >
+          <option value="">Its own password</option>
+          {SIGN_IN_PROVIDERS.map((provider) => (
+            <option key={provider} value={provider}>
+              {provider === "other" ? "Another provider" : SIGN_IN_PROVIDER_LABELS[provider]}
+            </option>
+          ))}
+        </select>
+        <p className={styles.help}>
+          For an account that uses “Continue with Google” and the like: ShardPass presses that button on the page instead of filling a password.
+        </p>
+      </div>
 
       {otpItems.length > 0 ? (
         <div className={styles.field}>

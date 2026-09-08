@@ -196,6 +196,7 @@ export class LoginFillService {
         tags: [...item.tags],
         hasLinkedOtp: item.linkedOtpId !== undefined || (item.totp ?? "").trim() !== "",
         ...(item.lastUsedAt === undefined ? {} : { lastUsedAt: item.lastUsedAt }),
+        ...(item.signInWith === undefined ? {} : { signInWith: item.signInWith }),
       });
     }
     suggestions.sort(compareSuggestions);
@@ -254,6 +255,7 @@ export class LoginFillService {
       kind: "login.fillRelease",
       username: item.username,
       password: item.password,
+      ...(item.signInWith === undefined ? {} : { signInWith: item.signInWith }),
       ...(linkedOtpCode === undefined ? {} : { linkedOtpCode }),
     };
   }

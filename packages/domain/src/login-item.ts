@@ -70,6 +70,35 @@ const base64url = (max: number) => z.string().check(z.maxLength(max), z.regex(/^
  * key is PKCS#8 DER; the public key is a COSE_Key; both base64url. Kept on the login so the
  * passkey lives with the account it signs in to, the way 1Password keeps them.
  */
+/** Providers a login can sign in through instead of a password; "other" keeps the fact without the name. */
+export const SIGN_IN_PROVIDERS = [
+  "google",
+  "apple",
+  "microsoft",
+  "github",
+  "facebook",
+  "twitter",
+  "amazon",
+  "linkedin",
+  "slack",
+  "other",
+] as const;
+export type SignInProvider = (typeof SIGN_IN_PROVIDERS)[number];
+
+/** How the provider reads in copy: "Continue with Google". */
+export const SIGN_IN_PROVIDER_LABELS: Readonly<Record<SignInProvider, string>> = {
+  google: "Google",
+  apple: "Apple",
+  microsoft: "Microsoft",
+  github: "GitHub",
+  facebook: "Facebook",
+  twitter: "X",
+  amazon: "Amazon",
+  linkedin: "LinkedIn",
+  slack: "Slack",
+  other: "a provider",
+};
+
 const passkeySchema = z.strictObject({
   credentialId: base64url(128),
   rpId: z.string().check(z.minLength(1), z.maxLength(253)),
@@ -117,6 +146,11 @@ export const LoginItemSchema = z.extend(ItemMetadataSchema, {
   passkeys: z.optional(z.array(passkeySchema).check(z.maxLength(MAX_LOGIN_PASSKEYS))),
   /** When this login was last filled; the background sets it on fill confirmation. */
   lastUsedAt: z.optional(ItemTimestampSchema),
+  /**
+   * The account signs in through a provider ("Continue with Google") rather than a
+   * password of its own. The page-side flow then presses that provider's button.
+   */
+  signInWith: z.optional(z.enum(SIGN_IN_PROVIDERS)),
   notes: boundedString(MAX_LOGIN_NOTES_LENGTH),
 });
 

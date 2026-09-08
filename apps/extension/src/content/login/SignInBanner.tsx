@@ -4,8 +4,8 @@ export interface SignInBannerProps {
   /** How many other saved logins fit this page. */
   readonly otherCount: number;
   readonly busy: boolean;
-  /** "Sign in" for a form with a password; "Continue" for a username-only first step. */
-  readonly action: "Sign in" | "Continue";
+  /** "Sign in" for a form with a password; "Continue" for a username-only first step; "Continue with Google" for a provider account. */
+  readonly action: string;
   readonly onSignIn: () => void;
   readonly onOtherOptions: () => void;
   readonly onClose: () => void;

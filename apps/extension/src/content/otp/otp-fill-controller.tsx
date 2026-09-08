@@ -97,6 +97,7 @@ export function createOtpFillController(
   };
 
   const closeHost = (): void => {
+    stopRefresh();
     const current = host;
     host = null;
     current?.close();
@@ -144,27 +145,56 @@ export function createOtpFillController(
     });
   };
 
+  let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+  const stopRefresh = (): void => {
+    if (refreshTimer !== null) clearTimeout(refreshTimer);
+    refreshTimer = null;
+  };
+
+  const pickerContent = (
+    candidate: Owner,
+    state: "busy" | "ready" | "empty" | "error" | "failed",
+    suggestions: readonly OtpPickerSuggestion[],
+  ) => (
+    <OtpPicker
+      suggestions={suggestions}
+      state={state}
+      now={Date.now()}
+      onClose={() => invalidate(true)}
+      onSelect={(suggestion) => void selectSuggestion(candidate, suggestion)}
+    />
+  );
+
   const renderPicker = (
     candidate: Owner,
-    state: "busy" | "ready" | "empty" | "error",
+    state: "busy" | "ready" | "empty" | "error" | "failed",
     suggestions: readonly OtpPickerSuggestion[],
   ): void => {
     if (!owns(candidate)) return;
+    stopRefresh();
     closeHost();
     if (!owns(candidate)) return;
     host = createPickerHost(candidate.input, {
       positionToAnchor: true,
       fit: "anchor",
       onRequestClose: () => invalidate(true),
-      content: (
-        <OtpPicker
-          suggestions={suggestions}
-          state={state}
-          onClose={() => invalidate(true)}
-          onSelect={(suggestion) => void selectSuggestion(candidate, suggestion)}
-        />
-      ),
+      content: pickerContent(candidate, state, suggestions),
     });
+    // Shown codes tick down each second and are fetched again when one runs out.
+    if (state === "ready" && suggestions.some((item) => item.preview !== undefined)) {
+      const soonest = Math.min(...suggestions.map((item) => item.preview?.expiresAt ?? Number.POSITIVE_INFINITY));
+      const tick = () => {
+        refreshTimer = null;
+        if (host === null || host.status !== "open" || !owns(candidate)) return;
+        if (Date.now() >= soonest) {
+          void openPicker(candidate);
+          return;
+        }
+        host.update(pickerContent(candidate, state, suggestions));
+        refreshTimer = setTimeout(tick, 1_000);
+      };
+      refreshTimer = setTimeout(tick, 1_000);
+    }
   };
 
   const openPicker = async (candidate: Owner): Promise<void> => {
@@ -227,8 +257,15 @@ export function createOtpFillController(
       const terminal = clearRelease();
       if (terminal === null) return;
       if (result.status !== "filled") {
+        // The field would not take it (a widget that rewrites itself, a changed page): the
+        // code goes to the clipboard so the person can still paste it, and the picker says so.
         sendCancel(candidate, terminal.releaseId);
-        invalidate(false);
+        try {
+          await options.window.navigator.clipboard.writeText(terminal.code);
+        } catch {
+          // No clipboard here; the message still explains what happened.
+        }
+        if (owns(candidate)) renderPicker(candidate, "failed", []);
         return;
       }
       closeHost();

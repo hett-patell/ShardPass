@@ -330,6 +330,25 @@ describe("PopupApp screens", () => {
     expect(screen.queryByText("Example Portal")).not.toBeInTheDocument();
   });
 
+  it("shows which provider a login signs in with instead of an empty password", async () => {
+    const viaGoogle = { ...loginItem, password: "", signInWith: "google" };
+    const fixture = createTestPlatform();
+    fixture.sendMessage.mockImplementation((payload: unknown) => {
+      const request = payload as { kind?: unknown; itemId?: unknown };
+      if (request.kind === "item.list")
+        return Promise.resolve({ version: 1, kind: "item.listResult", items: [{ ...loginProjection, signInWith: "google" }] });
+      if (request.kind === "item.get") return Promise.resolve({ version: 1, kind: "item.getResult", item: viaGoogle });
+      return Promise.resolve(undefined);
+    });
+    render(<PopupApp platform={fixture.platform} />);
+    act(() => fixture.publishVaultState(vaultState("unlocked", 1)));
+    fireEvent.click(await screen.findByRole("button", { name: /Logins/ }));
+    expect(screen.queryByRole("button", { name: "Copy password for Example Portal" })).not.toBeInTheDocument();
+    fireEvent.click(await screen.findByRole("button", { name: /Example Portal/ }));
+    expect(await screen.findByText("Google")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Show password" })).not.toBeInTheDocument();
+  });
+
   it("locks the vault from the title bar", async () => {
     const { sendMessage } = await renderUnlocked();
     fireEvent.click(screen.getByRole("button", { name: "Lock vault" }));

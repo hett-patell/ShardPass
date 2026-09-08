@@ -63,6 +63,13 @@ describe("metadata-only OTP picker shell", () => {
     expect(screen.getAllByRole("button", { name: /Use OTP account/ })).toHaveLength(suggestions.length + 1);
   });
 
+  it("shows the current code and its countdown for an account bound to the page", () => {
+    const here = { ...suggestions[0]!, itemId: "10000000-0000-4000-8000-00000000bbbb", issuer: "Here", siteMatch: true, preview: { code: "482913", expiresAt: 30_000 } };
+    render(<OtpPicker suggestions={[here]} state="ready" now={10_000} onClose={vi.fn()} onSelect={vi.fn()} />);
+    expect(screen.getByText("482 913")).toBeInTheDocument();
+    expect(screen.getByText("20s")).toBeInTheDocument();
+  });
+
   it("supports keyboard selection and Escape close", () => {
     const onClose = vi.fn();
     const onSelect = vi.fn();

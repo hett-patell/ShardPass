@@ -1,4 +1,5 @@
 import type { LoginItem, OtpItem, Folder } from "@shardpass/domain";
+import { SIGN_IN_PROVIDER_LABELS } from "@shardpass/domain";
 import { useState } from "react";
 
 import type { ExtensionPlatform } from "../../../platform/extension-platform";
@@ -109,7 +110,15 @@ export function LoginDetail({ item, platform, otpItems, folders, onUpdate, onDel
         </div>
       </div>
 
-      <RevealField label="Password" value={item.password} />
+      {item.signInWith !== undefined ? (
+        <div className={styles.fieldGroup}>
+          <span className={styles.label}>Signs in with</span>
+          <div className={styles.row}>
+            <span className={styles.rowValue}>{SIGN_IN_PROVIDER_LABELS[item.signInWith]}</span>
+          </div>
+        </div>
+      ) : null}
+      {item.signInWith === undefined || item.password !== "" ? <RevealField label="Password" value={item.password} /> : null}
 
       {history.length > 0 ? (
         <div className={styles.fieldGroup}>

@@ -1,3 +1,4 @@
+import { SIGN_IN_PROVIDERS } from "@shardpass/domain";
 import { z } from "zod/mini";
 
 import type { CommandSenderPolicy } from "./context";
@@ -13,6 +14,8 @@ export const LoginFillSuggestionSchema = z.strictObject({
   hasLinkedOtp: z.boolean(),
   /** When this login was last filled or copied, so the most recently used one leads. */
   lastUsedAt: z.optional(z.string()),
+  /** Signs in through a provider: the page-side flow presses that button instead of filling. */
+  signInWith: z.optional(z.enum(SIGN_IN_PROVIDERS)),
 });
 
 export type LoginFillSuggestion = z.infer<typeof LoginFillSuggestionSchema>;
@@ -43,6 +46,7 @@ export const LoginFillReleaseResponseSchema = z.strictObject({
   kind: z.literal("login.fillRelease"),
   username: z.string(),
   password: z.string(),
+  signInWith: z.optional(z.enum(SIGN_IN_PROVIDERS)),
   linkedOtpCode: z.optional(z.string()),
 });
 

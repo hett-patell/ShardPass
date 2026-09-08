@@ -27,9 +27,11 @@ export function RowActions({ item, platform, onCopyPassword, onCopyCode, onFill,
   if (item.kind !== "login") return null;
   return (
     <>
-      <QuickAction aria-label={`Copy password for ${item.name}`} title="Copy password" onClick={() => onCopyPassword(item)}>
-        <KeyRound size={15} />
-      </QuickAction>
+      {item.signInWith === undefined ? (
+        <QuickAction aria-label={`Copy password for ${item.name}`} title="Copy password" onClick={() => onCopyPassword(item)}>
+          <KeyRound size={15} />
+        </QuickAction>
+      ) : null}
       {onFill ? (
         <Button className={styles.fill} loading={filling} onClick={() => onFill(item)}>
           Fill

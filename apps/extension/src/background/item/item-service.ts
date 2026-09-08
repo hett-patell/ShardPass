@@ -318,7 +318,11 @@ function toListProjection(item: VaultItem): ItemListItemProjection {
     tags,
     ...listDisplayFields(item),
     ...(item.kind === "login" && item.urls.length > 0
-      ? { urls: [...item.urls], ...(item.urlMatches === undefined ? {} : { urlMatches: [...item.urlMatches] }) }
+      ? {
+          urls: [...item.urls],
+          ...(item.urlMatches === undefined ? {} : { urlMatches: [...item.urlMatches] }),
+          ...(item.signInWith === undefined ? {} : { signInWith: item.signInWith }),
+        }
       : {}),
   };
 }

@@ -3,6 +3,7 @@ import {
   MAX_ITEM_TAG_LENGTH,
   VAULT_ITEM_KINDS,
   VaultItemSchema,
+  SIGN_IN_PROVIDERS,
 } from "@shardpass/domain";
 import { z } from "zod/mini";
 
@@ -59,6 +60,8 @@ export const ItemListItemProjectionSchema = z.strictObject({
   urlMatches: z.optional(
     z.array(z.enum(["domain", "host", "startsWith", "exact", "never"])).check(z.maxLength(32)),
   ),
+  /** A login that signs in through a provider rather than a password. */
+  signInWith: z.optional(z.enum(SIGN_IN_PROVIDERS)),
 });
 
 export const ItemGetRequestSchema = z.strictObject({

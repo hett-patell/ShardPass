@@ -222,6 +222,16 @@ describe("LoginFillService", () => {
     await expect(third.service.handle(request("login.pendingOffer", {}), sender)).resolves.toMatchObject({ offer: null });
   });
 
+  it("says which provider a login signs in with, in suggestions and in the release", async () => {
+    const stored = loginItem({ password: "", signInWith: "google" });
+    const { service } = fixture([stored]);
+    const listed = await service.handle(request("login.fillSuggestions", { domain: "example.test" }), sender);
+    if (listed.kind !== "login.fillSuggestionsResult") throw new Error("expected suggestions");
+    expect(listed.suggestions[0]).toMatchObject({ signInWith: "google" });
+    const released = await service.handle(request("login.fillSelect", { itemId: stored.id, expectedRevision: 1 }), sender);
+    expect(released).toMatchObject({ kind: "login.fillRelease", signInWith: "google", password: "" });
+  });
+
   it("reports hasLinkedOtp without dereferencing the linked item", async () => {
     const stored = loginItem({ linkedOtpId: ids.totp, urls: ["https://example.test"] });
     const { service } = fixture([stored]);

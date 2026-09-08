@@ -170,3 +170,10 @@
 .linkButton:hover {
   text-decoration: underline;
 }
+
+.help {
+  margin: var(--space-1) 0 0;
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  line-height: var(--line-body);
+}

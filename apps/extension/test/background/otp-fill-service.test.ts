@@ -128,6 +128,7 @@ describe("OTP fill service", () => {
           favorite: true,
           tags: ["work"],
           siteMatch: true,
+          preview: { code: expect.stringMatching(/^\d{6}$/u) as unknown as string, expiresAt: expect.any(Number) as unknown as number },
         },
         {
           itemId,
@@ -138,22 +139,29 @@ describe("OTP fill service", () => {
           favorite: false,
           tags: ["work"],
           siteMatch: true,
+          preview: { code: expect.stringMatching(/^\d{6}$/u) as unknown as string, expiresAt: expect.any(Number) as unknown as number },
         },
       ],
     });
     expect(JSON.stringify(response)).not.toContain("secret");
     expect(JSON.stringify(response)).not.toContain("private");
-    expect(JSON.stringify(response)).not.toContain("code");
   });
 
-  it("puts the page's own accounts first and marks the others as belonging elsewhere", async () => {
+  it("puts the page's own accounts first, previews only their codes, and never a look-alike's", async () => {
     const elsewhere = otp({ id: otherItemId, issuer: "Other Service", label: "someone", favorite: true, secret: "GEZDGNBVGY3TQOJQ" });
     const { service } = harness([elsewhere, otp()]);
-    const response = (await suggestions(service)) as { suggestions: Array<{ itemId: string; siteMatch?: boolean }> };
-    expect(response.suggestions.map((item) => [item.itemId, item.siteMatch])).toEqual([
-      [itemId, true],
-      [otherItemId, false],
+    const response = (await suggestions(service)) as { suggestions: Array<{ itemId: string; siteMatch?: boolean; preview?: unknown }> };
+    expect(response.suggestions.map((item) => [item.itemId, item.siteMatch, item.preview !== undefined])).toEqual([
+      [itemId, true, true],
+      [otherItemId, false, false],
     ]);
+    // A brand contained in a longer word is not the brand: "evil-example.test" gets no code.
+    const lookalike = harness([otp()]);
+    const spoofed = (await lookalike.service.handle(
+      request("otp.fillSuggestions", { requestId: "request_0123456789abcdef", fieldHandle: "field_0123456789abcdef" }),
+      { ...sender, senderUrl: "https://evil-example.test/form" },
+    )) as { suggestions: Array<{ siteMatch?: boolean; preview?: unknown }> };
+    expect(spoofed.suggestions.map((item) => [item.siteMatch, item.preview !== undefined])).toEqual([[false, false]]);
   });
 
   it("binds capabilities and releases to exact sender origin field item revision and session", async () => {

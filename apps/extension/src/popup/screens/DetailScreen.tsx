@@ -1,4 +1,5 @@
 import type { LoginItem, VaultItem } from "@shardpass/domain";
+import { SIGN_IN_PROVIDER_LABELS } from "@shardpass/domain";
 import { parseItemCrudResponseForRequest } from "@shardpass/messaging";
 import { Button, SectionLabel } from "@shardpass/ui";
 import { Copy, Eye, EyeOff } from "lucide-react";
@@ -148,7 +149,14 @@ function LoginFields({
   return (
     <>
       <TextField label="Username" value={item.username} onCopy={onCopy} />
-      <SecretField label="Password" value={item.password} onCopy={onCopy} />
+      {item.signInWith !== undefined ? (
+        <Field label="Signs in with">
+          <span>{SIGN_IN_PROVIDER_LABELS[item.signInWith]}</span>
+        </Field>
+      ) : null}
+      {item.signInWith === undefined || item.password !== "" ? (
+        <SecretField label="Password" value={item.password} onCopy={onCopy} />
+      ) : null}
       {item.linkedOtpId !== undefined ? (
         <Field label="One-time code">
           <LiveCode platform={platform} itemId={item.linkedOtpId} onCopy={(code) => onCopy(code, "Code")} />
