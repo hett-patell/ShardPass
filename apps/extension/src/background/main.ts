@@ -85,6 +85,8 @@ export function installBackground(
 ): () => void {
   let disposed = false;
   let readyFailed = false;
+  /** Why startup failed, in the background's own words, for the page's "Reason" line. */
+  let startupFailure: string | undefined;
   const sessions = new SessionService({
     local: platform.localStorage,
     session: platform.sessionStorage,
@@ -262,6 +264,10 @@ export function installBackground(
       // Not a lock: that would throw away the saved session over a transient storage error.
       // The next worker instance simply tries again.
       readyFailed = true;
+      const named = error as { code?: unknown; name?: unknown; message?: unknown } | null;
+      const code = typeof named?.code === "string" ? named.code : typeof named?.name === "string" ? named.name : "Error";
+      const message = typeof named?.message === "string" ? named.message : "";
+      startupFailure = `startup ${code}${message === "" ? "" : `: ${message}`}`.slice(0, 200);
     }
   })();
 
@@ -333,7 +339,10 @@ export function installBackground(
     };
   });
   const disposeMessage = platform.onMessage(async (payload, rawSenderMetadata) => {
-    if (!(await awaitReady())) return errorResponse("VAULT_UNAVAILABLE");
+    if (!(await awaitReady())) {
+      const base = errorResponse("VAULT_UNAVAILABLE");
+      return startupFailure === undefined ? base : { ...base, error: { ...base.error, detail: startupFailure } };
+    }
     try {
       const senderContext = normalizeSenderContext(rawSenderMetadata, platform.extensionId);
       if (senderContext === null)

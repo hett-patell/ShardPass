@@ -6,7 +6,14 @@ import type { ExtensionPlatform } from "../platform/extension-platform";
 export type FoundationStatusState =
   | Readonly<{ state: "loading" }>
   | Readonly<{ state: "ready"; status: FoundationResponse }>
-  | Readonly<{ state: "error" }>;
+  | Readonly<{ state: "error"; reason?: string }>;
+
+/** The background's own diagnosis (code and where), never a raw message from an unknown source. */
+function reasonOf(error: unknown): string | undefined {
+  const candidate = error as { code?: unknown; detail?: unknown } | null;
+  if (typeof candidate?.code !== "string") return undefined;
+  return typeof candidate.detail === "string" && candidate.detail !== "" ? `${candidate.code} — ${candidate.detail}` : candidate.code;
+}
 
 const foundationRequest = {
   version: 1,
@@ -28,9 +35,10 @@ export function useFoundationStatus(platform: ExtensionPlatform): FoundationStat
         const parsed = FoundationResponseSchema.safeParse(response);
         setStatus(parsed.success ? { state: "ready", status: parsed.data } : { state: "error" });
       },
-      () => {
+      (error: unknown) => {
         if (active) {
-          setStatus({ state: "error" });
+          const reason = reasonOf(error);
+          setStatus(reason === undefined ? { state: "error" } : { state: "error", reason });
         }
       },
     );

@@ -22,6 +22,12 @@ export function EmptyVaultState({ foundation }: EmptyVaultStateProps) {
       {foundation.state === "error" ? (
         <p className={styles.error} role="alert">
           {safeFoundationError}
+          {foundation.reason ? (
+            <>
+              {" "}
+              Reason: <code>{foundation.reason}</code>.
+            </>
+          ) : null}
         </p>
       ) : null}
     </div>
