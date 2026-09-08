@@ -121,6 +121,8 @@ function signupFieldsOf(fieldSet: LoginFieldSet): HTMLInputElement[] | null {
   return twins.length > 0 ? twins : [password];
 }
 
+const PROVIDER_PAGE_HINT = /\b(?:continue|sign\s?in|log\s?in)\s+with\s+(?:google|apple|microsoft|github|facebook|amazon|linkedin|slack)\b/iu;
+
 const CAPTCHA_SELECTOR =
   'iframe[src*="recaptcha" i], iframe[src*="hcaptcha" i], iframe[src*="turnstile" i], [class*="captcha" i], [id*="captcha" i]';
 
@@ -153,7 +155,7 @@ export function createLoginFillController(
   let bannerDismissedBy: "user" | "fill" | null = null;
   let bannerBusy = false;
   let bannerRender: (() => ReactNode) | null = null;
-  const bannerAsked = new WeakSet<HTMLInputElement>();
+  const bannerAsked = new WeakSet<WeakKey>();
   // A "show password" toggle flips a password field to text; remembering the field keeps it
   // a login field.
   const seenPasswordFields = new WeakSet<HTMLInputElement>();
@@ -207,7 +209,8 @@ export function createLoginFillController(
     for (const fieldSet of fieldSets) {
       if (fieldSet.passwordField !== null) seenPasswordFields.add(fieldSet.passwordField);
     }
-    if (bannerHost !== null && (bannerFor === null || !bannerFor.isConnected || bannerFor.getClientRects().length === 0))
+    // A banner anchored to a field goes when the field does; one for a provider-only page stays.
+    if (bannerHost !== null && bannerFor !== null && (!bannerFor.isConnected || bannerFor.getClientRects().length === 0))
       closeBanner();
     maybeOfferSignIn();
   };
@@ -426,7 +429,7 @@ export function createLoginFillController(
    * A provider account has nothing to fill: the page's own "Continue with Google" button is
    * pressed instead. When the page has no such button, the person is told where to look.
    */
-  const signInThroughProvider = (candidate: Owner, suggestion: LoginPickerSuggestion): void => {
+  const signInThroughProvider = (candidate: Owner | null, suggestion: LoginPickerSuggestion): void => {
     const provider = suggestion.signInWith;
     if (provider === undefined) return;
     closeHost();
@@ -440,7 +443,7 @@ export function createLoginFillController(
       button.click();
       return;
     }
-    const notice = createPickerHost(candidate.input, {
+    const notice = createPickerHost(candidate?.input ?? options.document.body, {
       positionToAnchor: true,
       slot: "notice",
       content: (
@@ -548,8 +551,8 @@ export function createLoginFillController(
     return options.window.innerWidth >= 360 && options.window.innerHeight >= 160;
   };
 
-  const bestSuggestion = (fieldSet: LoginFieldSet, suggestions: readonly LoginPickerSuggestion[]) => {
-    const typed = fieldSet.usernameField?.value.trim().toLocaleLowerCase() ?? "";
+  const bestSuggestion = (fieldSet: LoginFieldSet | null, suggestions: readonly LoginPickerSuggestion[]) => {
+    const typed = fieldSet?.usernameField?.value.trim().toLocaleLowerCase() ?? "";
     const sorted = filterSuggestions(suggestions, "");
     return sorted.find((item) => typed !== "" && item.username.toLocaleLowerCase() === typed) ?? sorted[0] ?? null;
   };
@@ -561,8 +564,14 @@ export function createLoginFillController(
     return { token: Object.freeze({}), input, fieldSet, url: options.window.location.href, origin };
   };
 
-  const signInFromBanner = async (fieldSet: LoginFieldSet, suggestion: LoginPickerSuggestion): Promise<void> => {
+  const signInFromBanner = async (fieldSet: LoginFieldSet | null, suggestion: LoginPickerSuggestion): Promise<void> => {
     if (bannerBusy || disposed) return;
+    if (suggestion.signInWith !== undefined) {
+      // A provider account needs no field: the page's own button is pressed.
+      signInThroughProvider(fieldSet === null ? null : ownerFor(fieldSet), suggestion);
+      return;
+    }
+    if (fieldSet === null) return;
     const candidate = ownerFor(fieldSet);
     if (candidate === null) return;
     bannerBusy = true;
@@ -587,27 +596,29 @@ export function createLoginFillController(
     if (owner !== null && owner.input === input) openPicker(owner);
   };
 
-  const showBanner = (fieldSet: LoginFieldSet, suggestions: readonly LoginPickerSuggestion[]): void => {
+  const showBanner = (fieldSet: LoginFieldSet | null, suggestions: readonly LoginPickerSuggestion[]): void => {
     const best = bestSuggestion(fieldSet, suggestions);
-    const anchor = fieldSet.passwordField ?? fieldSet.usernameField;
+    const anchor = fieldSet === null ? options.document.body : (fieldSet.passwordField ?? fieldSet.usernameField);
     if (best === null || anchor === null || !options.document.body.isConnected) return;
     const render = () => (
       <SignInBanner
         name={best.name}
         username={best.username}
-        otherCount={suggestions.length - 1}
+        otherCount={fieldSet === null ? 0 : suggestions.length - 1}
         busy={bannerBusy}
         // A username-only first step only gets the name in; the password step follows. A
         // provider account gets its own verb.
         action={
           best.signInWith !== undefined
             ? `Continue with ${SIGN_IN_PROVIDER_LABELS[best.signInWith]}`
-            : fieldSet.passwordField === null
+            : fieldSet?.passwordField === null
               ? "Continue"
               : "Sign in"
         }
         onSignIn={() => void signInFromBanner(fieldSet, best)}
-        onOtherOptions={() => otherOptions(fieldSet)}
+        onOtherOptions={() => {
+          if (fieldSet !== null) otherOptions(fieldSet);
+        }}
         onClose={() => {
           bannerDismissedBy = "user";
           closeBanner();
@@ -615,7 +626,7 @@ export function createLoginFillController(
       />
     );
     bannerRender = render;
-    bannerFor = anchor;
+    bannerFor = anchor instanceof HTMLInputElement ? anchor : null;
     bannerHost = createPickerHost(options.document.body, {
       positionToAnchor: false,
       slot: "signin",
@@ -629,6 +640,11 @@ export function createLoginFillController(
    * the vault has something for it. Nothing is drawn while the vault is locked: the chip by
    * the field already explains that.
    */
+  /** A page with provider buttons and no login fields at all ("Continue with Google" only). */
+  const providerOnlyPage = (): boolean =>
+    PROVIDER_PAGE_HINT.test(options.document.body.textContent?.slice(0, 20_000) ?? "") ||
+    options.document.querySelector('a[href*="accounts.google.com"], a[href*="appleid.apple.com"], a[href*="/auth/"], a[href*="/oauth"]') !== null;
+
   function maybeOfferSignIn(): void {
     if (disposed || bannerDismissedBy === "user" || bannerHost !== null || !frameCanHostBanner()) return;
     // A shown form with a password first; failing that, a shown username-only first step.
@@ -637,13 +653,26 @@ export function createLoginFillController(
       fieldSets.find((candidate) => candidate.usernameField !== null && isRendered(candidate)) ??
       null;
     const field = fieldSet === null ? null : (fieldSet.passwordField ?? fieldSet.usernameField);
-    if (fieldSet === null || field === null || bannerAsked.has(field)) return;
-    bannerAsked.add(field);
+    // No fields: only a page that offers provider sign-in is worth asking about, and only
+    // an account that signs in through a provider whose button is on the page is offered.
+    const key: WeakKey = field ?? options.document.body;
+    if (fieldSet !== null && field === null) return;
+    if (fieldSet === null && !providerOnlyPage()) return;
+    if (bannerAsked.has(key)) return;
+    bannerAsked.add(key);
     void fetchSuggestions().then((result) => {
       if (disposed || bannerDismissedBy === "user" || bannerHost !== null) return;
-      if (result.state !== "ready" || !field.isConnected || !isRendered(fieldSet)) {
+      if (result.state !== "ready" || (field !== null && (!field.isConnected || !isRendered(fieldSet!)))) {
         // Not now (locked, or the form went away before the answer): ask again on the next look.
-        bannerAsked.delete(field);
+        bannerAsked.delete(key);
+        return;
+      }
+      if (fieldSet === null) {
+        const viaProvider = result.suggestions.filter(
+          (item) => item.signInWith !== undefined && findProviderButton(options.document, item.signInWith) !== null,
+        );
+        if (viaProvider.length === 0) return;
+        showBanner(null, viaProvider);
         return;
       }
       showBanner(fieldSet, result.suggestions);

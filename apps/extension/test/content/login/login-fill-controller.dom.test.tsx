@@ -342,6 +342,33 @@ describe("Login fill controller", () => {
     expect(vi.mocked(candidate.sendLoginFillMessage).mock.calls.some(([request]) => request.kind === "login.fillConfirm")).toBe(true);
   });
 
+  it("offers a provider account on a page that only has provider buttons", async () => {
+    const roots = captureClosedRoots();
+    const google = document.createElement("button");
+    google.type = "button";
+    google.textContent = "Sign in with Google";
+    google.getClientRects = () => [{} as DOMRect] as unknown as DOMRectList;
+    const pressed = vi.fn();
+    google.addEventListener("click", pressed);
+    document.body.append(google);
+    const viaGoogle: LoginFillSuggestion = { ...account, username: "het@gmail.test", signInWith: "google" };
+    const candidate = platform((request) =>
+      request.kind === "login.fillSuggestions"
+        ? { version: 1, kind: "login.fillSuggestionsResult", suggestions: [account, viaGoogle] }
+        : undefined,
+    );
+    start(candidate);
+    await flush();
+    const bannerRoot = roots.find((root) => root.querySelector(".signIn"));
+    expect(bannerRoot).toBeDefined();
+    const banner = within(bannerRoot as unknown as HTMLElement);
+    // Only the provider account is offered here; a password login has nowhere to go.
+    expect(banner.getByText("het@gmail.test")).toBeInTheDocument();
+    expect(banner.queryByRole("button", { name: /Other options/ })).toBeNull();
+    await clickAndFlush(banner.getByRole("button", { name: "Continue with Google" }));
+    expect(pressed).toHaveBeenCalledTimes(1);
+  });
+
   it("dismisses the sign-in banner for the rest of the page load", async () => {
     const roots = captureClosedRoots();
     const { password } = loginForm();
