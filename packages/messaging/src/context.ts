@@ -46,6 +46,11 @@ export const RawSenderMetadataSchema = z.strictObject({
 
 export type RawSenderMetadata = z.input<typeof RawSenderMetadataSchema>;
 
+function withoutFragment(url: string): string {
+  const cut = url.indexOf("#");
+  return cut === -1 ? url : url.slice(0, cut);
+}
+
 function extensionPageUrl(extensionId: string, contextKind: "popup" | "vault"): string {
   return `chrome-extension://${extensionId}/${contextKind}/index.html`;
 }
@@ -100,13 +105,18 @@ export function normalizeSenderContext(
   }
 
   const metadata = parsed.data;
+  // An extension page may carry a fragment (the vault opens at #/settings from the popup):
+  // the browser reports the page's own URL, a fragment cannot be planted from outside on a
+  // page that is not web-accessible, and the binding must not change when the page clears
+  // it. A query string is still refused: no page of ours ever carries one.
+  const pageUrl = withoutFragment(metadata.senderUrl);
   for (const contextKind of ["popup", "vault"] as const) {
-    if (metadata.senderUrl === extensionPageUrl(expectedExtensionId, contextKind)) {
+    if (pageUrl === extensionPageUrl(expectedExtensionId, contextKind)) {
       return {
         extensionId: expectedExtensionId,
         contextKind,
-        senderUrl: metadata.senderUrl,
-        documentId: metadata.documentId ?? syntheticDocumentId(metadata.senderUrl),
+        senderUrl: pageUrl,
+        documentId: metadata.documentId ?? syntheticDocumentId(pageUrl),
         ...(metadata.tabId === undefined ? {} : { tabId: metadata.tabId }),
         ...(metadata.frameId === undefined ? {} : { frameId: metadata.frameId }),
       };

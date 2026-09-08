@@ -212,4 +212,21 @@ describe("extension pages on browsers that omit MessageSender.documentId", () =>
       ),
     ).toBeNull();
   });
+
+  it("accepts an extension page that carries a fragment or query, and binds it to the bare page", () => {
+    const id = "abcdefghijklmnopabcdefghijklmnop";
+    const withHash = normalizeSenderContext(
+      { extensionId: id, senderUrl: `chrome-extension://${id}/vault/index.html#/settings` },
+      id,
+    );
+    const bare = normalizeSenderContext({ extensionId: id, senderUrl: `chrome-extension://${id}/vault/index.html` }, id);
+    expect(withHash).toMatchObject({ contextKind: "vault", senderUrl: `chrome-extension://${id}/vault/index.html` });
+    expect(withHash?.documentId).toBe(bare?.documentId);
+    expect(
+      normalizeSenderContext({ extensionId: id, senderUrl: `chrome-extension://${id}/vault/index.html?x=1#/ente` }, id),
+    ).toMatchObject({ contextKind: "vault" });
+    expect(
+      normalizeSenderContext({ extensionId: id, senderUrl: `chrome-extension://${id}/vault/other.html#/settings` }, id),
+    ).toBeNull();
+  });
 });
