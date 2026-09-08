@@ -510,6 +510,9 @@ describe("importOnePassword1pux", () => {
         { title: "valid from", id: "from", value: { date: "1700000000" } },
         { title: "expires", id: "to", value: { monthYear: { year: 202512 } } },
         { title: "weird", id: "w", value: { hologram: { a: 1, b: 2 } } },
+        // Left blank in 1Password: exported as null, and not worth a notice.
+        { title: "renewed", id: "r", value: { date: null } },
+        { title: "cvv", id: "c", value: { concealed: "" } },
       ],
     });
     expect(login).toMatchObject({ kind: "login" });

@@ -93,6 +93,8 @@ export function decodeField(raw: unknown): DecodedField | undefined {
   if (!isRecord(value)) return undefined;
   const entry = Object.entries(value)[0];
   if (entry === undefined) return undefined;
+  // A field the person left blank exports as a null value: nothing to store, nothing to say.
+  if (entry[1] === null || entry[1] === "") return undefined;
   return { id, title, valueKey: entry[0], ...decodeValue(entry[0], entry[1]) };
 }
 
