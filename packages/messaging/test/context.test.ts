@@ -145,7 +145,6 @@ describe("sender context normalization", () => {
   it.each([
     `chrome-extension://${extensionId}/unknown/index.html`,
     `chrome-extension://${extensionId}/popup/index.html?forged=true`,
-    `chrome-extension://${extensionId}/vault/index.html#forged`,
     "file:///popup/index.html",
     "ftp://example.test/login",
   ])("rejects an unknown sender URL: %s", (senderUrl) => {
@@ -213,7 +212,7 @@ describe("extension pages on browsers that omit MessageSender.documentId", () =>
     ).toBeNull();
   });
 
-  it("accepts an extension page that carries a fragment or query, and binds it to the bare page", () => {
+  it("accepts an extension page that carries a fragment, and binds it to the bare page", () => {
     const id = "abcdefghijklmnopabcdefghijklmnop";
     const withHash = normalizeSenderContext(
       { extensionId: id, senderUrl: `chrome-extension://${id}/vault/index.html#/settings` },
@@ -222,9 +221,10 @@ describe("extension pages on browsers that omit MessageSender.documentId", () =>
     const bare = normalizeSenderContext({ extensionId: id, senderUrl: `chrome-extension://${id}/vault/index.html` }, id);
     expect(withHash).toMatchObject({ contextKind: "vault", senderUrl: `chrome-extension://${id}/vault/index.html` });
     expect(withHash?.documentId).toBe(bare?.documentId);
+    // A query string is still not one of our pages.
     expect(
       normalizeSenderContext({ extensionId: id, senderUrl: `chrome-extension://${id}/vault/index.html?x=1#/ente` }, id),
-    ).toMatchObject({ contextKind: "vault" });
+    ).toBeNull();
     expect(
       normalizeSenderContext({ extensionId: id, senderUrl: `chrome-extension://${id}/vault/other.html#/settings` }, id),
     ).toBeNull();
