@@ -128,7 +128,7 @@ describe("OTP fill service", () => {
           favorite: true,
           tags: ["work"],
           siteMatch: true,
-          preview: { code: expect.stringMatching(/^\d{6}$/u) as unknown as string, expiresAt: expect.any(Number) as unknown as number },
+          preview: { code: expect.stringMatching(/^\d{6}$/u), expiresAt: expect.any(Number) },
         },
         {
           itemId,
@@ -139,7 +139,7 @@ describe("OTP fill service", () => {
           favorite: false,
           tags: ["work"],
           siteMatch: true,
-          preview: { code: expect.stringMatching(/^\d{6}$/u) as unknown as string, expiresAt: expect.any(Number) as unknown as number },
+          preview: { code: expect.stringMatching(/^\d{6}$/u), expiresAt: expect.any(Number) },
         },
       ],
     });
