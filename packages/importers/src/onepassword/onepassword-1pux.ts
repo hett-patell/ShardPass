@@ -444,7 +444,10 @@ function emitLoginLike(
   const sectionUsername = take(route.username);
   const sectionPassword = take(route.password);
   const username =
-    capturedLogin(parsed.loginFields, "username") || sectionUsername || (kind === "login" ? parsed.ainfo : "");
+    capturedLogin(parsed.loginFields, "username") ||
+    sectionUsername ||
+    signInWith?.account ||
+    (kind === "login" ? parsed.ainfo : "");
   const password = capturedLogin(parsed.loginFields, "password") || parsed.detailsPassword || sectionPassword;
   const urlField = take(route.url);
   const urls = urlField === "" || parsed.urls.includes(urlField) ? parsed.urls : [urlField, ...parsed.urls];

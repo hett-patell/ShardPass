@@ -484,4 +484,21 @@ describe("importOnePassword1pux", () => {
       );
     });
   });
+
+  it("reads 1Password 8's ssoLogin field, whatever keys its payload uses, and takes the account e-mail", async () => {
+    const google = await importOne({
+      title: "Shodan",
+      fields: [{ title: "sign in with", id: "signin", value: { ssoLogin: { vendor: "Google", email: "het@gmail.test" } } }],
+    });
+    expect(google.items[0]).toMatchObject({ kind: "login", signInWith: "google", username: "het@gmail.test", password: "" });
+    expect(google.warnings).toEqual([]);
+
+    const github = await importOne({
+      title: "Codeberg",
+      loginFields: [{ value: "het", name: "identifier", fieldType: "T", designation: "username" }],
+      fields: [{ title: "sign in with", id: "signin", value: { ssoLogin: "GitHub" } }],
+    });
+    expect(github.items[0]).toMatchObject({ kind: "login", signInWith: "github", username: "het" });
+    expect(github.warnings).toEqual([]);
+  });
 });

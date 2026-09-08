@@ -18,6 +18,8 @@ export type FieldValueKind =
   | "unsupported";
 
 export type DecodedField = Readonly<{
+  /** For a provider sign-in: the account e-mail the export attached to it, when any. */
+  account?: string;
   /** The export's own key for the value ("string", "concealed", "sso" ...), for diagnostics. */
   valueKey?: string;
   /** The template id ("username", "ccnum"), stable across 1Password's languages. */
@@ -42,6 +44,8 @@ export type SignInWith = Readonly<{
   provider: SignInProvider;
   /** How the export named the provider, for a warning when it is one ShardPass does not list. */
   name: string;
+  /** The account e-mail the export attached to the provider sign-in, when any. */
+  account?: string;
   /** The section field that said so, when one did; it is not repeated as a custom field. */
   field?: DecodedField;
 }>;
@@ -93,7 +97,12 @@ export function decodeField(raw: unknown): DecodedField | undefined {
 function decodeValue(key: string, payload: unknown): Pick<DecodedField, "kind" | "text" | "address"> {
   if (key === "concealed") return { kind: "hidden", text: asString(payload) };
   if (key === "totp") return { kind: "totp", text: asString(payload) };
-  if (key === "sso") return { kind: "sso", text: ssoProviderName(payload) };
+  // 1Password 8 writes "Sign in with" as a field titled "sign in with" whose value key is
+  // ssoLogin; older builds used sso. Any key naming SSO is read the same way.
+  if (key === "sso" || /sso/iu.test(key)) {
+    const account = ssoAccount(payload);
+    return { kind: "sso", text: ssoProviderName(payload), ...(account === "" ? {} : { account }) };
+  }
   if (key === "passkey" || looksLikePasskey(payload)) return { kind: "passkey", text: "" };
   if (key === "file") return { kind: "attachment", text: attachmentName(payload) };
   if (key === "reference") return { kind: "reference", text: asString(payload) };
@@ -142,7 +151,25 @@ function ssoProviderName(payload: unknown): string {
     if (typeof candidate === "string" && candidate.trim() !== "") return candidate;
     if (isRecord(candidate) && typeof candidate["name"] === "string") return candidate["name"];
   }
-  return "";
+  // Unknown keys: any string (or nested name) that reads as a provider we list, else the first
+  // string that is not an e-mail address.
+  const strings = stringsWithin(payload);
+  return strings.find((value) => providerOf(value) !== undefined) ?? strings.find((value) => !value.includes("@")) ?? "";
+}
+
+/** The account the provider login is for, when the payload carries an e-mail address. */
+function ssoAccount(payload: unknown): string {
+  if (!isRecord(payload)) return "";
+  return stringsWithin(payload).find((value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(value)) ?? "";
+}
+
+function stringsWithin(payload: Record<string, unknown>, depth = 0): string[] {
+  const out: string[] = [];
+  for (const value of Object.values(payload)) {
+    if (typeof value === "string" && value.trim() !== "") out.push(value.trim());
+    else if (isRecord(value) && depth < 2) out.push(...stringsWithin(value, depth + 1));
+  }
+  return out;
 }
 
 /** 1Password dates are Unix seconds at noon UTC; only the calendar day is meaningful. */
@@ -169,7 +196,7 @@ export function detectSignInWith(
   fields: readonly DecodedField[],
 ): SignInWith | undefined {
   const sso = fields.find((field) => field.kind === "sso");
-  if (sso !== undefined) return { ...resolveProvider(sso.text), field: sso };
+  if (sso !== undefined) return { ...resolveProvider(sso.text), field: sso, ...(sso.account === undefined ? {} : { account: sso.account }) };
 
   const titled = fields.find(
     (field) =>
