@@ -18,6 +18,8 @@ export type FieldValueKind =
   | "unsupported";
 
 export type DecodedField = Readonly<{
+  /** For an unsupported value: its key and type, for the notice (never the value itself). */
+  detail?: string;
   /** For a provider sign-in: the account e-mail the export attached to it, when any. */
   account?: string;
   /** The export's own key for the value ("string", "concealed", "sso" ...), for diagnostics. */
@@ -94,7 +96,7 @@ export function decodeField(raw: unknown): DecodedField | undefined {
   return { id, title, valueKey: entry[0], ...decodeValue(entry[0], entry[1]) };
 }
 
-function decodeValue(key: string, payload: unknown): Pick<DecodedField, "kind" | "text" | "address"> {
+function decodeValue(key: string, payload: unknown): Pick<DecodedField, "kind" | "text" | "address" | "account" | "detail"> {
   if (key === "concealed") return { kind: "hidden", text: asString(payload) };
   if (key === "totp") return { kind: "totp", text: asString(payload) };
   // 1Password 8 writes "Sign in with" as a field titled "sign in with" whose value key is
@@ -106,15 +108,20 @@ function decodeValue(key: string, payload: unknown): Pick<DecodedField, "kind" |
   if (key === "passkey" || looksLikePasskey(payload)) return { kind: "passkey", text: "" };
   if (key === "file") return { kind: "attachment", text: attachmentName(payload) };
   if (key === "reference") return { kind: "reference", text: asString(payload) };
-  if (key === "date" && typeof payload === "number") return { kind: "text", text: isoDateOf(payload) };
-  if (key === "monthYear" && typeof payload === "number") return { kind: "text", text: monthYearOf(payload) };
+  // Dates arrive as Unix seconds, as digit strings, or wrapped in an object; a month-year as
+  // YYYYMM the same three ways.
+  if (key === "date" || key === "monthYear") {
+    const numeric = numberWithin(payload);
+    if (numeric !== undefined) return { kind: "text", text: key === "date" ? isoDateOf(numeric) : monthYearOf(numeric) };
+    if (typeof payload === "string" && payload.trim() !== "") return { kind: "text", text: payload.trim() };
+  }
   if (key === "address" && isRecord(payload)) return decodeAddress(payload);
   if (key === "email" && isRecord(payload))
     return { kind: "text", text: asString(payload["email_address"]) || asString(payload["email"]) };
   if (typeof payload === "string") return { kind: "text", text: payload };
   if (typeof payload === "number" && Number.isFinite(payload)) return { kind: "text", text: String(payload) };
   if (typeof payload === "boolean") return { kind: "boolean", text: payload ? "true" : "false" };
-  return { kind: "unsupported", text: "" };
+  return { kind: "unsupported", text: "", detail: `${key}: ${describePayload(payload)}` };
 }
 
 function decodeAddress(payload: Record<string, unknown>): Pick<DecodedField, "kind" | "text" | "address"> {
@@ -229,4 +236,24 @@ export function detectSignInWith(
 
 function resolveProvider(name: string): Pick<SignInWith, "provider" | "name"> {
   return { provider: providerOf(name) ?? "other", name: name.trim() };
+}
+
+/** A number in a payload: the value itself, a digit string, or the first such thing inside an object. */
+function numberWithin(payload: unknown): number | undefined {
+  if (typeof payload === "number" && Number.isFinite(payload)) return payload;
+  if (typeof payload === "string" && /^\d{1,12}$/u.test(payload.trim())) return Number(payload.trim());
+  if (!isRecord(payload)) return undefined;
+  for (const value of Object.values(payload)) {
+    const found = numberWithin(value);
+    if (found !== undefined) return found;
+  }
+  return undefined;
+}
+
+/** "object with keys a, b", "string", "null": shape only, never content. */
+function describePayload(payload: unknown): string {
+  if (payload === null) return "null";
+  if (Array.isArray(payload)) return `array of ${payload.length}`;
+  if (isRecord(payload)) return `object with keys ${Object.keys(payload).slice(0, 6).join(", ") || "none"}`;
+  return typeof payload;
 }

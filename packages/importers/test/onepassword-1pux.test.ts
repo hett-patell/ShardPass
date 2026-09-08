@@ -501,4 +501,27 @@ describe("importOnePassword1pux", () => {
     expect(github.items[0]).toMatchObject({ kind: "login", signInWith: "github", username: "het" });
     expect(github.warnings).toEqual([]);
   });
+
+  it("reads dates and month-years in every spelling the export uses, and names an unknown value's shape", async () => {
+    const { item: login, warnings } = await importOne({
+      title: "API Credentials",
+      loginFields: [{ value: "k", name: "key", fieldType: "P", designation: "password" }],
+      fields: [
+        { title: "valid from", id: "from", value: { date: "1700000000" } },
+        { title: "expires", id: "to", value: { monthYear: { year: 202512 } } },
+        { title: "weird", id: "w", value: { hologram: { a: 1, b: 2 } } },
+      ],
+    });
+    expect(login).toMatchObject({ kind: "login" });
+    const custom = (login as { customFields?: { name: string; value: string }[] }).customFields ?? [];
+    expect(custom).toEqual(
+      expect.arrayContaining([
+        { name: "valid from", type: "text", value: "2023-11-14" },
+        { name: "expires", type: "text", value: "2025-12" },
+      ]),
+    );
+    expect(warnings).toEqual([
+      '"API Credentials": field "weird" has a value ShardPass cannot store (hologram: object with keys a, b) and was left out.',
+    ]);
+  });
 });

@@ -364,7 +364,9 @@ function convertItem(
     if (field.kind === "reference")
       warnings.push(`"${label}": field "${field.title}" links to another item and was left out.`);
     else if (field.kind === "unsupported")
-      warnings.push(`"${label}": field "${field.title}" has a value ShardPass cannot store and was left out.`);
+      warnings.push(
+        `"${label}": field "${field.title}" has a value ShardPass cannot store${field.detail === undefined ? "" : ` (${field.detail})`} and was left out.`,
+      );
   }
 
   switch (parsed.kind) {
