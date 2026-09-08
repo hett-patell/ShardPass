@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 
 import { describe, expect, it } from "vitest";
 
@@ -97,5 +97,13 @@ describe("built Manifest V3 policy", () => {
     await expect(readFile(new URL("dist/vault/index.html", root), "utf8")).resolves.toContain(
       'type="module"',
     );
+  });
+
+  it("ships production React only: no development JSX runtime in any asset", async () => {
+    const assets = await readdir(new URL("dist/assets/", root));
+    for (const name of assets.filter((file) => file.endsWith(".js"))) {
+      const source = await readFile(new URL(`dist/assets/${name}`, root), "utf8");
+      expect(source, name).not.toContain("jsxDEV");
+    }
   });
 });

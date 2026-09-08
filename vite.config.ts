@@ -1,6 +1,6 @@
 import { crx } from "@crxjs/vite-plugin";
 import path from "node:path";
-import { defineConfig, type Plugin } from "vite";
+import { defineConfig, type Plugin, type UserConfig } from "vite";
 
 import manifest from "./apps/extension/src/manifest";
 import { ENTE_SRP_PRODUCTION_ENTRY, enteSrpVitePlugin } from "./tools/ente-srp-vite-plugin";
@@ -21,7 +21,17 @@ function stripCrossOrigin(): Plugin {
 }
 
 
-export default defineConfig(({ command }) => ({
+export default defineConfig(({ command }) => {
+  // The JSX transform follows Vite's idea of "production", which follows NODE_ENV as inherited
+  // from the shell: a build spawned under vitest (NODE_ENV=test) emitted the development
+  // runtime (jsxDEV) against a production React and every page died before its first
+  // component. A build is a production build, whatever the shell says.
+  if (command === "build") process.env.NODE_ENV = "production";
+  return config(command);
+});
+
+function config(command: "build" | "serve"): UserConfig {
+  return {
   root: "apps/extension",
   // A production build must not depend on the shell: with NODE_ENV inherited as anything
   // else, React resolves its development entry (389 KB of console.error) into the popup.
@@ -62,4 +72,5 @@ export default defineConfig(({ command }) => ({
       },
     },
   },
-}));
+};
+}
