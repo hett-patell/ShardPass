@@ -474,8 +474,18 @@ function emitLoginLike(
         ? `"${label}": signs in with a provider the export does not name; kept as "other".`
         : `"${label}": signs in with "${signInWith.name}", which ShardPass does not list; kept as "other".`,
     );
-  if (password === "" && signInWith === undefined && parsed.passkeys === 0)
-    warnings.push(`"${label}": imported without a password (the export has none).`);
+  if (password === "" && signInWith === undefined && parsed.passkeys === 0) {
+    // No password and no provider: name the shape of what the export held (titles and
+    // value types only, never values), so an unrecognised "sign in with" layout can be
+    // reported and taught.
+    const loginShape = parsed.loginFields
+      .map((field) => `${field.name || "?"}(${field.fieldType || "?"}${field.designation ? `, ${field.designation}` : ""})`)
+      .join(", ");
+    const sectionShape = parsed.fields.map((field) => `"${field.title}" (${field.valueKey ?? field.kind})`).join(", ");
+    warnings.push(
+      `"${label}": imported without a password (the export has none). Login fields: ${loginShape || "none"}. Section fields: ${sectionShape || "none"}.`.slice(0, 400),
+    );
+  }
 
   const draft: LoginDraft = {
     name: parsed.title || "Imported item",

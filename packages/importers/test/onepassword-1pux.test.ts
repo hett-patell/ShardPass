@@ -222,7 +222,13 @@ describe("importOnePassword1pux", () => {
       const { item: login, warnings } = await importOne({ title: "Site I", loginFields: [username] });
       expect(login).toMatchObject({ kind: "login", username: "alice@gmail.com", password: "" });
       expect((login as { signInWith?: unknown }).signInWith).toBeUndefined();
-      expect(warnings).toEqual(['"Site I": imported without a password (the export has none).']);
+      expect(warnings).toHaveLength(1);
+      // The notice describes the export's shape (titles and value types, never values), so
+      // an unrecognised "sign in with" layout can be reported.
+      expect(warnings[0]).toMatch(
+        /^"Site I": imported without a password \(the export has none\)\. Login fields: .+\. Section fields: .+\.$/u,
+      );
+      expect(warnings[0]).not.toContain("@");
     });
   });
 

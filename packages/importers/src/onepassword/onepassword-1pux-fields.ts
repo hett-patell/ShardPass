@@ -18,6 +18,8 @@ export type FieldValueKind =
   | "unsupported";
 
 export type DecodedField = Readonly<{
+  /** The export's own key for the value ("string", "concealed", "sso" ...), for diagnostics. */
+  valueKey?: string;
   /** The template id ("username", "ccnum"), stable across 1Password's languages. */
   id: string;
   /** What the person sees; falls back to the id. */
@@ -81,11 +83,11 @@ export function decodeField(raw: unknown): DecodedField | undefined {
   const id = asString(raw["id"]).trim();
   const title = asString(raw["title"]).trim() || id;
   const value = raw["value"];
-  if (typeof value === "string") return { id, title, kind: "text", text: value };
+  if (typeof value === "string") return { id, title, valueKey: "string", kind: "text", text: value };
   if (!isRecord(value)) return undefined;
   const entry = Object.entries(value)[0];
   if (entry === undefined) return undefined;
-  return { id, title, ...decodeValue(entry[0], entry[1]) };
+  return { id, title, valueKey: entry[0], ...decodeValue(entry[0], entry[1]) };
 }
 
 function decodeValue(key: string, payload: unknown): Pick<DecodedField, "kind" | "text" | "address"> {
