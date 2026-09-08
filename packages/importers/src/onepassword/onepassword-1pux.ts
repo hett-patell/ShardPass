@@ -215,7 +215,7 @@ function convertExport(root: unknown): ImportResult {
       if (!isRecord(raw)) continue;
       const uuid = asString(raw["uuid"]).trim();
       const details = isRecord(raw["details"]) ? raw["details"] : {};
-      const loginFields = Array.isArray(details["loginFields"]) ? details["loginFields"] : [];
+      const loginFields: unknown[] = Array.isArray(details["loginFields"]) ? details["loginFields"] : [];
       const username = loginFields.find(
         (field) => isRecord(field) && asString(field["designation"]).toLowerCase() === "username" && asString(field["value"]).trim() !== "",
       );
@@ -321,7 +321,7 @@ function parseItem(raw: Record<string, unknown>): ParsedItem {
 function urlsOf(overview: Record<string, unknown>): { urls: string[]; urlMatches: LoginUrlMatchMode[] } {
   const urls: string[] = [];
   const urlMatches: LoginUrlMatchMode[] = [];
-  const list = Array.isArray(overview["urls"]) ? overview["urls"] : Array.isArray(overview["URLs"]) ? overview["URLs"] : [];
+  const list: unknown[] = Array.isArray(overview["urls"]) ? overview["urls"] : Array.isArray(overview["URLs"]) ? overview["URLs"] : [];
   const modeOf = (url: string): LoginUrlMatchMode => {
     const entry = list.find((candidate) => isRecord(candidate) && asString(candidate["url"]).trim() === url);
     const mode = isRecord(entry) ? asString(entry["mode"]).trim().toLowerCase() : "";
