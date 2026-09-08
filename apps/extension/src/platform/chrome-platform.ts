@@ -71,9 +71,14 @@ async function setTrustedAccess(area: chrome.storage.StorageArea, label: string)
   }
 }
 
-function runtimeError(): Error | null {
+/**
+ * Chrome's own report that a call failed ("Could not establish connection. Receiving end
+ * does not exist.", "The message port closed before a response was received."). Tagged as
+ * NO_REPLY with the browser's wording as detail, so a page can show it as its Reason line.
+ */
+function runtimeError(): (Error & { code: string; detail: string }) | null {
   const message = chrome.runtime.lastError?.message;
-  return message === undefined ? null : new Error(message);
+  return message === undefined ? null : Object.assign(new Error(message), { code: "NO_REPLY", detail: message.slice(0, 160) });
 }
 
 const safeErrorCodes = new Set<SafeErrorCode>([

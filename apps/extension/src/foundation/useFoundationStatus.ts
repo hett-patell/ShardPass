@@ -33,7 +33,18 @@ export function useFoundationStatus(platform: ExtensionPlatform): FoundationStat
         }
 
         const parsed = FoundationResponseSchema.safeParse(response);
-        setStatus(parsed.success ? { state: "ready", status: parsed.data } : { state: "error" });
+        if (parsed.success) {
+          setStatus({ state: "ready", status: parsed.data });
+          return;
+        }
+        // The background answered with its error envelope: its code and detail are the
+        // diagnosis (a failed startup names its step there).
+        const envelope = response as { kind?: unknown; error?: { code?: unknown; detail?: unknown } } | null;
+        const reason =
+          envelope?.kind === "error" && typeof envelope.error?.code === "string"
+            ? reasonOf(envelope.error)
+            : "unexpected reply from the background";
+        setStatus(reason === undefined ? { state: "error" } : { state: "error", reason });
       },
       (error: unknown) => {
         if (active) {
