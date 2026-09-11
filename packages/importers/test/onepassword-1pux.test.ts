@@ -275,7 +275,7 @@ describe("importOnePassword1pux", () => {
       // The notice describes the export's shape (titles and value types, never values), so
       // an unrecognised "sign in with" layout can be reported.
       expect(warnings[0]).toMatch(
-        /^"Site I": imported without a password \(the export has none\)\. Login fields: .+\. Section fields: .+\.$/u,
+        /^"Site I": has (?:a username but no password|no username or password) in the export; .+\.$/u,
       );
       expect(warnings[0]).not.toContain("@");
     });
@@ -690,7 +690,7 @@ describe("importOnePassword1pux", () => {
     expect((byName.get("Google") as { urlMatches?: unknown }).urlMatches).toBeUndefined();
     // The account item is reported as what it is, not as a login missing its password.
     expect(result.warnings).toContain(
-      '"Google": has no password in the export. One other login signs in through this account, so it is kept as a username-only login.',
+      '"Google": has a username but no password in the export; kept as a username-only login. One other login signs in through this account.',
     );
     expect(result.warnings.filter((warning) => warning.startsWith('"Google"'))).toHaveLength(1);
   });

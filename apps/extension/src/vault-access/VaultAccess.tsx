@@ -93,6 +93,7 @@ export function VaultAccess({
   const [newPassword, setNewPassword] = useState("");
   const [newConfirmation, setNewConfirmation] = useState("");
   const latestStream = useRef<{ streamId: string; sequence: number } | null>(null);
+  const lastKnownState = useRef<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -152,7 +153,11 @@ export function VaultAccess({
       latestStream.current = { streamId: parsed.data.streamId, sequence: parsed.data.sequence };
       retries = 0;
       setDiagnostic("");
-      if (parsed.data.state !== "unlocked") clearFields();
+      // Typed fields go only when the vault actually locks; a state repeated by a fresh
+      // port (the background worker restarts every so often) must not wipe a password
+      // someone is still typing.
+      if (lastKnownState.current === "unlocked" && parsed.data.state !== "unlocked") clearFields();
+      lastKnownState.current = parsed.data.state;
       onUnlockedChange?.(parsed.data.state === "unlocked");
       setState(parsed.data.state);
       setSettings({
@@ -186,13 +191,20 @@ export function VaultAccess({
           () => {
             disconnect = undefined;
             if (!active) return;
-            onUnlockedChange?.(false);
-            setState("loading");
-            clearFields();
+            // The background worker idles out after half a minute and takes the port with
+            // it; the vault itself is still unlocked in its session store. Keep the page as
+            // it is and reconnect: the new port's first message says whether anything
+            // changed. Only a connection that will not come back is shown as lost.
             latestStream.current = null;
             receivedPortState = false;
             if (queryTimer !== undefined) clearTimeout(queryTimer);
-            if (retries >= 5 || !globalThis.chrome?.runtime?.id) return;
+            if (!globalThis.chrome?.runtime?.id) return;
+            if (retries >= 5) {
+              setDiagnostic("Lost the connection to the background service.");
+              onUnlockedChange?.(false);
+              setState("loading");
+              return;
+            }
             const delay = Math.min(2_000, 250 * 2 ** retries++);
             reconnect = setTimeout(connect, delay);
           },

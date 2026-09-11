@@ -627,34 +627,29 @@ function emitLoginLike(
         ? `"${label}": signs in with a provider the export does not name; kept as "other".`
         : `"${label}": signs in with "${signInWith.name}", which ShardPass does not list; kept as "other".`,
     );
-  const linkedLogins = context.linkedLoginsOf(parsed.uuid);
-  if (password === "" && signInWith === undefined && parsed.passkeys === 0 && linkedLogins > 0) {
-    // The account other logins sign in through (a Google account, say): 1Password keeps it
-    // as a username-only item, and so does ShardPass.
-    warnings.push(
-      `"${label}": has no password in the export. ${
-        linkedLogins === 1 ? "One other login signs" : `${linkedLogins} other logins sign`
-      } in through this account, so it is kept as a username-only login.`,
-    );
-  } else if (password === "" && signInWith === undefined && parsed.passkeys === 0) {
-    // No password and no provider: name the shape of what the export held (titles and
-    // value types only, never values), so an unrecognised "sign in with" layout can be
-    // reported and taught.
-    const loginShape = parsed.loginFields
-      .map(
-        (field) =>
-          `${field.name || "?"}(${field.fieldType || "?"}${field.designation ? `, ${field.designation}` : ""})`,
-      )
-      .join(", ");
-    const sectionShape = parsed.fields
-      .map((field) => `"${field.title}" (${field.valueKey ?? field.kind})`)
-      .join(", ");
-    warnings.push(
-      `"${label}": imported without a password (the export has none). Login fields: ${loginShape || "none"}. Section fields: ${sectionShape || "none"}.`.slice(
-        0,
-        400,
-      ),
-    );
+  if (password === "" && signInWith === undefined && parsed.passkeys === 0) {
+    // A login without a password is kept as it is; the notice says what it is. The account
+    // other logins sign in through (a Google account, say) is the usual case.
+    const linkedLogins = context.linkedLoginsOf(parsed.uuid);
+    const through =
+      linkedLogins === 0
+        ? ""
+        : linkedLogins === 1
+          ? " One other login signs in through this account."
+          : ` ${linkedLogins} other logins sign in through this account.`;
+    if (username !== "") {
+      warnings.push(
+        `"${label}": has a username but no password in the export; kept as a username-only login.${through}`,
+      );
+    } else {
+      const kept =
+        customFields.length === 0
+          ? "kept with its notes and links only"
+          : customFields.length === 1
+            ? "its one field is kept as a custom field"
+            : `its ${customFields.length} fields are kept as custom fields`;
+      warnings.push(`"${label}": has no username or password in the export; ${kept}.${through}`);
+    }
   }
 
   const draft: LoginDraft = {
