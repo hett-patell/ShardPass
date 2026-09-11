@@ -1,10 +1,11 @@
 import {
   createDeterministicRandomSource,
-  createWorkerKdfExecutor,
   decryptEnvelope,
   deriveKeyEncryptionKey,
   encryptEnvelope,
 } from "@shardpass/crypto";
+
+import { createHarnessKdfExecutor } from "./kdf-worker";
 
 import { runDefaultArgon2idBenchmark } from "./benchmark";
 
@@ -71,7 +72,7 @@ async function run(): Promise<void> {
     if (started) ticks += 1;
   }, 10);
   const knownAnswer = await deriveKeyEncryptionKey(
-    createWorkerKdfExecutor(),
+    createHarnessKdfExecutor(),
     "password",
     { algorithm: "argon2id", memoryKiB: 65_536, iterations: 3, parallelism: 1 },
     new TextEncoder().encode("saltsaltsaltsalt"),

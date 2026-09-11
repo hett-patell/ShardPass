@@ -1,9 +1,10 @@
-import { createWorkerKdfExecutor, type KdfExecutor } from "@shardpass/crypto";
+import type { KdfExecutor } from "@shardpass/crypto";
 import { VAULT_ITEM_KINDS, type VaultItemKind } from "@shardpass/domain";
 import type { BackupCountsByKind } from "@shardpass/messaging";
 import { Button, PasswordInput, SectionLabel } from "@shardpass/ui";
 
 import type { BackupUiExtensionPlatform } from "../../platform/extension-platform";
+import { createPageKdfExecutor } from "../../platform/kdf-executor";
 import styles from "./BackupView.module.css";
 import {
   defaultBackupCrypto,
@@ -101,7 +102,7 @@ export function BackupView({
   platform,
   active,
   onImported,
-  kdfExecutor = createWorkerKdfExecutor(),
+  kdfExecutor = createPageKdfExecutor(),
   crypto = defaultBackupCrypto,
 }: BackupViewProps) {
   const backup = useBackup({
@@ -162,7 +163,9 @@ export function BackupView({
           <div className={styles.panelHeading}>
             <SectionLabel>Export</SectionLabel>
             <h4>Create a file</h4>
-            <p>Confirm your vault password, then the file is built here and offered as a download.</p>
+            <p>
+              Confirm your vault password, then the file is built here and offered as a download.
+            </p>
           </div>
 
           <fieldset className={styles.choices} disabled={exportWorking}>
@@ -197,8 +200,8 @@ export function BackupView({
             <div className={styles.unencrypted} role="note" id="backup-unencrypted-warning">
               <strong>This file is not encrypted</strong>
               <span>
-                Anyone who can open it can read every secret in it. Save it only where you need
-                it, and delete it as soon as you are done.
+                Anyone who can open it can read every secret in it. Save it only where you need it,
+                and delete it as soon as you are done.
               </span>
             </div>
           )}
@@ -319,8 +322,8 @@ export function BackupView({
                 </>
               ) : null}
               <p className={styles.help} id="backup-import-help">
-                The file is size-checked before it is read and decrypted here in the vault page.
-                Its name and contents are never shown.
+                The file is size-checked before it is read and decrypted here in the vault page. Its
+                name and contents are never shown.
               </p>
             </form>
           ) : state.preview !== null ? (

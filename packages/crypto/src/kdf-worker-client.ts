@@ -12,11 +12,12 @@ export interface KdfWorkerLike {
   terminate(): void;
 }
 
+/**
+ * Starts the KDF worker. The extension builds `kdf-worker-entry.ts` as an entry of its own
+ * and starts it by URL, so the worker shares the one audited libsodium module instead of
+ * carrying a second copy.
+ */
 export type KdfWorkerFactory = () => unknown;
-
-export function createBrowserKdfWorker(): Worker {
-  return new Worker(new URL("./kdf-worker-entry.ts", import.meta.url), { type: "module" });
-}
 
 const executionFailed = () => new Error("KDF_EXECUTION_FAILED");
 const cancelled = () => new Error("KDF_CANCELLED");
@@ -34,7 +35,7 @@ function ownedBytes(value: Uint8Array): Uint8Array<ArrayBuffer> {
 }
 
 export function createWorkerKdfExecutor(
-  workerFactory: KdfWorkerFactory = createBrowserKdfWorker,
+  workerFactory: KdfWorkerFactory,
   options: Readonly<{ timeoutMs?: number }> = {},
 ): KdfExecutor {
   const timeoutMs = options.timeoutMs ?? 120_000;

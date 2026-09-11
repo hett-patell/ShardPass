@@ -1,8 +1,6 @@
-import {
-  createWorkerKdfExecutor,
-  DEFAULT_ARGON2ID_PARAMETERS,
-  deriveKeyEncryptionKey,
-} from "@shardpass/crypto";
+import { DEFAULT_ARGON2ID_PARAMETERS, deriveKeyEncryptionKey } from "@shardpass/crypto";
+
+import { createHarnessKdfExecutor } from "./kdf-worker";
 
 const BENCHMARK_SALT = new Uint8Array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]);
 
@@ -11,7 +9,7 @@ export async function runArgon2idBenchmark(
 ): Promise<number> {
   const started = performance.now();
   const derived = await deriveKeyEncryptionKey(
-    createWorkerKdfExecutor(),
+    createHarnessKdfExecutor(),
     "ShardPass browser benchmark",
     parameters,
     BENCHMARK_SALT,

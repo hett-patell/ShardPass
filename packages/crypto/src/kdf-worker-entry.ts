@@ -1,39 +1,18 @@
 /// <reference lib="webworker" />
 
 import { deriveArgon2idDirect } from "./kdf-direct";
-import { KDF_WORKER_PROTOCOL_VERSION, parseWorkerRequest } from "./kdf-worker-protocol";
+import { deriveArgon2idWithSodium, sodiumDerives } from "./kdf-sodium";
+import { installKdfWorker } from "./kdf-worker-host";
 
-const workerScope = globalThis as unknown as DedicatedWorkerGlobalScope;
-let used = false;
-
-workerScope.onmessage = (event: MessageEvent<unknown>) => {
-  if (used) return;
-  used = true;
-  let requestId: string | null = null;
-  try {
-    const request = parseWorkerRequest(event.data);
-    requestId = request.requestId;
-    workerScope.postMessage({
-      version: KDF_WORKER_PROTOCOL_VERSION,
-      kind: "started",
-      requestId,
-    });
-    const result = deriveArgon2idDirect(request);
-    const transferable = result.buffer.slice(
-      result.byteOffset,
-      result.byteOffset + result.byteLength,
-    ) as ArrayBuffer;
-    workerScope.postMessage(
-      { version: KDF_WORKER_PROTOCOL_VERSION, kind: "success", requestId, result: transferable },
-      [transferable],
-    );
-  } catch {
-    if (requestId !== null) {
-      workerScope.postMessage({
-        version: KDF_WORKER_PROTOCOL_VERSION,
-        kind: "failure",
-        requestId,
-      });
+// libsodium's Argon2id when it can serve the parameters (the ~0.2 s path); the pure-JS
+// primitive for other lane counts, or if the WebAssembly module cannot load here.
+installKdfWorker(globalThis, async (request) => {
+  if (sodiumDerives(request.parameters)) {
+    try {
+      return await deriveArgon2idWithSodium(request);
+    } catch {
+      // Fall through to the pure-JS primitive; both compute the same function.
     }
   }
-};
+  return deriveArgon2idDirect(request);
+});

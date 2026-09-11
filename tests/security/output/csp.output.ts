@@ -64,6 +64,13 @@ describe("built extension executable security", () => {
     expect(sodiumFile).toBeDefined();
     const sodiumSource = await readFile(path.join(dist, "assets", sodiumFile!), "utf8");
     expect(() => verifyApprovedSodiumIdentity(sodiumSource, approved, "packaged")).not.toThrow();
+    // The vault KDF worker derives through that same module: one libsodium copy, one identity.
+    const kdfWorkerSource = await readFile(
+      path.join(dist, "assets", "kdf-worker-entry.js"),
+      "utf8",
+    );
+    expect(kdfWorkerSource).toMatch(/\.\/libsodium-wrappers-[\w-]+\.js/u);
+    expect(kdfWorkerSource).not.toContain("AGFzbQE");
     expect(violations.map(({ rule }) => rule)).toEqual([
       "network-destination",
       "network-destination",

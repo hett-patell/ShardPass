@@ -18,7 +18,7 @@ export {
   validateArgon2idWorkParameters,
 } from "./kdf";
 export type { Argon2idWorkParameters, KdfExecutor, KdfRequest, KdfRequestData } from "./kdf";
-export { createBrowserKdfWorker, createWorkerKdfExecutor } from "./kdf-worker-client";
+export { createWorkerKdfExecutor } from "./kdf-worker-client";
 export type { KdfWorkerFactory, KdfWorkerLike } from "./kdf-worker-client";
 export {
   createVaultKeyMaterial,

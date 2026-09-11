@@ -239,6 +239,9 @@ importers:
       '@shardpass/storage':
         specifier: workspace:*
         version: link:../storage
+      libsodium-wrappers-sumo:
+        specifier: 'catalog:'
+        version: 0.8.4
       zod:
         specifier: 'catalog:'
         version: 4.4.3

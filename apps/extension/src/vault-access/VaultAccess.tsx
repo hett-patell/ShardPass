@@ -1,7 +1,6 @@
 import {
   MAX_PASSWORD_UTF8_BYTES,
   MIN_SETUP_PASSWORD_CODE_POINTS,
-  createWorkerKdfExecutor,
   type Argon2idWorkParameters,
 } from "@shardpass/crypto";
 import {
@@ -15,6 +14,7 @@ import { passwordStrength } from "./password-strength";
 import { useEffect, useRef, useState } from "react";
 
 import type { ExtensionPlatform } from "../platform/extension-platform";
+import { createPageKdfExecutor } from "../platform/kdf-executor";
 import styles from "./VaultAccess.module.css";
 
 export type DerivePageKey = (
@@ -24,7 +24,7 @@ export type DerivePageKey = (
 ) => Promise<Uint8Array>;
 
 const defaultDerive: DerivePageKey = async (password, parameters, salt) => {
-  const executor = createWorkerKdfExecutor();
+  const executor = createPageKdfExecutor();
   return executor.derive({
     password: new TextEncoder().encode(password),
     salt,
@@ -343,7 +343,9 @@ export function VaultAccess({
       <div className={styles.loading} role="status" aria-label="Loading vault state">
         {loadingTimedOut ? (
           <>
-            <p className={styles.loadingError}>Could not connect to ShardPass background service.</p>
+            <p className={styles.loadingError}>
+              Could not connect to ShardPass background service.
+            </p>
             {diagnostic === "" ? null : <p className={styles.loadingDetail}>{diagnostic}</p>}
             <p>Check chrome://extensions for errors, then reload the extension.</p>
           </>
@@ -395,7 +397,6 @@ export function VaultAccess({
             <label>
               Current password
               <PasswordInput
-
                 autoComplete="current-password"
                 value={currentPassword}
                 onChange={(event) => setCurrentPassword(event.target.value)}
@@ -404,7 +405,6 @@ export function VaultAccess({
             <label>
               New password
               <PasswordInput
-
                 autoComplete="new-password"
                 value={newPassword}
                 onChange={(event) => setNewPassword(event.target.value)}
@@ -413,7 +413,6 @@ export function VaultAccess({
             <label>
               Confirm new password
               <PasswordInput
-
                 autoComplete="new-password"
                 value={newConfirmation}
                 onChange={(event) => setNewConfirmation(event.target.value)}
@@ -452,8 +451,15 @@ export function VaultAccess({
         onSubmit={(event) => {
           event.preventDefault();
           // The length rule speaks first (from submit); the weak gate only for a long enough one.
-          if (setup && Array.from(password).length >= MIN_SETUP_PASSWORD_CODE_POINTS && strength.level < 2 && !weakAllowed) {
-            setError("This password is weak. Tick the box to use it anyway, or choose a longer one.");
+          if (
+            setup &&
+            Array.from(password).length >= MIN_SETUP_PASSWORD_CODE_POINTS &&
+            strength.level < 2 &&
+            !weakAllowed
+          ) {
+            setError(
+              "This password is weak. Tick the box to use it anyway, or choose a longer one.",
+            );
             return;
           }
           void submit();
@@ -477,18 +483,28 @@ export function VaultAccess({
             <span className={styles.strengthLabel}>{strength.label}</span>
           </div>
         ) : null}
-        {setup && password.length > 0 && Array.from(password).length < MIN_SETUP_PASSWORD_CODE_POINTS ? (
+        {setup &&
+        password.length > 0 &&
+        Array.from(password).length < MIN_SETUP_PASSWORD_CODE_POINTS ? (
           <p className={styles.weakNote}>
             {`Use at least ${MIN_SETUP_PASSWORD_CODE_POINTS} characters. A few unrelated words are easy to remember and hard to guess.`}
           </p>
         ) : null}
-        {setup && password.length > 0 && Array.from(password).length >= MIN_SETUP_PASSWORD_CODE_POINTS && strength.level < 2 ? (
+        {setup &&
+        password.length > 0 &&
+        Array.from(password).length >= MIN_SETUP_PASSWORD_CODE_POINTS &&
+        strength.level < 2 ? (
           <>
             <p className={styles.weakNote}>
-              This password is weak. Anyone who gets your vault file could crack it offline. A few unrelated words are both easier to remember and much stronger.
+              This password is weak. Anyone who gets your vault file could crack it offline. A few
+              unrelated words are both easier to remember and much stronger.
             </p>
             <label className={styles.checkField}>
-              <input type="checkbox" checked={weakAllowed} onChange={(event) => setWeakAllowed(event.target.checked)} />
+              <input
+                type="checkbox"
+                checked={weakAllowed}
+                onChange={(event) => setWeakAllowed(event.target.checked)}
+              />
               Use this password anyway
             </label>
           </>
@@ -513,7 +529,7 @@ export function VaultAccess({
         </Button>
         {working ? (
           <p className={styles.working} role="status">
-            Unlocking takes a few seconds: your key is derived on this device, never fetched.
+            Deriving your key on this device. It is never sent anywhere.
           </p>
         ) : null}
       </form>

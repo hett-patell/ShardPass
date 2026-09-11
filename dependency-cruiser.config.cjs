@@ -28,7 +28,7 @@ module.exports = {
       comment: "Production applications and packages must not import test-only modules.",
       from: {
         path: "^(?:apps|packages)/",
-        pathNot: "^(?:packages/crypto/test/|apps/extension/test/)",
+        pathNot: "^(?:packages/[^/]+/test/|apps/extension/test/)",
       },
       to: { path: "(?:^|/)test(?:s)?/" },
     },
