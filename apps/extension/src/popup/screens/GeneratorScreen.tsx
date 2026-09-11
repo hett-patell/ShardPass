@@ -15,6 +15,8 @@ export interface GeneratorScreenProps {
 type Mode = "random" | "passphrase";
 type Separator = "hyphen" | "space" | "period" | "none";
 
+const GENERATE_SETTLE_MS = 120;
+
 const separatorOptions: readonly { value: Separator; label: string }[] = [
   { value: "hyphen", label: "Hyphen (-)" },
   { value: "space", label: "Space" },
@@ -51,9 +53,30 @@ export function GeneratorScreen({ platform, onCopy }: GeneratorScreenProps) {
 
   const buildRequest = useCallback((): GeneratePasswordRequest => {
     return mode === "random"
-      ? { version: 1, kind: "password.generate", mode, length, uppercase, lowercase, digits, symbols, excludeAmbiguous }
+      ? {
+          version: 1,
+          kind: "password.generate",
+          mode,
+          length,
+          uppercase,
+          lowercase,
+          digits,
+          symbols,
+          excludeAmbiguous,
+        }
       : { version: 1, kind: "password.generate", mode, wordCount, separator, capitalize };
-  }, [mode, length, uppercase, lowercase, digits, symbols, excludeAmbiguous, wordCount, separator, capitalize]);
+  }, [
+    mode,
+    length,
+    uppercase,
+    lowercase,
+    digits,
+    symbols,
+    excludeAmbiguous,
+    wordCount,
+    separator,
+    capitalize,
+  ]);
 
   const regenerate = useCallback(() => {
     const token = ++generation.current;
@@ -73,9 +96,12 @@ export function GeneratorScreen({ platform, onCopy }: GeneratorScreenProps) {
     );
   }, [buildRequest, platform]);
 
+  // Options settle first: a slider drag would otherwise flicker through dozens of
+  // passwords and send a request per pixel.
   useEffect(() => {
-    regenerate();
+    const timer = setTimeout(regenerate, GENERATE_SETTLE_MS);
     return () => {
+      clearTimeout(timer);
       generation.current += 1;
     };
   }, [regenerate]);
@@ -90,7 +116,13 @@ export function GeneratorScreen({ platform, onCopy }: GeneratorScreenProps) {
   return (
     <div className={styles.screen}>
       <div className={styles.tabs} role="tablist" aria-label="Generator mode">
-        <button type="button" role="tab" className={styles.tab} aria-selected={mode === "random"} onClick={() => setMode("random")}>
+        <button
+          type="button"
+          role="tab"
+          className={styles.tab}
+          aria-selected={mode === "random"}
+          onClick={() => setMode("random")}
+        >
           Random
         </button>
         <button
@@ -136,28 +168,54 @@ export function GeneratorScreen({ platform, onCopy }: GeneratorScreenProps) {
                 <span>Length</span>
                 <span>{length}</span>
               </span>
-              <input type="range" min={8} max={64} value={length} onChange={(event) => setLength(Number(event.target.value))} />
+              <input
+                type="range"
+                min={8}
+                max={64}
+                value={length}
+                onChange={(event) => setLength(Number(event.target.value))}
+              />
             </label>
             <div className={styles.checkGrid}>
               <label className={styles.checkField}>
-                <input type="checkbox" checked={uppercase} onChange={() => toggleClass(uppercase, setUppercase)} />
+                <input
+                  type="checkbox"
+                  checked={uppercase}
+                  onChange={() => toggleClass(uppercase, setUppercase)}
+                />
                 Uppercase
               </label>
               <label className={styles.checkField}>
-                <input type="checkbox" checked={lowercase} onChange={() => toggleClass(lowercase, setLowercase)} />
+                <input
+                  type="checkbox"
+                  checked={lowercase}
+                  onChange={() => toggleClass(lowercase, setLowercase)}
+                />
                 Lowercase
               </label>
               <label className={styles.checkField}>
-                <input type="checkbox" checked={digits} onChange={() => toggleClass(digits, setDigits)} />
+                <input
+                  type="checkbox"
+                  checked={digits}
+                  onChange={() => toggleClass(digits, setDigits)}
+                />
                 Digits
               </label>
               <label className={styles.checkField}>
-                <input type="checkbox" checked={symbols} onChange={() => toggleClass(symbols, setSymbols)} />
+                <input
+                  type="checkbox"
+                  checked={symbols}
+                  onChange={() => toggleClass(symbols, setSymbols)}
+                />
                 Symbols
               </label>
             </div>
             <label className={styles.checkField}>
-              <input type="checkbox" checked={excludeAmbiguous} onChange={(event) => setExcludeAmbiguous(event.target.checked)} />
+              <input
+                type="checkbox"
+                checked={excludeAmbiguous}
+                onChange={(event) => setExcludeAmbiguous(event.target.checked)}
+              />
               Avoid look-alikes (0 O 1 l I)
             </label>
           </>
@@ -168,11 +226,21 @@ export function GeneratorScreen({ platform, onCopy }: GeneratorScreenProps) {
                 <span>Words</span>
                 <span>{wordCount}</span>
               </span>
-              <input type="range" min={3} max={10} value={wordCount} onChange={(event) => setWordCount(Number(event.target.value))} />
+              <input
+                type="range"
+                min={3}
+                max={10}
+                value={wordCount}
+                onChange={(event) => setWordCount(Number(event.target.value))}
+              />
             </label>
             <label className={styles.selectRow}>
               <span>Separator</span>
-              <select className={styles.select} value={separator} onChange={(event) => setSeparator(event.target.value as Separator)}>
+              <select
+                className={styles.select}
+                value={separator}
+                onChange={(event) => setSeparator(event.target.value as Separator)}
+              >
                 {separatorOptions.map((option) => (
                   <option key={option.value} value={option.value}>
                     {option.label}
@@ -181,7 +249,11 @@ export function GeneratorScreen({ platform, onCopy }: GeneratorScreenProps) {
               </select>
             </label>
             <label className={styles.checkField}>
-              <input type="checkbox" checked={capitalize} onChange={(event) => setCapitalize(event.target.checked)} />
+              <input
+                type="checkbox"
+                checked={capitalize}
+                onChange={(event) => setCapitalize(event.target.checked)}
+              />
               Capitalize each word
             </label>
           </>

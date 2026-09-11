@@ -59,10 +59,15 @@
   display: flex;
   flex: 1;
   min-height: 0;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
   padding: var(--space-6);
   overflow: auto;
+}
+
+/* Centred while it fits, scrollable when it does not (auto margins collapse on overflow). */
+.accessRegion > * {
+  margin: auto;
 }
 
 .vault {

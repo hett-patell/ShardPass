@@ -30,12 +30,20 @@
   background: var(--bg-primary);
 }
 
+/* Centred while it fits, scrollable when it does not: a centred flex child that overflows
+   would be cut off at the top, so the child carries auto margins instead. */
 .vaultAccessWrapper {
   display: flex;
   flex: 1;
-  align-items: center;
+  min-height: 0;
+  align-items: flex-start;
   justify-content: center;
   padding: var(--space-5);
+  overflow-y: auto;
+}
+
+.vaultAccessWrapper > * {
+  margin: auto;
 }
 
 .screen {

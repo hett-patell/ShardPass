@@ -1,4 +1,11 @@
-import { compareItems, matchesQuery, parseQuery, type Folder, type VaultItem, type VaultSort } from "@shardpass/domain";
+import {
+  compareItems,
+  matchesQuery,
+  parseQuery,
+  type Folder,
+  type VaultItem,
+  type VaultSort,
+} from "@shardpass/domain";
 import { parseItemCrudResponseForRequest } from "@shardpass/messaging";
 import type { CategoryKey } from "@shardpass/ui";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -71,12 +78,37 @@ export function useVaultState(
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const generation = useRef(0);
 
+  // Restoring or deleting from the Archive view changes the live vault too; the sidebar
+  // counts come from `liveItems`, so the live list is re-fetched alongside.
+  const refreshLive = useCallback(
+    (token: number) => {
+      const liveRequest = { version: 1 as const, kind: "item.query" as const };
+      platform.sendMessage(liveRequest).then(
+        (candidate) => {
+          if (token !== generation.current) return;
+          const parsed = parseItemCrudResponseForRequest(liveRequest, candidate);
+          if (parsed.success && parsed.data.kind === "item.queryResult")
+            setLiveItems(parsed.data.items);
+        },
+        () => undefined,
+      );
+    },
+    [platform],
+  );
+
   const load = useCallback(() => {
     const token = ++generation.current;
     // A refresh keeps the current list on screen; switching between live and archive shows
     // the loading state instead of the other view's rows under the new heading.
-    setStatus((current) => (current === "ready" && loadedArchived.current === archived ? current : "loading"));
-    const queryRequest = { version: 1 as const, kind: "item.query" as const, ...(archived ? { archived: true } : {}) };
+    if (loadedArchived.current !== archived) setAllItems(emptyItems);
+    setStatus((current) =>
+      current === "ready" && loadedArchived.current === archived ? current : "loading",
+    );
+    const queryRequest = {
+      version: 1 as const,
+      kind: "item.query" as const,
+      ...(archived ? { archived: true } : {}),
+    };
     platform.sendMessage(queryRequest).then(
       (candidate) => {
         if (token !== generation.current) return;
@@ -84,6 +116,7 @@ export function useVaultState(
         if (parsed.success && parsed.data.kind === "item.queryResult") {
           setAllItems(parsed.data.items);
           if (!archived) setLiveItems(parsed.data.items);
+          else refreshLive(token);
           loadedArchived.current = archived;
           setStatus("ready");
         } else {
@@ -97,7 +130,7 @@ export function useVaultState(
         setStatus("error");
       },
     );
-  }, [platform, archived]);
+  }, [platform, archived, refreshLive]);
 
   useEffect(() => {
     if (!active) {
@@ -166,7 +199,20 @@ export function useVaultState(
       archived,
       setArchived,
     }),
-    [allItems, liveItems, items, status, category, folderId, search, sort, tagVocabulary, selectedId, refresh, archived],
+    [
+      allItems,
+      liveItems,
+      items,
+      status,
+      category,
+      folderId,
+      search,
+      sort,
+      tagVocabulary,
+      selectedId,
+      refresh,
+      archived,
+    ],
   );
 }
 

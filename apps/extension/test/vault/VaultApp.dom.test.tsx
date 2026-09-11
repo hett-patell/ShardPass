@@ -240,7 +240,13 @@ describe("VaultApp foundation shell", () => {
   it("boots into the Settings destination from a #/settings deep link and clears the hash", async () => {
     window.location.hash = "#/settings";
     const platform = readyUnlockedPlatform();
-    platform.queueSendResponse({ version: 1, kind: "migration.status", available: false, phase: "none", itemCount: 0 });
+    platform.queueSendResponse({
+      version: 1,
+      kind: "migration.status",
+      available: false,
+      phase: "none",
+      itemCount: 0,
+    });
     platform.queueSendResponse(unlockedVaultState(2));
     render(<VaultApp platform={platform} />);
 
@@ -274,21 +280,39 @@ describe("VaultApp foundation shell", () => {
     platform.queueSendResponse(foundationStatus);
     platform.queueSendResponse(unlockedVaultState(1));
     platform.queueSendResponse(noFolders);
-    platform.queueSendResponse({ version: 1, kind: "item.queryResult", items: [withPasskey, noteItem] });
+    platform.queueSendResponse({
+      version: 1,
+      kind: "item.queryResult",
+      items: [withPasskey, noteItem],
+    });
     render(<VaultApp platform={platform} />);
 
     fireEvent.click(await screen.findByRole("button", { name: /Example Login/ }));
     fireEvent.click(await screen.findByRole("button", { name: "Remove passkey for example.test" }));
     expect(await screen.findByRole("heading", { name: "Remove passkey" })).toBeVisible();
-    expect(platform.sentMessages).not.toContainEqual(expect.objectContaining({ kind: "item.update" }));
+    expect(platform.sentMessages).not.toContainEqual(
+      expect.objectContaining({ kind: "item.update" }),
+    );
 
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
-    await waitFor(() => expect(screen.queryByRole("heading", { name: "Remove passkey" })).not.toBeInTheDocument());
-    expect(platform.sentMessages).not.toContainEqual(expect.objectContaining({ kind: "item.update" }));
+    await waitFor(() =>
+      expect(screen.queryByRole("heading", { name: "Remove passkey" })).not.toBeInTheDocument(),
+    );
+    expect(platform.sentMessages).not.toContainEqual(
+      expect.objectContaining({ kind: "item.update" }),
+    );
 
     fireEvent.click(screen.getByRole("button", { name: "Remove passkey for example.test" }));
-    platform.queueSendResponse({ version: 1, kind: "item.mutationResult", item: { ...loginItem, revision: 2 } });
-    platform.queueSendResponse({ version: 1, kind: "item.queryResult", items: [{ ...loginItem, revision: 2 }, noteItem] });
+    platform.queueSendResponse({
+      version: 1,
+      kind: "item.mutationResult",
+      item: { ...loginItem, revision: 2 },
+    });
+    platform.queueSendResponse({
+      version: 1,
+      kind: "item.queryResult",
+      items: [{ ...loginItem, revision: 2 }, noteItem],
+    });
     fireEvent.click(await screen.findByRole("button", { name: "Remove passkey" }));
     await waitFor(() =>
       expect(platform.sentMessages).toContainEqual(
@@ -311,7 +335,11 @@ describe("VaultApp foundation shell", () => {
     fireEvent.submit(input.closest("form")!);
 
     await waitFor(() =>
-      expect(platform.sentMessages).toContainEqual({ version: 1, kind: "folder.create", name: "Work" }),
+      expect(platform.sentMessages).toContainEqual({
+        version: 1,
+        kind: "folder.create",
+        name: "Work",
+      }),
     );
     const tree = await screen.findByRole("tree", { name: "Folders" });
     expect(within(tree).getByText("Work")).toBeVisible();
@@ -322,14 +350,53 @@ describe("VaultApp foundation shell", () => {
     render(<VaultApp platform={platform} />);
     await screen.findByText("Example Login");
 
-    platform.queueSendResponse({ version: 1, kind: "item.queryResult", items: [] });
+    // The archive query is held back so the in-between state can be seen.
+    const original = platform.sendMessage.bind(platform);
+    let releaseArchive: ((value: unknown) => void) | undefined;
+    vi.spyOn(platform, "sendMessage").mockImplementation((payload: unknown) => {
+      const request = payload as { kind?: string; archived?: boolean };
+      if (request.kind === "item.query" && request.archived === true) {
+        platform.sentMessages.push(payload);
+        return new Promise((resolve) => {
+          releaseArchive = resolve;
+        });
+      }
+      return original(payload);
+    });
     fireEvent.click(screen.getByRole("button", { name: "Archive" }));
 
     await waitFor(() =>
-      expect(platform.sentMessages).toContainEqual({ version: 1, kind: "item.query", archived: true }),
+      expect(platform.sentMessages).toContainEqual({
+        version: 1,
+        kind: "item.query",
+        archived: true,
+      }),
     );
+    // While the archive loads, the everyday rows are not shown under the archive heading.
+    expect(screen.getByRole("status", { name: "Loading items" })).toBeVisible();
+    expect(screen.queryByText("Example Login")).toBeNull();
+
+    // The live vault is re-fetched alongside, so sidebar counts stay current from the archive.
+    platform.queueSendResponse(itemQueryResult);
+    const liveQueriesBefore = platform.sentMessages.filter(
+      (message) =>
+        (message as { kind?: string; archived?: boolean }).kind === "item.query" &&
+        (message as { archived?: boolean }).archived === undefined,
+    ).length;
+    releaseArchive?.({ version: 1, kind: "item.queryResult", items: [] });
     expect(await screen.findByText("Nothing archived")).toBeVisible();
-    expect(screen.queryByRole("button", { name: /New item|Add your first item|Add one/i })).toBeNull();
+    await waitFor(() =>
+      expect(
+        platform.sentMessages.filter(
+          (message) =>
+            (message as { kind?: string; archived?: boolean }).kind === "item.query" &&
+            (message as { archived?: boolean }).archived === undefined,
+        ).length,
+      ).toBe(liveQueriesBefore + 1),
+    );
+    expect(
+      screen.queryByRole("button", { name: /New item|Add your first item|Add one/i }),
+    ).toBeNull();
     expect(screen.getByRole("button", { name: "Archive" })).toHaveAttribute("aria-current", "true");
   });
 });

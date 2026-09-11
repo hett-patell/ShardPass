@@ -1,6 +1,13 @@
 import { VAULT_SORTS, type OtpItem, type VaultItemKind, type VaultSort } from "@shardpass/domain";
 import type { OtpEditableInput, OtpResponse } from "@shardpass/messaging";
-import { AppHeader, SearchBar, StatusBadge, ThemeToggle, type CategoryKey, type Status } from "@shardpass/ui";
+import {
+  AppHeader,
+  SearchBar,
+  StatusBadge,
+  ThemeToggle,
+  type CategoryKey,
+  type Status,
+} from "@shardpass/ui";
 import { useCallback, useEffect, useState } from "react";
 
 import { useFoundationStatus } from "../foundation/useFoundationStatus";
@@ -64,13 +71,18 @@ export function VaultApp({ platform }: VaultAppProps) {
   const [creatingKind, setCreatingKind] = useState<VaultItemKind | null>(null);
   const [otpCreating, setOtpCreating] = useState(false);
   const [otpCreateError, setOtpCreateError] = useState("");
+  // A just-created item is selected before the list has re-fetched it; the detail pane
+  // stays blank for that beat instead of flashing "Select an item".
+  const [pendingId, setPendingId] = useState<string | null>(null);
 
   const folderState = useFolders(platform, vaultUnlocked);
   const vaultState = useVaultState(platform, vaultUnlocked, folderState.folders);
   // From every loaded item, not the filtered list: a search that excludes the selected item
   // must not unmount its detail (and any edit in progress) under the person.
   const selectedItem =
-    creatingKind === null ? (vaultState.allItems.find((item) => item.id === vaultState.selectedId) ?? null) : null;
+    creatingKind === null
+      ? (vaultState.allItems.find((item) => item.id === vaultState.selectedId) ?? null)
+      : null;
   const otpItems = vaultState.allItems.filter((item): item is OtpItem => item.kind === "otp");
   const folderCounts = countItemsByFolder(vaultState.liveItems);
 
@@ -123,6 +135,15 @@ export function VaultApp({ platform }: VaultAppProps) {
     [goToVaultView, vaultState],
   );
 
+  useEffect(() => {
+    if (pendingId === null) return;
+    if (
+      vaultState.selectedId !== pendingId ||
+      vaultState.allItems.some((item) => item.id === pendingId)
+    )
+      setPendingId(null);
+  }, [pendingId, vaultState.allItems, vaultState.selectedId]);
+
   const handleUpdate = useCallback(() => vaultState.refresh(), [vaultState]);
   // An import can create folders too; the sidebar must learn about them.
   const handleImported = useCallback(() => {
@@ -132,6 +153,8 @@ export function VaultApp({ platform }: VaultAppProps) {
   const handleDeleted = useCallback(() => {
     vaultState.setSelectedId(null);
     vaultState.refresh();
+    // The button that was pressed is gone with the item; land on the vault content region.
+    document.getElementById("vault-content")?.focus();
   }, [vaultState]);
 
   const startCreate = useCallback(
@@ -150,7 +173,9 @@ export function VaultApp({ platform }: VaultAppProps) {
   // Deep links from the popup and the save prompt ride in the URL hash; they apply once the
   // vault is unlocked (a locked page keeps them until then) and are then cleared, so a
   // reload does not replay "new login" or reopen an item.
-  const [route, setRoute] = useState<VaultPageTarget | null>(() => parseVaultPageHash(window.location.hash));
+  const [route, setRoute] = useState<VaultPageTarget | null>(() =>
+    parseVaultPageHash(window.location.hash),
+  );
   useEffect(() => {
     const onHashChange = () => {
       const next = parseVaultPageHash(window.location.hash);
@@ -184,6 +209,8 @@ export function VaultApp({ platform }: VaultAppProps) {
       // the open directory. The forms know nothing about folders, so it is one update.
       const folderId = vaultState.folderId;
       setCreatingKind(null);
+      setPendingId(item.id);
+      vaultState.setSelectedId(item.id);
       vaultState.setCategory("all");
       vaultState.setSearch("");
       const filed =
@@ -255,6 +282,7 @@ export function VaultApp({ platform }: VaultAppProps) {
                 onCreateFolder={folderState.create}
                 onRenameFolder={folderState.rename}
                 onDeleteFolder={deleteFolder}
+                onClearFolderError={folderState.clearError}
                 archived={vaultState.archived}
                 onOpenArchive={openArchive}
                 view={view}
@@ -302,8 +330,15 @@ export function VaultApp({ platform }: VaultAppProps) {
                       category={vaultState.category}
                       archived={vaultState.archived}
                       onRetry={vaultState.refresh}
-                      {...(vaultState.folderId === null ? {} : { folderName: folderPath(folderState.folders, vaultState.folderId) })}
-                      {...(vaultState.archived ? {} : { onCreate: () => startCreate("login"), onImport: () => setView("settings") })}
+                      {...(vaultState.folderId === null
+                        ? {}
+                        : { folderName: folderPath(folderState.folders, vaultState.folderId) })}
+                      {...(vaultState.archived
+                        ? {}
+                        : {
+                            onCreate: () => startCreate("login"),
+                            onImport: () => setView("settings"),
+                          })}
                     />
                   </div>
                 </div>
@@ -318,9 +353,7 @@ export function VaultApp({ platform }: VaultAppProps) {
                         onSubmit={submitOtpCreate}
                         onCancel={cancelCreate}
                       />
-                      {otpCreateError ? (
-                        <p role="alert">{otpCreateError}</p>
-                      ) : null}
+                      {otpCreateError ? <p role="alert">{otpCreateError}</p> : null}
                     </>
                   ) : creatingKind === "login" ? (
                     <LoginForm
@@ -334,9 +367,17 @@ export function VaultApp({ platform }: VaultAppProps) {
                   ) : creatingKind === "card" ? (
                     <CardForm platform={platform} onSaved={handleCreated} onCancel={cancelCreate} />
                   ) : creatingKind === "identity" ? (
-                    <IdentityForm platform={platform} onSaved={handleCreated} onCancel={cancelCreate} />
+                    <IdentityForm
+                      platform={platform}
+                      onSaved={handleCreated}
+                      onCancel={cancelCreate}
+                    />
                   ) : creatingKind === "secret" ? (
-                    <SecretForm platform={platform} onSaved={handleCreated} onCancel={cancelCreate} />
+                    <SecretForm
+                      platform={platform}
+                      onSaved={handleCreated}
+                      onCancel={cancelCreate}
+                    />
                   ) : selectedItem ? (
                     <ItemDetailPanel
                       // Keyed by item: an edit form or a revealed field must never survive a
@@ -349,30 +390,42 @@ export function VaultApp({ platform }: VaultAppProps) {
                       onUpdate={handleUpdate}
                       onDeleted={handleDeleted}
                     />
-                  ) : (
+                  ) : pendingId !== null && pendingId === vaultState.selectedId ? null : (
                     <EmptyDetailState />
                   )}
                 </div>
               </>
-            ) : (
-              <div className={styles.settingsPanel}>
-                {view === "settings" ? (
-                  <>
-                    <section className={styles.settingsCard} aria-labelledby="appearance-heading">
-                      <h3 id="appearance-heading" className={styles.settingsCardTitle}>
-                        Appearance
-                      </h3>
-                      <ThemeToggle />
-                    </section>
-                    <VaultAccess platform={platform} securityControls onUnlockedChange={setVaultUnlocked} />
-                    <MigrationPanel platform={platform} active onCompleted={vaultState.refresh} />
-                    <ImportDialog platform={platform} active onImported={handleImported} onDone={goToVaultView} />
-                  </>
-                ) : (
-                  <EnteSettings platform={platform} active onSynced={handleUpdate} />
-                )}
-              </div>
-            )}
+            ) : null}
+            {/* Settings and Ente stay mounted while the vault is open: an import preview, a
+                backup in progress or an Ente sign-in survives a look at the vault, and the
+                security controls keep listening for a lock from any view. */}
+            <div className={styles.settingsPanel} hidden={view !== "settings"}>
+              <section className={styles.settingsCard} aria-labelledby="appearance-heading">
+                <h3 id="appearance-heading" className={styles.settingsCardTitle}>
+                  Appearance
+                </h3>
+                <ThemeToggle />
+              </section>
+              <VaultAccess
+                platform={platform}
+                securityControls
+                onUnlockedChange={setVaultUnlocked}
+              />
+              <MigrationPanel
+                platform={platform}
+                active={view === "settings"}
+                onCompleted={vaultState.refresh}
+              />
+              <ImportDialog
+                platform={platform}
+                active={view === "settings"}
+                onImported={handleImported}
+                onDone={goToVaultView}
+              />
+            </div>
+            <div className={styles.settingsPanel} hidden={view !== "ente"}>
+              <EnteSettings platform={platform} active={view === "ente"} onSynced={handleUpdate} />
+            </div>
           </div>
         )}
       </main>

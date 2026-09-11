@@ -17,9 +17,12 @@ export function PopupTitleBar({ back, title, trailing, onLock, onSettings }: Pop
   // A pushed screen replaces the whole body; the title takes focus so keyboard and screen
   // reader users land on what just opened instead of on nothing.
   const titleRef = useRef<HTMLHeadingElement>(null);
+  // Keyed on whether a back control exists, not on the object (rebuilt every render): a
+  // copy or a fill must not pull focus off the button that was just used.
+  const hasBack = back !== undefined;
   useEffect(() => {
-    if (back) titleRef.current?.focus();
-  }, [back, title]);
+    if (hasBack) titleRef.current?.focus();
+  }, [hasBack, title]);
   return (
     <header className={styles.bar}>
       {back ? (

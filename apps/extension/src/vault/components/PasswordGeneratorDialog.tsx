@@ -19,6 +19,8 @@ export interface PasswordGeneratorDialogProps {
 type Mode = "random" | "passphrase";
 type Separator = "hyphen" | "space" | "period" | "none";
 
+const GENERATE_SETTLE_MS = 120;
+
 const separatorOptions: readonly { value: Separator; label: string }[] = [
   { value: "hyphen", label: "Hyphen (-)" },
   { value: "space", label: "Space" },
@@ -38,7 +40,11 @@ function strengthStatus(entropyBits: number): Status {
  * requests a fresh password from the background's password.generate handler — the
  * actual CSPRNG generation happens there, not in this UI.
  */
-export function PasswordGeneratorDialog({ platform, onUse, onClose }: PasswordGeneratorDialogProps) {
+export function PasswordGeneratorDialog({
+  platform,
+  onUse,
+  onClose,
+}: PasswordGeneratorDialogProps) {
   const [mode, setMode] = useState<Mode>("random");
   const [length, setLength] = useState(20);
   const [uppercase, setUppercase] = useState(true);
@@ -104,8 +110,11 @@ export function PasswordGeneratorDialog({ platform, onUse, onClose }: PasswordGe
     );
   }, [buildRequest, platform]);
 
+  // Options settle first: a slider drag would otherwise flicker through dozens of
+  // passwords and send a request per pixel.
   useEffect(() => {
-    regenerate();
+    const timer = setTimeout(regenerate, GENERATE_SETTLE_MS);
+    return () => clearTimeout(timer);
   }, [regenerate]);
 
   useEffect(() => {
@@ -126,162 +135,166 @@ export function PasswordGeneratorDialog({ platform, onUse, onClose }: PasswordGe
       // Nothing destructive here: clicking outside is a fine way to dismiss it.
       {...({ closedby: "any" } as Record<string, string>)}
     >
-        <h3 id="password-generator-heading">Generate password</h3>
+      <h3 id="password-generator-heading">Generate password</h3>
 
-        <div className={styles.tabs} role="tablist" aria-label="Generator mode">
-          <button
-            type="button"
-            role="tab"
-            className={styles.tab}
-            aria-selected={mode === "random"}
-            onClick={() => setMode("random")}
-          >
-            Random
-          </button>
-          <button
-            type="button"
-            role="tab"
-            className={styles.tab}
-            aria-selected={mode === "passphrase"}
-            onClick={() => setMode("passphrase")}
-          >
-            Passphrase
-          </button>
-        </div>
+      <div className={styles.tabs} role="tablist" aria-label="Generator mode">
+        <button
+          type="button"
+          role="tab"
+          className={styles.tab}
+          aria-selected={mode === "random"}
+          onClick={() => setMode("random")}
+        >
+          Random
+        </button>
+        <button
+          type="button"
+          role="tab"
+          className={styles.tab}
+          aria-selected={mode === "passphrase"}
+          onClick={() => setMode("passphrase")}
+        >
+          Passphrase
+        </button>
+      </div>
 
-        <div className={styles.preview}>
-          <span className={styles.previewValue}>{password || "—"}</span>
-          <CopyButton label="Copy generated password" value={password} />
-        </div>
+      <div className={styles.preview}>
+        <span className={styles.previewValue}>{password || "—"}</span>
+        <CopyButton label="Copy generated password" value={password} />
+      </div>
 
-        <div className={styles.entropyRow}>
-          <StatusBadge status={strengthStatus(entropyBits)}>
-            {Math.round(entropyBits)} bits of entropy
-          </StatusBadge>
-          <Button variant="ghost" onClick={regenerate}>
-            <RefreshCw size={14} aria-hidden="true" /> Regenerate
-          </Button>
-        </div>
+      <div className={styles.entropyRow}>
+        <StatusBadge status={strengthStatus(entropyBits)}>
+          {Math.round(entropyBits)} bits of entropy
+        </StatusBadge>
+        <Button variant="ghost" onClick={regenerate}>
+          <RefreshCw size={14} aria-hidden="true" /> Regenerate
+        </Button>
+      </div>
 
-        {error ? (
-          <p className={styles.error} role="alert">
-            {error}
-          </p>
-        ) : null}
+      {error ? (
+        <p className={styles.error} role="alert">
+          {error}
+        </p>
+      ) : null}
 
-        <div className={styles.options}>
-          {mode === "random" ? (
-            <>
-              <div className={styles.sliderRow}>
-                <span className={styles.sliderLabel}>
-                  <span>Length</span>
-                  <span>{length}</span>
-                </span>
-                <input
-                  type="range"
-                  min={8}
-                  max={128}
-                  value={length}
-                  onChange={(event) => setLength(Number(event.target.value))}
-                  aria-label="Password length"
-                />
-              </div>
-              <div className={styles.checkGrid}>
-                <label className={styles.checkField}>
-                  <input
-                    type="checkbox"
-                    checked={uppercase}
-                    onChange={() => toggleClass(uppercase, setUppercase)}
-                  />
-                  Uppercase (A-Z)
-                </label>
-                <label className={styles.checkField}>
-                  <input
-                    type="checkbox"
-                    checked={lowercase}
-                    onChange={() => toggleClass(lowercase, setLowercase)}
-                  />
-                  Lowercase (a-z)
-                </label>
-                <label className={styles.checkField}>
-                  <input type="checkbox" checked={digits} onChange={() => toggleClass(digits, setDigits)} />
-                  Digits (0-9)
-                </label>
-                <label className={styles.checkField}>
-                  <input
-                    type="checkbox"
-                    checked={symbols}
-                    onChange={() => toggleClass(symbols, setSymbols)}
-                  />
-                  Symbols (!@#…)
-                </label>
-              </div>
+      <div className={styles.options}>
+        {mode === "random" ? (
+          <>
+            <div className={styles.sliderRow}>
+              <span className={styles.sliderLabel}>
+                <span>Length</span>
+                <span>{length}</span>
+              </span>
+              <input
+                type="range"
+                min={8}
+                max={128}
+                value={length}
+                onChange={(event) => setLength(Number(event.target.value))}
+                aria-label="Password length"
+              />
+            </div>
+            <div className={styles.checkGrid}>
               <label className={styles.checkField}>
                 <input
                   type="checkbox"
-                  checked={excludeAmbiguous}
-                  onChange={(event) => setExcludeAmbiguous(event.target.checked)}
+                  checked={uppercase}
+                  onChange={() => toggleClass(uppercase, setUppercase)}
                 />
-                Exclude ambiguous characters (0, O, 1, l, I)
+                Uppercase (A-Z)
               </label>
-            </>
-          ) : (
-            <>
-              <div className={styles.sliderRow}>
-                <span className={styles.sliderLabel}>
-                  <span>Word count</span>
-                  <span>{wordCount}</span>
-                </span>
-                <input
-                  type="range"
-                  min={3}
-                  max={10}
-                  value={wordCount}
-                  onChange={(event) => setWordCount(Number(event.target.value))}
-                  aria-label="Word count"
-                />
-              </div>
-              <label className={styles.checkField} htmlFor="passphrase-separator">
-                Separator
-              </label>
-              <select
-                id="passphrase-separator"
-                className={styles.select}
-                value={separator}
-                onChange={(event) => setSeparator(event.target.value as Separator)}
-              >
-                {separatorOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
               <label className={styles.checkField}>
                 <input
                   type="checkbox"
-                  checked={capitalize}
-                  onChange={(event) => setCapitalize(event.target.checked)}
+                  checked={lowercase}
+                  onChange={() => toggleClass(lowercase, setLowercase)}
                 />
-                Capitalize each word
+                Lowercase (a-z)
               </label>
-            </>
-          )}
-        </div>
+              <label className={styles.checkField}>
+                <input
+                  type="checkbox"
+                  checked={digits}
+                  onChange={() => toggleClass(digits, setDigits)}
+                />
+                Digits (0-9)
+              </label>
+              <label className={styles.checkField}>
+                <input
+                  type="checkbox"
+                  checked={symbols}
+                  onChange={() => toggleClass(symbols, setSymbols)}
+                />
+                Symbols (!@#…)
+              </label>
+            </div>
+            <label className={styles.checkField}>
+              <input
+                type="checkbox"
+                checked={excludeAmbiguous}
+                onChange={(event) => setExcludeAmbiguous(event.target.checked)}
+              />
+              Exclude ambiguous characters (0, O, 1, l, I)
+            </label>
+          </>
+        ) : (
+          <>
+            <div className={styles.sliderRow}>
+              <span className={styles.sliderLabel}>
+                <span>Word count</span>
+                <span>{wordCount}</span>
+              </span>
+              <input
+                type="range"
+                min={3}
+                max={10}
+                value={wordCount}
+                onChange={(event) => setWordCount(Number(event.target.value))}
+                aria-label="Word count"
+              />
+            </div>
+            <label className={styles.checkField} htmlFor="passphrase-separator">
+              Separator
+            </label>
+            <select
+              id="passphrase-separator"
+              className={styles.select}
+              value={separator}
+              onChange={(event) => setSeparator(event.target.value as Separator)}
+            >
+              {separatorOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <label className={styles.checkField}>
+              <input
+                type="checkbox"
+                checked={capitalize}
+                onChange={(event) => setCapitalize(event.target.checked)}
+              />
+              Capitalize each word
+            </label>
+          </>
+        )}
+      </div>
 
-        <div className={styles.actions}>
-          <Button ref={closeButtonRef} variant="ghost" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button
-            disabled={password.length === 0}
-            onClick={() => {
-              onUse(password);
-              onClose();
-            }}
-          >
-            Use password
-          </Button>
-        </div>
+      <div className={styles.actions}>
+        <Button ref={closeButtonRef} variant="ghost" onClick={onClose}>
+          Cancel
+        </Button>
+        <Button
+          disabled={password.length === 0}
+          onClick={() => {
+            onUse(password);
+            onClose();
+          }}
+        >
+          Use password
+        </Button>
+      </div>
     </dialog>,
     document.body,
   );

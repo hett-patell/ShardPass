@@ -1,6 +1,15 @@
 import type { Folder } from "@shardpass/domain";
 import { CategoryNav, type CategoryKey } from "@shardpass/ui";
-import { Archive, Cloud, Folder as FolderIcon, FolderPlus, Pencil, Plus, Settings, Trash2 } from "lucide-react";
+import {
+  Archive,
+  Cloud,
+  Folder as FolderIcon,
+  FolderPlus,
+  Pencil,
+  Plus,
+  Settings,
+  Trash2,
+} from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 
 import { folderSubtreeIds, folderTree } from "../item-support";
@@ -19,6 +28,8 @@ export interface VaultSidebarProps {
   selectedFolderId: string | null;
   onFolderSelect: (folderId: string | null) => void;
   folderError: string | null;
+  /** Called when a create/rename/delete attempt is abandoned, so a stale error does not linger. */
+  onClearFolderError?: () => void;
   onCreateFolder: (name: string, parentId?: string) => Promise<boolean>;
   onRenameFolder: (id: string, name: string) => Promise<boolean>;
   onDeleteFolder: (id: string) => Promise<boolean>;
@@ -46,6 +57,7 @@ export function VaultSidebar({
   selectedFolderId,
   onFolderSelect,
   folderError,
+  onClearFolderError,
   onCreateFolder,
   onRenameFolder,
   onDeleteFolder,
@@ -61,11 +73,25 @@ export function VaultSidebar({
   const tree = folderTree(folders);
   const browsing = view === "vault" && !archived;
 
+  const newFolderRef = useRef<HTMLButtonElement>(null);
+  const cancelEdit = () => {
+    setEdit(null);
+    onClearFolderError?.();
+  };
+  // The native <dialog> returns focus to its opener, but the row's trash button is only
+  // rendered while the row is hovered or focused; land on the folder itself, or on "New
+  // folder" once the folder is gone.
+  const focusAfterDialog = (folderId: string) => {
+    setTimeout(() => {
+      const row = document.getElementById(folderButtonId(folderId));
+      (row ?? newFolderRef.current)?.focus();
+    }, 0);
+  };
   const submitEdit = async (name: string) => {
     if (edit === null) return;
     const trimmed = name.trim();
     if (trimmed === "") {
-      setEdit(null);
+      cancelEdit();
       return;
     }
     setBusy(true);
@@ -83,9 +109,13 @@ export function VaultSidebar({
     const ok = await onDeleteFolder(pendingDelete.id);
     setBusy(false);
     if (ok) {
-      if (selectedFolderId !== null && folderSubtreeIds(folders, pendingDelete.id).has(selectedFolderId))
+      if (
+        selectedFolderId !== null &&
+        folderSubtreeIds(folders, pendingDelete.id).has(selectedFolderId)
+      )
         onFolderSelect(null);
       setPendingDelete(null);
+      focusAfterDialog(pendingDelete.id);
     }
   };
 
@@ -110,6 +140,7 @@ export function VaultSidebar({
             <button
               type="button"
               className={styles.iconButton}
+              ref={newFolderRef}
               aria-label="New folder"
               title="New folder"
               disabled={edit !== null}
@@ -136,7 +167,7 @@ export function VaultSidebar({
                       busy={busy}
                       label={`Rename ${folder.name}`}
                       onSubmit={submitEdit}
-                      onCancel={() => setEdit(null)}
+                      onCancel={cancelEdit}
                     />
                   ) : (
                     <div
@@ -148,13 +179,14 @@ export function VaultSidebar({
                     >
                       <button
                         type="button"
+                        id={folderButtonId(folder.id)}
                         className={styles.folderItem}
                         aria-current={active ? "true" : undefined}
                         onClick={() => onFolderSelect(active ? null : folder.id)}
                       >
                         <FolderIcon size={14} aria-hidden="true" />
                         <span className={styles.folderLabel}>{folder.name}</span>
-                        <span className={styles.folderCount}>{folderCounts.get(folder.id) ?? 0}</span>
+                        <span className={styles.folderCount}>{subtreeCount(folder.id)}</span>
                       </button>
                       <span className={styles.rowTools}>
                         {depth < MAX_VISIBLE_DEPTH ? (
@@ -175,7 +207,9 @@ export function VaultSidebar({
                           aria-label={`Rename ${folder.name}`}
                           title="Rename"
                           disabled={edit !== null}
-                          onClick={() => setEdit({ mode: "rename", id: folder.id, initial: folder.name })}
+                          onClick={() =>
+                            setEdit({ mode: "rename", id: folder.id, initial: folder.name })
+                          }
                         >
                           <Pencil size={13} aria-hidden="true" />
                         </button>
@@ -185,7 +219,10 @@ export function VaultSidebar({
                           aria-label={`Delete ${folder.name}`}
                           title="Delete"
                           disabled={edit !== null}
-                          onClick={() => setPendingDelete(folder)}
+                          onClick={() => {
+                            onClearFolderError?.();
+                            setPendingDelete(folder);
+                          }}
                         >
                           <Trash2 size={13} aria-hidden="true" />
                         </button>
@@ -199,7 +236,7 @@ export function VaultSidebar({
                       busy={busy}
                       label={`New folder inside ${folder.name}`}
                       onSubmit={submitEdit}
-                      onCancel={() => setEdit(null)}
+                      onCancel={cancelEdit}
                     />
                   ) : null}
                 </div>
@@ -212,7 +249,7 @@ export function VaultSidebar({
                 busy={busy}
                 label="New folder name"
                 onSubmit={submitEdit}
-                onCancel={() => setEdit(null)}
+                onCancel={cancelEdit}
               />
             ) : null}
           </div>
@@ -264,6 +301,7 @@ export function VaultSidebar({
           onCancel={() => {
             if (busy) return;
             setPendingDelete(null);
+            focusAfterDialog(pendingDelete.id);
           }}
           onConfirm={() => void confirmDelete()}
         />
@@ -271,6 +309,8 @@ export function VaultSidebar({
     </aside>
   );
 }
+
+const folderButtonId = (folderId: string) => `vault-folder-${folderId}`;
 
 interface FolderNameInputProps {
   initial: string;
@@ -282,7 +322,14 @@ interface FolderNameInputProps {
 }
 
 /** Inline name editor: Enter saves, Escape or blur cancels, an empty name is a cancel. */
-function FolderNameInput({ initial, depth, busy, label, onSubmit, onCancel }: FolderNameInputProps) {
+function FolderNameInput({
+  initial,
+  depth,
+  busy,
+  label,
+  onSubmit,
+  onCancel,
+}: FolderNameInputProps) {
   const [value, setValue] = useState(initial);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -323,7 +370,12 @@ function FolderNameInput({ initial, depth, busy, label, onSubmit, onCancel }: Fo
           if (!busy && value.trim() === "") onCancel();
         }}
       />
-      <button type="submit" className={styles.iconButton} aria-label="Save folder name" disabled={busy}>
+      <button
+        type="submit"
+        className={styles.iconButton}
+        aria-label="Save folder name"
+        disabled={busy}
+      >
         <Plus size={13} aria-hidden="true" />
       </button>
     </form>

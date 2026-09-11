@@ -11,6 +11,8 @@ export interface UseFoldersResult {
   status: FolderStatus;
   /** The last mutation's failure, worded for a person; cleared on the next attempt. */
   error: string | null;
+  /** Forget the last failure, e.g. when the person abandons the attempt. */
+  clearError: () => void;
   refresh: () => void;
   create: (name: string, parentId?: string) => Promise<boolean>;
   rename: (id: string, name: string) => Promise<boolean>;
@@ -72,6 +74,7 @@ export function useFolders(
   const refresh = useCallback(() => {
     if (active) void send({ version: 1, kind: "folder.list" });
   }, [active, send]);
+  const clearError = useCallback(() => setError(null), []);
 
   useEffect(() => {
     if (!active) {
@@ -86,11 +89,17 @@ export function useFolders(
 
   return {
     folders,
+    clearError,
     status,
     error,
     refresh,
     create: (name, parentId) =>
-      send({ version: 1, kind: "folder.create", name, ...(parentId === undefined ? {} : { parentId }) }),
+      send({
+        version: 1,
+        kind: "folder.create",
+        name,
+        ...(parentId === undefined ? {} : { parentId }),
+      }),
     rename: (id, name) => send({ version: 1, kind: "folder.rename", id, name }),
     remove: (id) => send({ version: 1, kind: "folder.delete", id }),
   };
