@@ -27,7 +27,14 @@ import {
   type LoginUrlMatchMode,
 } from "@shardpass/domain";
 
-import { clampList, clampName, clampText, keepIfValid, normalizeTags, warningLabel } from "../common/clamp";
+import {
+  clampList,
+  clampName,
+  clampText,
+  keepIfValid,
+  normalizeTags,
+  warningLabel,
+} from "../common/clamp";
 import { createFolderIndex, type ImportResult } from "../common/import-result";
 import { newItemBase } from "../common/item-base";
 import { emitLogin, type LoginBase, type LoginDraft } from "../common/login-candidate";
@@ -89,7 +96,10 @@ const CATEGORY_KINDS: Readonly<Record<string, ItemKind>> = {
 
 /** Which template fields hold the account, the password and the address for each login-like kind. */
 const LOGIN_ROUTES: Readonly<
-  Record<LoginKind, Readonly<{ username: readonly string[]; password: readonly string[]; url: readonly string[] }>>
+  Record<
+    LoginKind,
+    Readonly<{ username: readonly string[]; password: readonly string[]; url: readonly string[] }>
+  >
 > = {
   login: { username: ["username"], password: ["password"], url: ["url", "website"] },
   password: { username: ["username"], password: ["password"], url: ["url", "website"] },
@@ -159,7 +169,9 @@ type ParsedItem = Readonly<{
  * Throws {@link OnePassword1puxFormatError} when the file is not a 1PUX export; anything wrong
  * with an individual item is a warning, as with every other importer.
  */
-export async function importOnePassword1pux(archive: ArrayBuffer | Uint8Array): Promise<ImportResult> {
+export async function importOnePassword1pux(
+  archive: ArrayBuffer | Uint8Array,
+): Promise<ImportResult> {
   const bytes = ArrayBuffer.isView(archive) ? archive : new Uint8Array(archive);
   if (bytes.byteLength > MAX_ONEPASSWORD_1PUX_ARCHIVE_BYTES)
     throw new OnePassword1puxFormatError(
@@ -172,12 +184,16 @@ async function readExportData(bytes: Uint8Array): Promise<unknown> {
   let text: string;
   try {
     const entries = listZipEntries(bytes);
-    const entry = entries.find((candidate) => candidate.name === EXPORT_ENTRY || candidate.name.endsWith(`/${EXPORT_ENTRY}`));
+    const entry = entries.find(
+      (candidate) => candidate.name === EXPORT_ENTRY || candidate.name.endsWith(`/${EXPORT_ENTRY}`),
+    );
     if (entry === undefined)
       throw new OnePassword1puxFormatError(
         "The archive has no export.data file, so it is not a 1Password 1PUX export.",
       );
-    text = new TextDecoder("utf-8", { fatal: true }).decode(await readZipEntry(bytes, entry, MAX_ONEPASSWORD_1PUX_EXPORT_BYTES));
+    text = new TextDecoder("utf-8", { fatal: true }).decode(
+      await readZipEntry(bytes, entry, MAX_ONEPASSWORD_1PUX_EXPORT_BYTES),
+    );
   } catch (error) {
     if (error instanceof OnePassword1puxFormatError) throw error;
     if (error instanceof ZipFormatError) throw new OnePassword1puxFormatError(error.message);
@@ -193,11 +209,19 @@ async function readExportData(bytes: Uint8Array): Promise<unknown> {
 function convertExport(root: unknown): ImportResult {
   const items: VaultItem[] = [];
   const warnings: string[] = [];
-  const accounts = isRecord(root) && Array.isArray(root["accounts"]) ? root["accounts"].filter(isRecord) : undefined;
+  const accounts =
+    isRecord(root) && Array.isArray(root["accounts"])
+      ? root["accounts"].filter(isRecord)
+      : undefined;
   if (accounts === undefined)
-    throw new OnePassword1puxFormatError('export.data has no "accounts" list, so it is not a 1Password 1PUX export.');
+    throw new OnePassword1puxFormatError(
+      'export.data has no "accounts" list, so it is not a 1Password 1PUX export.',
+    );
   const vaults = accounts.flatMap((account) =>
-    (Array.isArray(account["vaults"]) ? account["vaults"].filter(isRecord) : []).map((vault) => ({ account, vault })),
+    (Array.isArray(account["vaults"]) ? account["vaults"].filter(isRecord) : []).map((vault) => ({
+      account,
+      vault,
+    })),
   );
   const folderIndex = createFolderIndex();
   const severalAccounts = accounts.length > 1;
@@ -215,19 +239,39 @@ function convertExport(root: unknown): ImportResult {
       if (!isRecord(raw)) continue;
       const uuid = asString(raw["uuid"]).trim();
       const details = isRecord(raw["details"]) ? raw["details"] : {};
-      const loginFields: unknown[] = Array.isArray(details["loginFields"]) ? details["loginFields"] : [];
+      const loginFields: unknown[] = Array.isArray(details["loginFields"])
+        ? details["loginFields"]
+        : [];
       const username = loginFields.find(
-        (field) => isRecord(field) && asString(field["designation"]).toLowerCase() === "username" && asString(field["value"]).trim() !== "",
+        (field) =>
+          isRecord(field) &&
+          asString(field["designation"]).toLowerCase() === "username" &&
+          asString(field["value"]).trim() !== "",
       );
-      if (uuid !== "" && isRecord(username)) usernameByUuid.set(uuid, asString(username["value"]).trim());
+      if (uuid !== "" && isRecord(username))
+        usernameByUuid.set(uuid, asString(username["value"]).trim());
     }
-  const context: ConvertContext = { usernameOf: (uuid) => usernameByUuid.get(uuid) };
+  // The reverse link: how many logins sign in through each account item. An account with no
+  // password of its own is then reported as what it is rather than as a gap.
+  const linkedLoginsByUuid = new Map<string, number>();
+  for (const { vault } of vaults)
+    for (const raw of Array.isArray(vault["items"]) ? vault["items"] : [])
+      for (const target of linkedItemUuidsOf(raw))
+        linkedLoginsByUuid.set(target, (linkedLoginsByUuid.get(target) ?? 0) + 1);
+  const context: ConvertContext = {
+    usernameOf: (uuid) => usernameByUuid.get(uuid),
+    linkedLoginsOf: (uuid) => linkedLoginsByUuid.get(uuid) ?? 0,
+  };
 
   for (const { account, vault } of vaults) {
     // A single vault is the whole export; a folder named after it would wrap everything.
     const folderId =
       vaults.length > 1
-        ? folderIndex.idFor(severalAccounts ? [attrName(account, "Account"), attrName(vault, "Vault")] : [attrName(vault, "Vault")])
+        ? folderIndex.idFor(
+            severalAccounts
+              ? [attrName(account, "Account"), attrName(vault, "Vault")]
+              : [attrName(vault, "Vault")],
+          )
         : undefined;
     for (const raw of Array.isArray(vault["items"]) ? vault["items"] : []) {
       ordinal += 1;
@@ -258,7 +302,10 @@ function convertExport(root: unknown): ImportResult {
 
 function attrName(record: Record<string, unknown>, fallback: string): string {
   const attrs = isRecord(record["attrs"]) ? record["attrs"] : {};
-  const name = asString(attrs["name"]).trim() || asString(attrs["accountName"]).trim() || asString(attrs["email"]).trim();
+  const name =
+    asString(attrs["name"]).trim() ||
+    asString(attrs["accountName"]).trim() ||
+    asString(attrs["email"]).trim();
   return name === "" ? fallback : name;
 }
 
@@ -277,11 +324,16 @@ function parseItem(raw: Record<string, unknown>): ParsedItem {
       if (decoded !== undefined) fields.push(decoded);
     }
   }
-  const attachments = fields.filter((field) => field.kind === "attachment").map((field) => field.text);
-  const document = isRecord(details["documentAttributes"]) ? details["documentAttributes"] : undefined;
+  const attachments = fields
+    .filter((field) => field.kind === "attachment")
+    .map((field) => field.text);
+  const document = isRecord(details["documentAttributes"])
+    ? details["documentAttributes"]
+    : undefined;
   if (document !== undefined) attachments.push(asString(document["fileName"]));
   const passkeys =
-    fields.filter((field) => field.kind === "passkey").length + (isRecord(details["passkey"]) ? 1 : 0);
+    fields.filter((field) => field.kind === "passkey").length +
+    (isRecord(details["passkey"]) ? 1 : 0);
 
   const loginFields: LoginField[] = [];
   for (const entry of Array.isArray(details["loginFields"]) ? details["loginFields"] : []) {
@@ -300,7 +352,9 @@ function parseItem(raw: Record<string, unknown>): ParsedItem {
     categoryUuid,
     kind: CATEGORY_KINDS[categoryUuid],
     ...urlsOf(overview),
-    tags: Array.isArray(overview["tags"]) ? overview["tags"].filter((tag): tag is string => typeof tag === "string") : [],
+    tags: Array.isArray(overview["tags"])
+      ? overview["tags"].filter((tag): tag is string => typeof tag === "string")
+      : [],
     notes: asString(details["notesPlain"]),
     ainfo: asString(overview["ainfo"]).trim(),
     favorite: favIndex === true || (typeof favIndex === "number" && favIndex > 0),
@@ -318,12 +372,21 @@ function parseItem(raw: Record<string, unknown>): ParsedItem {
 }
 
 /** The primary `url` plus every `urls[].url`, in order and without repeats, each with its match mode. */
-function urlsOf(overview: Record<string, unknown>): { urls: string[]; urlMatches: LoginUrlMatchMode[] } {
+function urlsOf(overview: Record<string, unknown>): {
+  urls: string[];
+  urlMatches: LoginUrlMatchMode[];
+} {
   const urls: string[] = [];
   const urlMatches: LoginUrlMatchMode[] = [];
-  const list: unknown[] = Array.isArray(overview["urls"]) ? overview["urls"] : Array.isArray(overview["URLs"]) ? overview["URLs"] : [];
+  const list: unknown[] = Array.isArray(overview["urls"])
+    ? overview["urls"]
+    : Array.isArray(overview["URLs"])
+      ? overview["URLs"]
+      : [];
   const modeOf = (url: string): LoginUrlMatchMode => {
-    const entry = list.find((candidate) => isRecord(candidate) && asString(candidate["url"]).trim() === url);
+    const entry = list.find(
+      (candidate) => isRecord(candidate) && asString(candidate["url"]).trim() === url,
+    );
     const mode = isRecord(entry) ? asString(entry["mode"]).trim().toLowerCase() : "";
     return mode === "exact" ? "exact" : mode === "host" ? "host" : "domain";
   };
@@ -361,7 +424,28 @@ function passwordHistoryOf(raw: unknown): LoginPasswordHistoryEntry[] {
     .slice(0, MAX_LOGIN_PASSWORD_HISTORY);
 }
 
-type ConvertContext = Readonly<{ usernameOf(uuid: string): string | undefined }>;
+type ConvertContext = Readonly<{
+  usernameOf(uuid: string): string | undefined;
+  linkedLoginsOf(uuid: string): number;
+}>;
+
+/** Item uuids this raw item's "sign in with" fields point at (the provider account items). */
+function linkedItemUuidsOf(raw: unknown): string[] {
+  if (!isRecord(raw)) return [];
+  const details = isRecord(raw["details"]) ? raw["details"] : {};
+  const targets: string[] = [];
+  for (const section of Array.isArray(details["sections"]) ? details["sections"] : []) {
+    if (!isRecord(section)) continue;
+    for (const field of Array.isArray(section["fields"]) ? section["fields"] : []) {
+      if (!isRecord(field) || !isRecord(field["value"])) continue;
+      const sso = field["value"]["ssoLogin"];
+      const item = isRecord(sso) && isRecord(sso["item"]) ? sso["item"] : undefined;
+      const uuid = item === undefined ? "" : asString(item["itemUuid"]).trim();
+      if (uuid !== "") targets.push(uuid);
+    }
+  }
+  return targets;
+}
 
 function convertItem(
   parsed: ParsedItem,
@@ -391,7 +475,9 @@ function convertItem(
   for (const name of parsed.attachments)
     warnings.push(`"${label}": attachment${name === "" ? "" : ` "${name}"`} not imported.`);
   if (parsed.passkeys > 0)
-    warnings.push(`"${label}": ${parsed.passkeys === 1 ? "passkey" : `${parsed.passkeys} passkeys`} not imported.`);
+    warnings.push(
+      `"${label}": ${parsed.passkeys === 1 ? "passkey" : `${parsed.passkeys} passkeys`} not imported.`,
+    );
   for (const field of parsed.fields) {
     if (field.kind === "reference")
       warnings.push(`"${label}": field "${field.title}" links to another item and was left out.`);
@@ -435,7 +521,10 @@ function convertItem(
 }
 
 /** The captured form field 1Password designated, or the best-typed one when none is designated. */
-function capturedLogin(loginFields: readonly LoginField[], designation: "username" | "password"): string {
+function capturedLogin(
+  loginFields: readonly LoginField[],
+  designation: "username" | "password",
+): string {
   const designated = loginFields.find((field) => field.designation.toLowerCase() === designation);
   if (designated !== undefined) return designated.value;
   const fallback = loginFields.find((field) => {
@@ -482,31 +571,54 @@ function emitLoginLike(
     capturedLogin(parsed.loginFields, "username") ||
     sectionUsername ||
     signInWith?.account ||
-    (signInWith?.linkedItemUuid === undefined ? "" : (context.usernameOf(signInWith.linkedItemUuid) ?? "")) ||
+    (signInWith?.linkedItemUuid === undefined
+      ? ""
+      : (context.usernameOf(signInWith.linkedItemUuid) ?? "")) ||
     (kind === "login" ? parsed.ainfo : "");
-  const password = capturedLogin(parsed.loginFields, "password") || parsed.detailsPassword || sectionPassword;
+  const password =
+    capturedLogin(parsed.loginFields, "password") || parsed.detailsPassword || sectionPassword;
   const urlField = take(route.url);
   const prepended = urlField !== "" && !parsed.urls.includes(urlField);
   const urls = prepended ? [urlField, ...parsed.urls] : parsed.urls;
   const urlMatches = prepended ? ["domain" as const, ...parsed.urlMatches] : parsed.urlMatches;
-  const totpField = parsed.fields.find((field) => field.kind === "totp" && field.text.trim() !== "");
+  const totpField = parsed.fields.find(
+    (field) => field.kind === "totp" && field.text.trim() !== "",
+  );
   if (totpField !== undefined) consumed.add(totpField);
 
   const customFields: LoginCustomField[] = [];
   for (const field of parsed.fields) {
     if (consumed.has(field) || field.text === "") continue;
-    if (field.kind === "text") customFields.push({ name: field.title, type: "text", value: field.text });
+    if (field.kind === "text")
+      customFields.push({ name: field.title, type: "text", value: field.text });
     else if (field.kind === "hidden" || field.kind === "totp")
       customFields.push({ name: field.title, type: "hidden", value: field.text });
-    else if (field.kind === "boolean") customFields.push({ name: field.title, type: "boolean", value: field.text });
+    else if (field.kind === "boolean")
+      customFields.push({ name: field.title, type: "boolean", value: field.text });
   }
   // Other captured form fields (a company id, a "remember me" box) are kept so autofill can use them.
   for (const field of parsed.loginFields) {
     const designation = field.designation.toLowerCase();
     const type = field.fieldType.toUpperCase();
-    if (designation === "username" || designation === "password" || designation === "sso" || type === "SSO") continue;
-    if (field.name === "" || field.value === "" || field.value === username || field.value === password) continue;
-    customFields.push({ name: field.name, type: type === "P" ? "hidden" : "text", value: field.value });
+    if (
+      designation === "username" ||
+      designation === "password" ||
+      designation === "sso" ||
+      type === "SSO"
+    )
+      continue;
+    if (
+      field.name === "" ||
+      field.value === "" ||
+      field.value === username ||
+      field.value === password
+    )
+      continue;
+    customFields.push({
+      name: field.name,
+      type: type === "P" ? "hidden" : "text",
+      value: field.value,
+    });
   }
 
   if (signInWith?.provider === "other")
@@ -515,16 +627,33 @@ function emitLoginLike(
         ? `"${label}": signs in with a provider the export does not name; kept as "other".`
         : `"${label}": signs in with "${signInWith.name}", which ShardPass does not list; kept as "other".`,
     );
-  if (password === "" && signInWith === undefined && parsed.passkeys === 0) {
+  const linkedLogins = context.linkedLoginsOf(parsed.uuid);
+  if (password === "" && signInWith === undefined && parsed.passkeys === 0 && linkedLogins > 0) {
+    // The account other logins sign in through (a Google account, say): 1Password keeps it
+    // as a username-only item, and so does ShardPass.
+    warnings.push(
+      `"${label}": has no password in the export. ${
+        linkedLogins === 1 ? "One other login signs" : `${linkedLogins} other logins sign`
+      } in through this account, so it is kept as a username-only login.`,
+    );
+  } else if (password === "" && signInWith === undefined && parsed.passkeys === 0) {
     // No password and no provider: name the shape of what the export held (titles and
     // value types only, never values), so an unrecognised "sign in with" layout can be
     // reported and taught.
     const loginShape = parsed.loginFields
-      .map((field) => `${field.name || "?"}(${field.fieldType || "?"}${field.designation ? `, ${field.designation}` : ""})`)
+      .map(
+        (field) =>
+          `${field.name || "?"}(${field.fieldType || "?"}${field.designation ? `, ${field.designation}` : ""})`,
+      )
       .join(", ");
-    const sectionShape = parsed.fields.map((field) => `"${field.title}" (${field.valueKey ?? field.kind})`).join(", ");
+    const sectionShape = parsed.fields
+      .map((field) => `"${field.title}" (${field.valueKey ?? field.kind})`)
+      .join(", ");
     warnings.push(
-      `"${label}": imported without a password (the export has none). Login fields: ${loginShape || "none"}. Section fields: ${sectionShape || "none"}.`.slice(0, 400),
+      `"${label}": imported without a password (the export has none). Login fields: ${loginShape || "none"}. Section fields: ${sectionShape || "none"}.`.slice(
+        0,
+        400,
+      ),
     );
   }
 
@@ -540,7 +669,13 @@ function emitLoginLike(
     customFields,
     passwordHistory: parsed.passwordHistory.map((entry) => ({
       ...entry,
-      password: clampText(entry.password, MAX_LOGIN_PASSWORD_LENGTH, "an old password", label, warnings),
+      password: clampText(
+        entry.password,
+        MAX_LOGIN_PASSWORD_LENGTH,
+        "an old password",
+        label,
+        warnings,
+      ),
     })),
   };
   // emitLogin fits the draft to the schema; the provider is added to what it kept, since the
@@ -550,16 +685,23 @@ function emitLoginLike(
   const emitted = staged[0];
   if (emitted === undefined) return;
   items.push(
-    emitted.kind === "login" && signInWith !== undefined ? { ...emitted, signInWith: signInWith.provider } : emitted,
+    emitted.kind === "login" && signInWith !== undefined
+      ? { ...emitted, signInWith: signInWith.provider }
+      : emitted,
   );
 }
 
 /** Pulls a template field's text by id, marking it used so it is not repeated in the notes. */
-function fieldPicker(parsed: ParsedItem): { pick(id: string): string; rest(): DecodedField[]; part(id: string, part: string): string } {
+function fieldPicker(parsed: ParsedItem): {
+  pick(id: string): string;
+  rest(): DecodedField[];
+  part(id: string, part: string): string;
+} {
   const used = new Set<DecodedField>();
   const find = (id: string) =>
     parsed.fields.find(
-      (field) => field.id === id && (field.kind === "text" || field.kind === "hidden") && !used.has(field),
+      (field) =>
+        field.id === id && (field.kind === "text" || field.kind === "hidden") && !used.has(field),
     );
   return {
     pick(id) {
@@ -570,7 +712,9 @@ function fieldPicker(parsed: ParsedItem): { pick(id: string): string; rest(): De
     },
     part(id, part) {
       // One address field feeds several columns, so it stays findable after the first.
-      const field = parsed.fields.find((candidate) => candidate.id === id && candidate.address !== undefined);
+      const field = parsed.fields.find(
+        (candidate) => candidate.id === id && candidate.address !== undefined,
+      );
       if (field === undefined) return "";
       used.add(field);
       return field.address?.[part] ?? "";
@@ -584,7 +728,10 @@ function withFieldLines(notes: string, fields: readonly DecodedField[]): string 
   const lines = fields
     .filter(
       (field) =>
-        (field.kind === "text" || field.kind === "hidden" || field.kind === "boolean" || field.kind === "totp") &&
+        (field.kind === "text" ||
+          field.kind === "hidden" ||
+          field.kind === "boolean" ||
+          field.kind === "totp") &&
         field.text.trim() !== "",
     )
     .map((field) => `${field.title === "" ? "Field" : field.title}: ${field.text.trim()}`);
@@ -603,12 +750,20 @@ function splitExpiry(text: string): { month: string; year: string } {
   return { month: "", year: "" };
 }
 
-function emitCard(parsed: ParsedItem, base: LoginBase, label: string, warnings: string[], items: VaultItem[]): void {
+function emitCard(
+  parsed: ParsedItem,
+  base: LoginBase,
+  label: string,
+  warnings: string[],
+  items: VaultItem[],
+): void {
   const fields = fieldPicker(parsed);
   const rawBrand = fields.pick("type").toLowerCase();
-  const brand: CardBrand | undefined = rawBrand === "" ? undefined : (CARD_BRANDS[rawBrand] ?? "other");
+  const brand: CardBrand | undefined =
+    rawBrand === "" ? undefined : (CARD_BRANDS[rawBrand] ?? "other");
   const { month, year } = splitExpiry(fields.pick("expiry"));
-  const fit = (value: string, max: number, what: string) => clampText(value, max, what, label, warnings);
+  const fit = (value: string, max: number, what: string) =>
+    clampText(value, max, what, label, warnings);
   const candidate = {
     ...base,
     kind: "card" as const,
@@ -625,12 +780,23 @@ function emitCard(parsed: ParsedItem, base: LoginBase, label: string, warnings: 
   keepIfValid(CardItemSchema, candidate, "card", label, warnings, items);
 }
 
-function emitIdentity(parsed: ParsedItem, base: LoginBase, label: string, warnings: string[], items: VaultItem[]): void {
+function emitIdentity(
+  parsed: ParsedItem,
+  base: LoginBase,
+  label: string,
+  warnings: string[],
+  items: VaultItem[],
+): void {
   const fields = fieldPicker(parsed);
-  const fit = (value: string, max: number, what: string) => clampText(value, max, what, label, warnings);
+  const fit = (value: string, max: number, what: string) =>
+    clampText(value, max, what, label, warnings);
   const optional = <K extends string>(key: K, value: string): Partial<Record<K, string>> =>
     value === "" ? {} : ({ [key]: value } as Record<K, string>);
-  const phone = fields.pick("defphone") || fields.pick("cellphone") || fields.pick("homephone") || fields.pick("busphone");
+  const phone =
+    fields.pick("defphone") ||
+    fields.pick("cellphone") ||
+    fields.pick("homephone") ||
+    fields.pick("busphone");
   const candidate = {
     ...base,
     kind: "identity" as const,
@@ -653,12 +819,24 @@ function emitIdentity(parsed: ParsedItem, base: LoginBase, label: string, warnin
   keepIfValid(IdentityItemSchema, candidate, "identity", label, warnings, items);
 }
 
-function emitNote(parsed: ParsedItem, base: LoginBase, label: string, warnings: string[], items: VaultItem[]): void {
+function emitNote(
+  parsed: ParsedItem,
+  base: LoginBase,
+  label: string,
+  warnings: string[],
+  items: VaultItem[],
+): void {
   const candidate = {
     ...base,
     kind: "note" as const,
     name: clampName(parsed.title, MAX_NOTE_NAME_LENGTH, "Imported item", label, warnings),
-    content: clampText(withFieldLines(parsed.notes, parsed.fields), MAX_NOTE_CONTENT_LENGTH, "content", label, warnings),
+    content: clampText(
+      withFieldLines(parsed.notes, parsed.fields),
+      MAX_NOTE_CONTENT_LENGTH,
+      "content",
+      label,
+      warnings,
+    ),
   };
   keepIfValid(NoteItemSchema, candidate, "note", label, warnings, items);
 }
@@ -672,9 +850,12 @@ function emitSecret(
   items: VaultItem[],
 ): void {
   const route = SECRET_ROUTES[kind];
-  const usable = (field: DecodedField) => (field.kind === "text" || field.kind === "hidden") && field.text !== "";
+  const usable = (field: DecodedField) =>
+    (field.kind === "text" || field.kind === "hidden") && field.text !== "";
   const valueField =
-    route.value.map((id) => parsed.fields.find((field) => field.id === id && usable(field))).find((field) => field !== undefined) ??
+    route.value
+      .map((id) => parsed.fields.find((field) => field.id === id && usable(field)))
+      .find((field) => field !== undefined) ??
     parsed.fields.find((field) => field.kind === "hidden" && field.text !== "");
 
   const entries: [string, string][] = [];
@@ -683,15 +864,39 @@ function emitSecret(
   if (parsed.urls[0] !== undefined) entries.push(["url", parsed.urls[0]]);
   for (const field of parsed.fields) {
     if (field === valueField || field.text.trim() === "") continue;
-    if (field.kind === "text" || field.kind === "hidden" || field.kind === "boolean" || field.kind === "totp")
+    if (
+      field.kind === "text" ||
+      field.kind === "hidden" ||
+      field.kind === "boolean" ||
+      field.kind === "totp"
+    )
       entries.push([field.title === "" ? "field" : field.title, field.text]);
   }
   const metadata: Record<string, string> = {};
-  for (const [rawKey, rawValue] of clampList(entries, MAX_SECRET_METADATA_ENTRIES, "details", label, warnings)) {
-    const key = clampText(rawKey.trim() || "field", MAX_SECRET_METADATA_KEY_LENGTH, "detail name", label, warnings);
+  for (const [rawKey, rawValue] of clampList(
+    entries,
+    MAX_SECRET_METADATA_ENTRIES,
+    "details",
+    label,
+    warnings,
+  )) {
+    const key = clampText(
+      rawKey.trim() || "field",
+      MAX_SECRET_METADATA_KEY_LENGTH,
+      "detail name",
+      label,
+      warnings,
+    );
     let unique = key;
-    for (let suffix = 2; Object.hasOwn(metadata, unique); suffix += 1) unique = `${key} (${suffix})`;
-    metadata[unique] = clampText(rawValue, MAX_SECRET_METADATA_VALUE_LENGTH, `detail "${key}"`, label, warnings);
+    for (let suffix = 2; Object.hasOwn(metadata, unique); suffix += 1)
+      unique = `${key} (${suffix})`;
+    metadata[unique] = clampText(
+      rawValue,
+      MAX_SECRET_METADATA_VALUE_LENGTH,
+      `detail "${key}"`,
+      label,
+      warnings,
+    );
   }
 
   const candidate = {

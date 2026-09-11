@@ -5,7 +5,12 @@ import { IMPORT_LIMITS, importOnePassword1pux, OnePassword1puxFormatError } from
 import { zipArchive, type ZipEntrySpec } from "./helpers/zip-writer";
 
 type Field = Readonly<{ title: string; id: string; value: unknown }>;
-type LoginField = Readonly<{ value: string; name: string; fieldType: string; designation?: string }>;
+type LoginField = Readonly<{
+  value: string;
+  name: string;
+  fieldType: string;
+  designation?: string;
+}>;
 type ItemSpec = Readonly<{
   title: string;
   categoryUuid?: string;
@@ -49,7 +54,9 @@ function item(spec: ItemSpec): Record<string, unknown> {
       notesPlain: spec.notesPlain ?? "",
       sections: spec.fields === undefined ? [] : [{ title: "", name: "", fields: spec.fields }],
       passwordHistory: spec.passwordHistory ?? [],
-      ...(spec.documentAttributes === undefined ? {} : { documentAttributes: spec.documentAttributes }),
+      ...(spec.documentAttributes === undefined
+        ? {}
+        : { documentAttributes: spec.documentAttributes }),
     },
     overview: {
       title: spec.title,
@@ -76,7 +83,11 @@ function exportData(
   };
 }
 
-function archive(data: Record<string, unknown>, deflate = false, extra: readonly ZipEntrySpec[] = []): Uint8Array {
+function archive(
+  data: Record<string, unknown>,
+  deflate = false,
+  extra: readonly ZipEntrySpec[] = [],
+): Uint8Array {
   return zipArchive([
     { name: "export.attributes", data: '{"version":3}' },
     { name: "export.data", data: JSON.stringify(data), deflate },
@@ -91,13 +102,19 @@ const LOGIN_FIELDS: readonly LoginField[] = [
 ];
 
 async function importOne(spec: ItemSpec, deflate = false) {
-  const result = await importOnePassword1pux(archive(exportData([{ name: "Personal", items: [item(spec)] }]), deflate));
+  const result = await importOnePassword1pux(
+    archive(exportData([{ name: "Personal", items: [item(spec)] }]), deflate),
+  );
   return { ...result, item: result.items[0] };
 }
 
 describe("importOnePassword1pux", () => {
   it("imports a login with two URLs, tags, a one-time secret, custom fields and password history", async () => {
-    const { item: login, warnings, folders } = await importOne(
+    const {
+      item: login,
+      warnings,
+      folders,
+    } = await importOne(
       {
         title: "Example",
         loginFields: LOGIN_FIELDS,
@@ -112,7 +129,11 @@ describe("importOnePassword1pux", () => {
           { title: "one-time password", id: "TOTP_1", value: { totp: "JBSW Y3DP EHPK 3PXP" } },
           { title: "Security question", id: "q", value: { string: "first pet" } },
           { title: "Recovery code", id: "rc", value: { concealed: "abcd-efgh" } },
-          { title: "Backup e-mail", id: "be", value: { email: { email_address: "alice@backup.test", provider: "" } } },
+          {
+            title: "Backup e-mail",
+            id: "be",
+            value: { email: { email_address: "alice@backup.test", provider: "" } },
+          },
           { title: "Member since", id: "ms", value: { date: 1_262_347_200 } },
         ],
         passwordHistory: [
@@ -151,16 +172,32 @@ describe("importOnePassword1pux", () => {
   });
 
   describe("sign in with a provider", () => {
-    const username: LoginField = { value: "alice@gmail.com", name: "email", fieldType: "E", designation: "username" };
+    const username: LoginField = {
+      value: "alice@gmail.com",
+      name: "email",
+      fieldType: "E",
+      designation: "username",
+    };
 
     it("reads an sso field value, as an object or a string", async () => {
       const google = await importOne({
         title: "Site A",
         loginFields: [username],
-        fields: [{ title: "Sign in", id: "sso", value: { sso: { provider: "Google", ssoProvider: "google.com" } } }],
+        fields: [
+          {
+            title: "Sign in",
+            id: "sso",
+            value: { sso: { provider: "Google", ssoProvider: "google.com" } },
+          },
+        ],
       });
       expect(google.warnings).toEqual([]);
-      expect(google.item).toMatchObject({ kind: "login", username: "alice@gmail.com", password: "", signInWith: "google" });
+      expect(google.item).toMatchObject({
+        kind: "login",
+        username: "alice@gmail.com",
+        password: "",
+        signInWith: "google",
+      });
       expect((google.item as { customFields?: unknown }).customFields).toBeUndefined();
 
       const apple = await importOne({
@@ -182,7 +219,9 @@ describe("importOnePassword1pux", () => {
       const fromTitle = await importOne({
         title: "Site D",
         loginFields: [username],
-        fields: [{ title: "Sign in with Microsoft", id: "s2", value: { string: "alice@outlook.com" } }],
+        fields: [
+          { title: "Sign in with Microsoft", id: "s2", value: { string: "alice@outlook.com" } },
+        ],
       });
       expect(fromTitle.item).toMatchObject({ kind: "login", signInWith: "microsoft" });
 
@@ -205,7 +244,10 @@ describe("importOnePassword1pux", () => {
 
       const designated = await importOne({
         title: "Site G",
-        loginFields: [username, { value: "", name: "Sign in with Facebook", fieldType: "B", designation: "sso" }],
+        loginFields: [
+          username,
+          { value: "", name: "Sign in with Facebook", fieldType: "B", designation: "sso" },
+        ],
       });
       expect(designated.item).toMatchObject({ kind: "login", signInWith: "facebook" });
     });
@@ -217,11 +259,16 @@ describe("importOnePassword1pux", () => {
         fields: [{ title: "", id: "sso", value: { sso: { provider: "Yandex" } } }],
       });
       expect(login).toMatchObject({ kind: "login", signInWith: "other" });
-      expect(warnings).toEqual(['"Site H": signs in with "Yandex", which ShardPass does not list; kept as "other".']);
+      expect(warnings).toEqual([
+        '"Site H": signs in with "Yandex", which ShardPass does not list; kept as "other".',
+      ]);
     });
 
     it("does not guess a provider from the account's e-mail domain", async () => {
-      const { item: login, warnings } = await importOne({ title: "Site I", loginFields: [username] });
+      const { item: login, warnings } = await importOne({
+        title: "Site I",
+        loginFields: [username],
+      });
       expect(login).toMatchObject({ kind: "login", username: "alice@gmail.com", password: "" });
       expect((login as { signInWith?: unknown }).signInWith).toBeUndefined();
       expect(warnings).toHaveLength(1);
@@ -278,7 +325,15 @@ describe("importOnePassword1pux", () => {
         {
           title: "address",
           id: "address",
-          value: { address: { street: "123 Main St", city: "Springfield", state: "IL", zip: "62701", country: "us" } },
+          value: {
+            address: {
+              street: "123 Main St",
+              city: "Springfield",
+              state: "IL",
+              zip: "62701",
+              country: "us",
+            },
+          },
         },
         { title: "default phone", id: "defphone", value: { phone: "555-1234" } },
         { title: "email", id: "email", value: { string: "john@example.com" } },
@@ -311,13 +366,27 @@ describe("importOnePassword1pux", () => {
       fields: [{ title: "Extra", id: "e", value: { string: "keep me" } }],
     });
     expect(warnings).toEqual([]);
-    expect(note).toMatchObject({ kind: "note", name: "Recovery codes", content: "1234-5678\n\nExtra: keep me" });
+    expect(note).toMatchObject({
+      kind: "note",
+      name: "Recovery codes",
+      content: "1234-5678\n\nExtra: keep me",
+    });
   });
 
   it("imports a Password item as a login with an empty username", async () => {
-    const { item: login, warnings } = await importOne({ title: "Wi-Fi", categoryUuid: "005", password: "p4ss" });
+    const { item: login, warnings } = await importOne({
+      title: "Wi-Fi",
+      categoryUuid: "005",
+      password: "p4ss",
+    });
     expect(warnings).toEqual([]);
-    expect(login).toMatchObject({ kind: "login", name: "Wi-Fi", username: "", password: "p4ss", urls: [] });
+    expect(login).toMatchObject({
+      kind: "login",
+      name: "Wi-Fi",
+      username: "",
+      password: "p4ss",
+      urls: [],
+    });
   });
 
   it("imports an API credential as a secret whose details are its metadata", async () => {
@@ -349,7 +418,12 @@ describe("importOnePassword1pux", () => {
   });
 
   it("keeps archived and favourite state", async () => {
-    const { item: login } = await importOne({ title: "Old", loginFields: LOGIN_FIELDS, state: "archived", favIndex: 1 });
+    const { item: login } = await importOne({
+      title: "Old",
+      loginFields: LOGIN_FIELDS,
+      state: "archived",
+      favIndex: 1,
+    });
     expect(login?.favorite).toBe(true);
     expect(login?.archivedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/u);
   });
@@ -381,12 +455,9 @@ describe("importOnePassword1pux", () => {
         ),
       ),
     );
-    expect(result.folders?.map((folder) => `${folder.parentId === undefined ? "" : "> "}${folder.name}`)).toEqual([
-      "Alice",
-      "> Personal",
-      "Acme",
-      "> Personal",
-    ]);
+    expect(
+      result.folders?.map((folder) => `${folder.parentId === undefined ? "" : "> "}${folder.name}`),
+    ).toEqual(["Alice", "> Personal", "Acme", "> Personal"]);
     expect(new Set(result.items.map((entry) => entry.folderId)).size).toBe(2);
   });
 
@@ -397,12 +468,20 @@ describe("importOnePassword1pux", () => {
           {
             name: "Personal",
             items: [
-              item({ title: "Passport scan", categoryUuid: "006", documentAttributes: { fileName: "passport.pdf" } }),
+              item({
+                title: "Passport scan",
+                categoryUuid: "006",
+                documentAttributes: { fileName: "passport.pdf" },
+              }),
               item({
                 title: "With extras",
                 loginFields: [LOGIN_FIELDS[0]!],
                 fields: [
-                  { title: "key", id: "f", value: { file: { fileName: "key.txt", documentId: "doc-1" } } },
+                  {
+                    title: "key",
+                    id: "f",
+                    value: { file: { fileName: "key.txt", documentId: "doc-1" } },
+                  },
                   {
                     title: "passkey",
                     id: "p",
@@ -455,7 +534,10 @@ describe("importOnePassword1pux", () => {
 
     it("a file that is not a ZIP archive", async () => {
       await expectFormatError(new Uint8Array([1, 2, 3, 4, 5]), /not a ZIP archive/u);
-      await expectFormatError(new TextEncoder().encode("Title,Url\nExample,https://x"), /not a ZIP archive/u);
+      await expectFormatError(
+        new TextEncoder().encode("Title,Url\nExample,https://x"),
+        /not a ZIP archive/u,
+      );
     });
 
     it("a truncated archive", async () => {
@@ -468,20 +550,33 @@ describe("importOnePassword1pux", () => {
     });
 
     it("an export.data that is not JSON, or not a 1Password export", async () => {
-      await expectFormatError(zipArchive([{ name: "export.data", data: "not json" }]), /not valid JSON/u);
+      await expectFormatError(
+        zipArchive([{ name: "export.data", data: "not json" }]),
+        /not valid JSON/u,
+      );
       await expectFormatError(zipArchive([{ name: "export.data", data: "{}" }]), /"accounts"/u);
     });
 
     it("an encrypted or unusually compressed entry", async () => {
-      await expectFormatError(zipArchive([{ name: "export.data", data: "{}", flags: 1 }]), /encrypted/u);
-      await expectFormatError(zipArchive([{ name: "export.data", data: "{}", method: 12 }]), /compression method 12/u);
+      await expectFormatError(
+        zipArchive([{ name: "export.data", data: "{}", flags: 1 }]),
+        /encrypted/u,
+      );
+      await expectFormatError(
+        zipArchive([{ name: "export.data", data: "{}", method: 12 }]),
+        /compression method 12/u,
+      );
     });
 
     it("corrupt deflate data", async () => {
-      const data = JSON.stringify(exportData([{ name: "Personal", items: [item({ title: "A" })] }]));
+      const data = JSON.stringify(
+        exportData([{ name: "Personal", items: [item({ title: "A" })] }]),
+      );
       const corruptData = new Uint8Array(new TextEncoder().encode(data).length).fill(0xff);
       await expectFormatError(
-        zipArchive([{ name: "export.data", data, deflate: true, corruptData: corruptData.slice(0, 40) }]),
+        zipArchive([
+          { name: "export.data", data, deflate: true, corruptData: corruptData.slice(0, 40) },
+        ]),
         /corrupt/u,
       );
     });
@@ -490,9 +585,20 @@ describe("importOnePassword1pux", () => {
   it("reads 1Password 8's ssoLogin field, whatever keys its payload uses, and takes the account e-mail", async () => {
     const google = await importOne({
       title: "Shodan",
-      fields: [{ title: "sign in with", id: "signin", value: { ssoLogin: { vendor: "Google", email: "het@gmail.test" } } }],
+      fields: [
+        {
+          title: "sign in with",
+          id: "signin",
+          value: { ssoLogin: { vendor: "Google", email: "het@gmail.test" } },
+        },
+      ],
     });
-    expect(google.items[0]).toMatchObject({ kind: "login", signInWith: "google", username: "het@gmail.test", password: "" });
+    expect(google.items[0]).toMatchObject({
+      kind: "login",
+      signInWith: "google",
+      username: "het@gmail.test",
+      password: "",
+    });
     expect(google.warnings).toEqual([]);
 
     const github = await importOne({
@@ -518,7 +624,8 @@ describe("importOnePassword1pux", () => {
       ],
     });
     expect(login).toMatchObject({ kind: "login" });
-    const custom = (login as { customFields?: { name: string; value: string }[] }).customFields ?? [];
+    const custom =
+      (login as { customFields?: { name: string; value: string }[] }).customFields ?? [];
     expect(custom).toEqual(
       expect.arrayContaining([
         { name: "valid from", type: "text", value: "2023-11-14" },
@@ -531,21 +638,60 @@ describe("importOnePassword1pux", () => {
   });
 
   it("gives a provider login the username of the account item it links to, and keeps URL match modes", async () => {
-    const google = item({ uuid: "google-account", title: "Google", loginFields: [{ value: "het@gmail.test", name: "identifier", fieldType: "T", designation: "username" }] });
+    const google = item({
+      uuid: "google-account",
+      title: "Google",
+      loginFields: [
+        { value: "het@gmail.test", name: "identifier", fieldType: "T", designation: "username" },
+      ],
+    });
     const shodan = item({
       title: "Shodan",
       urlEntries: [{ url: "https://account.shodan.io/login", mode: "exact" }],
-      fields: [{ title: "sign in with", id: "signin", value: { ssoLogin: { provider: "Google", item: { vaultUuid: "v", itemUuid: "google-account" } } } }],
+      fields: [
+        {
+          title: "sign in with",
+          id: "signin",
+          value: {
+            ssoLogin: { provider: "Google", item: { vaultUuid: "v", itemUuid: "google-account" } },
+          },
+        },
+      ],
     });
     const orphan = item({
       title: "Tailscale",
-      fields: [{ title: "sign in with", id: "signin", value: { ssoLogin: { provider: "Google", item: { vaultUuid: "v", itemUuid: "not-exported" } } } }],
+      fields: [
+        {
+          title: "sign in with",
+          id: "signin",
+          value: {
+            ssoLogin: { provider: "Google", item: { vaultUuid: "v", itemUuid: "not-exported" } },
+          },
+        },
+      ],
     });
-    const result = await importOnePassword1pux(archive(exportData([{ name: "Personal", items: [google, shodan, orphan] }])));
+    const result = await importOnePassword1pux(
+      archive(exportData([{ name: "Personal", items: [google, shodan, orphan] }])),
+    );
     const byName = new Map(result.items.map((entry) => [nameOf(entry), entry]));
-    expect(byName.get("Shodan")).toMatchObject({ kind: "login", signInWith: "google", username: "het@gmail.test", password: "", urlMatches: ["exact"] });
-    expect(byName.get("Tailscale")).toMatchObject({ kind: "login", signInWith: "google", username: "" });
+    expect(byName.get("Shodan")).toMatchObject({
+      kind: "login",
+      signInWith: "google",
+      username: "het@gmail.test",
+      password: "",
+      urlMatches: ["exact"],
+    });
+    expect(byName.get("Tailscale")).toMatchObject({
+      kind: "login",
+      signInWith: "google",
+      username: "",
+    });
     expect(byName.get("Google")).toMatchObject({ kind: "login", username: "het@gmail.test" });
     expect((byName.get("Google") as { urlMatches?: unknown }).urlMatches).toBeUndefined();
+    // The account item is reported as what it is, not as a login missing its password.
+    expect(result.warnings).toContain(
+      '"Google": has no password in the export. One other login signs in through this account, so it is kept as a username-only login.',
+    );
+    expect(result.warnings.filter((warning) => warning.startsWith('"Google"'))).toHaveLength(1);
   });
 });
