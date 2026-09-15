@@ -119,31 +119,63 @@
   overflow-y: auto;
 }
 
-/* Settings are a grid of equal columns: cards line up edge to edge instead of wrapping at
-   their own widths, and the import panel takes the whole row. */
+/* Settings are tiles: equal columns, equal rows, one frame for every card whatever its own
+   module says. The import card takes the whole row while it shows a preview, and the rows
+   stop equalising then, so a long preview does not stretch its neighbours. */
 .settingsPanel {
   display: grid;
   min-height: 0;
   grid-column: 2 / -1;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+  grid-auto-rows: 1fr;
   align-content: start;
-  align-items: start;
+  align-items: stretch;
   gap: var(--space-5);
   padding: clamp(20px, 3vw, 40px);
   overflow-y: auto;
 }
 
-.settingsCell {
-  min-width: 0;
-}
-
-.settingsCell > :first-child {
+.settingsPanel > section,
+.settingsPanel > div,
+.settingsPanel > form {
+  display: flex;
+  box-sizing: border-box;
   width: 100%;
   max-width: none;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-5);
+  color: var(--text-primary);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
 }
 
-.settingsCellWide {
+.settingsPanel > section > h2:first-child,
+.settingsPanel > section > h3:first-child,
+.settingsPanel > section > header h3 {
+  margin: 0;
+  font-size: var(--text-md);
+  font-weight: 600;
+}
+
+.settingsPanel > [data-phase="preview"],
+.settingsPanel > [data-phase="importing"],
+.settingsPanel > [data-phase="done"] {
   grid-column: 1 / -1;
+}
+
+.settingsPanel:has(> [data-phase="preview"]),
+.settingsPanel:has(> [data-phase="importing"]),
+.settingsPanel:has(> [data-phase="done"]) {
+  grid-auto-rows: auto;
+}
+
+.settingsPanelSingle {
+  grid-template-columns: minmax(0, 1fr);
+  grid-auto-rows: auto;
 }
 
 @media (max-width: 980px) {

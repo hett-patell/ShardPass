@@ -541,7 +541,11 @@ export function ImportDialog({ platform, active, onImported, onDone }: ImportDia
       : null;
 
   return (
-    <section className={styles.region} aria-labelledby="import-dialog-heading">
+    <section
+      className={styles.region}
+      aria-labelledby="import-dialog-heading"
+      data-phase={state.phase}
+    >
       <header className={styles.header}>
         <div>
           <h3 id="import-dialog-heading">Import items</h3>
