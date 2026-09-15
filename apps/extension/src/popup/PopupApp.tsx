@@ -9,6 +9,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { EnteUiPlatform, ExtensionPlatform } from "../platform/extension-platform";
 import type { VaultPageTarget } from "../platform/vault-route";
 import { clearClipboardNow } from "../vault/components/detail/clipboard";
+import { RepromptPrompt } from "../vault-access/RepromptPrompt";
 import { VaultAccess } from "../vault-access/VaultAccess";
 import { PopupTitleBar } from "./components/PopupTitleBar";
 import { useActiveTab } from "./hooks/useActiveTab";
@@ -141,6 +142,26 @@ function confirmsLocked(reply: unknown): boolean {
 export function PopupApp({ platform }: PopupAppProps) {
   const [vaultUnlocked, setVaultUnlocked] = useState(false);
   const [lockError, setLockError] = useState(false);
+  // An item that asks for the master password again: what to run once it has been given.
+  // The background remembers a grant for a few minutes; this set avoids asking twice here.
+  const [reprompt, setReprompt] = useState<Readonly<{
+    itemId: string;
+    action: string;
+    run: () => void;
+  }> | null>(null);
+  const grantedRef = useRef(new Set<string>());
+  const withReprompt = useCallback(
+    (
+      item: Readonly<{ id: string; reprompt?: boolean | undefined }>,
+      action: string,
+      run: () => void,
+    ) => {
+      if (item.reprompt === true && !grantedRef.current.has(item.id))
+        setReprompt({ itemId: item.id, action, run });
+      else run();
+    },
+    [],
+  );
   const [stack, setStack] = useState<Screen[]>([{ kind: "home" }]);
   const [search, setSearch] = useState("");
   const [feedback, setFeedback] = useState("");
@@ -280,6 +301,22 @@ export function PopupApp({ platform }: PopupAppProps) {
 
   return (
     <div className={styles.popup}>
+      {reprompt !== null ? (
+        <div className={styles.repromptOverlay}>
+          <RepromptPrompt
+            platform={platform}
+            itemId={reprompt.itemId}
+            action={reprompt.action}
+            onGranted={() => {
+              grantedRef.current.add(reprompt.itemId);
+              const { run } = reprompt;
+              setReprompt(null);
+              run();
+            }}
+            onCancel={() => setReprompt(null)}
+          />
+        </div>
+      ) : null}
       <div className={styles.vaultAccessWrapper} hidden={vaultUnlocked}>
         <VaultAccess platform={platform} onUnlockedChange={setVaultUnlocked} />
       </div>
@@ -327,9 +364,11 @@ export function PopupApp({ platform }: PopupAppProps) {
                 onSearch={setSearch}
                 onOpenCategory={(category) => push({ kind: "list", category })}
                 onOpenItem={openItem}
-                onFill={(item) => void fillItem(item.id, item.revision)}
+                onFill={(item) =>
+                  withReprompt(item, "fill", () => void fillItem(item.id, item.revision))
+                }
                 filling={filling}
-                onCopyPassword={copyPassword}
+                onCopyPassword={(item) => withReprompt(item, "copy", () => copyPassword(item))}
                 onOpenVault={() => void openVault()}
                 onRetry={() => vaultItems.refresh()}
                 onCopyCode={(_item, code) => void copy(code, "Code")}
@@ -346,7 +385,7 @@ export function PopupApp({ platform }: PopupAppProps) {
                 emptyText={CATEGORY_EMPTY[screen.category]}
                 platform={platform}
                 onOpenItem={openItem}
-                onCopyPassword={copyPassword}
+                onCopyPassword={(item) => withReprompt(item, "copy", () => copyPassword(item))}
                 onCopyCode={(_item, code) => void copy(code, "Code")}
               />
             ) : screen.kind === "generator" ? (
@@ -372,7 +411,9 @@ export function PopupApp({ platform }: PopupAppProps) {
                 tab={tab}
                 tabMatches={detailMatches(screen)}
                 filling={filling === screen.itemId}
-                onFill={(item: LoginItem) => void fillItem(item.id, item.revision)}
+                onFill={(item: LoginItem) =>
+                  withReprompt(item, "fill", () => void fillItem(item.id, item.revision))
+                }
                 onCopy={(value, label) => void copy(value, label)}
                 onOpenVault={() => void openVault({ item: screen.itemId })}
               />

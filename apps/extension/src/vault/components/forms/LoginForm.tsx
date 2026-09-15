@@ -59,18 +59,12 @@ interface FormValue {
   signInWith: string;
   notes: string;
   favorite: boolean;
+  reprompt: boolean;
   tags: string;
 }
 
 type FieldKey =
-  | "name"
-  | "username"
-  | "password"
-  | "urls"
-  | "totp"
-  | "customFields"
-  | "notes"
-  | "tags";
+  "name" | "username" | "password" | "urls" | "totp" | "customFields" | "notes" | "tags";
 type Errors = Partial<Record<FieldKey | "form", string>>;
 
 /** Fields the form can show a schema error beside. */
@@ -119,6 +113,7 @@ function initialValue(item?: LoginItem): FormValue {
     signInWith: item?.signInWith ?? "",
     notes: item?.notes ?? "",
     favorite: item?.favorite ?? false,
+    reprompt: item?.reprompt ?? false,
     tags: formatTags(item?.tags ?? []),
   };
 }
@@ -225,6 +220,7 @@ export function LoginForm({ item, platform, otpItems, onSaved, onCancel }: Login
         : undefined,
       notes: value.notes,
       favorite: value.favorite,
+      reprompt: value.reprompt ? true : undefined,
       tags,
     };
     const candidate = item
@@ -382,7 +378,8 @@ export function LoginForm({ item, platform, otpItems, onSaved, onCancel }: Login
           ))}
         </select>
         <p className={styles.help}>
-          For an account that uses “Continue with Google” and the like: ShardPass presses that button on the page instead of filling a password.
+          For an account that uses “Continue with Google” and the like: ShardPass presses that
+          button on the page instead of filling a password.
         </p>
       </div>
 
@@ -526,6 +523,14 @@ export function LoginForm({ item, platform, otpItems, onSaved, onCancel }: Login
           onChange={(event) => setValue({ ...value, favorite: event.target.checked })}
         />
         Favorite
+      </label>
+      <label className={styles.checkboxField}>
+        <input
+          type="checkbox"
+          checked={value.reprompt}
+          onChange={(event) => setValue({ ...value, reprompt: event.target.checked })}
+        />
+        Ask for the master password before use
       </label>
 
       <div className={styles.actions}>

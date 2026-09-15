@@ -247,6 +247,68 @@ function fixture(
 }
 
 describe("ItemService", () => {
+  it("withholds a re-prompted item's secrets and blocks its use until the master password is given again", async () => {
+    let granted = false;
+    const guarded = {
+      ...loginItem(),
+      id: ids.created,
+      reprompt: true,
+      totp: "JBSWY3DPEHPK3PXP",
+      notes: "private",
+    };
+    const repository = new FakeRepository([guarded]);
+    const service = new ItemService({
+      repository,
+      now: () => Date.parse(nowIso),
+      notePrivilegedActivity: () => Promise.resolve(),
+      repromptGranted: () => granted,
+    });
+
+    await expect(
+      service.handle(request("item.get", { itemId: ids.created }), vaultSender),
+    ).rejects.toMatchObject({
+      code: "REPROMPT_REQUIRED",
+    });
+    const listed = await service.handle(request("item.query", {}), vaultSender);
+    expect(listed).toMatchObject({
+      kind: "item.queryResult",
+      redacted: [ids.created],
+      items: [{ id: ids.created, password: "", notes: "" }],
+    });
+    expect(JSON.stringify(listed)).not.toContain("JBSWY3DPEHPK3PXP");
+    expect(JSON.stringify(listed)).not.toContain(guarded.password);
+    await expect(
+      service.handle(
+        request("item.update", {
+          itemId: ids.created,
+          expectedRevision: 1,
+          fields: { name: "Renamed" },
+        }),
+        vaultSender,
+      ),
+    ).rejects.toMatchObject({ code: "REPROMPT_REQUIRED" });
+    await expect(
+      service.handle(request("item.delete", { itemId: ids.created }), vaultSender),
+    ).rejects.toMatchObject({
+      code: "REPROMPT_REQUIRED",
+    });
+    const projection = await service.handle(request("item.list", {}), popupSender);
+    expect(projection).toMatchObject({
+      kind: "item.listResult",
+      items: [{ id: ids.created, reprompt: true }],
+    });
+
+    granted = true;
+    expect(
+      await service.handle(request("item.get", { itemId: ids.created }), vaultSender),
+    ).toMatchObject({
+      kind: "item.getResult",
+      item: { password: guarded.password, totp: "JBSWY3DPEHPK3PXP" },
+    });
+    const opened = await service.handle(request("item.query", {}), vaultSender);
+    expect((opened as { redacted?: unknown }).redacted).toBeUndefined();
+  });
+
   it("creates a login item and retrieves it", async () => {
     const { service } = fixture();
     const candidate = { ...loginItem(), id: ids.created };

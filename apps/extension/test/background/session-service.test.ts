@@ -988,6 +988,27 @@ describe("SessionService", () => {
     await expect(service.getState()).resolves.toMatchObject({ state: "unlocked" });
   });
 
+  it("proves the master password again for a re-prompt without touching the session, once per challenge", async () => {
+    const { service } = fixture();
+    await setup(service);
+    const challenge = await service.createChallenge("reprompt", popupBinding);
+    await expect(
+      service.verifyReprompt(challenge.challengeId, wrongKek.slice(), popupBinding),
+    ).rejects.toMatchObject({ code: "INVALID_CREDENTIALS" });
+    const again = await service.createChallenge("reprompt", popupBinding);
+    const ownedKey = kek.slice();
+    await expect(
+      service.verifyReprompt(again.challengeId, ownedKey, popupBinding),
+    ).resolves.toBeUndefined();
+    expect(ownedKey).toEqual(new Uint8Array(32));
+    await expect(
+      service.verifyReprompt(again.challengeId, kek.slice(), popupBinding),
+    ).rejects.toMatchObject({
+      code: "CHALLENGE_INVALID",
+    });
+    await expect(service.getState()).resolves.toMatchObject({ state: "unlocked" });
+  });
+
   it("rotates the wrapped key around the same DEK and invalidates the old key", async () => {
     const { local, service } = fixture();
     await setup(service);

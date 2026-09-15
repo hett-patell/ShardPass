@@ -40,6 +40,7 @@ interface FormValue {
   nationalId: string;
   notes: string;
   favorite: boolean;
+  reprompt: boolean;
   tags: string;
 }
 
@@ -112,6 +113,7 @@ function initialValue(item?: IdentityItem): FormValue {
     nationalId: item?.nationalId ?? "",
     notes: item?.notes ?? "",
     favorite: item?.favorite ?? false,
+    reprompt: item?.reprompt ?? false,
     tags: formatTags(item?.tags ?? []),
   };
 }
@@ -150,6 +152,7 @@ export function IdentityForm({ item, platform, onSaved, onCancel }: IdentityForm
       nationalId: opt(value.nationalId),
       notes: value.notes,
       favorite: value.favorite,
+      reprompt: value.reprompt ? true : undefined,
       tags,
     };
     const candidate = item
@@ -424,6 +427,14 @@ export function IdentityForm({ item, platform, onSaved, onCancel }: IdentityForm
           onChange={(event) => setValue({ ...value, favorite: event.target.checked })}
         />
         Favorite
+      </label>
+      <label className={styles.checkboxField}>
+        <input
+          type="checkbox"
+          checked={value.reprompt}
+          onChange={(event) => setValue({ ...value, reprompt: event.target.checked })}
+        />
+        Ask for the master password before use
       </label>
 
       <div className={styles.actions}>

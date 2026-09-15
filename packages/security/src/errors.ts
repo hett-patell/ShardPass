@@ -59,6 +59,7 @@ export type SafeErrorCode =
   | "ENTE_DEPENDENCY_INTEGRITY"
   | "ENTE_PERMISSION_DENIED"
   | "ENTE_AUTH_KEY_MISSING"
+  | "REPROMPT_REQUIRED"
   | "BREACH_CHECK_DISABLED"
   | "BREACH_CHECK_UNAVAILABLE"
   | "THROTTLED"
@@ -131,6 +132,7 @@ const messages: Readonly<Record<SafeErrorCode, string>> = {
   ENTE_DEPENDENCY_INTEGRITY: "Ente cryptography could not be verified.",
   ENTE_PERMISSION_DENIED: "This Ente action is not allowed here.",
   ENTE_AUTH_KEY_MISSING: "This Ente account does not have an Authenticator key.",
+  REPROMPT_REQUIRED: "Enter your master password to use this item.",
   BREACH_CHECK_DISABLED: "Breach checks are off. Turn them on in Settings.",
   BREACH_CHECK_UNAVAILABLE: "The breach check could not run. Try again later.",
   THROTTLED: "Too many attempts. Wait before trying again.",

@@ -1,4 +1,9 @@
-import { MAX_NOTE_CONTENT_LENGTH, MAX_NOTE_NAME_LENGTH, NoteItemSchema, type NoteItem } from "@shardpass/domain";
+import {
+  MAX_NOTE_CONTENT_LENGTH,
+  MAX_NOTE_NAME_LENGTH,
+  NoteItemSchema,
+  type NoteItem,
+} from "@shardpass/domain";
 import { Button, Field } from "@shardpass/ui";
 import { useState } from "react";
 
@@ -19,6 +24,7 @@ interface FormValue {
   name: string;
   content: string;
   favorite: boolean;
+  reprompt: boolean;
   tags: string;
 }
 
@@ -33,6 +39,7 @@ function initialValue(item?: NoteItem): FormValue {
     name: item?.name ?? "",
     content: item?.content ?? "",
     favorite: item?.favorite ?? false,
+    reprompt: item?.reprompt ?? false,
     tags: formatTags(item?.tags ?? []),
   };
 }
@@ -57,6 +64,7 @@ export function NoteForm({ item, platform, onSaved, onCancel }: NoteFormProps) {
           name,
           content: value.content,
           favorite: value.favorite,
+          reprompt: value.reprompt ? true : undefined,
           tags,
         };
     const parsed = NoteItemSchema.safeParse(candidate);
@@ -71,6 +79,7 @@ export function NoteForm({ item, platform, onSaved, onCancel }: NoteFormProps) {
           name,
           content: value.content,
           favorite: value.favorite,
+          reprompt: value.reprompt ? true : undefined,
           tags,
         })
       : await createItem(platform, candidate);
@@ -155,6 +164,14 @@ export function NoteForm({ item, platform, onSaved, onCancel }: NoteFormProps) {
           onChange={(event) => setValue({ ...value, favorite: event.target.checked })}
         />
         Favorite
+      </label>
+      <label className={styles.checkboxField}>
+        <input
+          type="checkbox"
+          checked={value.reprompt}
+          onChange={(event) => setValue({ ...value, reprompt: event.target.checked })}
+        />
+        Ask for the master password before use
       </label>
 
       <div className={styles.actions}>

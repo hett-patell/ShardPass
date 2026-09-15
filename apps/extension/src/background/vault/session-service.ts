@@ -101,7 +101,7 @@ export class VaultSessionError extends Error {
   }
 }
 
-type ChallengePurpose = "setup" | "unlock" | "change-current" | "change-new";
+type ChallengePurpose = "setup" | "unlock" | "change-current" | "change-new" | "reprompt";
 export type SenderBinding = Readonly<{
   extensionId: string;
   contextKind: "popup" | "vault";
@@ -379,7 +379,10 @@ export class SessionService {
     if (purpose === "setup" && root !== null)
       throw new VaultSessionError("VAULT_ALREADY_CONFIGURED");
     if (purpose !== "setup" && root === null) throw new VaultSessionError("VAULT_NOT_CONFIGURED");
-    if ((purpose === "change-current" || purpose === "change-new") && this.dek === null)
+    if (
+      (purpose === "change-current" || purpose === "change-new" || purpose === "reprompt") &&
+      this.dek === null
+    )
       throw new VaultSessionError("VAULT_LOCKED");
     const salt =
       purpose === "setup" || purpose === "change-new"
@@ -465,6 +468,60 @@ export class SessionService {
     } finally {
       keyEncryptionKey.fill(0);
     }
+  }
+
+  /**
+   * Proves the master password again while the vault is open (a per-item re-prompt): the
+   * key derived on the page must unwrap the same data key the session holds. Failures count
+   * against the unlock backoff, as a guess at the password would.
+   */
+  verifyReprompt(
+    challengeId: string,
+    keyEncryptionKey: Uint8Array,
+    sender: SenderBinding,
+  ): Promise<void> {
+    return this.credentialMutex.run(async () => {
+      const operationEpoch = this.epoch;
+      let verifiedDek: Uint8Array | null = null;
+      try {
+        const challenge = this.consume(challengeId, "reprompt", sender);
+        const retryAfterMs = await this.retryAfter();
+        if (retryAfterMs > 0) throw new VaultSessionError("THROTTLED", retryAfterMs);
+        this.assertEpoch(operationEpoch);
+        await this.assertActiveRoot();
+        this.assertEpoch(operationEpoch);
+        const root = await this.readRoot();
+        this.assertEpoch(operationEpoch);
+        if (this.dek === null || root === null || challenge.rootBinding !== canonicalJson(root)) {
+          await this.recordFailure();
+          this.assertEpoch(operationEpoch);
+          throw new VaultSessionError("INVALID_CREDENTIALS");
+        }
+        verifiedDek = await unwrapVaultDataKeyWithKeyEncryptionKey(
+          keyEncryptionKey,
+          root.wrappedKey,
+        );
+        this.assertEpoch(operationEpoch);
+        if (!equalBytes(verifiedDek, this.dek)) throw new Error("credential mismatch");
+        verifiedDek.fill(0);
+        verifiedDek = null;
+        await this.clearAttempts();
+      } catch (error) {
+        verifiedDek?.fill(0);
+        if (
+          error instanceof VaultSessionError &&
+          (error.code === "CHALLENGE_INVALID" ||
+            error.code === "THROTTLED" ||
+            error.code === "VAULT_LOCKED")
+        )
+          throw error;
+        await this.recordFailure();
+        this.assertEpoch(operationEpoch);
+        throw new VaultSessionError("INVALID_CREDENTIALS");
+      } finally {
+        keyEncryptionKey.fill(0);
+      }
+    });
   }
 
   async captureBackupSession(): Promise<BackupSessionAuthority> {

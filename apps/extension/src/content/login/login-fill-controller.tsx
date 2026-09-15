@@ -432,10 +432,9 @@ export function createLoginFillController(
       });
       if (response.kind !== "login.fillSuggestionsResult")
         return { state: "error", suggestions: [] };
-      return {
-        state: response.suggestions.length === 0 ? "empty" : "ready",
-        suggestions: response.suggestions,
-      };
+      // A login that asks for the master password first is the popup's to fill, after asking.
+      const suggestions = response.suggestions.filter((suggestion) => suggestion.reprompt !== true);
+      return { state: suggestions.length === 0 ? "empty" : "ready", suggestions };
     } catch (error) {
       return { state: errorCode(error) === "VAULT_LOCKED" ? "locked" : "error", suggestions: [] };
     }

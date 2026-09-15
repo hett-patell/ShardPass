@@ -30,6 +30,7 @@ import { FolderService } from "./folder/folder-service";
 import { PasskeyService } from "./passkey/passkey-service";
 import { ItemService } from "./item/item-service";
 import { BreachCheckService } from "./security/breach-check-service";
+import { RepromptGrants } from "./vault/reprompt-grants";
 import { LoginFillService } from "./login/login-fill-service";
 import { createInternalHotpLifecycle } from "./otp/hotp-lifecycle";
 import { OtpImportService } from "./otp/import-service";
@@ -104,7 +105,8 @@ export function installBackground(
   // Synchronously, before any await: the idle listener has to exist in the worker's first
   // turn or Chrome will not wake the worker to lock on screen lock.
   settings.listen();
-  const vault = new VaultService(sessions, settings);
+  const repromptGrants = new RepromptGrants(() => Date.now());
+  const vault = new VaultService(sessions, settings, repromptGrants);
   const backup = new BackupService({
     sessions,
     readSettings: () => settings.snapshot(),
@@ -152,6 +154,7 @@ export function installBackground(
   const item = new ItemService({
     repository: sessions.vaultRepository,
     notePrivilegedActivity: () => settings.notePrivilegedActivity(),
+    repromptGranted: (itemId) => repromptGrants.granted(itemId),
   });
   const folder = new FolderService({
     repository: sessions.vaultRepository,
@@ -168,6 +171,7 @@ export function installBackground(
     now: () => Date.now(),
     notePrivilegedActivity: () => settings.notePrivilegedActivity(),
     offerStore: platform.sessionStorage,
+    repromptGranted: (itemId) => repromptGrants.granted(itemId),
   });
   const passwordGen = new PasswordGenService();
   // Have I Been Pwned's range endpoint, padded: the reply's size says nothing about the
@@ -306,6 +310,7 @@ export function installBackground(
     enteUnlocked = false;
     await enteScheduler?.setUnlocked(false);
     enteService.lock();
+    repromptGrants.clear();
     runtimeOwner?.clearSessionHandoffs();
     await sessions.lock();
     await settings.cancelAutoLock();

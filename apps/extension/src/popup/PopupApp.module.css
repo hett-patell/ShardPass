@@ -81,3 +81,19 @@
 .feedback:empty {
   display: none;
 }
+
+/* The master-password re-prompt sits over the current screen until answered or dismissed. */
+.repromptOverlay {
+  position: absolute;
+  z-index: var(--z-modal, 300);
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+  background: var(--backdrop, rgb(0 0 0 / 0.5));
+}
+
+.popup {
+  position: relative;
+}

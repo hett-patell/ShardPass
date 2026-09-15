@@ -187,6 +187,35 @@ describe("LoginFillService", () => {
     expect(result.suggestions).toHaveLength(1);
   });
 
+  it("marks a re-prompted login and releases it only once the master password was given again", async () => {
+    let granted = false;
+    const guarded = loginItem({ urls: ["https://example.test"], reprompt: true });
+    const service = new LoginFillService({
+      repository: new FakeRepository([guarded]),
+      now: () => 15_000,
+      notePrivilegedActivity: () => Promise.resolve(),
+      repromptGranted: () => granted,
+    });
+    const listed = await service.handle(
+      request("login.fillSuggestions", { domain: "example.test" }),
+      sender,
+    );
+    expect(listed).toMatchObject({ suggestions: [{ itemId: guarded.id, reprompt: true }] });
+    await expect(
+      service.handle(
+        request("login.fillSelect", { itemId: guarded.id, expectedRevision: 1 }),
+        sender,
+      ),
+    ).rejects.toMatchObject({ code: "REPROMPT_REQUIRED" });
+    granted = true;
+    await expect(
+      service.handle(
+        request("login.fillSelect", { itemId: guarded.id, expectedRevision: 1 }),
+        sender,
+      ),
+    ).resolves.toMatchObject({ kind: "login.fillRelease", password: "s3cret" });
+  });
+
   it("stamps a login as used only with the release it was handed, and only once", async () => {
     const stored = loginItem({ urls: ["https://example.test"] });
     const { service, repository } = fixture([stored]);

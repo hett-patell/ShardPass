@@ -267,6 +267,23 @@ describe("VaultApp foundation shell", () => {
     expect(screen.getByRole("button", { name: "Edit" })).toBeVisible();
   });
 
+  it("asks for the master password in the detail pane for an item whose secrets were withheld", async () => {
+    const platform = new FakeExtensionPlatform("vault-test-id");
+    platform.queueSendResponse(foundationStatus);
+    platform.queueSendResponse(unlockedVaultState(1));
+    platform.queueSendResponse(noFolders);
+    platform.queueSendResponse({
+      version: 1,
+      kind: "item.queryResult",
+      items: [{ ...loginItem, password: "", reprompt: true }, noteItem],
+      redacted: [loginItem.id],
+    });
+    render(<VaultApp platform={platform} />);
+    fireEvent.click(await screen.findByRole("button", { name: /Example Login/ }));
+    expect(await screen.findByRole("heading", { name: "Master password needed" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Edit" })).toBeNull();
+  });
+
   it("returns focus to the item's title when its edit form closes", async () => {
     const platform = readyUnlockedPlatform();
     render(<VaultApp platform={platform} />);

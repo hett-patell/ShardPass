@@ -134,6 +134,7 @@ const otpFillErrorCodes = {
 } satisfies Record<OtpFillServiceErrorCode, SafeErrorCode>;
 
 const itemErrorCodes = {
+  REPROMPT_REQUIRED: "REPROMPT_REQUIRED",
   VAULT_LOCKED: "VAULT_LOCKED",
   VAULT_UNAVAILABLE: "VAULT_UNAVAILABLE",
   ITEM_INVALID: "ITEM_INVALID",
@@ -158,6 +159,7 @@ const passkeyErrorCodes = {
 } satisfies Record<PasskeyServiceErrorCode, SafeErrorCode>;
 
 const loginFillErrorCodes = {
+  REPROMPT_REQUIRED: "REPROMPT_REQUIRED",
   LOGIN_FILL_INVALID: "LOGIN_FILL_INVALID",
   LOGIN_FILL_UNAVAILABLE: "LOGIN_FILL_UNAVAILABLE",
   LOGIN_FILL_NOT_FOUND: "LOGIN_FILL_NOT_FOUND",
@@ -319,6 +321,7 @@ const vaultResponseKindByRequest = {
   "vault.lock": "vault.ok",
   "vault.changePassword": "vault.ok",
   "vault.updateLockSettings": "vault.ok",
+  "vault.confirmReprompt": "vault.ok",
 } as const;
 
 export function routeMessage(

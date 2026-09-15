@@ -209,10 +209,10 @@ describe("VaultAccess over the background's state port", () => {
   it("offers locking when ShardPass closes, and warns when the vault is left open until the browser closes", async () => {
     const { platform, ports } = portPlatform();
     const sent: unknown[] = [];
-    platform.sendMessage.mockImplementation((request: unknown) => {
+    vi.mocked(platform.sendMessage).mockImplementation((async (request: unknown) => {
       sent.push(request);
       return Promise.resolve({ version: 1, kind: "vault.ok", state: "unlocked" });
-    });
+    }) as never);
     render(<VaultAccess platform={platform} securityControls />);
     await waitFor(() => expect(ports).toHaveLength(1));
     ports[0]!.onState(stateMessage("unlocked", "00000000000000000000000000000001", 1));

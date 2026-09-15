@@ -35,19 +35,12 @@ interface FormValue {
   pin: string;
   notes: string;
   favorite: boolean;
+  reprompt: boolean;
   tags: string;
 }
 
 type FieldKey =
-  | "name"
-  | "cardholderName"
-  | "number"
-  | "expMonth"
-  | "expYear"
-  | "cvv"
-  | "pin"
-  | "notes"
-  | "tags";
+  "name" | "cardholderName" | "number" | "expMonth" | "expYear" | "cvv" | "pin" | "notes" | "tags";
 type Errors = Partial<Record<FieldKey | "form", string>>;
 
 /** Fields the form can show a schema error beside. */
@@ -85,6 +78,7 @@ function initialValue(item?: CardItem): FormValue {
     pin: item?.pin ?? "",
     notes: item?.notes ?? "",
     favorite: item?.favorite ?? false,
+    reprompt: item?.reprompt ?? false,
     tags: formatTags(item?.tags ?? []),
   };
 }
@@ -101,7 +95,10 @@ export function CardForm({ item, platform, onSaved, onCancel }: CardFormProps) {
     if (name.length === 0) nextErrors.name = "Enter a name.";
     if (value.expMonth.length > 0 && !/^\d{1,2}$/u.test(value.expMonth))
       nextErrors.expMonth = "Use a two-digit month.";
-    else if (value.expMonth.length > 0 && (Number(value.expMonth) < 1 || Number(value.expMonth) > 12))
+    else if (
+      value.expMonth.length > 0 &&
+      (Number(value.expMonth) < 1 || Number(value.expMonth) > 12)
+    )
       nextErrors.expMonth = "Enter a month from 01 to 12.";
     if (value.expYear.length > 0 && !/^\d{2,4}$/u.test(value.expYear))
       nextErrors.expYear = "Use a two- or four-digit year.";
@@ -119,6 +116,7 @@ export function CardForm({ item, platform, onSaved, onCancel }: CardFormProps) {
       pin: value.pin,
       notes: value.notes,
       favorite: value.favorite,
+      reprompt: value.reprompt ? true : undefined,
       tags,
     };
     const candidate = item
@@ -298,6 +296,14 @@ export function CardForm({ item, platform, onSaved, onCancel }: CardFormProps) {
           onChange={(event) => setValue({ ...value, favorite: event.target.checked })}
         />
         Favorite
+      </label>
+      <label className={styles.checkboxField}>
+        <input
+          type="checkbox"
+          checked={value.reprompt}
+          onChange={(event) => setValue({ ...value, reprompt: event.target.checked })}
+        />
+        Ask for the master password before use
       </label>
 
       <div className={styles.actions}>

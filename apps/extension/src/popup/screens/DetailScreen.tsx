@@ -11,6 +11,7 @@ import { KIND_LABELS, KindIcon } from "../components/KindIcon";
 import { LiveCode } from "../components/LiveCode";
 import { QuickAction } from "../components/QuickAction";
 import type { ActiveTab } from "../hooks/useActiveTab";
+import { RepromptPrompt } from "../../vault-access/RepromptPrompt";
 import styles from "./DetailScreen.module.css";
 
 export interface DetailScreenProps {
@@ -24,11 +25,25 @@ export interface DetailScreenProps {
   onOpenVault: () => void;
 }
 
-type Loaded = { status: "loading" } | { status: "error" } | { status: "ready"; item: VaultItem };
+type Loaded =
+  | { status: "loading" }
+  | { status: "error" }
+  | { status: "reprompt" }
+  | { status: "ready"; item: VaultItem };
 
 /** One item, field by field, each with a copy button; secrets stay hidden until revealed. */
-export function DetailScreen({ itemId, platform, tab, tabMatches, filling, onFill, onCopy, onOpenVault }: DetailScreenProps) {
+export function DetailScreen({
+  itemId,
+  platform,
+  tab,
+  tabMatches,
+  filling,
+  onFill,
+  onCopy,
+  onOpenVault,
+}: DetailScreenProps) {
   const [loaded, setLoaded] = useState<Loaded>({ status: "loading" });
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -39,8 +54,12 @@ export function DetailScreen({ itemId, platform, tab, tabMatches, filling, onFil
       .then((candidate) => {
         if (cancelled) return;
         const parsed = parseItemCrudResponseForRequest(request, candidate);
-        if (parsed.success && parsed.data.kind === "item.getResult") setLoaded({ status: "ready", item: parsed.data.item });
-        else setLoaded({ status: "error" });
+        if (parsed.success && parsed.data.kind === "item.getResult")
+          setLoaded({ status: "ready", item: parsed.data.item });
+        else {
+          const code = (candidate as { error?: { code?: unknown } } | null)?.error?.code;
+          setLoaded(code === "REPROMPT_REQUIRED" ? { status: "reprompt" } : { status: "error" });
+        }
       })
       .catch(() => {
         if (!cancelled) setLoaded({ status: "error" });
@@ -48,7 +67,19 @@ export function DetailScreen({ itemId, platform, tab, tabMatches, filling, onFil
     return () => {
       cancelled = true;
     };
-  }, [itemId, platform]);
+  }, [attempt, itemId, platform]);
+
+  if (loaded.status === "reprompt")
+    return (
+      <div className={styles.screen}>
+        <RepromptPrompt
+          platform={platform}
+          itemId={itemId}
+          action="view"
+          onGranted={() => setAttempt((count) => count + 1)}
+        />
+      </div>
+    );
 
   if (loaded.status === "loading")
     return (
@@ -67,7 +98,14 @@ export function DetailScreen({ itemId, platform, tab, tabMatches, filling, onFil
 
   const item = loaded.item;
   const title = item.kind === "otp" ? item.issuer || item.label : item.name;
-  const subtitle = item.kind === "otp" ? (item.issuer ? item.label : "") : item.kind === "login" ? item.username : KIND_LABELS[item.kind];
+  const subtitle =
+    item.kind === "otp"
+      ? item.issuer
+        ? item.label
+        : ""
+      : item.kind === "login"
+        ? item.username
+        : KIND_LABELS[item.kind];
 
   return (
     <div className={styles.screen}>
@@ -81,39 +119,79 @@ export function DetailScreen({ itemId, platform, tab, tabMatches, filling, onFil
 
       {item.kind === "login" && tab !== null ? (
         <div className={styles.primaryAction}>
-          <Button className={styles.fillButton} loading={filling} disabled={!tabMatches} onClick={() => onFill(item)}>
+          <Button
+            className={styles.fillButton}
+            loading={filling}
+            disabled={!tabMatches}
+            onClick={() => onFill(item)}
+          >
             {tabMatches ? `Fill in ${tab.host}` : "Not for this site"}
           </Button>
         </div>
       ) : null}
 
       <div className={styles.fields}>
-        {item.kind === "login" ? <LoginFields item={item} platform={platform} onCopy={onCopy} /> : null}
+        {item.kind === "login" ? (
+          <LoginFields item={item} platform={platform} onCopy={onCopy} />
+        ) : null}
         {item.kind === "otp" ? (
           <Field label="One-time code">
-            <LiveCode platform={platform} itemId={item.id} size="display" onCopy={(code) => onCopy(code, "Code")} />
+            <LiveCode
+              platform={platform}
+              itemId={item.id}
+              size="display"
+              onCopy={(code) => onCopy(code, "Code")}
+            />
           </Field>
         ) : null}
-        {item.kind === "note" ? <Field label="Note"><pre className={styles.pre}>{item.content || "—"}</pre></Field> : null}
+        {item.kind === "note" ? (
+          <Field label="Note">
+            <pre className={styles.pre}>{item.content || "—"}</pre>
+          </Field>
+        ) : null}
         {item.kind === "card" ? (
           <>
             <TextField label="Cardholder" value={item.cardholderName} onCopy={onCopy} />
             <SecretField label="Number" value={item.number} onCopy={onCopy} mask={maskCard} />
-            <TextField label="Expires" value={[item.expMonth, item.expYear].filter(Boolean).join(" / ")} onCopy={onCopy} />
+            <TextField
+              label="Expires"
+              value={[item.expMonth, item.expYear].filter(Boolean).join(" / ")}
+              onCopy={onCopy}
+            />
             <SecretField label="Security code" value={item.cvv} onCopy={onCopy} />
             <SecretField label="PIN" value={item.pin} onCopy={onCopy} />
           </>
         ) : null}
         {item.kind === "identity" ? (
           <>
-            <TextField label="Name" value={[item.firstName, item.lastName].filter(Boolean).join(" ")} onCopy={onCopy} />
+            <TextField
+              label="Name"
+              value={[item.firstName, item.lastName].filter(Boolean).join(" ")}
+              onCopy={onCopy}
+            />
             <TextField label="Email" value={item.email} onCopy={onCopy} />
             <TextField label="Phone" value={item.phone} onCopy={onCopy} />
-            <TextField label="Address" value={[item.street, item.city, item.state, item.zip, item.country].filter(Boolean).join(", ")} onCopy={onCopy} />
+            <TextField
+              label="Address"
+              value={[item.street, item.city, item.state, item.zip, item.country]
+                .filter(Boolean)
+                .join(", ")}
+              onCopy={onCopy}
+            />
           </>
         ) : null}
-        {item.kind === "secret" ? <SecretField label={item.secretType === "ssh_key" ? "Key" : "Value"} value={item.value} onCopy={onCopy} /> : null}
-        {"notes" in item && item.notes ? <Field label="Notes"><pre className={styles.pre}>{item.notes}</pre></Field> : null}
+        {item.kind === "secret" ? (
+          <SecretField
+            label={item.secretType === "ssh_key" ? "Key" : "Value"}
+            value={item.value}
+            onCopy={onCopy}
+          />
+        ) : null}
+        {"notes" in item && item.notes ? (
+          <Field label="Notes">
+            <pre className={styles.pre}>{item.notes}</pre>
+          </Field>
+        ) : null}
         {item.tags.length > 0 ? (
           <Field label="Tags">
             <span className={styles.tags}>
@@ -159,18 +237,31 @@ function LoginFields({
       ) : null}
       {item.linkedOtpId !== undefined ? (
         <Field label="One-time code">
-          <LiveCode platform={platform} itemId={item.linkedOtpId} onCopy={(code) => onCopy(code, "Code")} />
+          <LiveCode
+            platform={platform}
+            itemId={item.linkedOtpId}
+            onCopy={(code) => onCopy(code, "Code")}
+          />
         </Field>
       ) : inline.code !== null ? (
         <Field label="One-time code">
-          <button type="button" className={styles.inlineCode} onClick={() => onCopy(inline.code ?? "", "Code")}>
+          <button
+            type="button"
+            className={styles.inlineCode}
+            onClick={() => onCopy(inline.code ?? "", "Code")}
+          >
             <span className={styles.codeText}>{inline.code}</span>
             <span className={styles.remaining}>{inline.remaining}s</span>
           </button>
         </Field>
       ) : null}
       {item.urls.map((url, index) => (
-        <TextField key={`${url}-${index}`} label={index === 0 ? "Website" : `Website ${index + 1}`} value={url} onCopy={onCopy} />
+        <TextField
+          key={`${url}-${index}`}
+          label={index === 0 ? "Website" : `Website ${index + 1}`}
+          value={url}
+          onCopy={onCopy}
+        />
       ))}
       {(item.passkeys ?? []).length > 0 ? (
         <Field label="Passkeys">
@@ -183,9 +274,19 @@ function LoginFields({
       ) : null}
       {(item.customFields ?? []).map((field, index) =>
         field.type === "hidden" ? (
-          <SecretField key={`${field.name}-${index}`} label={field.name} value={field.value} onCopy={onCopy} />
+          <SecretField
+            key={`${field.name}-${index}`}
+            label={field.name}
+            value={field.value}
+            onCopy={onCopy}
+          />
         ) : field.type === "linked" ? null : (
-          <TextField key={`${field.name}-${index}`} label={field.name} value={field.value} onCopy={onCopy} />
+          <TextField
+            key={`${field.name}-${index}`}
+            label={field.name}
+            value={field.value}
+            onCopy={onCopy}
+          />
         ),
       )}
     </>
@@ -201,14 +302,26 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-function TextField({ label, value, onCopy }: { label: string; value: string; onCopy: (value: string, label: string) => void }) {
+function TextField({
+  label,
+  value,
+  onCopy,
+}: {
+  label: string;
+  value: string;
+  onCopy: (value: string, label: string) => void;
+}) {
   if (value === "") return null;
   return (
     <div className={styles.field}>
       <SectionLabel>{label}</SectionLabel>
       <div className={styles.valueRow}>
         <span className={styles.value}>{value}</span>
-        <QuickAction aria-label={`Copy ${label.toLowerCase()}`} title="Copy" onClick={() => onCopy(value, label)}>
+        <QuickAction
+          aria-label={`Copy ${label.toLowerCase()}`}
+          title="Copy"
+          onClick={() => onCopy(value, label)}
+        >
           <Copy size={15} />
         </QuickAction>
       </div>
@@ -239,10 +352,19 @@ function SecretField({
       <SectionLabel>{label}</SectionLabel>
       <div className={styles.valueRow}>
         <span className={`${styles.value} ${styles.mono}`}>{shown ? value : mask(value)}</span>
-        <QuickAction aria-label={shown ? `Hide ${label.toLowerCase()}` : `Show ${label.toLowerCase()}`} title={shown ? "Hide" : "Show"} aria-pressed={shown} onClick={() => setShown((current) => !current)}>
+        <QuickAction
+          aria-label={shown ? `Hide ${label.toLowerCase()}` : `Show ${label.toLowerCase()}`}
+          title={shown ? "Hide" : "Show"}
+          aria-pressed={shown}
+          onClick={() => setShown((current) => !current)}
+        >
           {shown ? <EyeOff size={15} /> : <Eye size={15} />}
         </QuickAction>
-        <QuickAction aria-label={`Copy ${label.toLowerCase()}`} title="Copy" onClick={() => onCopy(value, label)}>
+        <QuickAction
+          aria-label={`Copy ${label.toLowerCase()}`}
+          title="Copy"
+          onClick={() => onCopy(value, label)}
+        >
           <Copy size={15} />
         </QuickAction>
       </div>

@@ -36,6 +36,7 @@ interface FormValue {
   metadata: MetadataRow[];
   notes: string;
   favorite: boolean;
+  reprompt: boolean;
   tags: string;
 }
 
@@ -61,6 +62,7 @@ function initialValue(item?: SecretItem): FormValue {
     metadata: Object.entries(item?.metadata ?? {}).map(([key, value]) => ({ key, value })),
     notes: item?.notes ?? "",
     favorite: item?.favorite ?? false,
+    reprompt: item?.reprompt ?? false,
     tags: formatTags(item?.tags ?? []),
   };
 }
@@ -115,6 +117,7 @@ export function SecretForm({ item, platform, onSaved, onCancel }: SecretFormProp
       metadata: metadataRecord(value.metadata),
       notes: value.notes,
       favorite: value.favorite,
+      reprompt: value.reprompt ? true : undefined,
       tags,
     };
     const candidate = item
@@ -299,6 +302,14 @@ export function SecretForm({ item, platform, onSaved, onCancel }: SecretFormProp
           onChange={(event) => setValue({ ...value, favorite: event.target.checked })}
         />
         Favorite
+      </label>
+      <label className={styles.checkboxField}>
+        <input
+          type="checkbox"
+          checked={value.reprompt}
+          onChange={(event) => setValue({ ...value, reprompt: event.target.checked })}
+        />
+        Ask for the master password before use
       </label>
 
       <div className={styles.actions}>

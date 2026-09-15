@@ -36,7 +36,12 @@ type ItemRepository = Pick<
 >;
 
 export type ItemServiceErrorCode =
-  "VAULT_LOCKED" | "VAULT_UNAVAILABLE" | "ITEM_INVALID" | "ITEM_NOT_FOUND" | "ITEM_CONFLICT";
+  | "VAULT_LOCKED"
+  | "VAULT_UNAVAILABLE"
+  | "ITEM_INVALID"
+  | "ITEM_NOT_FOUND"
+  | "ITEM_CONFLICT"
+  | "REPROMPT_REQUIRED";
 
 export class ItemServiceError extends Error {
   constructor(readonly code: ItemServiceErrorCode) {
@@ -50,6 +55,8 @@ type ItemServiceDependencies = Readonly<{
   notePrivilegedActivity(): Promise<void>;
   /** Wall clock, for password-history stamps; Date.now when not given. */
   now?: () => number;
+  /** Whether an item's master-password re-prompt has been answered recently. */
+  repromptGranted?: (itemId: string) => boolean;
 }>;
 
 export class ItemService {
@@ -125,7 +132,20 @@ export class ItemService {
       if (query.length > 0) items = items.filter((item) => matchesSearch(item, query));
     }
     const sorted = [...items].sort(compareItems).slice(0, MAX_ITEM_QUERY_RESULTS);
-    return response({ version: 1, kind: "item.queryResult", items: sorted });
+    // An item that asks for the master password again travels without its secrets until
+    // it has been answered; the page shows the prompt for the ids named here.
+    const redacted: string[] = [];
+    const shown = sorted.map((item) => {
+      if (item.reprompt !== true || this.granted(item.id)) return item;
+      redacted.push(item.id);
+      return redactSecrets(item);
+    });
+    return response({
+      version: 1,
+      kind: "item.queryResult",
+      items: shown,
+      ...(redacted.length === 0 ? {} : { redacted }),
+    });
   }
 
   // Popup-safe counterpart to query(): filters/sorts the same way, but returns only
@@ -150,7 +170,17 @@ export class ItemService {
   private async get(itemId: string): Promise<ItemCrudResponse> {
     const item = await this.dependencies.repository.getItem(itemId);
     if (item === null) throw new ItemServiceError("ITEM_NOT_FOUND");
+    this.assertReprompt(item);
     return response({ version: 1, kind: "item.getResult", item });
+  }
+
+  private granted(itemId: string): boolean {
+    return this.dependencies.repromptGranted?.(itemId) ?? false;
+  }
+
+  private assertReprompt(item: VaultItem): void {
+    if (item.reprompt === true && !this.granted(item.id))
+      throw new ItemServiceError("REPROMPT_REQUIRED");
   }
 
   private async create(rawItem: unknown): Promise<ItemCrudResponse> {
@@ -228,6 +258,7 @@ export class ItemService {
     if (typeof fields !== "object" || fields === null || Array.isArray(fields)) invalid();
     const current = await this.dependencies.repository.getItem(itemId);
     if (current === null) throw new ItemServiceError("ITEM_NOT_FOUND");
+    this.assertReprompt(current);
     if (current.revision !== expectedRevision) conflict();
     // id/kind/schemaVersion/revision/createdAt are always re-derived by the repository
     // from the stored record regardless of what `fields` supplies, so pinning them here
@@ -262,6 +293,7 @@ export class ItemService {
   private async delete(itemId: string): Promise<ItemCrudResponse> {
     const current = await this.dependencies.repository.getItem(itemId);
     if (current === null) throw new ItemServiceError("ITEM_NOT_FOUND");
+    this.assertReprompt(current);
     const deleted = await this.dependencies.repository.tombstone(itemId, current.revision);
     return response({
       version: 1,
@@ -273,6 +305,34 @@ export class ItemService {
 
   private assertVaultSender(sender: SenderContext): void {
     if (sender.contextKind !== "vault") invalid();
+  }
+}
+
+/** The item with every secret blanked: what a re-prompted item looks like before it is answered. */
+function redactSecrets(item: VaultItem): VaultItem {
+  switch (item.kind) {
+    case "login":
+      return {
+        ...item,
+        password: "",
+        totp: undefined,
+        passwordHistory: undefined,
+        customFields: item.customFields?.map((field) =>
+          field.type === "hidden" ? { ...field, value: "" } : field,
+        ),
+        passkeys: undefined,
+        notes: "",
+      };
+    case "note":
+      return { ...item, content: "" };
+    case "card":
+      return { ...item, number: "", cvv: "", pin: "", notes: "" };
+    case "secret":
+      return { ...item, value: "", notes: "" };
+    case "identity":
+      return { ...item, notes: "" };
+    case "otp":
+      return item;
   }
 }
 
@@ -343,6 +403,7 @@ function toListProjection(item: VaultItem): ItemListItemProjection {
     revision,
     favorite,
     tags,
+    ...(item.reprompt === true ? { reprompt: true } : {}),
     ...listDisplayFields(item),
     ...(item.kind === "login" && item.urls.length > 0
       ? {

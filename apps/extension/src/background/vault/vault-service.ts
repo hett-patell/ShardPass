@@ -1,4 +1,5 @@
 import type { VaultLockSettings, VaultRequest, VaultResponse } from "@shardpass/messaging";
+import type { RepromptGrants } from "./reprompt-grants";
 
 import type { SenderBinding, SessionService } from "./session-service";
 
@@ -13,6 +14,7 @@ export class VaultService {
   constructor(
     private readonly sessions: SessionService,
     private readonly settings: Settings,
+    private readonly reprompt: Pick<RepromptGrants, "grant"> = { grant: () => undefined },
   ) {}
 
   async getStateSnapshot() {
@@ -76,6 +78,16 @@ export class VaultService {
         if (outcome.state === "unlocked") await this.settings.notePrivilegedActivity();
         else await this.settings.cancelAutoLock();
         return { version: 1, kind: "vault.ok", ...outcome };
+      }
+      case "vault.confirmReprompt": {
+        await this.sessions.verifyReprompt(
+          request.challengeId,
+          decodeKey(request.keyEncryptionKey),
+          sender,
+        );
+        this.reprompt.grant(request.itemId);
+        await this.settings.notePrivilegedActivity();
+        return { version: 1, kind: "vault.ok", state: "unlocked" };
       }
       case "vault.updateLockSettings": {
         const requested = {

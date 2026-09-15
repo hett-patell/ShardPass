@@ -16,6 +16,8 @@ export const LoginFillSuggestionSchema = z.strictObject({
   lastUsedAt: z.optional(z.string()),
   /** Signs in through a provider: the page-side flow presses that button instead of filling. */
   signInWith: z.optional(z.enum(SIGN_IN_PROVIDERS)),
+  /** Asks for the master password first; a page never fills it, the popup does after asking. */
+  reprompt: z.optional(z.boolean()),
 });
 
 export type LoginFillSuggestion = z.infer<typeof LoginFillSuggestionSchema>;

@@ -42,6 +42,8 @@ export const ItemMetadataSchema = z.strictObject({
   deletedAt: z.optional(ItemTimestampSchema),
   folderId: z.optional(ItemIdSchema),
   tags: itemTagsSchema,
+  /** Ask for the master password again before this item is shown, copied, filled or edited. */
+  reprompt: z.optional(z.boolean()),
 });
 
 export type ItemMetadata = z.infer<typeof ItemMetadataSchema>;

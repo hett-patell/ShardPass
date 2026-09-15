@@ -62,6 +62,8 @@ export const ItemListItemProjectionSchema = z.strictObject({
   ),
   /** A login that signs in through a provider rather than a password. */
   signInWith: z.optional(z.enum(SIGN_IN_PROVIDERS)),
+  /** The master password is asked for again before this item is used. */
+  reprompt: z.optional(z.boolean()),
 });
 
 export const ItemGetRequestSchema = z.strictObject({
@@ -150,6 +152,8 @@ export const ItemQueryResultSchema = z.strictObject({
   version: z.literal(MESSAGE_VERSION),
   kind: z.literal("item.queryResult"),
   items: z.array(VaultItemSchema).check(z.maxLength(MAX_ITEM_QUERY_RESULTS)),
+  /** Items whose secrets were withheld: they ask for the master password again first. */
+  redacted: z.optional(z.array(itemId).check(z.maxLength(MAX_ITEM_QUERY_RESULTS))),
 });
 
 export const ItemListResultSchema = z.strictObject({

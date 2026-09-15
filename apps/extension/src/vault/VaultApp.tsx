@@ -17,6 +17,7 @@ import type {
   ExtensionPlatform,
   OtpImportUiExtensionPlatform,
 } from "../platform/extension-platform";
+import { RepromptPrompt } from "../vault-access/RepromptPrompt";
 import { VaultAccess } from "../vault-access/VaultAccess";
 import { BreachCheckSettings } from "./settings/BreachCheckSettings";
 import { EmptyDetailState } from "./components/EmptyDetailState";
@@ -382,6 +383,14 @@ export function VaultApp({ platform }: VaultAppProps) {
                       platform={platform}
                       onSaved={handleCreated}
                       onCancel={cancelCreate}
+                    />
+                  ) : selectedItem && vaultState.redactedIds.has(selectedItem.id) ? (
+                    <RepromptPrompt
+                      key={selectedItem.id}
+                      platform={platform}
+                      itemId={selectedItem.id}
+                      action="open"
+                      onGranted={vaultState.refresh}
                     />
                   ) : selectedItem ? (
                     <ItemDetailPanel

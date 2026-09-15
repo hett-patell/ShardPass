@@ -18,6 +18,8 @@ export type VaultStateStatus = "idle" | "loading" | "ready" | "error";
 export interface UseVaultStateResult {
   /** Every non-deleted item in the vault, unfiltered — the source for sidebar counts. */
   allItems: readonly VaultItem[];
+  /** Items whose secrets were withheld until the master password is given again. */
+  redactedIds: ReadonlySet<string>;
   /** The live vault, unaffected by the Archive view's own query; drives sidebar counts. */
   liveItems: readonly VaultItem[];
   /** `allItems` narrowed by the current category, folder, and search text. */
@@ -57,6 +59,7 @@ export function useVaultState(
   folders: readonly Folder[] = noFolders,
 ): UseVaultStateResult {
   const [allItems, setAllItems] = useState<readonly VaultItem[]>(emptyItems);
+  const [redactedIds, setRedactedIds] = useState<ReadonlySet<string>>(() => new Set());
   // The live (non-archived) vault, kept while the Archive view runs its own query, so
   // sidebar counts never turn into archived-only numbers.
   const [liveItems, setLiveItems] = useState<readonly VaultItem[]>(emptyItems);
@@ -115,6 +118,7 @@ export function useVaultState(
         const parsed = parseItemCrudResponseForRequest(queryRequest, candidate);
         if (parsed.success && parsed.data.kind === "item.queryResult") {
           setAllItems(parsed.data.items);
+          setRedactedIds(new Set(parsed.data.redacted ?? []));
           if (!archived) setLiveItems(parsed.data.items);
           else refreshLive(token);
           loadedArchived.current = archived;
@@ -181,6 +185,7 @@ export function useVaultState(
   return useMemo(
     () => ({
       allItems,
+      redactedIds,
       liveItems,
       items,
       status,
@@ -201,6 +206,7 @@ export function useVaultState(
     }),
     [
       allItems,
+      redactedIds,
       liveItems,
       items,
       status,

@@ -47,6 +47,7 @@ export type LoginFillServiceErrorCode =
   | "LOGIN_FILL_UNAVAILABLE"
   | "LOGIN_FILL_NOT_FOUND"
   | "LOGIN_FILL_ITEM_CHANGED"
+  | "REPROMPT_REQUIRED"
   | "VAULT_LOCKED";
 
 export class LoginFillServiceError extends Error {
@@ -62,6 +63,8 @@ type LoginFillServiceDependencies = Readonly<{
   notePrivilegedActivity(): Promise<void>;
   /** 32 hex characters; the offer id the page names later. */
   nextOfferId?(): string;
+  /** Whether an item's master-password re-prompt has been answered recently. */
+  repromptGranted?(itemId: string): boolean;
   /**
    * Session-scoped storage for offers still waiting on the page (memory-only in Chrome, the
    * same place the session key lives), so a save banner survives the worker's idle teardown.
@@ -259,6 +262,7 @@ export class LoginFillService {
         hasLinkedOtp: item.linkedOtpId !== undefined || (item.totp ?? "").trim() !== "",
         ...(item.lastUsedAt === undefined ? {} : { lastUsedAt: item.lastUsedAt }),
         ...(item.signInWith === undefined ? {} : { signInWith: item.signInWith }),
+        ...(item.reprompt === true ? { reprompt: true } : {}),
       });
     }
     suggestions.sort(compareSuggestions);
@@ -285,6 +289,8 @@ export class LoginFillService {
       throw new LoginFillServiceError("LOGIN_FILL_NOT_FOUND");
     if (item.revision !== expectedRevision)
       throw new LoginFillServiceError("LOGIN_FILL_ITEM_CHANGED");
+    if (item.reprompt === true && !(this.dependencies.repromptGranted?.(item.id) ?? false))
+      throw new LoginFillServiceError("REPROMPT_REQUIRED");
     let linkedOtpCode: string | undefined;
     // An inline one-time secret on the login itself: the code travels with the fill so the
     // page's next step is already on the clipboard.
@@ -582,6 +588,7 @@ function mapError(error: unknown): LoginFillServiceError {
     code === "LOGIN_FILL_UNAVAILABLE" ||
     code === "LOGIN_FILL_NOT_FOUND" ||
     code === "LOGIN_FILL_ITEM_CHANGED" ||
+    code === "REPROMPT_REQUIRED" ||
     code === "VAULT_LOCKED"
   )
     return new LoginFillServiceError(code);

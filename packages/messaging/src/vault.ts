@@ -6,7 +6,7 @@ import { MESSAGE_VERSION } from "./envelope";
 const challengeId = z.string().check(z.regex(/^[0-9a-f]{32}$/));
 const canonicalKek = z.string().check(z.regex(/^[A-Za-z0-9+/]{43}=$/));
 const lockMinutes = z.int().check(z.nonnegative(), z.maximum(1_440));
-const purpose = z.enum(["setup", "unlock", "change-current", "change-new"]);
+const purpose = z.enum(["setup", "unlock", "change-current", "change-new", "reprompt"]);
 const request = <T extends z.ZodMiniObject>(shape: T) => shape;
 
 export const VaultGetStateRequestSchema = request(
@@ -59,6 +59,17 @@ export const VaultUpdateLockSettingsRequestSchema = request(
   }),
 );
 
+/** Proves the master password again for one item; the grant lasts a few minutes. */
+export const VaultConfirmRepromptRequestSchema = request(
+  z.strictObject({
+    version: z.literal(MESSAGE_VERSION),
+    kind: z.literal("vault.confirmReprompt"),
+    challengeId,
+    keyEncryptionKey: canonicalKek,
+    itemId: z.uuid(),
+  }),
+);
+
 export const VaultRequestSchema = z.discriminatedUnion("kind", [
   VaultGetStateRequestSchema,
   VaultGetKdfChallengeRequestSchema,
@@ -67,6 +78,7 @@ export const VaultRequestSchema = z.discriminatedUnion("kind", [
   VaultLockRequestSchema,
   VaultChangePasswordRequestSchema,
   VaultUpdateLockSettingsRequestSchema,
+  VaultConfirmRepromptRequestSchema,
 ]);
 
 const state = z.enum(["unconfigured", "locked", "unlocked"]);
@@ -135,4 +147,5 @@ export const vaultSenderPolicy = {
   "vault.lock": privileged,
   "vault.changePassword": vaultDocumentOnly,
   "vault.updateLockSettings": privileged,
+  "vault.confirmReprompt": documentBound,
 } satisfies Record<VaultCommandKind, CommandSenderPolicy>;
