@@ -482,6 +482,7 @@ export class SessionService {
     const normalized = {
       autoLockMinutes: normalizePortableAutoLockMinutes(settings.autoLockMinutes),
       lockOnScreenLock: settings.lockOnScreenLock,
+      ...(settings.lockWhenClosed === undefined ? {} : { lockWhenClosed: settings.lockWhenClosed }),
     };
     await this.#runRepositoryOperation((repository, context) =>
       repository.updatePortableSettings(normalized, context),
@@ -509,6 +510,9 @@ export class SessionService {
       settings: {
         autoLockMinutes: normalizePortableAutoLockMinutes(settings.autoLockMinutes),
         lockOnScreenLock: settings.lockOnScreenLock,
+        ...(settings.lockWhenClosed === undefined
+          ? {}
+          : { lockWhenClosed: settings.lockWhenClosed }),
       },
       history: {
         journal: state.journal.map((entry) => ({ ...entry })),
@@ -641,6 +645,9 @@ export class SessionService {
               canonicalJson({
                 autoLockMinutes: normalizePortableAutoLockMinutes(settings.autoLockMinutes),
                 lockOnScreenLock: settings.lockOnScreenLock,
+                ...(settings.lockWhenClosed === undefined
+                  ? {}
+                  : { lockWhenClosed: settings.lockWhenClosed }),
               }),
             ),
           },

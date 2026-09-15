@@ -54,6 +54,8 @@ export const VaultUpdateLockSettingsRequestSchema = request(
     kind: z.literal("vault.updateLockSettings"),
     autoLockMinutes: lockMinutes,
     lockOnScreenLock: z.boolean(),
+    /** Lock as soon as the last ShardPass page closes ("immediately"). */
+    lockWhenClosed: z.optional(z.boolean()),
   }),
 );
 
@@ -74,6 +76,7 @@ export const VaultStateResponseSchema = z.strictObject({
   state,
   autoLockMinutes: lockMinutes,
   lockOnScreenLock: z.boolean(),
+  lockWhenClosed: z.optional(z.boolean()),
   retryAfterMs: z.int().check(z.nonnegative()),
   streamId: z.string().check(z.regex(/^[0-9a-f]{32}$/)),
   sequence: z.int().check(z.positive()),
@@ -117,6 +120,7 @@ export type VaultState = z.infer<typeof state>;
 export type VaultLockSettings = Readonly<{
   autoLockMinutes: z.infer<typeof lockMinutes>;
   lockOnScreenLock: boolean;
+  lockWhenClosed?: boolean | undefined;
 }>;
 export type VaultCommandKind = VaultRequest["kind"];
 

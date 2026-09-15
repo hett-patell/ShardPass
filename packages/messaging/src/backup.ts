@@ -46,6 +46,7 @@ const autoLockMinutes = z.union([
 const settings = z.strictObject({
   autoLockMinutes,
   lockOnScreenLock: z.boolean(),
+  lockWhenClosed: z.optional(z.boolean()),
 });
 const journalEntry = z.strictObject({
   sequence: z.int().check(z.positive(), z.maximum(Number.MAX_SAFE_INTEGER)),

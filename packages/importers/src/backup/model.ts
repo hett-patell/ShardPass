@@ -77,9 +77,12 @@ export function isPortableFolderTree(folders: readonly Folder[]): boolean {
 const PortableSettingsSchema = z.strictObject({
   autoLockMinutes: AutoLockMinutesSchema,
   lockOnScreenLock: z.boolean(),
+  lockWhenClosed: z.optional(z.boolean()),
 });
 const PortableHistorySchema = z.strictObject({
-  journal: z.array(PortableJournalEntrySchema).check(z.maxLength(BACKUP_V2_LIMITS.maxJournalEntries)),
+  journal: z
+    .array(PortableJournalEntrySchema)
+    .check(z.maxLength(BACKUP_V2_LIMITS.maxJournalEntries)),
   tombstones: z.array(PortableTombstoneSchema).check(z.maxLength(BACKUP_V2_LIMITS.maxTombstones)),
 });
 const PortableFoldersSchema = z

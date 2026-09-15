@@ -41,7 +41,7 @@ export class SettingsService {
 
   async update(settings: VaultLockSettings): Promise<VaultLockSettings> {
     if (!isSettings(settings)) throw new RangeError("Invalid lock settings.");
-    await this.storage.set({ [SETTINGS_KEY]: settings });
+    await this.storage.set({ [SETTINGS_KEY]: storable(settings) });
     this.settings = settings;
     return settings;
   }
@@ -50,9 +50,10 @@ export class SettingsService {
     if (!isSettings(settings)) throw new RangeError("Invalid lock settings.");
     if (
       this.settings.autoLockMinutes !== settings.autoLockMinutes ||
-      this.settings.lockOnScreenLock !== settings.lockOnScreenLock
+      this.settings.lockOnScreenLock !== settings.lockOnScreenLock ||
+      (this.settings.lockWhenClosed ?? false) !== (settings.lockWhenClosed ?? false)
     ) {
-      await this.storage.set({ [SETTINGS_KEY]: settings });
+      await this.storage.set({ [SETTINGS_KEY]: storable(settings) });
       this.settings = settings;
     }
     await this.resetAlarm();
@@ -155,14 +156,35 @@ export class SettingsService {
   }
 }
 
+/** The record as written: an absent third setting is left out, never stored as undefined. */
+function storable(settings: VaultLockSettings): {
+  autoLockMinutes: number;
+  lockOnScreenLock: boolean;
+  lockWhenClosed?: boolean;
+} {
+  return {
+    autoLockMinutes: settings.autoLockMinutes,
+    lockOnScreenLock: settings.lockOnScreenLock,
+    ...(settings.lockWhenClosed === undefined ? {} : { lockWhenClosed: settings.lockWhenClosed }),
+  };
+}
+
 function isSettings(value: unknown): value is VaultLockSettings {
   if (typeof value !== "object" || value === null) return false;
-  const candidate = value as { autoLockMinutes?: unknown; lockOnScreenLock?: unknown };
+  const candidate = value as {
+    autoLockMinutes?: unknown;
+    lockOnScreenLock?: unknown;
+    lockWhenClosed?: unknown;
+  };
+  const keys = Object.keys(value);
   return (
     Number.isSafeInteger(candidate.autoLockMinutes) &&
     (candidate.autoLockMinutes as number) >= 0 &&
     (candidate.autoLockMinutes as number) <= 1_440 &&
     typeof candidate.lockOnScreenLock === "boolean" &&
-    Object.keys(value).length === 2
+    (candidate.lockWhenClosed === undefined || typeof candidate.lockWhenClosed === "boolean") &&
+    keys.every(
+      (key) => key === "autoLockMinutes" || key === "lockOnScreenLock" || key === "lockWhenClosed",
+    )
   );
 }

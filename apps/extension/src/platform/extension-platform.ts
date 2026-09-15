@@ -100,4 +100,9 @@ export interface BackgroundExtensionPlatform extends RuntimeExtensionPlatform {
   onVaultStatePort(
     handler: (senderMetadata: unknown, send: (state: unknown) => void) => () => void,
   ): () => void;
+  /**
+   * Runs when the last ShardPass page (popup or vault) has been gone for a moment: the
+   * "lock when ShardPass closes" setting. A short grace covers a popup opening the vault page.
+   */
+  onVaultPagesClosed?(handler: () => void): () => void;
 }

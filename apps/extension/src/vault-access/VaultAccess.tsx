@@ -7,6 +7,7 @@ import {
   VaultKdfChallengeResponseSchema,
   VaultStateResponseSchema,
   VaultStateUnavailableSchema,
+  type VaultLockSettings,
 } from "@shardpass/messaging";
 import { Button, PasswordInput } from "@shardpass/ui";
 
@@ -63,7 +64,10 @@ export function VaultAccess({
   const [weakAllowed, setWeakAllowed] = useState(false);
   const [error, setError] = useState("");
   const [working, setWorking] = useState(false);
-  const [settings, setSettings] = useState({ autoLockMinutes: 15, lockOnScreenLock: true });
+  const [settings, setSettings] = useState<VaultLockSettings>({
+    autoLockMinutes: 15,
+    lockOnScreenLock: true,
+  });
   const [loadingTimedOut, setLoadingTimedOut] = useState(false);
   const [settingsError, setSettingsError] = useState("");
   // Time left on the failed-unlock cooldown the background reported; counts down on screen.
@@ -98,7 +102,7 @@ export function VaultAccess({
   // Optimistic, but honest: the control shows the new value immediately and rolls back with
   // a named reason if the background refuses, instead of silently snapping back on the next
   // state push -- which reads as "the setting doesn't save".
-  async function applyLockSettings(next: { autoLockMinutes: number; lockOnScreenLock: boolean }) {
+  async function applyLockSettings(next: VaultLockSettings) {
     const previous = settings;
     setSettings(next);
     setSettingsError("");
@@ -193,6 +197,9 @@ export function VaultAccess({
       setSettings({
         autoLockMinutes: parsed.data.autoLockMinutes,
         lockOnScreenLock: parsed.data.lockOnScreenLock,
+        ...(parsed.data.lockWhenClosed === undefined
+          ? {}
+          : { lockWhenClosed: parsed.data.lockWhenClosed }),
       });
     };
     const query = async () => {
@@ -414,21 +421,37 @@ export function VaultAccess({
               </p>
             ) : null}
             <label>
-              Auto-lock
+              Lock the vault
               <select
-                value={settings.autoLockMinutes}
+                value={
+                  settings.lockWhenClosed === true
+                    ? "immediately"
+                    : String(settings.autoLockMinutes)
+                }
                 onChange={(event) => {
-                  const autoLockMinutes = Number(event.target.value) as 0 | 5 | 15 | 30 | 60;
-                  void applyLockSettings({ ...settings, autoLockMinutes });
+                  const choice = event.target.value;
+                  if (choice === "immediately") {
+                    void applyLockSettings({ ...settings, lockWhenClosed: true });
+                    return;
+                  }
+                  const autoLockMinutes = Number(choice) as 0 | 5 | 15 | 30 | 60;
+                  void applyLockSettings({ ...settings, autoLockMinutes, lockWhenClosed: false });
                 }}
               >
-                <option value={0}>Off</option>
-                <option value={5}>5 minutes</option>
-                <option value={15}>15 minutes</option>
-                <option value={30}>30 minutes</option>
-                <option value={60}>60 minutes</option>
+                <option value="immediately">When ShardPass closes</option>
+                <option value="5">After 5 minutes</option>
+                <option value="15">After 15 minutes</option>
+                <option value="30">After 30 minutes</option>
+                <option value="60">After 60 minutes</option>
+                <option value="0">Never, until the browser closes</option>
               </select>
             </label>
+            {settings.lockWhenClosed !== true && settings.autoLockMinutes === 0 ? (
+              <p className={styles.weakNote} role="note">
+                Until the browser closes, anyone at this computer can open your vault. Pick a timer
+                unless this device is yours alone and always locked when you step away.
+              </p>
+            ) : null}
             <label>
               <input
                 type="checkbox"

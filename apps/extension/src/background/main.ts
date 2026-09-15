@@ -312,6 +312,10 @@ export function installBackground(
     publisher.publish();
   };
   lockTransition = lockAndPublish;
+  // "Lock when ShardPass closes": the last popup or vault page went away a moment ago.
+  const disposePagesClosed = platform.onVaultPagesClosed?.(() => {
+    if (settings.snapshot().lockWhenClosed === true) void lockAndPublish();
+  });
 
   const awaitReady = async (): Promise<boolean> => {
     await ready;
@@ -493,6 +497,7 @@ export function installBackground(
     runtimeOwner?.clearSessionHandoffs();
     disposeRoot();
     disposePorts();
+    disposePagesClosed?.();
     otpFill.dispose();
     otp.dispose();
     backup.dispose();

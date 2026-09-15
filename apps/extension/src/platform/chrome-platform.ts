@@ -245,6 +245,19 @@ export function createChromePlatform(): BackgroundExtensionPlatform &
   ExtensionPlatform {
   const activePorts = new Set<chrome.runtime.Port>();
   const portDisposers = new Map<chrome.runtime.Port, () => void>();
+  const pagesClosedHandlers = new Set<() => void>();
+  let pagesClosedTimer: ReturnType<typeof setTimeout> | undefined;
+  const PAGES_CLOSED_GRACE_MS = 1_500;
+  const notePortChange = () => {
+    if (pagesClosedTimer !== undefined) clearTimeout(pagesClosedTimer);
+    pagesClosedTimer = undefined;
+    if (activePorts.size > 0 || pagesClosedHandlers.size === 0) return;
+    pagesClosedTimer = setTimeout(() => {
+      pagesClosedTimer = undefined;
+      if (activePorts.size > 0) return;
+      for (const handler of [...pagesClosedHandlers]) handler();
+    }, PAGES_CLOSED_GRACE_MS);
+  };
   return {
     extensionId: chrome.runtime.id,
     localStorage: createChromeStoragePort(chrome.storage.local),
@@ -339,10 +352,18 @@ export function createChromePlatform(): BackgroundExtensionPlatform &
       return () => chrome.storage.onChanged.removeListener(listener);
     },
 
+    onVaultPagesClosed(handler) {
+      pagesClosedHandlers.add(handler);
+      return () => {
+        pagesClosedHandlers.delete(handler);
+      };
+    },
+
     onVaultStatePort(handler) {
       const listener = (port: chrome.runtime.Port) => {
         if (port.name !== VAULT_STATE_PORT) return;
         activePorts.add(port);
+        notePortChange();
         const disposeSubscription = handler(
           port.sender === undefined ? null : rawSenderMetadata(port.sender),
           (state) => port.postMessage(state),
@@ -355,6 +376,7 @@ export function createChromePlatform(): BackgroundExtensionPlatform &
           port.onDisconnect.removeListener(dispose);
           activePorts.delete(port);
           portDisposers.delete(port);
+          notePortChange();
         };
         portDisposers.set(port, dispose);
         port.onDisconnect.addListener(dispose);

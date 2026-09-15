@@ -206,6 +206,44 @@ describe("VaultAccess over the background's state port", () => {
     expect(screen.getByLabelText("Master password")).toHaveValue("still typing this");
   });
 
+  it("offers locking when ShardPass closes, and warns when the vault is left open until the browser closes", async () => {
+    const { platform, ports } = portPlatform();
+    const sent: unknown[] = [];
+    platform.sendMessage.mockImplementation((request: unknown) => {
+      sent.push(request);
+      return Promise.resolve({ version: 1, kind: "vault.ok", state: "unlocked" });
+    });
+    render(<VaultAccess platform={platform} securityControls />);
+    await waitFor(() => expect(ports).toHaveLength(1));
+    ports[0]!.onState(stateMessage("unlocked", "00000000000000000000000000000001", 1));
+    const choice = await screen.findByLabelText("Lock the vault");
+    expect(choice).toHaveValue("15");
+
+    fireEvent.change(choice, { target: { value: "immediately" } });
+    await waitFor(() =>
+      expect(sent).toContainEqual({
+        version: 1,
+        kind: "vault.updateLockSettings",
+        autoLockMinutes: 15,
+        lockOnScreenLock: true,
+        lockWhenClosed: true,
+      }),
+    );
+    expect(screen.queryByRole("note")).toBeNull();
+
+    fireEvent.change(choice, { target: { value: "0" } });
+    await waitFor(() =>
+      expect(sent).toContainEqual({
+        version: 1,
+        kind: "vault.updateLockSettings",
+        autoLockMinutes: 0,
+        lockOnScreenLock: true,
+        lockWhenClosed: false,
+      }),
+    );
+    expect(screen.getByRole("note")).toHaveTextContent(/anyone at this computer/u);
+  });
+
   it("gives up and shows the vault as unavailable only after repeated failed reconnects", async () => {
     const { platform, ports, connectVaultState } = portPlatform();
     const onUnlockedChange = vi.fn();

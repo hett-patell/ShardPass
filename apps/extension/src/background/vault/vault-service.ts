@@ -81,6 +81,9 @@ export class VaultService {
         const requested = {
           autoLockMinutes: request.autoLockMinutes,
           lockOnScreenLock: request.lockOnScreenLock,
+          ...(request.lockWhenClosed === undefined
+            ? {}
+            : { lockWhenClosed: request.lockWhenClosed }),
         };
         const outcome = await this.sessions.updateLockSettings(requested);
         try {

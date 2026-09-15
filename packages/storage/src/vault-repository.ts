@@ -106,6 +106,7 @@ export type CreateManyOutcome =
 export type PortableLockSettings = Readonly<{
   autoLockMinutes: 0 | 5 | 15 | 30 | 60;
   lockOnScreenLock: boolean;
+  lockWhenClosed?: boolean | undefined;
 }>;
 export type PortableHistory = Readonly<{
   journal: readonly ChangeJournalEntry[];
@@ -1982,10 +1983,14 @@ async function replaceMetadataEntry(
 }
 
 function validatePortableSettings(settings: PortableLockSettings): void {
+  const keys = Object.keys(settings);
   if (
     ![0, 5, 15, 30, 60].includes(settings.autoLockMinutes) ||
     typeof settings.lockOnScreenLock !== "boolean" ||
-    Object.keys(settings).length !== 2
+    (settings.lockWhenClosed !== undefined && typeof settings.lockWhenClosed !== "boolean") ||
+    !keys.every(
+      (key) => key === "autoLockMinutes" || key === "lockOnScreenLock" || key === "lockWhenClosed",
+    )
   )
     throw new StorageError("VAULT_INVALID");
 }
