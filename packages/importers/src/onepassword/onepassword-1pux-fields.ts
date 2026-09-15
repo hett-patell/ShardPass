@@ -34,6 +34,8 @@ export type DecodedField = Readonly<{
   text: string;
   /** The parts of an address field, so identities can fill their own columns. */
   address?: Readonly<Record<string, string>>;
+  /** What 1Password derived from an SSH private key: its public key, fingerprint and type. */
+  sshKey?: Readonly<{ publicKey: string; fingerprint: string; keyType: string }>;
 }>;
 
 /** One `details.loginFields` entry: the web form fields 1Password captured. */
@@ -57,7 +59,14 @@ export type SignInWith = Readonly<{
 }>;
 
 const ADDRESS_PARTS = ["street", "city", "state", "zip", "country"] as const;
-const SSO_PROVIDER_KEYS = ["provider", "ssoProvider", "identityProvider", "name", "issuer", "idp"] as const;
+const SSO_PROVIDER_KEYS = [
+  "provider",
+  "ssoProvider",
+  "identityProvider",
+  "name",
+  "issuer",
+  "idp",
+] as const;
 const SIGN_IN_WITH = /(?:sign|log)[\s-]?in[\s-]?with\b/iu;
 
 /** Provider names as people and exports write them, matched loosely. */
@@ -93,7 +102,8 @@ export function decodeField(raw: unknown): DecodedField | undefined {
   const id = asString(raw["id"]).trim();
   const title = asString(raw["title"]).trim() || id;
   const value = raw["value"];
-  if (typeof value === "string") return { id, title, valueKey: "string", kind: "text", text: value };
+  if (typeof value === "string")
+    return { id, title, valueKey: "string", kind: "text", text: value };
   if (!isRecord(value)) return undefined;
   const entry = Object.entries(value)[0];
   if (entry === undefined) return undefined;
@@ -102,15 +112,38 @@ export function decodeField(raw: unknown): DecodedField | undefined {
   return { id, title, valueKey: entry[0], ...decodeValue(entry[0], entry[1]) };
 }
 
-function decodeValue(key: string, payload: unknown): Pick<DecodedField, "kind" | "text" | "address" | "account" | "detail" | "linkedItemUuid"> {
+function decodeValue(
+  key: string,
+  payload: unknown,
+): Pick<
+  DecodedField,
+  "kind" | "text" | "address" | "account" | "detail" | "linkedItemUuid" | "sshKey"
+> {
   if (key === "concealed") return { kind: "hidden", text: asString(payload) };
+  // An SSH key: { privateKey, metadata: { publicKey, fingerprint, keyType } }.
+  if (key === "sshKey") {
+    const record = isRecord(payload) ? payload : {};
+    const metadata = isRecord(record["metadata"]) ? record["metadata"] : {};
+    return {
+      kind: "hidden",
+      text: asString(record["privateKey"]),
+      sshKey: {
+        publicKey: asString(metadata["publicKey"]),
+        fingerprint: asString(metadata["fingerprint"]),
+        keyType: asString(metadata["keyType"]),
+      },
+    };
+  }
   if (key === "totp") return { kind: "totp", text: asString(payload) };
   // 1Password 8 writes "Sign in with" as a field titled "sign in with" whose value key is
   // ssoLogin; older builds used sso. Any key naming SSO is read the same way.
   if (key === "sso" || /sso/iu.test(key)) {
     const account = ssoAccount(payload);
     // 1Password 8 links the field to the provider account's own item ({ item: { itemUuid } }).
-    const linked = isRecord(payload) && isRecord(payload["item"]) ? asString(payload["item"]["itemUuid"]).trim() : "";
+    const linked =
+      isRecord(payload) && isRecord(payload["item"])
+        ? asString(payload["item"]["itemUuid"]).trim()
+        : "";
     return {
       kind: "sso",
       text: ssoProviderName(payload),
@@ -125,19 +158,24 @@ function decodeValue(key: string, payload: unknown): Pick<DecodedField, "kind" |
   // YYYYMM the same three ways.
   if (key === "date" || key === "monthYear") {
     const numeric = numberWithin(payload);
-    if (numeric !== undefined) return { kind: "text", text: key === "date" ? isoDateOf(numeric) : monthYearOf(numeric) };
-    if (typeof payload === "string" && payload.trim() !== "") return { kind: "text", text: payload.trim() };
+    if (numeric !== undefined)
+      return { kind: "text", text: key === "date" ? isoDateOf(numeric) : monthYearOf(numeric) };
+    if (typeof payload === "string" && payload.trim() !== "")
+      return { kind: "text", text: payload.trim() };
   }
   if (key === "address" && isRecord(payload)) return decodeAddress(payload);
   if (key === "email" && isRecord(payload))
     return { kind: "text", text: asString(payload["email_address"]) || asString(payload["email"]) };
   if (typeof payload === "string") return { kind: "text", text: payload };
-  if (typeof payload === "number" && Number.isFinite(payload)) return { kind: "text", text: String(payload) };
+  if (typeof payload === "number" && Number.isFinite(payload))
+    return { kind: "text", text: String(payload) };
   if (typeof payload === "boolean") return { kind: "boolean", text: payload ? "true" : "false" };
   return { kind: "unsupported", text: "", detail: `${key}: ${describePayload(payload)}` };
 }
 
-function decodeAddress(payload: Record<string, unknown>): Pick<DecodedField, "kind" | "text" | "address"> {
+function decodeAddress(
+  payload: Record<string, unknown>,
+): Pick<DecodedField, "kind" | "text" | "address"> {
   const address: Record<string, string> = {};
   for (const part of ADDRESS_PARTS) address[part] = asString(payload[part]).trim();
   const text = ADDRESS_PARTS.map((part) => address[part] ?? "")
@@ -156,7 +194,9 @@ function looksLikePasskey(payload: unknown): boolean {
 
 function attachmentName(payload: unknown): string {
   if (!isRecord(payload)) return "";
-  return asString(payload["fileName"]) || asString(payload["name"]) || asString(payload["documentId"]);
+  return (
+    asString(payload["fileName"]) || asString(payload["name"]) || asString(payload["documentId"])
+  );
 }
 
 /**
@@ -174,7 +214,11 @@ function ssoProviderName(payload: unknown): string {
   // Unknown keys: any string (or nested name) that reads as a provider we list, else the first
   // string that is not an e-mail address.
   const strings = stringsWithin(payload);
-  return strings.find((value) => providerOf(value) !== undefined) ?? strings.find((value) => !value.includes("@")) ?? "";
+  return (
+    strings.find((value) => providerOf(value) !== undefined) ??
+    strings.find((value) => !value.includes("@")) ??
+    ""
+  );
 }
 
 /** The account the provider login is for, when the payload carries an e-mail address. */
@@ -247,7 +291,10 @@ export function detectSignInWith(
     const provider = fromValue ?? fromName;
     return {
       provider: provider ?? "other",
-      name: fromValue !== undefined ? captured.value.trim() : captured.name.trim() || captured.value.trim(),
+      name:
+        fromValue !== undefined
+          ? captured.value.trim()
+          : captured.name.trim() || captured.value.trim(),
     };
   }
   return undefined;
@@ -260,7 +307,8 @@ function resolveProvider(name: string): Pick<SignInWith, "provider" | "name"> {
 /** A number in a payload: the value itself, a digit string, or the first such thing inside an object. */
 function numberWithin(payload: unknown): number | undefined {
   if (typeof payload === "number" && Number.isFinite(payload)) return payload;
-  if (typeof payload === "string" && /^\d{1,12}$/u.test(payload.trim())) return Number(payload.trim());
+  if (typeof payload === "string" && /^\d{1,12}$/u.test(payload.trim()))
+    return Number(payload.trim());
   if (!isRecord(payload)) return undefined;
   for (const value of Object.values(payload)) {
     const found = numberWithin(value);
@@ -273,6 +321,7 @@ function numberWithin(payload: unknown): number | undefined {
 function describePayload(payload: unknown): string {
   if (payload === null) return "null";
   if (Array.isArray(payload)) return `array of ${payload.length}`;
-  if (isRecord(payload)) return `object with keys ${Object.keys(payload).slice(0, 6).join(", ") || "none"}`;
+  if (isRecord(payload))
+    return `object with keys ${Object.keys(payload).slice(0, 6).join(", ") || "none"}`;
   return typeof payload;
 }

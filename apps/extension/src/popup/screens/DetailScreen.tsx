@@ -196,9 +196,15 @@ export function DetailScreen({
             />
           </>
         ) : null}
+        {item.kind === "secret" && item.secretType === "ssh_key" && item.metadata["publicKey"] ? (
+          <TextField label="Public key" value={item.metadata["publicKey"]} onCopy={onCopy} />
+        ) : null}
+        {item.kind === "secret" && item.secretType === "ssh_key" && item.metadata["fingerprint"] ? (
+          <TextField label="Fingerprint" value={item.metadata["fingerprint"]} onCopy={onCopy} />
+        ) : null}
         {item.kind === "secret" ? (
           <SecretField
-            label={item.secretType === "ssh_key" ? "Key" : "Value"}
+            label={item.secretType === "ssh_key" ? "Private key" : "Value"}
             value={item.value}
             onCopy={onCopy}
           />

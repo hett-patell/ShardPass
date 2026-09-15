@@ -9,7 +9,12 @@ import {
   MAX_IDENTITY_NOTES_LENGTH,
   MAX_NOTE_CONTENT_LENGTH,
   MAX_NOTE_NAME_LENGTH,
+  MAX_SECRET_METADATA_VALUE_LENGTH,
+  MAX_SECRET_NAME_LENGTH,
+  MAX_SECRET_NOTES_LENGTH,
+  MAX_SECRET_VALUE_LENGTH,
   NoteItemSchema,
+  SecretItemSchema,
   type CardBrand,
   type LoginCustomField,
   type LoginCustomFieldType,
@@ -26,6 +31,7 @@ const BITWARDEN_TYPE_LOGIN = 1;
 const BITWARDEN_TYPE_NOTE = 2;
 const BITWARDEN_TYPE_CARD = 3;
 const BITWARDEN_TYPE_IDENTITY = 4;
+const BITWARDEN_TYPE_SSH_KEY = 5;
 
 /** Bitwarden `uris[].match` values. Regex has no equivalent and falls back to domain. */
 const URI_MATCH: Record<number, LoginUrlMatchMode> = {
@@ -36,7 +42,12 @@ const URI_MATCH: Record<number, LoginUrlMatchMode> = {
   5: "never",
 };
 /** Bitwarden `fields[].type`: 0 text, 1 hidden, 2 boolean, 3 linked. */
-const FIELD_TYPE: Record<number, LoginCustomFieldType> = { 0: "text", 1: "hidden", 2: "boolean", 3: "linked" };
+const FIELD_TYPE: Record<number, LoginCustomFieldType> = {
+  0: "text",
+  1: "hidden",
+  2: "boolean",
+  3: "linked",
+};
 /** Bitwarden `fields[].linkedId` for logins: 100 username, 101 password. */
 const LINKED_ID: Record<number, "username" | "password"> = { 100: "username", 101: "password" };
 const CARD_BRAND: Record<string, CardBrand> = {
@@ -84,7 +95,10 @@ export function importBitwardenJson(text: string): ImportResult {
   // Bitwarden folders and collections are flat records whose names may carry a path
   // ("Work/Clients").
   const folderIndex = createFolderIndex();
-  const folderIdByBitwardenId = indexNamedRecords(isRecord(root) ? root["folders"] : undefined, folderIndex);
+  const folderIdByBitwardenId = indexNamedRecords(
+    isRecord(root) ? root["folders"] : undefined,
+    folderIndex,
+  );
   const folderIdByCollectionId = indexNamedRecords(
     isRecord(root) ? root["collections"] : undefined,
     folderIndex,
@@ -128,14 +142,19 @@ export function importBitwardenJson(text: string): ImportResult {
         const kept = uris
           .map((entry) =>
             isRecord(entry)
-              ? { uri: asString(entry["uri"]), match: URI_MATCH[asNumber(entry["match"])] ?? "domain" }
+              ? {
+                  uri: asString(entry["uri"]),
+                  match: URI_MATCH[asNumber(entry["match"])] ?? "domain",
+                }
               : { uri: "", match: "domain" as const },
           )
           .filter((entry) => entry.uri.length > 0);
         const totp = asString(login["totp"]);
         const customFields = customFieldsOf(raw["fields"], warnings, label);
         const passwordHistory = passwordHistoryOf(raw["passwordHistory"]);
-        const passkeys = Array.isArray(login["fido2Credentials"]) ? login["fido2Credentials"].length : 0;
+        const passkeys = Array.isArray(login["fido2Credentials"])
+          ? login["fido2Credentials"].length
+          : 0;
         if (passkeys > 0)
           warnings.push(
             `"${label}": ${passkeys === 1 ? "passkey" : `${passkeys} passkeys`} not imported.`,
@@ -184,7 +203,13 @@ export function importBitwardenJson(text: string): ImportResult {
             label,
             warnings,
           ),
-          number: clampText(asString(card["number"]), MAX_CARD_NUMBER_LENGTH, "card number", label, warnings),
+          number: clampText(
+            asString(card["number"]),
+            MAX_CARD_NUMBER_LENGTH,
+            "card number",
+            label,
+            warnings,
+          ),
           expMonth: asString(card["expMonth"]),
           expYear: asString(card["expYear"]),
           cvv: asString(card["code"]),
@@ -219,6 +244,46 @@ export function importBitwardenJson(text: string): ImportResult {
           notes: clampText(notes, MAX_IDENTITY_NOTES_LENGTH, "notes", label, warnings),
         };
         keepIfValid(IdentityItemSchema, candidate, "identity", label, warnings, items);
+        break;
+      }
+      case BITWARDEN_TYPE_SSH_KEY: {
+        const sshKey = isRecord(raw["sshKey"]) ? raw["sshKey"] : {};
+        const privateKey = asString(sshKey["privateKey"]);
+        if (privateKey === "") {
+          warnings.push(`Skipped "${label}": the SSH key has no private key.`);
+          break;
+        }
+        const metadata: Record<string, string> = {};
+        const publicKey = asString(sshKey["publicKey"]).trim();
+        const fingerprint = asString(sshKey["keyFingerprint"]).trim();
+        if (publicKey !== "")
+          metadata["publicKey"] = clampText(
+            publicKey,
+            MAX_SECRET_METADATA_VALUE_LENGTH,
+            "public key",
+            label,
+            warnings,
+          );
+        if (fingerprint !== "")
+          metadata["fingerprint"] = clampText(
+            fingerprint,
+            MAX_SECRET_METADATA_VALUE_LENGTH,
+            "fingerprint",
+            label,
+            warnings,
+          );
+        const keyType = publicKey.split(/\s+/u)[0] ?? "";
+        if (keyType !== "") metadata["keyType"] = keyType;
+        const candidate = {
+          ...base,
+          kind: "secret" as const,
+          name: clampName(rawName, MAX_SECRET_NAME_LENGTH, "Imported item", label, warnings),
+          secretType: "ssh_key" as const,
+          value: clampText(privateKey, MAX_SECRET_VALUE_LENGTH, "private key", label, warnings),
+          metadata,
+          notes: clampText(notes, MAX_SECRET_NOTES_LENGTH, "notes", label, warnings),
+        };
+        keepIfValid(SecretItemSchema, candidate, "secret", label, warnings, items);
         break;
       }
       default:
@@ -324,7 +389,12 @@ function customFieldsOf(raw: unknown, warnings: string[], label: string): LoginC
     fields.push({
       name,
       type,
-      value: type === "boolean" ? (value === true || value === "true" ? "true" : "false") : asString(value),
+      value:
+        type === "boolean"
+          ? value === true || value === "true"
+            ? "true"
+            : "false"
+          : asString(value),
     });
   }
   return fields;

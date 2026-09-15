@@ -61,7 +61,7 @@ export class OnePassword1puxFormatError extends Error {
 }
 
 type LoginKind = "login" | "password" | "router" | "server" | "email";
-type SecretKind = "api" | "license" | "bank" | "database" | "wallet";
+type SecretKind = "api" | "license" | "bank" | "database" | "wallet" | "sshKey";
 type ItemKind = LoginKind | SecretKind | "card" | "identity" | "note" | "record" | "document";
 
 /**
@@ -91,7 +91,8 @@ const CATEGORY_KINDS: Readonly<Record<string, ItemKind>> = {
   "111": "email",
   "112": "api",
   "113": "record",
-  "114": "wallet",
+  "114": "sshKey",
+  "115": "wallet",
 };
 
 /** Which template fields hold the account, the password and the address for each login-like kind. */
@@ -121,6 +122,7 @@ const SECRET_ROUTES: Readonly<
   bank: { type: "other", value: ["accountNo"] },
   database: { type: "other", value: ["password"] },
   wallet: { type: "other", value: ["recoveryPhrase", "seed", "privateKey", "password"] },
+  sshKey: { type: "ssh_key", value: ["private_key", "privateKey"] },
 };
 
 const CARD_BRANDS: Readonly<Record<string, CardBrand>> = {
@@ -506,6 +508,7 @@ function convertItem(
     case "bank":
     case "database":
     case "wallet":
+    case "sshKey":
       emitSecret(parsed, parsed.kind, base, label, warnings, items);
       return;
     case "note":
@@ -857,6 +860,10 @@ function emitSecret(
   const username = capturedLogin(parsed.loginFields, "username");
   if (username !== "") entries.push(["username", username]);
   if (parsed.urls[0] !== undefined) entries.push(["url", parsed.urls[0]]);
+  // What 1Password derived from the key travels with it, under the names the vault shows.
+  if (valueField?.sshKey !== undefined)
+    for (const [key, text] of Object.entries(valueField.sshKey))
+      if (text.trim() !== "") entries.push([key, text.trim()]);
   for (const field of parsed.fields) {
     if (field === valueField || field.text.trim() === "") continue;
     if (

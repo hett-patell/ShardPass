@@ -389,6 +389,43 @@ describe("importOnePassword1pux", () => {
     });
   });
 
+  it("imports an SSH key as a secret with its public key, fingerprint and type", async () => {
+    const { item: secret, warnings } = await importOne({
+      title: "Deploy key",
+      categoryUuid: "114",
+      fields: [
+        {
+          title: "private key",
+          id: "private_key",
+          value: {
+            sshKey: {
+              privateKey:
+                "-----BEGIN OPENSSH PRIVATE KEY-----\nAAAA\n-----END OPENSSH PRIVATE KEY-----\n",
+              metadata: {
+                privateKey:
+                  "-----BEGIN OPENSSH PRIVATE KEY-----\nAAAA\n-----END OPENSSH PRIVATE KEY-----\n",
+                publicKey: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDummy deploy",
+                fingerprint: "SHA256:abc",
+                keyType: "ed25519",
+              },
+            },
+          },
+        },
+      ],
+    });
+    expect(warnings).toEqual([]);
+    expect(secret).toMatchObject({
+      kind: "secret",
+      secretType: "ssh_key",
+      value: "-----BEGIN OPENSSH PRIVATE KEY-----\nAAAA\n-----END OPENSSH PRIVATE KEY-----\n",
+      metadata: {
+        publicKey: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDummy deploy",
+        fingerprint: "SHA256:abc",
+        keyType: "ed25519",
+      },
+    });
+  });
+
   it("imports an API credential as a secret whose details are its metadata", async () => {
     const { item: secret, warnings } = await importOne({
       title: "Weather API",

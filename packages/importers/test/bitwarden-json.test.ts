@@ -148,9 +148,28 @@ describe("importBitwardenJson extras", () => {
           { id: "f-home", name: "Home" },
         ],
         items: [
-          { id: "i1", type: 1, name: "Client portal", folderId: "f-work", login: { username: "a", password: "b", uris: [] } },
-          { id: "i2", type: 2, name: "Wifi", folderId: "f-home", notes: "pass", secureNote: { type: 0 } },
-          { id: "i3", type: 1, name: "Loose", folderId: null, login: { username: "c", password: "d", uris: [] } },
+          {
+            id: "i1",
+            type: 1,
+            name: "Client portal",
+            folderId: "f-work",
+            login: { username: "a", password: "b", uris: [] },
+          },
+          {
+            id: "i2",
+            type: 2,
+            name: "Wifi",
+            folderId: "f-home",
+            notes: "pass",
+            secureNote: { type: 0 },
+          },
+          {
+            id: "i3",
+            type: 1,
+            name: "Loose",
+            folderId: null,
+            login: { username: "c", password: "d", uris: [] },
+          },
         ],
       }),
     );
@@ -207,15 +226,41 @@ describe("importBitwardenJson extras", () => {
         ],
         folders: [{ id: "f-mine", name: "Mine" }],
         items: [
-          { id: "i1", type: 1, name: "Router", folderId: null, collectionIds: ["c-eng"], login: { username: "a", password: "b", uris: [] } },
-          { id: "i2", type: 1, name: "Pager", folderId: "f-mine", collectionIds: ["c-ops"], login: { username: "c", password: "d", uris: [] } },
-          { id: "i3", type: 1, name: "Loose", folderId: null, collectionIds: [], login: { username: "e", password: "f", uris: [] } },
+          {
+            id: "i1",
+            type: 1,
+            name: "Router",
+            folderId: null,
+            collectionIds: ["c-eng"],
+            login: { username: "a", password: "b", uris: [] },
+          },
+          {
+            id: "i2",
+            type: 1,
+            name: "Pager",
+            folderId: "f-mine",
+            collectionIds: ["c-ops"],
+            login: { username: "c", password: "d", uris: [] },
+          },
+          {
+            id: "i3",
+            type: 1,
+            name: "Loose",
+            folderId: null,
+            collectionIds: [],
+            login: { username: "e", password: "f", uris: [] },
+          },
         ],
       }),
     );
     expect(result.warnings).toHaveLength(0);
     const folders = result.folders ?? [];
-    expect(folders.map((folder) => folder.name).sort()).toEqual(["Engineering", "Infra", "Mine", "Ops"]);
+    expect(folders.map((folder) => folder.name).sort()).toEqual([
+      "Engineering",
+      "Infra",
+      "Mine",
+      "Ops",
+    ]);
     const infra = folders.find((folder) => folder.name === "Infra")!;
     expect(infra.parentId).toBe(folders.find((folder) => folder.name === "Engineering")?.id);
     expect(result.items[0]?.folderId).toBe(infra.id);
@@ -249,10 +294,31 @@ describe("importBitwardenJson extras", () => {
     const result = importBitwardenJson(
       JSON.stringify({
         items: [
-          { type: 1, name: "URI", login: { username: "u", password: "p", uris: [], totp: "otpauth://totp/URI:u?secret=JBSWY3DPEHPK3PXP&issuer=URI" } },
-          { type: 1, name: "Bare", login: { username: "u", password: "p", uris: [], totp: "jbsw y3dp ehpk 3pxp" } },
-          { type: 1, name: "Steam", login: { username: "u", password: "p", uris: [], totp: "steam://JBSWY3DPEHPK3PXP" } },
-          { type: 1, name: "Junk", login: { username: "u", password: "p", uris: [], totp: "not-a-valid-secret-1" } },
+          {
+            type: 1,
+            name: "URI",
+            login: {
+              username: "u",
+              password: "p",
+              uris: [],
+              totp: "otpauth://totp/URI:u?secret=JBSWY3DPEHPK3PXP&issuer=URI",
+            },
+          },
+          {
+            type: 1,
+            name: "Bare",
+            login: { username: "u", password: "p", uris: [], totp: "jbsw y3dp ehpk 3pxp" },
+          },
+          {
+            type: 1,
+            name: "Steam",
+            login: { username: "u", password: "p", uris: [], totp: "steam://JBSWY3DPEHPK3PXP" },
+          },
+          {
+            type: 1,
+            name: "Junk",
+            login: { username: "u", password: "p", uris: [], totp: "not-a-valid-secret-1" },
+          },
         ],
       }),
     );
@@ -263,14 +329,25 @@ describe("importBitwardenJson extras", () => {
       "steam://JBSWY3DPEHPK3PXP",
       undefined,
     ]);
-    expect(result.warnings).toEqual(['"Junk": the one-time-code secret could not be read and was left out.']);
+    expect(result.warnings).toEqual([
+      '"Junk": the one-time-code secret could not be read and was left out.',
+    ]);
   });
 
   it("bounds custom fields and URLs to the schema, naming what was dropped", () => {
-    const fields = Array.from({ length: 40 }, (_, index) => ({ name: `f${index}`, type: 0, value: "v" }));
-    const uris = Array.from({ length: 20 }, (_, index) => ({ uri: `https://s${index}.example`, match: 3 }));
+    const fields = Array.from({ length: 40 }, (_, index) => ({
+      name: `f${index}`,
+      type: 0,
+      value: "v",
+    }));
+    const uris = Array.from({ length: 20 }, (_, index) => ({
+      uri: `https://s${index}.example`,
+      match: 3,
+    }));
     const result = importBitwardenJson(
-      JSON.stringify({ items: [{ type: 1, name: "Big", login: { username: "u", password: "p", uris }, fields }] }),
+      JSON.stringify({
+        items: [{ type: 1, name: "Big", login: { username: "u", password: "p", uris }, fields }],
+      }),
     );
     const item = result.items[0];
     if (item?.kind !== "login") throw new Error("expected login");
@@ -285,9 +362,52 @@ describe("importBitwardenJson extras", () => {
 
   it("names the failing field instead of calling the whole item invalid", () => {
     const result = importBitwardenJson(
-      JSON.stringify({ items: [{ type: 3, name: "Card", card: { number: "4111", expMonth: "123" } }] }),
+      JSON.stringify({
+        items: [{ type: 3, name: "Card", card: { number: "4111", expMonth: "123" } }],
+      }),
     );
     expect(result.items).toHaveLength(0);
-    expect(result.warnings).toEqual(['Skipped "Card": invalid card item (expMonth did not pass validation).']);
+    expect(result.warnings).toEqual([
+      'Skipped "Card": invalid card item (expMonth did not pass validation).',
+    ]);
+  });
+});
+
+describe("importBitwardenJson SSH keys", () => {
+  it("imports a type-5 item as an SSH key secret with its public key and fingerprint", () => {
+    const result = importBitwardenJson(
+      JSON.stringify({
+        encrypted: false,
+        folders: [],
+        items: [
+          {
+            id: "1",
+            type: 5,
+            name: "Deploy key",
+            notes: "for CI",
+            favorite: false,
+            sshKey: {
+              privateKey:
+                "-----BEGIN OPENSSH PRIVATE KEY-----\nAAAA\n-----END OPENSSH PRIVATE KEY-----\n",
+              publicKey: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDummy",
+              keyFingerprint: "SHA256:abc",
+            },
+          },
+        ],
+      }),
+    );
+    expect(result.warnings).toEqual([]);
+    expect(result.items[0]).toMatchObject({
+      kind: "secret",
+      secretType: "ssh_key",
+      name: "Deploy key",
+      value: "-----BEGIN OPENSSH PRIVATE KEY-----\nAAAA\n-----END OPENSSH PRIVATE KEY-----\n",
+      metadata: {
+        publicKey: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDummy",
+        fingerprint: "SHA256:abc",
+        keyType: "ssh-ed25519",
+      },
+      notes: "for CI",
+    });
   });
 });

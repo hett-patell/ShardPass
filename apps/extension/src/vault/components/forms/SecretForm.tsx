@@ -8,9 +8,10 @@ import {
   SecretItemSchema,
   type SecretItem,
 } from "@shardpass/domain";
+import { generateSshKey, inspectSshPrivateKey, type SshKeyInfo } from "@shardpass/crypto";
 import { Button, Field, IconButton } from "@shardpass/ui";
 import { Plus, X } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import type { ExtensionPlatform } from "../../../platform/extension-platform";
 import { formatTags, newItemMetadata, parseTags, schemaErrors } from "../../item-support";
@@ -54,17 +55,27 @@ const secretTypeOptions: readonly { value: SecretItem["secretType"]; label: stri
   { value: "other", label: "Other" },
 ];
 
+/** Metadata the form derives from an SSH private key itself; never typed by hand. */
+const SSH_MANAGED_KEYS = ["publicKey", "fingerprint", "keyType"] as const;
+const INSPECT_SETTLE_MS = 150;
+
 function initialValue(item?: SecretItem): FormValue {
   return {
     name: item?.name ?? "",
     secretType: item?.secretType ?? "api_key",
     value: item?.value ?? "",
-    metadata: Object.entries(item?.metadata ?? {}).map(([key, value]) => ({ key, value })),
+    metadata: Object.entries(item?.metadata ?? {})
+      .filter(([key]) => item?.secretType !== "ssh_key" || !isManagedKey(key))
+      .map(([key, value]) => ({ key, value })),
     notes: item?.notes ?? "",
     favorite: item?.favorite ?? false,
     reprompt: item?.reprompt ?? false,
     tags: formatTags(item?.tags ?? []),
   };
+}
+
+function isManagedKey(key: string): key is (typeof SSH_MANAGED_KEYS)[number] {
+  return (SSH_MANAGED_KEYS as readonly string[]).includes(key);
 }
 
 function metadataRecord(rows: readonly MetadataRow[]): Record<string, string> {
@@ -81,6 +92,68 @@ export function SecretForm({ item, platform, onSaved, onCancel }: SecretFormProp
   const [value, setValue] = useState<FormValue>(() => initialValue(item));
   const [errors, setErrors] = useState<Errors>({});
   const [submitting, setSubmitting] = useState(false);
+  // What the private key says about itself; "unreadable" when it is not a key this vault can read.
+  const [sshInfo, setSshInfo] = useState<SshKeyInfo | "unreadable" | null>(null);
+  const [sshKind, setSshKind] = useState<"ed25519" | "rsa">("ed25519");
+  const [sshComment, setSshComment] = useState("");
+  const [generating, setGenerating] = useState(false);
+  const isSshKey = value.secretType === "ssh_key";
+  // The stored public key and fingerprint, kept when the pasted key cannot be read again
+  // (a passphrase-protected key, say).
+  const storedSsh = item?.secretType === "ssh_key" ? item.metadata : {};
+
+  useEffect(() => {
+    if (!isSshKey || value.value.trim() === "") {
+      setSshInfo(null);
+      return;
+    }
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      void inspectSshPrivateKey(value.value).then((info) => {
+        if (!cancelled) setSshInfo(info ?? "unreadable");
+      });
+    }, INSPECT_SETTLE_MS);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [isSshKey, value.value]);
+
+  /** The public key, fingerprint and type the item will carry, from the key or what was stored. */
+  const managedMetadata = (): Record<string, string> => {
+    const managed: Record<string, string> = {};
+    const readable = sshInfo !== null && sshInfo !== "unreadable" && sshInfo.keyType !== "";
+    for (const key of SSH_MANAGED_KEYS) {
+      const derived = readable ? sshInfo[key] : "";
+      const stored = storedSsh[key] ?? "";
+      const chosen = derived !== "" ? derived : value.value === item?.value ? stored : "";
+      if (chosen !== "") managed[key] = chosen;
+    }
+    return managed;
+  };
+
+  const generate = async () => {
+    setGenerating(true);
+    try {
+      const generated = await generateSshKey(sshKind, sshComment.trim());
+      setValue((current) => ({
+        ...current,
+        value: generated.privateKey,
+        name: current.name.trim() === "" ? `SSH key (${generated.keyType})` : current.name,
+      }));
+      setSshInfo({
+        keyType: generated.keyType,
+        publicKey: generated.publicKey,
+        fingerprint: generated.fingerprint,
+        comment: sshComment.trim(),
+        encrypted: false,
+      });
+    } catch {
+      setErrors((current) => ({ ...current, value: "The key could not be generated." }));
+    } finally {
+      setGenerating(false);
+    }
+  };
 
   const updateRow = (index: number, patch: Partial<MetadataRow>) => {
     setValue((current) => ({
@@ -114,7 +187,9 @@ export function SecretForm({ item, platform, onSaved, onCancel }: SecretFormProp
       name,
       secretType: value.secretType,
       value: value.value,
-      metadata: metadataRecord(value.metadata),
+      metadata: isSshKey
+        ? { ...metadataRecord(value.metadata), ...managedMetadata() }
+        : metadataRecord(value.metadata),
       notes: value.notes,
       favorite: value.favorite,
       reprompt: value.reprompt ? true : undefined,
@@ -197,9 +272,46 @@ export function SecretForm({ item, platform, onSaved, onCancel }: SecretFormProp
         </select>
       </div>
 
+      {isSshKey ? (
+        <div className={styles.field}>
+          <span className={styles.label}>New key</span>
+          <div className={styles.listRow}>
+            <select
+              className={styles.select}
+              aria-label="Key algorithm"
+              value={sshKind}
+              onChange={(event) => setSshKind(event.target.value as "ed25519" | "rsa")}
+            >
+              <option value="ed25519">Ed25519 (recommended)</option>
+              <option value="rsa">RSA 4096</option>
+            </select>
+            <input
+              className={styles.textInput}
+              placeholder="Comment (optional)"
+              aria-label="Key comment"
+              autoComplete="off"
+              value={sshComment}
+              onChange={(event) => setSshComment(event.target.value)}
+            />
+            <Button
+              type="button"
+              variant="secondary"
+              loading={generating}
+              onClick={() => void generate()}
+            >
+              Generate key
+            </Button>
+          </div>
+          <p className={styles.help}>
+            Made on this device with the browser's own cryptography; the private key never leaves
+            the vault. Paste an existing OpenSSH, PEM or PuTTY key below instead, if you have one.
+          </p>
+        </div>
+      ) : null}
+
       <div className={styles.field}>
         <label className={styles.label} htmlFor="secret-value">
-          Value
+          {isSshKey ? "Private key" : "Value"}
         </label>
         <textarea
           id="secret-value"
@@ -217,6 +329,40 @@ export function SecretForm({ item, platform, onSaved, onCancel }: SecretFormProp
           </p>
         ) : null}
       </div>
+
+      {isSshKey && value.value.trim() !== "" ? (
+        <div className={styles.field} aria-live="polite">
+          {sshInfo === null ? (
+            <p className={styles.help}>Reading the key…</p>
+          ) : sshInfo === "unreadable" ? (
+            <p className={styles.help}>
+              This is not a private key ShardPass can read (OpenSSH, PKCS#8, PEM RSA or EC, PuTTY).
+              It is stored as pasted.
+            </p>
+          ) : sshInfo.keyType === "" ? (
+            <p className={styles.help}>
+              This key is passphrase-protected, so its public key cannot be derived here. It is
+              stored as pasted.
+            </p>
+          ) : (
+            <>
+              <label className={styles.label} htmlFor="secret-public-key">
+                Public key
+              </label>
+              <textarea
+                id="secret-public-key"
+                className={styles.textarea}
+                readOnly
+                value={sshInfo.publicKey}
+                spellCheck={false}
+              />
+              <p className={styles.help}>
+                {sshInfo.keyType} · {sshInfo.fingerprint}
+              </p>
+            </>
+          )}
+        </div>
+      ) : null}
 
       <div className={styles.field}>
         <span className={styles.label}>Metadata</span>

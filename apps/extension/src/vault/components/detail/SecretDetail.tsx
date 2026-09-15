@@ -37,7 +37,18 @@ export function SecretDetail({ item, platform, folders, onUpdate, onDeleted }: S
     );
   }
 
-  const metadataEntries = Object.entries(item.metadata);
+  const ssh = item.secretType === "ssh_key";
+  const SSH_LABELS: Record<string, string> = {
+    publicKey: "Public key",
+    fingerprint: "Fingerprint",
+    keyType: "Key type",
+  };
+  const sshEntries = ssh
+    ? Object.entries(item.metadata).filter(([key]) => Object.hasOwn(SSH_LABELS, key))
+    : [];
+  const metadataEntries = Object.entries(item.metadata).filter(
+    ([key]) => !ssh || !Object.hasOwn(SSH_LABELS, key),
+  );
 
   return (
     <div className={styles.detail}>
@@ -56,7 +67,21 @@ export function SecretDetail({ item, platform, folders, onUpdate, onDeleted }: S
         ))}
       </div>
 
-      <RevealField label="Value" value={item.value} />
+      {sshEntries.length > 0 ? (
+        <div className={styles.fieldGroup}>
+          <div className={styles.table}>
+            {sshEntries.map(([key, value]) => (
+              <div key={key} className={styles.tableRow}>
+                <span className={styles.tableLabel}>{SSH_LABELS[key]}</span>
+                <span className={styles.tableValue}>{value}</span>
+                <CopyButton label={`Copy ${SSH_LABELS[key]?.toLowerCase() ?? key}`} value={value} />
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      <RevealField label={ssh ? "Private key" : "Value"} value={item.value} />
 
       {metadataEntries.length > 0 ? (
         <div className={styles.fieldGroup}>
