@@ -139,6 +139,7 @@ export function createOtpFillController(
     };
     owner = candidate;
     host = createPickerHost(input, {
+      slot: "otp-chip",
       positionToAnchor: true,
       fit: "content",
       content: <OtpTrigger onActivate={() => void openPicker(candidate)} />,
@@ -175,6 +176,7 @@ export function createOtpFillController(
     closeHost();
     if (!owns(candidate)) return;
     host = createPickerHost(candidate.input, {
+      slot: "otp-chip",
       positionToAnchor: true,
       fit: "anchor",
       onRequestClose: () => invalidate(true),
@@ -182,7 +184,9 @@ export function createOtpFillController(
     });
     // Shown codes tick down each second and are fetched again when one runs out.
     if (state === "ready" && suggestions.some((item) => item.preview !== undefined)) {
-      const soonest = Math.min(...suggestions.map((item) => item.preview?.expiresAt ?? Number.POSITIVE_INFINITY));
+      const soonest = Math.min(
+        ...suggestions.map((item) => item.preview?.expiresAt ?? Number.POSITIVE_INFINITY),
+      );
       const tick = () => {
         refreshTimer = null;
         if (host === null || host.status !== "open" || !owns(candidate)) return;
@@ -305,7 +309,8 @@ export function createOtpFillController(
     start() {
       if (started || disposed) return;
       started = true;
-      discovery.start();
+      // Only the focused field is ever asked about (revalidateFocusedField); the discovery's
+      // document-wide scan would cost layout work on every mutation for nothing.
       options.document.addEventListener("focusin", onFocusIn, true);
       options.window.addEventListener("pagehide", onPageInvalidated, { once: true });
       options.window.addEventListener("popstate", onPageInvalidated);

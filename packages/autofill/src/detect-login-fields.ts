@@ -60,12 +60,32 @@ function isVisible(input: HTMLInputElement): boolean {
   return style.display !== "none" && style.visibility !== "hidden";
 }
 
+/**
+ * Without a <form>, the password's own wrapper rarely holds the username: single-page apps
+ * put each field in a div of its own. Climb a few levels to the nearest ancestor that also
+ * holds another text-like field, and stop at the document otherwise.
+ */
+function formlessContainerOf(
+  passwordField: HTMLInputElement,
+  isPassword: (input: HTMLInputElement) => boolean,
+): ParentNode {
+  let node: HTMLElement | null = passwordField.parentElement;
+  for (let depth = 0; node !== null && depth < 6; depth += 1) {
+    const holdsAnother = Array.from(node.querySelectorAll<HTMLInputElement>("input")).some(
+      (input) => input !== passwordField && !isPassword(input) && isTextLike(input),
+    );
+    if (holdsAnother) return node;
+    node = node.parentElement;
+  }
+  return passwordField.parentElement ?? passwordField.ownerDocument;
+}
+
 function findUsernameField(
   passwordField: HTMLInputElement,
   isPassword: (input: HTMLInputElement) => boolean,
 ): HTMLInputElement | null {
   const form = passwordField.closest("form");
-  const container = form ?? passwordField.parentElement ?? passwordField.ownerDocument;
+  const container = form ?? formlessContainerOf(passwordField, isPassword);
   const all = Array.from(container.querySelectorAll<HTMLInputElement>("input"));
   const others = all.filter((input) => !isPassword(input));
   const preceding = all

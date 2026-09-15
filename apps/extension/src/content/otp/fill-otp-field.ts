@@ -106,6 +106,10 @@ export function fillOtpField(options: FillOtpFieldOptions): OtpFillPrimitiveResu
   // A segmented widget takes one character per box, each focused and told about its input
   // the way typing would, so the widget's own "advance to the next box" logic runs.
   const group = segmentedGroupOf(options.input);
+  // Fewer boxes than digits is not this code's widget: nothing is written, and the caller
+  // falls back to copying the code.
+  if (group !== null && group.length < options.code.length)
+    return { status: "verification-failed" };
   const targets: Array<Readonly<{ box: HTMLInputElement; value: string }>> =
     group === null
       ? [{ box: options.input, value: options.code }]

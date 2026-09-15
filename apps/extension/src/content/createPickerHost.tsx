@@ -20,7 +20,7 @@ export interface PickerHandle {
  * What a host is for. Hosts in different slots coexist -- a save banner above a login chip, a
  * passkey prompt over both -- while a new host in an occupied slot replaces the one there.
  */
-export type PickerSlot = "chip" | "banner" | "prompt" | "notice" | "signin";
+export type PickerSlot = "chip" | "otp-chip" | "banner" | "prompt" | "notice" | "signin";
 
 interface PickerRecord {
   readonly handle: PickerHandle;
@@ -230,6 +230,9 @@ export function createPickerHost(
     else requestClose();
   }
 
+  // A detached anchor (the page re-rendered its form) takes the host with it. Only the
+  // anchor's own ancestor chain is watched, child lists only: that is where a removal
+  // happens, and it costs nothing while the rest of the page mutates.
   const anchorObserver = new MutationObserver(() => {
     if (!anchor.isConnected || !host.isConnected) {
       close();
@@ -259,7 +262,10 @@ export function createPickerHost(
     resizeObserver?.observe(anchor);
     resizeObserver?.observe(ownerDocument.documentElement);
   }
-  anchorObserver.observe(ownerDocument, { childList: true, subtree: true });
+
+  for (let node: Node | null = anchor.parentNode; node !== null; node = node.parentNode) {
+    anchorObserver.observe(node, { childList: true });
+  }
 
   flushSync(() => {
     root?.render(

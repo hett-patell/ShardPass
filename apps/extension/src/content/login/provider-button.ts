@@ -16,7 +16,8 @@ const PROVIDER_WORDS: Readonly<Record<SignInProvider, RegExp | null>> = {
 const PROVIDER_HREF: Readonly<Record<SignInProvider, RegExp | null>> = {
   google: /accounts\.google\.com|\/(?:auth|oauth|login|signin)\/google|provider=google/iu,
   apple: /appleid\.apple\.com|\/(?:auth|oauth|login|signin)\/apple|provider=apple/iu,
-  microsoft: /login\.microsoftonline\.com|login\.live\.com|\/(?:auth|oauth|login|signin)\/(?:microsoft|azure)/iu,
+  microsoft:
+    /login\.microsoftonline\.com|login\.live\.com|\/(?:auth|oauth|login|signin)\/(?:microsoft|azure)/iu,
   github: /github\.com\/login\/oauth|\/(?:auth|oauth|login|signin)\/github/iu,
   facebook: /facebook\.com\/(?:v[\d.]+\/)?dialog\/oauth|\/(?:auth|oauth|login|signin)\/facebook/iu,
   twitter: /\/(?:auth|oauth|login|signin)\/(?:twitter|x)\b/iu,
@@ -58,11 +59,14 @@ export function findProviderButton(root: ParentNode, provider: SignInProvider): 
   const href = PROVIDER_HREF[provider];
   let fallback: HTMLElement | null = null;
   for (const element of Array.from(root.querySelectorAll<HTMLElement>(CANDIDATES))) {
-    if (element.getClientRects().length === 0 || element.closest("shardpass-picker-host") !== null) continue;
+    if (element.getClientRects().length === 0 || element.closest("shardpass-picker-host") !== null)
+      continue;
     const text = textOf(element);
     const link = element.getAttribute("href") ?? "";
     if (words.test(text) && ACTION_WORDS.test(text)) return element;
-    if (fallback === null && (words.test(text) || (href !== null && href.test(link)))) fallback = element;
+    // A link to the provider's OAuth endpoint is the button even when its text is only a logo.
+    // A bare mention of the provider ("Google Privacy Policy", "Get it on Google Play") is not.
+    if (fallback === null && href !== null && href.test(link)) fallback = element;
   }
   return fallback;
 }

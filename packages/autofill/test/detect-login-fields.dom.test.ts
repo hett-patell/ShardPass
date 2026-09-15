@@ -21,6 +21,20 @@ describe("detectLoginFields", () => {
     expect(results[0]?.form).not.toBeNull();
   });
 
+  it("finds the username on a form-less page where each field sits in its own wrapper", () => {
+    document.body.innerHTML = `
+      <div class="card">
+        <div class="field"><label>Email</label><input type="email" /></div>
+        <div class="field"><label>Password</label><input type="password" /></div>
+        <button type="button">Sign in</button>
+      </div>
+    `;
+    const results = detectLoginFields(document);
+    expect(results).toHaveLength(1);
+    expect(results[0]?.form).toBeNull();
+    expect(results[0]?.usernameField?.type).toBe("email");
+  });
+
   it("detects password field without username", () => {
     document.body.innerHTML = `<input type="password" name="pwd" />`;
     const results = detectLoginFields(document);

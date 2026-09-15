@@ -55,7 +55,9 @@ function loginForm(): Readonly<{
 
 /** Requests the handler leaves unanswered get a plain "nothing held" or an acknowledgement. */
 function platform(
-  handler: (request: LoginFillRequest) => LoginFillResponse | Promise<LoginFillResponse> | undefined,
+  handler: (
+    request: LoginFillRequest,
+  ) => LoginFillResponse | Promise<LoginFillResponse> | undefined,
 ): LoginFillContentPlatform & { openVaultPage: ReturnType<typeof vi.fn> } {
   return {
     extensionId: "extension-test",
@@ -141,7 +143,9 @@ describe("Save login prompt", () => {
       username: "new-user@example.test",
       password: "correct-horse",
     });
-    expect(banner(roots).getByRole("region", { name: "ShardPass save login prompt" })).toBeVisible();
+    expect(
+      banner(roots).getByRole("region", { name: "ShardPass save login prompt" }),
+    ).toBeVisible();
     expect(banner(roots).getByText("new-user@example.test")).toBeVisible();
     expect(document.activeElement?.localName).not.toBe("shardpass-picker-host");
 
@@ -168,7 +172,12 @@ describe("Save login prompt", () => {
       if (request.kind === "login.saveOffer")
         return { version: 1, kind: "login.saveOfferResult", offerId, existing: "none" };
       if (request.kind === "login.saveConfirm")
-        return { version: 1, kind: "login.saveResult", itemId: "018f47a6-7d11-7c2f-8bd9-a1d37f147a21", saved: "created" };
+        return {
+          version: 1,
+          kind: "login.saveResult",
+          itemId: "018f47a6-7d11-7c2f-8bd9-a1d37f147a21",
+          saved: "created",
+        };
       return undefined;
     });
     start(candidate);
@@ -210,13 +219,20 @@ describe("Save login prompt", () => {
           existingName: "Existing",
         };
       if (request.kind === "login.saveConfirm")
-        return { version: 1, kind: "login.saveResult", itemId: "018f47a6-7d11-7c2f-8bd9-a1d37f147a20", saved: "updated" };
+        return {
+          version: 1,
+          kind: "login.saveResult",
+          itemId: "018f47a6-7d11-7c2f-8bd9-a1d37f147a20",
+          saved: "updated",
+        };
       return undefined;
     });
     start(candidate);
 
     await submitAndFlush(form);
-    expect(banner(roots).getByRole("heading", { name: "Update password for Existing?" })).toBeVisible();
+    expect(
+      banner(roots).getByRole("heading", { name: "Update password for Existing?" }),
+    ).toBeVisible();
     await act(async () => {
       fireEvent.click(banner(roots).getByRole("button", { name: "Update password" }));
       await Promise.resolve();
@@ -296,9 +312,42 @@ describe("Save login prompt", () => {
     start(candidate);
     await flush();
 
-    expect(banner(roots).getByRole("heading", { name: "Update password for Example?" })).toBeVisible();
+    expect(
+      banner(roots).getByRole("heading", { name: "Update password for Example?" }),
+    ).toBeVisible();
     expect(banner(roots).getByText("alice@example.test")).toBeVisible();
     expect(banner(roots).getByText("accounts.example.test")).toBeVisible();
+  });
+
+  it("ignores clicks on the form's other buttons, so the real submit is still offered", async () => {
+    captureClosedRoots();
+    const { form, username, password } = loginForm();
+    const reveal = document.createElement("button");
+    reveal.type = "button";
+    reveal.textContent = "Show password";
+    form.append(reveal);
+    username.value = "alice@example.test";
+    password.value = "half-typ";
+    const candidate = platform((request) => {
+      if (request.kind === "login.saveOffer")
+        return { version: 1, kind: "login.saveOfferResult", offerId, existing: "none" };
+      return undefined;
+    });
+    start(candidate);
+
+    await act(async () => {
+      fireEvent.click(reveal);
+      await Promise.resolve();
+    });
+    expect(offers(candidate)).toHaveLength(0);
+
+    password.value = "half-typed-now-whole";
+    await act(async () => {
+      fireEvent.submit(form);
+      await Promise.resolve();
+    });
+    expect(offers(candidate)).toHaveLength(1);
+    expect(offers(candidate)[0]).toMatchObject({ password: "half-typed-now-whole" });
   });
 
   it("arms on the submit control's click and on Enter in the password field, offering each credential once", async () => {
@@ -323,7 +372,10 @@ describe("Save login prompt", () => {
       await Promise.resolve();
     });
     expect(offers(candidate)).toHaveLength(1);
-    expect(offers(candidate)[0]).toMatchObject({ username: "alice@example.test", password: "first-try" });
+    expect(offers(candidate)[0]).toMatchObject({
+      username: "alice@example.test",
+      password: "first-try",
+    });
 
     password.value = "second-try";
     await act(async () => {
@@ -347,7 +399,8 @@ describe("Save login prompt", () => {
     `;
     for (const form of document.querySelectorAll("form"))
       form.addEventListener("submit", (event) => event.preventDefault());
-    const field = (name: string) => document.querySelector<HTMLInputElement>(`input[name="${name}"]`)!;
+    const field = (name: string) =>
+      document.querySelector<HTMLInputElement>(`input[name="${name}"]`)!;
     const candidate = platform((request) => {
       if (request.kind === "login.saveOffer")
         return { version: 1, kind: "login.saveOfferResult", offerId, existing: "none" };
@@ -392,7 +445,9 @@ describe("Save login prompt", () => {
     start(candidate);
 
     await submitAndFlush(form);
-    expect(banner(roots).getByRole("heading", { name: "Unlock ShardPass to save this login" })).toBeVisible();
+    expect(
+      banner(roots).getByRole("heading", { name: "Unlock ShardPass to save this login" }),
+    ).toBeVisible();
     expect(banner(roots).queryByRole("button", { name: /Save|Update/u })).toBeNull();
     expect(banner(roots).getByRole("button", { name: "Not now" })).toBeVisible();
 

@@ -93,9 +93,12 @@ function SaveLoginBanner(
   );
 }
 
+/** A control that submits: a button without a type is one, a "Show password" type=button is not. */
 function isSubmitControl(element: Element): element is HTMLButtonElement | HTMLInputElement {
-  if (element instanceof HTMLButtonElement) return true;
-  return element instanceof HTMLInputElement && (element.type === "submit" || element.type === "image");
+  if (element instanceof HTMLButtonElement) return element.type === "submit";
+  return (
+    element instanceof HTMLInputElement && (element.type === "submit" || element.type === "image")
+  );
 }
 
 function autocompleteOf(input: HTMLInputElement): string {
@@ -134,7 +137,9 @@ export function createSaveLoginPrompt(
   const seenPasswordFields = new WeakSet<HTMLInputElement>();
 
   const fieldSetsNow = (): LoginFieldSet[] => {
-    const fieldSets = detectLoginFields(options.document, { previousPasswordFields: seenPasswordFields });
+    const fieldSets = detectLoginFields(options.document, {
+      previousPasswordFields: seenPasswordFields,
+    });
     for (const fieldSet of fieldSets) {
       if (fieldSet.passwordField !== null) seenPasswordFields.add(fieldSet.passwordField);
     }
@@ -188,7 +193,12 @@ export function createSaveLoginPrompt(
     const save = (): void => {
       if (busy || summary.mode === "locked") return;
       busy = true;
-      void send({ version: 1, kind: "login.saveConfirm", offerId: summary.offerId, choice: summary.mode })
+      void send({
+        version: 1,
+        kind: "login.saveConfirm",
+        offerId: summary.offerId,
+        choice: summary.mode,
+      })
         .then((response) => {
           if (current !== entry) return;
           current = null;
@@ -246,7 +256,8 @@ export function createSaveLoginPrompt(
     pendingProbe = probe;
     void send({ version: 1, kind: "login.pendingOffer" })
       .then((response) => {
-        if (disposed || pendingProbe !== probe || response.kind !== "login.pendingOfferResult") return;
+        if (disposed || pendingProbe !== probe || response.kind !== "login.pendingOfferResult")
+          return;
         const offer = response.offer;
         if (offer === null) {
           if (current !== null && current.offerId !== null) {
@@ -257,7 +268,8 @@ export function createSaveLoginPrompt(
           return;
         }
         const mode = modeOf(offer.existing);
-        if (current?.offerId === offer.offerId && current.mode === mode && host?.status === "open") return;
+        if (current?.offerId === offer.offerId && current.mode === mode && host?.status === "open")
+          return;
         const entry: Entry = { token: {}, offerId: offer.offerId, mode: null };
         current = entry;
         showBanner(entry, summaryOf(offer));
@@ -323,7 +335,8 @@ export function createSaveLoginPrompt(
     target instanceof Element && target.ownerDocument.defaultView === options.window;
 
   const handleSubmit = (event: Event): void => {
-    if (disposed || !ownsElement(event.target) || !(event.target instanceof HTMLFormElement)) return;
+    if (disposed || !ownsElement(event.target) || !(event.target instanceof HTMLFormElement))
+      return;
     snapshotForm(event.target);
   };
 
@@ -342,15 +355,26 @@ export function createSaveLoginPrompt(
     const fieldSets = fieldSetsNow();
     const own = fieldSets.find((fieldSet) => fieldSet.passwordField === target);
     if (own === undefined) return;
-    snapshot(own.form === null ? [own] : fieldSets.filter((fieldSet) => fieldSet.form === own.form));
+    snapshot(
+      own.form === null ? [own] : fieldSets.filter((fieldSet) => fieldSet.form === own.form),
+    );
   };
 
+  // Typing runs a full field scan at most every so often: a search box or a comment field
+  // would otherwise re-detect the page's login fields on every keystroke.
+  let scanCache: { at: number; fieldSets: LoginFieldSet[] } | null = null;
+  const fieldSetsRecent = (): LoginFieldSet[] => {
+    const now = Date.now();
+    if (scanCache === null || now - scanCache.at > 500)
+      scanCache = { at: now, fieldSets: fieldSetsNow() };
+    return scanCache.fieldSets;
+  };
   const handleInput = (event: Event): void => {
     if (disposed || !ownsElement(event.target)) return;
     const target = event.target;
     if (!(target instanceof HTMLInputElement) || target.value.trim() === "") return;
     if (target.type !== "text" && target.type !== "email" && target.type !== "tel") return;
-    if (fieldSetsNow().some((fieldSet) => fieldSet.usernameField === target))
+    if (fieldSetsRecent().some((fieldSet) => fieldSet.usernameField === target))
       lastUsername = target.value.trim();
   };
 

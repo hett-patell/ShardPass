@@ -2,7 +2,11 @@
 import "@testing-library/jest-dom/vitest";
 
 import { act, fireEvent, within } from "@testing-library/react";
-import type { LoginFillRequest, LoginFillResponse, LoginFillSuggestion } from "@shardpass/messaging";
+import type {
+  LoginFillRequest,
+  LoginFillResponse,
+  LoginFillSuggestion,
+} from "@shardpass/messaging";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { LoginFillContentPlatform } from "../../../src/platform/extension-platform";
@@ -66,7 +70,9 @@ const release: LoginFillResponse = {
 
 /** A thrown handler rejects the request; unanswered kinds get "nothing held" or an acknowledgement. */
 function platform(
-  handler: (request: LoginFillRequest) => LoginFillResponse | Promise<LoginFillResponse> | undefined,
+  handler: (
+    request: LoginFillRequest,
+  ) => LoginFillResponse | Promise<LoginFillResponse> | undefined,
 ): LoginFillContentPlatform & { runtime: { handler: MessageHandler | null } } {
   const runtime: { handler: MessageHandler | null } = { handler: null };
   return {
@@ -154,7 +160,12 @@ describe("Login fill controller", () => {
     password.getClientRects = () => [{} as DOMRect] as unknown as DOMRectList;
     const submitted = vi.fn((event: Event) => event.preventDefault());
     form.addEventListener("submit", submitted);
-    const other: LoginFillSuggestion = { ...account, itemId: "018f47a6-7d11-7c2f-8bd9-a1d37f147a21", name: "Other", favorite: false };
+    const other: LoginFillSuggestion = {
+      ...account,
+      itemId: "018f47a6-7d11-7c2f-8bd9-a1d37f147a21",
+      name: "Other",
+      favorite: false,
+    };
     const candidate = platform((request) => {
       if (request.kind === "login.fillSuggestions")
         return { version: 1, kind: "login.fillSuggestionsResult", suggestions: [other, account] };
@@ -227,26 +238,28 @@ describe("Login fill controller", () => {
     await flush();
 
     const first = roots.find((root) => root.querySelector(".signIn"));
-    await clickAndFlush(within(first as unknown as HTMLElement).getByRole("button", { name: "Continue" }));
+    await clickAndFlush(
+      within(first as unknown as HTMLElement).getByRole("button", { name: "Continue" }),
+    );
     expect(username.value).toBe("user@example.test");
     expect(submitted).toHaveBeenCalledTimes(1);
     expect(first?.querySelector(".signIn")).toBeNull();
 
-    // The site's second step arrives without a navigation.
+    // The site's second step arrives without a navigation; the page's mutations settle first.
     const password = document.createElement("input");
     password.type = "password";
     password.name = "password";
     password.getClientRects = () => [{} as DOMRect] as unknown as DOMRectList;
     await act(async () => {
       form.append(password);
-      await Promise.resolve();
-      await Promise.resolve();
-      await Promise.resolve();
+      await new Promise((resolve) => setTimeout(resolve, 250));
     });
     await flush();
     const second = roots.filter((root) => root.querySelector(".signIn")).at(-1);
     expect(second).toBeDefined();
-    await clickAndFlush(within(second as unknown as HTMLElement).getByRole("button", { name: "Sign in" }));
+    await clickAndFlush(
+      within(second as unknown as HTMLElement).getByRole("button", { name: "Sign in" }),
+    );
     expect(password.value).toBe("s3cret!");
     expect(submitted).toHaveBeenCalledTimes(2);
   });
@@ -268,6 +281,72 @@ describe("Login fill controller", () => {
     focusField(username);
     await flush();
     expect(roots.some((root) => root.querySelector(".signIn"))).toBe(true);
+  });
+
+  it("shows no chip on a sign-in form that merely links to sign-up when nothing is saved", async () => {
+    const roots = captureClosedRoots();
+    const form = document.createElement("form");
+    const heading = document.createElement("h1");
+    heading.textContent = "Sign in";
+    const email = document.createElement("input");
+    email.type = "email";
+    email.name = "email";
+    const password = document.createElement("input");
+    password.type = "password";
+    password.name = "password";
+    const submit = document.createElement("button");
+    submit.type = "submit";
+    submit.textContent = "Sign in";
+    const aside = document.createElement("p");
+    aside.textContent = "Don't have an account? Sign up";
+    form.append(heading, email, password, submit, aside);
+    document.body.append(form);
+    const candidate = platform((request) =>
+      request.kind === "login.fillSuggestions"
+        ? { version: 1, kind: "login.fillSuggestionsResult", suggestions: [] }
+        : undefined,
+    );
+    start(candidate);
+    focusField(password);
+    await flush();
+    expect(roots.some((root) => root.querySelector(".loginTrigger") !== null)).toBe(false);
+  });
+
+  it("fills a change-password form's new and confirm fields, never the current password", async () => {
+    const roots = captureClosedRoots();
+    const form = document.createElement("form");
+    const current = document.createElement("input");
+    current.type = "password";
+    current.name = "current";
+    current.autocomplete = "current-password";
+    const next = document.createElement("input");
+    next.type = "password";
+    next.name = "new";
+    next.autocomplete = "new-password";
+    const confirm = document.createElement("input");
+    confirm.type = "password";
+    confirm.name = "confirm";
+    form.append(current, next, confirm);
+    document.body.append(form);
+    current.value = "old-secret";
+    const candidate = platform((request) =>
+      request.kind === "login.fillSuggestions"
+        ? { version: 1, kind: "login.fillSuggestionsResult", suggestions: [] }
+        : undefined,
+    );
+    start(candidate);
+    focusField(next);
+    await flush();
+    await clickAndFlush(chipIn(roots.at(-1)));
+    await flush();
+    await clickAndFlush(
+      within(roots.at(-1) as unknown as HTMLElement).getByRole("button", {
+        name: /Use suggested password/u,
+      }),
+    );
+    expect(current.value).toBe("old-secret");
+    expect(next.value).not.toBe("");
+    expect(confirm.value).toBe(next.value);
   });
 
   it("offers a generated password on a sign-up form and fills both password fields with it", async () => {
@@ -308,7 +387,11 @@ describe("Login fill controller", () => {
       ?.replace("Use suggested password ", "");
     expect(second).not.toBe(first);
 
-    await clickAndFlush(within(roots.at(-1) as unknown as HTMLElement).getByRole("button", { name: /Use suggested password/u }));
+    await clickAndFlush(
+      within(roots.at(-1) as unknown as HTMLElement).getByRole("button", {
+        name: /Use suggested password/u,
+      }),
+    );
     expect(password.value).toBe(second);
     expect(confirm.value).toBe(second);
     expect(document.querySelector("shardpass-picker-host")).toBeNull();
@@ -325,11 +408,16 @@ describe("Login fill controller", () => {
     const pressed = vi.fn();
     google.addEventListener("click", pressed);
     document.body.append(google);
-    const viaGoogle: LoginFillSuggestion = { ...account, username: "het@gmail.test", signInWith: "google" };
+    const viaGoogle: LoginFillSuggestion = {
+      ...account,
+      username: "het@gmail.test",
+      signInWith: "google",
+    };
     const candidate = platform((request) => {
       if (request.kind === "login.fillSuggestions")
         return { version: 1, kind: "login.fillSuggestionsResult", suggestions: [viaGoogle] };
-      if (request.kind === "login.fillSelect") throw new Error("a provider account releases nothing");
+      if (request.kind === "login.fillSelect")
+        throw new Error("a provider account releases nothing");
       return undefined;
     });
     start(candidate);
@@ -339,7 +427,11 @@ describe("Login fill controller", () => {
     await clickAndFlush(banner.getByRole("button", { name: "Continue with Google" }));
     expect(pressed).toHaveBeenCalledTimes(1);
     expect(password.value).toBe("");
-    expect(vi.mocked(candidate.sendLoginFillMessage).mock.calls.some(([request]) => request.kind === "login.fillConfirm")).toBe(true);
+    expect(
+      vi
+        .mocked(candidate.sendLoginFillMessage)
+        .mock.calls.some(([request]) => request.kind === "login.fillConfirm"),
+    ).toBe(true);
   });
 
   it("offers a provider account on a page that only has provider buttons", async () => {
@@ -351,7 +443,11 @@ describe("Login fill controller", () => {
     const pressed = vi.fn();
     google.addEventListener("click", pressed);
     document.body.append(google);
-    const viaGoogle: LoginFillSuggestion = { ...account, username: "het@gmail.test", signInWith: "google" };
+    const viaGoogle: LoginFillSuggestion = {
+      ...account,
+      username: "het@gmail.test",
+      signInWith: "google",
+    };
     const candidate = platform((request) =>
       request.kind === "login.fillSuggestions"
         ? { version: 1, kind: "login.fillSuggestionsResult", suggestions: [account, viaGoogle] }
@@ -381,7 +477,11 @@ describe("Login fill controller", () => {
     start(candidate);
     await flush();
     const bannerRoot = roots.find((root) => root.querySelector(".signIn"));
-    await clickAndFlush(within(bannerRoot as unknown as HTMLElement).getByRole("button", { name: "Dismiss ShardPass sign-in" }));
+    await clickAndFlush(
+      within(bannerRoot as unknown as HTMLElement).getByRole("button", {
+        name: "Dismiss ShardPass sign-in",
+      }),
+    );
     expect(bannerRoot?.querySelector(".signIn")).toBeNull();
     // A later DOM change does not bring it back.
     document.body.append(document.createElement("p"));
@@ -429,7 +529,10 @@ describe("Login fill controller", () => {
       fireEvent.keyDown(username, { key: "ArrowDown" });
       await Promise.resolve();
     });
-    expect(picker.getByRole("button", { name: /Use login/u })).toHaveAttribute("data-active", "true");
+    expect(picker.getByRole("button", { name: /Use login/u })).toHaveAttribute(
+      "data-active",
+      "true",
+    );
     await act(async () => {
       fireEvent.keyDown(username, { key: "Enter" });
       await Promise.resolve();
@@ -474,7 +577,8 @@ describe("Login fill controller", () => {
       let usernameEvents = 0;
       let passwordEvents = 0;
       // Only the fill's own writes count (they carry inputType); the test types too.
-      const fillWrite = (event: Event) => event instanceof InputEvent && event.inputType === "insertText";
+      const fillWrite = (event: Event) =>
+        event instanceof InputEvent && event.inputType === "insertText";
       username.addEventListener("input", (event) => fillWrite(event) && usernameEvents++);
       password.addEventListener("input", (event) => fillWrite(event) && passwordEvents++);
       const candidate = platform((request) => {
@@ -678,7 +782,9 @@ describe("Login fill controller", () => {
     await clickAndFlush(chipIn(roots.at(-1)));
     const picker = within(roots.at(-1) as unknown as HTMLElement);
     expect(picker.getByRole("status")).toHaveTextContent("ShardPass is locked");
-    expect(picker.getByRole("status")).toHaveTextContent("Unlock it from the toolbar, then click here again.");
+    expect(picker.getByRole("status")).toHaveTextContent(
+      "Unlock it from the toolbar, then click here again.",
+    );
 
     vaultLocked = false;
     await act(async () => {
@@ -705,7 +811,9 @@ describe("Login fill controller", () => {
     focusField(username);
     await flush();
     await clickAndFlush(chipIn(roots.at(-1)));
-    expect(within(roots.at(-1) as unknown as HTMLElement).getByRole("button", { name: /Account/u })).toBeVisible();
+    expect(
+      within(roots.at(-1) as unknown as HTMLElement).getByRole("button", { name: /Account/u }),
+    ).toBeVisible();
 
     // Escape lands on the field, which keeps focus while the picker is open.
     await act(async () => {
@@ -737,7 +845,9 @@ describe("Login fill controller", () => {
     const shown = loginForm();
     let shownRects: object[] = [{}];
     Object.defineProperty(shown.password, "getClientRects", { value: () => shownRects });
-    const candidate = platform((request) => (request.kind === "login.fillSelect" ? release : undefined));
+    const candidate = platform((request) =>
+      request.kind === "login.fillSelect" ? release : undefined,
+    );
     start(candidate);
     const ask = () =>
       candidate.runtime.handler?.(
