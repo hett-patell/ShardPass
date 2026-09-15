@@ -1,4 +1,7 @@
 import {
+  MAX_SECRET_METADATA_ENTRIES,
+  MAX_SECRET_METADATA_KEY_LENGTH,
+  MAX_SECRET_METADATA_VALUE_LENGTH,
   MAX_SECRET_NAME_LENGTH,
   MAX_SECRET_NOTES_LENGTH,
   MAX_SECRET_VALUE_LENGTH,
@@ -97,6 +100,13 @@ export function SecretForm({ item, platform, onSaved, onCancel }: SecretFormProp
     const tags = parseTags(value.tags);
     const nextErrors: Errors = {};
     if (name.length === 0) nextErrors.name = "Enter a name.";
+    const keys = value.metadata.map((row) => row.key.trim());
+    if (value.metadata.some((row, index) => keys[index] === "" && row.value.trim() !== ""))
+      nextErrors.metadata = "Every metadata row needs a key.";
+    else if (
+      new Set(keys.filter((key) => key !== "")).size !== keys.filter((key) => key !== "").length
+    )
+      nextErrors.metadata = "Metadata keys must be unique.";
 
     const fields = {
       name,
@@ -217,12 +227,16 @@ export function SecretForm({ item, platform, onSaved, onCancel }: SecretFormProp
             <input
               className={styles.textInput}
               placeholder="Key"
+              aria-label={`Metadata key ${index + 1}`}
+              maxLength={MAX_SECRET_METADATA_KEY_LENGTH}
               value={row.key}
               onChange={(event) => updateRow(index, { key: event.target.value })}
             />
             <input
               className={styles.textInput}
               placeholder="Value"
+              aria-label={`Metadata value ${index + 1}`}
+              maxLength={MAX_SECRET_METADATA_VALUE_LENGTH}
               value={row.value}
               onChange={(event) => updateRow(index, { value: event.target.value })}
             />
@@ -231,15 +245,20 @@ export function SecretForm({ item, platform, onSaved, onCancel }: SecretFormProp
             </IconButton>
           </div>
         ))}
-        <button
-          type="button"
-          className={styles.linkButton}
-          onClick={() =>
-            setValue((current) => ({ ...current, metadata: [...current.metadata, { key: "", value: "" }] }))
-          }
-        >
-          <Plus size={12} aria-hidden="true" /> Add metadata row
-        </button>
+        {value.metadata.length < MAX_SECRET_METADATA_ENTRIES ? (
+          <button
+            type="button"
+            className={styles.linkButton}
+            onClick={() =>
+              setValue((current) => ({
+                ...current,
+                metadata: [...current.metadata, { key: "", value: "" }],
+              }))
+            }
+          >
+            <Plus size={12} aria-hidden="true" /> Add metadata row
+          </button>
+        ) : null}
       </div>
 
       <div className={styles.field}>

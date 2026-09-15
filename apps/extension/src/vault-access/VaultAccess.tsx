@@ -65,6 +65,13 @@ export function VaultAccess({
   const [settings, setSettings] = useState({ autoLockMinutes: 15, lockOnScreenLock: true });
   const [loadingTimedOut, setLoadingTimedOut] = useState(false);
   const [settingsError, setSettingsError] = useState("");
+  // Time left on the failed-unlock cooldown the background reported; counts down on screen.
+  const [retryAfterMs, setRetryAfterMs] = useState(0);
+  useEffect(() => {
+    if (retryAfterMs <= 0) return;
+    const timer = setTimeout(() => setRetryAfterMs((left) => Math.max(0, left - 1_000)), 1_000);
+    return () => clearTimeout(timer);
+  }, [retryAfterMs]);
 
   // Optimistic, but honest: the control shows the new value immediately and rolls back with
   // a named reason if the background refuses, instead of silently snapping back on the next
@@ -160,6 +167,7 @@ export function VaultAccess({
       lastKnownState.current = parsed.data.state;
       onUnlockedChange?.(parsed.data.state === "unlocked");
       setState(parsed.data.state);
+      setRetryAfterMs(parsed.data.retryAfterMs);
       setSettings({
         autoLockMinutes: parsed.data.autoLockMinutes,
         lockOnScreenLock: parsed.data.lockOnScreenLock,
@@ -242,6 +250,10 @@ export function VaultAccess({
     }
     if (newPassword !== newConfirmation) {
       setError("Passwords do not match.");
+      return;
+    }
+    if (newPassword === currentPassword) {
+      setError("Choose a password different from your current one.");
       return;
     }
     if (new TextEncoder().encode(newPassword).byteLength > MAX_PASSWORD_UTF8_BYTES) {
@@ -406,42 +418,56 @@ export function VaultAccess({
               Lock when the screen locks
             </label>
             <h3>Change master password</h3>
-            <label>
-              Current password
-              <PasswordInput
-                autoComplete="current-password"
-                value={currentPassword}
-                onChange={(event) => setCurrentPassword(event.target.value)}
-              />
-            </label>
-            <label>
-              New password
-              <PasswordInput
-                autoComplete="new-password"
-                value={newPassword}
-                onChange={(event) => setNewPassword(event.target.value)}
-              />
-            </label>
-            <label>
-              Confirm new password
-              <PasswordInput
-                autoComplete="new-password"
-                value={newConfirmation}
-                onChange={(event) => setNewConfirmation(event.target.value)}
-              />
-            </label>
-            <Button variant="secondary" onClick={() => void rotatePassword()}>
-              Change password
-            </Button>
+            <form
+              className={styles.changePassword}
+              onSubmit={(event) => {
+                event.preventDefault();
+                if (!working) void rotatePassword();
+              }}
+            >
+              <label>
+                Current password
+                <PasswordInput
+                  autoComplete="current-password"
+                  value={currentPassword}
+                  onChange={(event) => setCurrentPassword(event.target.value)}
+                />
+              </label>
+              <label>
+                New password
+                <PasswordInput
+                  autoComplete="new-password"
+                  value={newPassword}
+                  onChange={(event) => setNewPassword(event.target.value)}
+                />
+              </label>
+              <label>
+                Confirm new password
+                <PasswordInput
+                  autoComplete="new-password"
+                  value={newConfirmation}
+                  onChange={(event) => setNewConfirmation(event.target.value)}
+                />
+              </label>
+              <Button type="submit" variant="secondary" loading={working}>
+                Change password
+              </Button>
+            </form>
           </>
         ) : null}
         <Button
           variant="secondary"
           onClick={() =>
-            void platform.sendMessage({ version: 1, kind: "vault.lock" }).then(() => {
-              onUnlockedChange?.(false);
-              setState("locked");
-            })
+            void platform.sendMessage({ version: 1, kind: "vault.lock" }).then(
+              (reply) => {
+                const candidate = reply as { kind?: unknown; state?: unknown } | null;
+                if (candidate?.kind === "vault.ok" && candidate.state === "locked") {
+                  onUnlockedChange?.(false);
+                  setState("locked");
+                } else setError("Could not lock the vault. Try again.");
+              },
+              () => setError("Could not lock the vault. Try again."),
+            )
           }
         >
           Lock vault
@@ -536,7 +562,12 @@ export function VaultAccess({
             {error}
           </p>
         ) : null}
-        <Button type="submit" loading={working}>
+        {retryAfterMs > 0 ? (
+          <p className={styles.loadingError} role="alert">
+            Too many attempts. Try again in {Math.ceil(retryAfterMs / 1_000)} s.
+          </p>
+        ) : null}
+        <Button type="submit" loading={working} disabled={retryAfterMs > 0}>
           {setup ? "Create vault" : "Unlock vault"}
         </Button>
         {working ? (

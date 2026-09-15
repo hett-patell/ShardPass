@@ -2,7 +2,17 @@ import type { VaultItemKind } from "@shardpass/domain";
 import type { ItemListItemProjection } from "@shardpass/messaging";
 import { matchLoginUrls } from "@shardpass/autofill";
 import { Button, SearchBar, SectionLabel } from "@shardpass/ui";
-import { ChevronRight, ExternalLink, KeyRound, LayoutGrid, Plus, Star, type LucideIcon, UserCog, UserPlus } from "lucide-react";
+import {
+  ChevronRight,
+  ExternalLink,
+  KeyRound,
+  LayoutGrid,
+  Plus,
+  Star,
+  type LucideIcon,
+  UserCog,
+  UserPlus,
+} from "lucide-react";
 
 import type { ExtensionPlatform } from "../../platform/extension-platform";
 import { KIND_ICONS } from "../components/KindIcon";
@@ -44,7 +54,10 @@ const MAX_SEARCH_RESULTS = 60;
 
 function initials(name: string): string {
   const parts = name.trim().split(/\s+/u).filter(Boolean);
-  const letters = parts.length >= 2 ? `${parts[0]![0] ?? ""}${parts[parts.length - 1]![0] ?? ""}` : (parts[0] ?? "").slice(0, 2);
+  const letters =
+    parts.length >= 2
+      ? `${parts[0]![0] ?? ""}${parts[parts.length - 1]![0] ?? ""}`
+      : (parts[0] ?? "").slice(0, 2);
   return letters.toUpperCase();
 }
 
@@ -102,11 +115,14 @@ export function HomeScreen({
       ? []
       : items.filter(
           (item) =>
-            item.kind === "login" && item.urls !== undefined && matchLoginUrls(tab.url, item.urls, item.urlMatches),
+            item.kind === "login" &&
+            item.urls !== undefined &&
+            matchLoginUrls(tab.url, item.urls, item.urlMatches),
         );
   const matches = query === "" ? [] : items.filter((item) => projectionMatches(item, query));
   const results = matches.slice(0, MAX_SEARCH_RESULTS);
-  const resultCount = matches.length > MAX_SEARCH_RESULTS ? `${MAX_SEARCH_RESULTS}+` : String(matches.length);
+  const resultCount =
+    matches.length > MAX_SEARCH_RESULTS ? `${MAX_SEARCH_RESULTS}+` : String(matches.length);
   // The person's own identity sits above everything: the favourite one, else the first.
   const identities = items.filter((item) => item.kind === "identity");
   const identity =
@@ -172,8 +188,8 @@ export function HomeScreen({
                   Get started
                 </SectionLabel>
                 <p className={styles.getStartedCopy}>
-                  Your vault is empty. Bring your passwords over from your browser, 1Password, Bitwarden or KeePass,
-                  or add the first one by hand.
+                  Your vault is empty. Bring your passwords over from your browser, 1Password,
+                  Bitwarden or KeePass, or add the first one by hand.
                 </p>
                 <div className={styles.getStartedActions}>
                   <Button onClick={onImport}>Import passwords</Button>
@@ -197,16 +213,26 @@ export function HomeScreen({
                   </span>
                   <span className={styles.identityText}>
                     <span className={styles.identityName}>{identity.name}</span>
-                    {identity.subtitle ? <span className={styles.identityEmail}>{identity.subtitle}</span> : null}
+                    {identity.subtitle ? (
+                      <span className={styles.identityEmail}>{identity.subtitle}</span>
+                    ) : null}
                   </span>
                   <ChevronRight size={16} className={styles.chevron} aria-hidden="true" />
                 </button>
-                <QuickAction aria-label="Choose identity" title="Choose identity" onClick={onChooseIdentity}>
+                <QuickAction
+                  aria-label="Choose identity"
+                  title="Choose identity"
+                  onClick={onChooseIdentity}
+                >
                   <UserCog size={15} />
                 </QuickAction>
               </div>
             ) : status === "ready" && items.length > 0 ? (
-              <button type="button" className={styles.identityAdd} onClick={() => onNewItem("identity")}>
+              <button
+                type="button"
+                className={styles.identityAdd}
+                onClick={() => onNewItem("identity")}
+              >
                 <UserPlus size={15} aria-hidden="true" />
                 Add your identity
               </button>
@@ -214,7 +240,11 @@ export function HomeScreen({
 
             {tab !== null ? (
               <section aria-labelledby="suggestions-label">
-                <SectionLabel id="suggestions-label" className={styles.sectionLabel} trailing={tab.host}>
+                <SectionLabel
+                  id="suggestions-label"
+                  className={styles.sectionLabel}
+                  trailing={tab.host}
+                >
                   Suggestions
                 </SectionLabel>
                 {status === "loading" ? (
@@ -233,13 +263,15 @@ export function HomeScreen({
                           onOpen={onOpenItem}
                           actions={
                             <>
-                              <QuickAction
-                                aria-label={`Copy password for ${item.name}`}
-                                title="Copy password"
-                                onClick={() => onCopyPassword(item)}
-                              >
-                                <KeyRound size={15} />
-                              </QuickAction>
+                              {item.signInWith === undefined ? (
+                                <QuickAction
+                                  aria-label={`Copy password for ${item.name}`}
+                                  title="Copy password"
+                                  onClick={() => onCopyPassword(item)}
+                                >
+                                  <KeyRound size={15} />
+                                </QuickAction>
+                              ) : null}
                               <Button
                                 className={styles.fill}
                                 loading={filling === item.id}
@@ -266,7 +298,11 @@ export function HomeScreen({
                   const count = status === "ready" ? itemsInCategory(items, id).length : null;
                   return (
                     <li key={id}>
-                      <button type="button" className={styles.category} onClick={() => onOpenCategory(id)}>
+                      <button
+                        type="button"
+                        className={styles.category}
+                        onClick={() => onOpenCategory(id)}
+                      >
                         <span className={styles.categoryIcon} aria-hidden="true">
                           <Icon size={16} strokeWidth={1.75} />
                         </span>

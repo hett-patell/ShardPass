@@ -1,6 +1,9 @@
 import type { LoginItem, VaultItemKind } from "@shardpass/domain";
 import { matchLoginUrls, type UrlMatchMode } from "@shardpass/autofill";
-import { parseLoginFillResponseForRequest, type ItemListItemProjection } from "@shardpass/messaging";
+import {
+  parseLoginFillResponseForRequest,
+  type ItemListItemProjection,
+} from "@shardpass/messaging";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { EnteUiPlatform, ExtensionPlatform } from "../platform/extension-platform";
@@ -28,7 +31,10 @@ const LAST_SCREEN_KEY = "shardpass:popup:lastScreen";
 /** How long a closed popup remembers where it was; a later open starts at home. */
 const LAST_SCREEN_TTL_MS = 5 * 60_000;
 
-type RememberedScreen = Readonly<{ at: number; screen: { kind: "list"; category: CategoryId } | { kind: "generator" } | { kind: "identity" } }>;
+type RememberedScreen = Readonly<{
+  at: number;
+  screen: { kind: "list"; category: CategoryId } | { kind: "generator" } | { kind: "identity" };
+}>;
 
 /** The screen a popup closed on moments ago: reopening lands back there, like a window would. */
 function readLastScreen(): RememberedScreen["screen"] | null {
@@ -48,7 +54,8 @@ function readLastScreen(): RememberedScreen["screen"] | null {
 function writeLastScreen(screen: RememberedScreen["screen"] | null): void {
   try {
     if (screen === null) globalThis.localStorage?.removeItem(LAST_SCREEN_KEY);
-    else globalThis.localStorage?.setItem(LAST_SCREEN_KEY, JSON.stringify({ at: Date.now(), screen }));
+    else
+      globalThis.localStorage?.setItem(LAST_SCREEN_KEY, JSON.stringify({ at: Date.now(), screen }));
   } catch {
     // Forgetting where the popup was is harmless.
   }
@@ -89,16 +96,16 @@ export function useOpenVaultAction(platform: ExtensionPlatform) {
 
   const openVault = useCallback(
     async (target?: VaultPageTarget): Promise<void> => {
-    const token = ++invocationToken.current;
-    setActionError(false);
-    setOpeningVault(true);
-    try {
-      await platform.openVaultPage(target);
-    } catch {
-      if (mounted.current && token === invocationToken.current) setActionError(true);
-    } finally {
-      if (mounted.current && token === invocationToken.current) setOpeningVault(false);
-    }
+      const token = ++invocationToken.current;
+      setActionError(false);
+      setOpeningVault(true);
+      try {
+        await platform.openVaultPage(target);
+      } catch {
+        if (mounted.current && token === invocationToken.current) setActionError(true);
+      } finally {
+        if (mounted.current && token === invocationToken.current) setOpeningVault(false);
+      }
     },
     [platform],
   );
@@ -111,13 +118,26 @@ type Screen =
   | { kind: "list"; category: CategoryId }
   | { kind: "generator" }
   | { kind: "identity" }
-  | { kind: "detail"; itemId: string; name: string; kindOf: VaultItemKind; urls?: readonly string[]; urlMatches?: readonly UrlMatchMode[] };
+  | {
+      kind: "detail";
+      itemId: string;
+      name: string;
+      kindOf: VaultItemKind;
+      urls?: readonly string[];
+      urlMatches?: readonly UrlMatchMode[];
+    };
 
 /**
  * The popup: a stack of screens over the unlocked vault. Home shows suggestions for the open
  * tab and the categories; a category pushes its list; an item pushes its detail. The unlock
  * screen stays mounted (hidden) so its state port keeps reporting an out-of-band lock.
  */
+/** The background's answer to vault.lock when the vault is now locked. */
+function confirmsLocked(reply: unknown): boolean {
+  const candidate = reply as { kind?: unknown; state?: unknown } | null;
+  return candidate?.kind === "vault.ok" && candidate.state === "locked";
+}
+
 export function PopupApp({ platform }: PopupAppProps) {
   const [vaultUnlocked, setVaultUnlocked] = useState(false);
   const [lockError, setLockError] = useState(false);
@@ -143,7 +163,11 @@ export function PopupApp({ platform }: PopupAppProps) {
   useEffect(() => {
     if (!vaultUnlocked) return;
     writeLastScreen(
-      screen.kind === "list" ? { kind: "list", category: screen.category } : screen.kind === "generator" || screen.kind === "identity" ? { kind: screen.kind } : null,
+      screen.kind === "list"
+        ? { kind: "list", category: screen.category }
+        : screen.kind === "generator" || screen.kind === "identity"
+          ? { kind: screen.kind }
+          : null,
     );
   }, [screen, vaultUnlocked]);
   const push = useCallback((next: Screen) => {
@@ -184,8 +208,10 @@ export function PopupApp({ platform }: PopupAppProps) {
     // Only a confirmed lock leaves the unlocked UI; a failed one stays here with the
     // message, rather than dropping onto a lock screen that still says "unlocked".
     try {
-      await platform.sendMessage({ version: 1, kind: "vault.lock" });
-      setVaultUnlocked(false);
+      const reply = await platform.sendMessage({ version: 1, kind: "vault.lock" });
+      // A refusal arrives as an error envelope, not a rejection; only "locked" counts.
+      if (confirmsLocked(reply)) setVaultUnlocked(false);
+      else setLockError(true);
     } catch {
       setLockError(true);
     }
@@ -206,10 +232,16 @@ export function PopupApp({ platform }: PopupAppProps) {
 
   const copyPassword = useCallback(
     (item: ItemListItemProjection) => {
-      const request = { version: 1 as const, kind: "login.reveal" as const, itemId: item.id, expectedRevision: item.revision };
+      const request = {
+        version: 1 as const,
+        kind: "login.reveal" as const,
+        itemId: item.id,
+        expectedRevision: item.revision,
+      };
       const reveal = platform.sendMessage(request).then((candidate) => {
         const parsed = parseLoginFillResponseForRequest(request, candidate);
-        if (!parsed.success || parsed.data.kind !== "login.fillRelease") throw new Error("password unavailable");
+        if (!parsed.success || parsed.data.kind !== "login.fillRelease")
+          throw new Error("password unavailable");
         return parsed.data.password;
       });
       // A refused reveal (locked meanwhile, stale item) is not a clipboard problem.
@@ -231,16 +263,20 @@ export function PopupApp({ platform }: PopupAppProps) {
       notify(
         outcome === "no-form"
           ? "No login form found on this page."
-          : outcome === "no-script"
-            ? "Reload the page, then try again."
-            : "Could not fill. Try again.",
+          : outcome === "no-tab"
+            ? "This page can't be filled."
+            : outcome === "no-script"
+              ? "Reload the page, then try again."
+              : "Could not fill. Try again.",
       );
     },
     [fill, notify],
   );
 
   const detailMatches = (candidate: Extract<Screen, { kind: "detail" }>): boolean =>
-    tab !== null && candidate.urls !== undefined && matchLoginUrls(tab.url, candidate.urls, candidate.urlMatches);
+    tab !== null &&
+    candidate.urls !== undefined &&
+    matchLoginUrls(tab.url, candidate.urls, candidate.urlMatches);
 
   return (
     <div className={styles.popup}>
@@ -251,7 +287,10 @@ export function PopupApp({ platform }: PopupAppProps) {
         <>
           <PopupTitleBar
             {...(screen.kind === "home"
-              ? { onLock: () => void lock(), onSettings: () => void openVault({ view: "settings" }) }
+              ? {
+                  onLock: () => void lock(),
+                  onSettings: () => void openVault({ view: "settings" }),
+                }
               : {
                   back: { label: "Back", onBack: pop },
                   title:
@@ -275,7 +314,10 @@ export function PopupApp({ platform }: PopupAppProps) {
             </p>
           ) : null}
 
-          <div key={`${screen.kind}-${stack.length}`} className={`${styles.screen} ${direction === "push" ? styles.enterRight : styles.enterLeft}`}>
+          <div
+            key={`${screen.kind}-${stack.length}`}
+            className={`${styles.screen} ${direction === "push" ? styles.enterRight : styles.enterLeft}`}
+          >
             {screen.kind === "home" ? (
               <HomeScreen
                 items={vaultItems.items}
@@ -308,7 +350,10 @@ export function PopupApp({ platform }: PopupAppProps) {
                 onCopyCode={(_item, code) => void copy(code, "Code")}
               />
             ) : screen.kind === "generator" ? (
-              <GeneratorScreen platform={platform} onCopy={(value, label) => void copy(value, label)} />
+              <GeneratorScreen
+                platform={platform}
+                onCopy={(value, label) => void copy(value, label)}
+              />
             ) : screen.kind === "identity" ? (
               <IdentityScreen
                 identities={vaultItems.items.filter((item) => item.kind === "identity")}

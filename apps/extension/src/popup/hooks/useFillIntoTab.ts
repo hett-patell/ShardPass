@@ -5,7 +5,7 @@ import type { ActiveTab } from "./useActiveTab";
 
 const FILL_TIMEOUT_MS = 3_000;
 
-export type FillOutcome = "filled" | "no-form" | "no-script" | "failed";
+export type FillOutcome = "filled" | "no-form" | "no-script" | "no-tab" | "failed";
 
 /** Chrome's wording when no content script is listening: a tab opened before install or reload. */
 const NO_RECEIVER = /Receiving end does not exist|Could not establish connection/u;
@@ -22,7 +22,8 @@ export function useFillIntoTab(
   const [filling, setFilling] = useState<string | null>(null);
   const fill = useCallback(
     async (itemId: string, expectedRevision: number): Promise<FillOutcome> => {
-      if (tab === null) return "no-form";
+      // No eligible tab at all (a chrome:// page, a PDF): not "no form on this page".
+      if (tab === null) return "no-tab";
       setFilling(itemId);
       try {
         const response = await Promise.race<unknown>([
@@ -32,10 +33,16 @@ export function useFillIntoTab(
             itemId,
             expectedRevision,
           }),
-          new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), FILL_TIMEOUT_MS)),
+          new Promise<undefined>((resolve) =>
+            setTimeout(() => resolve(undefined), FILL_TIMEOUT_MS),
+          ),
         ]);
         const status = (response as { status?: unknown } | undefined)?.status;
-        return status === "filled" ? "filled" : status === "no-form" || status === undefined ? "no-form" : "failed";
+        return status === "filled"
+          ? "filled"
+          : status === "no-form" || status === undefined
+            ? "no-form"
+            : "failed";
       } catch (error) {
         return error instanceof Error && NO_RECEIVER.test(error.message) ? "no-script" : "failed";
       } finally {

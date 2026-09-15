@@ -104,6 +104,8 @@ export function OtpDetail({ item, platform, folders, onUpdate, onDeleted }: OtpD
       if (code === "OTP_CONFLICT") {
         setAttempted(value);
         setConflict(true);
+        // The typed values stay; the item is re-fetched so the next save carries its revision.
+        onUpdate();
       } else {
         setSaveError(
           code === "VAULT_LOCKED" ? "The vault is locked. Unlock and try again." : saveUnavailable,

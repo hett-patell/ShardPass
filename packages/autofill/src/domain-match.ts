@@ -120,7 +120,9 @@ export function matchLoginUrl(page: string, url: string, mode: UrlMatchMode = "d
   const target = parts(url);
   if (mode === "host" || pageParts.bare) return pageParts.host === target.host;
   if (mode === "exact") return pageParts.href === target.href;
-  return pageParts.href.startsWith(target.href);
+  // The host must be the saved one: a prefix test alone lets "example.com.evil.net" pass
+  // for a login saved as "https://example.com".
+  return pageParts.host === target.host && pageParts.href.startsWith(target.href);
 }
 
 /** `modes` is positional and optional: a missing entry means "domain". */

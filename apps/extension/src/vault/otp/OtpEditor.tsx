@@ -53,9 +53,13 @@ export function OtpEditor({
   const [secretBuffer, setSecretBuffer] = useState("");
   const [secretChanged, setSecretChanged] = useState(false);
   const [errors, setErrors] = useState<Errors>({});
+  // As typed: splitting on every keystroke and re-joining with ", " moved the caret and
+  // grew a space per key. Parsed once, on save, like every other form.
+  const [tagText, setTagText] = useState(() => value.tags.join(", "));
 
   useEffect(() => {
     setForm(value);
+    setTagText(value.tags.join(", "));
     setSecretVisible(false);
     setSecretBuffer("");
     setSecretChanged(false);
@@ -106,7 +110,7 @@ export function OtpEditor({
           issuer: form.issuer.trim(),
           label: form.label.trim(),
           // Same rules as every other form: blanks dropped, repeats folded.
-          tags: parseTags(form.tags.join(",")),
+          tags: parseTags(tagText),
         };
         const nextErrors = validate(trimmed);
         setErrors(nextErrors);
@@ -299,14 +303,10 @@ export function OtpEditor({
           label="Tags"
           help="Comma-separated, up to the vault schema limit."
           inputProps={{
-            value: form.tags.join(", "),
+            value: tagText,
             autoComplete: "off",
             spellCheck: false,
-            onChange: (event) =>
-              setForm({
-                ...form,
-                tags: event.target.value === "" ? [] : event.target.value.split(","),
-              }),
+            onChange: (event) => setTagText(event.target.value),
           }}
         />
         <label className={styles.favoriteField}>

@@ -1,5 +1,5 @@
 import { IconButton } from "@shardpass/ui";
-import { Check, Copy } from "lucide-react";
+import { Check, Copy, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { copyWithAutoClear } from "./clipboard";
@@ -15,26 +15,39 @@ export interface CopyButtonProps {
 
 /** A one-click copy-to-clipboard icon button that briefly confirms success. */
 export function CopyButton({ label, value }: CopyButtonProps) {
-  const [copied, setCopied] = useState(false);
+  const [outcome, setOutcome] = useState<"idle" | "copied" | "failed">("idle");
   const resetTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   useEffect(() => () => clearTimeout(resetTimer.current), []);
 
+  const settle = (next: "copied" | "failed") => {
+    setOutcome(next);
+    clearTimeout(resetTimer.current);
+    resetTimer.current = setTimeout(() => setOutcome("idle"), COPIED_RESET_MS);
+  };
   const onClick = () => {
-    void copyWithAutoClear(value).then(() => {
-      setCopied(true);
-      clearTimeout(resetTimer.current);
-      resetTimer.current = setTimeout(() => setCopied(false), COPIED_RESET_MS);
-    });
+    // The clipboard refuses when the document is not focused or permission is denied;
+    // the button says so instead of staying silent.
+    copyWithAutoClear(value).then(
+      () => settle("copied"),
+      () => settle("failed"),
+    );
   };
 
   return (
     <IconButton
-      aria-label={copied ? "Copied" : label}
+      aria-label={outcome === "copied" ? "Copied" : outcome === "failed" ? "Copy failed" : label}
+      title={outcome === "failed" ? "Copy failed. Try again." : undefined}
       disabled={value.length === 0}
       onClick={onClick}
     >
-      {copied ? <Check size={16} /> : <Copy size={16} />}
+      {outcome === "copied" ? (
+        <Check size={16} />
+      ) : outcome === "failed" ? (
+        <X size={16} />
+      ) : (
+        <Copy size={16} />
+      )}
     </IconButton>
   );
 }

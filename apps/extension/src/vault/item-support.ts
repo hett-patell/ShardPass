@@ -35,7 +35,8 @@ export function parseTags(value: string): string[] {
   const tags: string[] = [];
   for (const raw of value.split(",")) {
     const tag = raw.trim();
-    const key = tag.toLocaleLowerCase("en-US");
+    // The same folding the schema applies, so nothing the form accepts is refused later.
+    const key = tag.normalize("NFKC").toLocaleLowerCase("en-US");
     if (tag.length === 0 || seen.has(key)) continue;
     seen.add(key);
     tags.push(tag);
@@ -58,7 +59,8 @@ export function schemaErrors<K extends string>(
 ): Partial<Record<K | "form", string>> {
   const head = issues[0]?.path[0];
   const field = fields.find((candidate) => candidate === head);
-  if (field === undefined) return { form: "Review the highlighted fields." } as Partial<Record<K | "form", string>>;
+  if (field === undefined)
+    return { form: "Review the highlighted fields." } as Partial<Record<K | "form", string>>;
   return { [field]: "This value isn’t valid." } as Partial<Record<K | "form", string>>;
 }
 
@@ -112,7 +114,10 @@ export function formatCardExpiry(expMonth: string, expYear: string): string {
 }
 
 /** Ids of `folderId` and every folder nested beneath it (the set a folder filter should match). */
-export function folderSubtreeIds(folders: readonly Folder[], folderId: string): ReadonlySet<string> {
+export function folderSubtreeIds(
+  folders: readonly Folder[],
+  folderId: string,
+): ReadonlySet<string> {
   const children = new Map<string, string[]>();
   for (const folder of folders) {
     if (folder.parentId === undefined) continue;
@@ -158,7 +163,9 @@ export function folderPath(folders: readonly Folder[], folderId: string): string
 }
 
 /** Depth-first order with each folder's depth, for indented tree rendering. */
-export function folderTree(folders: readonly Folder[]): readonly { folder: Folder; depth: number }[] {
+export function folderTree(
+  folders: readonly Folder[],
+): readonly { folder: Folder; depth: number }[] {
   const byParent = new Map<string | undefined, Folder[]>();
   for (const folder of folders) {
     const siblings = byParent.get(folder.parentId) ?? [];
@@ -166,7 +173,9 @@ export function folderTree(folders: readonly Folder[]): readonly { folder: Folde
     byParent.set(folder.parentId, siblings);
   }
   for (const siblings of byParent.values())
-    siblings.sort((left, right) => left.name.localeCompare(right.name, undefined, { sensitivity: "base" }));
+    siblings.sort((left, right) =>
+      left.name.localeCompare(right.name, undefined, { sensitivity: "base" }),
+    );
   const rows: { folder: Folder; depth: number }[] = [];
   const seen = new Set<string>();
   const visit = (parentId: string | undefined, depth: number) => {
