@@ -119,15 +119,31 @@
   overflow-y: auto;
 }
 
+/* Settings are a grid of equal columns: cards line up edge to edge instead of wrapping at
+   their own widths, and the import panel takes the whole row. */
 .settingsPanel {
-  display: flex;
+  display: grid;
   min-height: 0;
   grid-column: 2 / -1;
-  flex-wrap: wrap;
-  align-items: flex-start;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr));
+  align-content: start;
+  align-items: start;
   gap: var(--space-5);
   padding: clamp(20px, 3vw, 40px);
   overflow-y: auto;
+}
+
+.settingsCell {
+  min-width: 0;
+}
+
+.settingsCell > :first-child {
+  width: 100%;
+  max-width: none;
+}
+
+.settingsCellWide {
+  grid-column: 1 / -1;
 }
 
 @media (max-width: 980px) {

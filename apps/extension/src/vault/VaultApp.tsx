@@ -257,7 +257,11 @@ export function VaultApp({ platform }: VaultAppProps) {
 
       <AppHeader
         title="ShardPass"
-        actions={<StatusBadge status={presentation.status}>{presentation.label}</StatusBadge>}
+        actions={
+          <StatusBadge live status={presentation.status}>
+            {presentation.label}
+          </StatusBadge>
+        }
       />
 
       <main className={styles.main} id="vault-content" tabIndex={-1}>
@@ -400,31 +404,45 @@ export function VaultApp({ platform }: VaultAppProps) {
                 backup in progress or an Ente sign-in survives a look at the vault, and the
                 security controls keep listening for a lock from any view. */}
             <div className={styles.settingsPanel} hidden={view !== "settings"}>
-              <section className={styles.settingsCard} aria-labelledby="appearance-heading">
-                <h3 id="appearance-heading" className={styles.settingsCardTitle}>
-                  Appearance
-                </h3>
-                <ThemeToggle />
-              </section>
-              <VaultAccess
-                platform={platform}
-                securityControls
-                onUnlockedChange={setVaultUnlocked}
-              />
-              <MigrationPanel
-                platform={platform}
-                active={view === "settings"}
-                onCompleted={vaultState.refresh}
-              />
-              <ImportDialog
-                platform={platform}
-                active={view === "settings"}
-                onImported={handleImported}
-                onDone={goToVaultView}
-              />
+              <div className={styles.settingsCell}>
+                <section className={styles.settingsCard} aria-labelledby="appearance-heading">
+                  <h3 id="appearance-heading" className={styles.settingsCardTitle}>
+                    Appearance
+                  </h3>
+                  <ThemeToggle />
+                </section>
+              </div>
+              <div className={styles.settingsCell}>
+                <VaultAccess
+                  platform={platform}
+                  securityControls
+                  onUnlockedChange={setVaultUnlocked}
+                />
+              </div>
+              <div className={styles.settingsCell}>
+                <MigrationPanel
+                  platform={platform}
+                  active={view === "settings"}
+                  onCompleted={vaultState.refresh}
+                />
+              </div>
+              <div className={`${styles.settingsCell} ${styles.settingsCellWide}`}>
+                <ImportDialog
+                  platform={platform}
+                  active={view === "settings"}
+                  onImported={handleImported}
+                  onDone={goToVaultView}
+                />
+              </div>
             </div>
             <div className={styles.settingsPanel} hidden={view !== "ente"}>
-              <EnteSettings platform={platform} active={view === "ente"} onSynced={handleUpdate} />
+              <div className={`${styles.settingsCell} ${styles.settingsCellWide}`}>
+                <EnteSettings
+                  platform={platform}
+                  active={view === "ente"}
+                  onSynced={handleUpdate}
+                />
+              </div>
             </div>
           </div>
         )}
