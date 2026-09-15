@@ -1,7 +1,8 @@
 const OTP_CONTEXT =
   /\b(?:otp|one[\s-]?time(?:\s+(?:pass(?:word|code)?|code))?|verification\s+(?:code|token)|authentication\s+(?:code|token)|2fa(?:\s+(?:code|token))?|mfa(?:\s+(?:code|token)?)?)\b/i;
 /** Wording that can only mean a second factor; it wins over a weak negative such as "pin". */
-const HARD_CONTEXT = /\b(?:otp|totp|hotp|2fa|mfa|one[\s-]?time|two[\s-]?(?:factor|step)|authenticator)\b/i;
+const HARD_CONTEXT =
+  /\b(?:otp|totp|hotp|2fa|mfa|one[\s-]?time|two[\s-]?(?:factor|step)|authenticator)\b/i;
 /** Wording that usually means a second factor, unless a negative says otherwise ("PIN verification code"). */
 const MEDIUM_CONTEXT =
   /\b(?:passcode|auth(?:entication)?[\s-]?(?:code|token)|security[\s-]?code|verification[\s-]?(?:code|token))\b/i;
@@ -52,7 +53,8 @@ function contextFor(input: HTMLInputElement): string {
   // The form's own heading ("Two-factor authentication", "Enter the code we sent") counts too.
   const scope = input.form ?? input.closest("fieldset, [role='dialog'], main, section");
   const heading = scope?.querySelector("h1, h2, h3, legend");
-  if (heading !== null && heading !== undefined) parts.push((heading.textContent ?? "").slice(0, 200));
+  if (heading !== null && heading !== undefined)
+    parts.push((heading.textContent ?? "").slice(0, 200));
   // "totpPin" reads as "totp Pin": camel case is split before the words are judged.
   return boundedText(parts.map(boundedText).join(" "))
     .replace(/([a-z])([A-Z])/g, "$1 $2")
@@ -69,7 +71,9 @@ export function segmentedGroupOf(input: HTMLInputElement): HTMLInputElement[] | 
   if (input.maxLength !== 1) return null;
   let scope: Element | null = input.parentElement;
   for (let depth = 0; scope !== null && depth < 3; depth += 1) {
-    const boxes = Array.from(scope.querySelectorAll<HTMLInputElement>('input[maxlength="1"]')).filter(
+    const boxes = Array.from(
+      scope.querySelectorAll<HTMLInputElement>('input[maxlength="1"]'),
+    ).filter(
       (box) => SEGMENT_TYPES.has(box.getAttribute("type")?.toLowerCase() ?? "") && !box.disabled,
     );
     if (boxes.length >= 4 && boxes.length <= 8 && boxes.includes(input)) return boxes;
@@ -128,7 +132,9 @@ export function createOtpFieldEligibility(ownerWindow: Window): OtpFieldEligibil
   return {
     isEligible(input): boolean {
       if (input.ownerDocument.defaultView !== ownerWindow) return false;
-      if (!input.isConnected || input.getRootNode() !== input.ownerDocument) return false;
+      const root = input.getRootNode();
+      if (!input.isConnected || (root !== input.ownerDocument && !(root instanceof ShadowRoot)))
+        return false;
       if (input.closest("shardpass-picker-host") !== null) return false;
       if (
         input.disabled ||
@@ -150,7 +156,10 @@ export function createOtpFieldEligibility(ownerWindow: Window): OtpFieldEligibil
       const maximum = input.maxLength;
       const type = input.getAttribute("type")?.toLowerCase() ?? "";
       const numericShape =
-        (input.inputMode === "numeric" || type === "tel" || type === "number" || /\\d|\[0-9\]/.test(input.pattern)) &&
+        (input.inputMode === "numeric" ||
+          type === "tel" ||
+          type === "number" ||
+          /\\d|\[0-9\]/.test(input.pattern)) &&
         (maximum === -1 || (maximum >= 4 && maximum <= 8));
       if (numericShape && VERIFICATION_CONTEXT.test(context)) return true;
       return OTP_CONTEXT.test(context);

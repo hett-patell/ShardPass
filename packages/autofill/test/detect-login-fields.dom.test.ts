@@ -83,6 +83,24 @@ describe("detectLoginFields", () => {
     ]);
   });
 
+  it("sees a login form inside an open shadow root, and reports the root", () => {
+    const host = document.createElement("x-login");
+    document.body.append(host);
+    const shadow = host.attachShadow({ mode: "open" });
+    shadow.innerHTML = `
+      <form>
+        <input type="email" name="email" />
+        <input type="password" name="password" />
+      </form>
+    `;
+    const roots: ShadowRoot[] = [];
+    const results = detectLoginFields(document, { onShadowRoot: (root) => roots.push(root) });
+    expect(results).toHaveLength(1);
+    expect(results[0]?.usernameField?.name).toBe("email");
+    expect(results[0]?.passwordField?.getRootNode()).toBe(shadow);
+    expect(roots).toEqual([shadow]);
+  });
+
   it("detects password field without username", () => {
     document.body.innerHTML = `<input type="password" name="pwd" />`;
     const results = detectLoginFields(document);

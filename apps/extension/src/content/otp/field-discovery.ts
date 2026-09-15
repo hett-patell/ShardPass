@@ -1,3 +1,4 @@
+import { deepActiveElement } from "../deep-active-element";
 import { createOtpFieldEligibility, type OtpFieldEligibility } from "./field-eligibility";
 
 export const OTP_DISCOVERY_LIMITS = Object.freeze({
@@ -129,7 +130,7 @@ export function createOtpFieldDiscovery(
       });
     },
     revalidateFocusedField() {
-      const active = options.document.activeElement;
+      const active = deepActiveElement(options.document);
       if (active?.tagName !== "INPUT" || active.ownerDocument.defaultView !== options.window)
         return null;
       const input = active as HTMLInputElement;

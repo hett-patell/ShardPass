@@ -94,7 +94,7 @@ describe("OTP field eligibility", () => {
     expect(eligibility().isEligible(element)).toBe(false);
   });
 
-  it("does not accept page shadow-tree fields", () => {
+  it("accepts fields inside open page shadow roots", () => {
     const host = document.createElement("div");
     document.body.append(host);
     const root = host.attachShadow({ mode: "open" });
@@ -112,7 +112,7 @@ describe("OTP field eligibility", () => {
       height: 1,
       toJSON: () => ({}),
     });
-    expect(eligibility().isEligible(element)).toBe(false);
+    expect(eligibility().isEligible(element)).toBe(true);
   });
 
   it("rejects hidden, transparent, inert, disabled, read-only, zero-size, offscreen, and unsupported fields", () => {
@@ -231,11 +231,17 @@ describe("OTP field eligibility", () => {
   });
 
   it("reads Google's totpPin as a code field: the strong word wins over the weak negative", () => {
-    expect(eligibility().isEligible(input({ id: "totpPin", name: "totpPin", type: "tel", "aria-label": "Enter code" }))).toBe(true);
+    expect(
+      eligibility().isEligible(
+        input({ id: "totpPin", name: "totpPin", type: "tel", "aria-label": "Enter code" }),
+      ),
+    ).toBe(true);
   });
 
   it("accepts a plain numeric code box, and a tel box under a two-factor heading", () => {
-    expect(eligibility().isEligible(input({ name: "code", inputmode: "numeric", maxlength: "6" }))).toBe(true);
+    expect(
+      eligibility().isEligible(input({ name: "code", inputmode: "numeric", maxlength: "6" })),
+    ).toBe(true);
     const form = document.createElement("form");
     const heading = document.createElement("h2");
     heading.textContent = "Two-factor authentication";
@@ -257,7 +263,13 @@ describe("OTP field eligibility", () => {
   });
 
   it("never mistakes a card's security code for a second factor", () => {
-    expect(eligibility().isEligible(labeled("Card security code", { maxlength: "4", inputmode: "numeric" }))).toBe(false);
-    expect(eligibility().isEligible(input({ name: "cvv", inputmode: "numeric", maxlength: "4" }))).toBe(false);
+    expect(
+      eligibility().isEligible(
+        labeled("Card security code", { maxlength: "4", inputmode: "numeric" }),
+      ),
+    ).toBe(false);
+    expect(
+      eligibility().isEligible(input({ name: "cvv", inputmode: "numeric", maxlength: "4" })),
+    ).toBe(false);
   });
 });

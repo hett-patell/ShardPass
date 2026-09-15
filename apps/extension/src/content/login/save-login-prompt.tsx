@@ -1,4 +1,5 @@
 import { detectLoginFields, type LoginFieldSet } from "@shardpass/autofill";
+import { deepEventTarget } from "../deep-active-element";
 import type { LoginFillRequest, LoginFillResponse } from "@shardpass/messaging";
 
 import type { LoginFillContentPlatform } from "../../platform/extension-platform";
@@ -335,22 +336,23 @@ export function createSaveLoginPrompt(
     target instanceof Element && target.ownerDocument.defaultView === options.window;
 
   const handleSubmit = (event: Event): void => {
-    if (disposed || !ownsElement(event.target) || !(event.target instanceof HTMLFormElement))
-      return;
-    snapshotForm(event.target);
+    const target = deepEventTarget(event);
+    if (disposed || !ownsElement(target) || !(target instanceof HTMLFormElement)) return;
+    snapshotForm(target);
   };
 
   const handleClick = (event: Event): void => {
-    if (disposed || !ownsElement(event.target)) return;
-    const control = event.target.closest("button, input");
+    const target = deepEventTarget(event);
+    if (disposed || !ownsElement(target)) return;
+    const control = target.closest("button, input");
     if (control === null || !isSubmitControl(control)) return;
     const form = control.form;
     if (form !== null) snapshotForm(form);
   };
 
   const handleKeyDown = (event: KeyboardEvent): void => {
-    if (disposed || event.key !== "Enter" || !ownsElement(event.target)) return;
-    const target = event.target;
+    const target = deepEventTarget(event);
+    if (disposed || event.key !== "Enter" || !ownsElement(target)) return;
     if (!(target instanceof HTMLInputElement)) return;
     const fieldSets = fieldSetsNow();
     const own = fieldSets.find((fieldSet) => fieldSet.passwordField === target);
@@ -370,8 +372,8 @@ export function createSaveLoginPrompt(
     return scanCache.fieldSets;
   };
   const handleInput = (event: Event): void => {
-    if (disposed || !ownsElement(event.target)) return;
-    const target = event.target;
+    const target = deepEventTarget(event);
+    if (disposed || !ownsElement(target)) return;
     if (!(target instanceof HTMLInputElement) || target.value.trim() === "") return;
     if (target.type !== "text" && target.type !== "email" && target.type !== "tel") return;
     if (fieldSetsRecent().some((fieldSet) => fieldSet.usernameField === target))

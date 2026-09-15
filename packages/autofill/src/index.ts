@@ -1,4 +1,4 @@
-export { detectLoginFields } from "./detect-login-fields";
+export { collectInputs, detectLoginFields } from "./detect-login-fields";
 export type { DetectLoginFieldsOptions, LoginFieldSet } from "./detect-login-fields";
 export { matchDomain, matchLoginUrl, matchLoginUrls, registrableDomain } from "./domain-match";
 export type { UrlMatchMode } from "./domain-match";

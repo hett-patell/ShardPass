@@ -284,6 +284,34 @@ describe("Login fill controller", () => {
     expect(roots.some((root) => root.querySelector(".signIn"))).toBe(true);
   });
 
+  it("offers the chip for a login form inside an open shadow root", async () => {
+    const roots = captureClosedRoots();
+    const host = document.createElement("x-login");
+    document.body.append(host);
+    const shadow = host.attachShadow({ mode: "open" });
+    const form = document.createElement("form");
+    const email = document.createElement("input");
+    email.type = "email";
+    email.name = "email";
+    const password = document.createElement("input");
+    password.type = "password";
+    password.name = "password";
+    form.append(email, password);
+    shadow.append(form);
+    const candidate = platform((request) =>
+      request.kind === "login.fillSuggestions"
+        ? { version: 1, kind: "login.fillSuggestionsResult", suggestions: [account] }
+        : undefined,
+    );
+    start(candidate);
+    act(() => {
+      password.focus();
+      password.dispatchEvent(new FocusEvent("focusin", { bubbles: true, composed: true }));
+    });
+    await flush();
+    expect(roots.some((root) => root.querySelector(".loginTrigger") !== null)).toBe(true);
+  });
+
   it("shows no chip on a sign-in form that merely links to sign-up when nothing is saved", async () => {
     const roots = captureClosedRoots();
     const form = document.createElement("form");

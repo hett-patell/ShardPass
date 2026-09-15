@@ -3,6 +3,7 @@ import { detectLoginFields, fillLoginFields } from "@shardpass/autofill";
 import type { LoginFieldSet } from "@shardpass/autofill";
 
 import type { LoginFillContentPlatform } from "../../platform/extension-platform";
+import { deepActiveElement } from "../deep-active-element";
 import { createPickerHost, type PickerHandle } from "../createPickerHost";
 import {
   filterSuggestions,
@@ -184,6 +185,28 @@ export function createLoginFillController(
   let started = false;
   let disposed = false;
   let observer: MutationObserver | null = null;
+  // Mutations inside a shadow root are invisible to an observer on the document: every open
+  // root the scan enters is watched on its own, once.
+  const watchedShadowRoots = new WeakSet<ShadowRoot>();
+  const watchShadowRoot = (root: ShadowRoot): void => {
+    if (observer === null || watchedShadowRoots.has(root)) return;
+    watchedShadowRoots.add(root);
+    observer.observe(root, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: [
+        "type",
+        "autocomplete",
+        "name",
+        "id",
+        "hidden",
+        "disabled",
+        "style",
+        "class",
+      ],
+    });
+  };
   let rescanScheduled = false;
   let owner: Owner | null = null;
   let host: PickerHandle | null = null;
@@ -253,7 +276,10 @@ export function createLoginFillController(
   const rescan = (): void => {
     rescanScheduled = false;
     if (disposed) return;
-    fieldSets = detectLoginFields(options.document, { previousPasswordFields: seenPasswordFields });
+    fieldSets = detectLoginFields(options.document, {
+      previousPasswordFields: seenPasswordFields,
+      onShadowRoot: watchShadowRoot,
+    });
     for (const fieldSet of fieldSets) {
       if (fieldSet.passwordField !== null) seenPasswordFields.add(fieldSet.passwordField);
     }
@@ -609,7 +635,7 @@ export function createLoginFillController(
     }
     if (event?.target instanceof Element && event.target.localName === "shardpass-picker-host")
       return;
-    const active = options.document.activeElement;
+    const active = deepActiveElement(options.document);
     if (active?.tagName !== "INPUT" || active.ownerDocument.defaultView !== options.window) {
       invalidate(false);
       return;
@@ -887,7 +913,7 @@ export function createLoginFillController(
       return Promise.resolve({ version: 1, kind: "login.fillFromPopupResult", status: "failed" });
     rescan();
     if (fieldSets.length === 0) return new Promise(() => undefined);
-    const active = options.document.activeElement;
+    const active = deepActiveElement(options.document);
     const focused = active instanceof HTMLInputElement ? fieldSetFor(active, fieldSets) : null;
     const fieldSet =
       (focused !== null && isRendered(focused) ? focused : null) ??
@@ -954,7 +980,8 @@ export function createLoginFillController(
     start() {
       if (started || disposed) return;
       started = true;
-      rescan();
+      // The observer exists before the first scan, so the shadow roots that scan finds are
+      // watched from the start.
       const Observer = options.document.defaultView?.MutationObserver ?? MutationObserver;
       observer = new Observer(scheduleRescan);
       observer.observe(options.document.body, {
@@ -963,6 +990,7 @@ export function createLoginFillController(
         attributes: true,
         attributeFilter: ["type", "autocomplete"],
       });
+      rescan();
       options.document.addEventListener("focusin", onFocusIn, true);
       options.document.addEventListener("mousedown", onPointerDownOutside, true);
       options.window.addEventListener("pagehide", onPageInvalidated, { once: true });

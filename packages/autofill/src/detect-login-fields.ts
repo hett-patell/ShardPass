@@ -13,6 +13,35 @@ export interface DetectLoginFieldsOptions {
    * text, and the field would otherwise vanish from detection in the middle of a login.
    */
   readonly previousPasswordFields?: Readonly<{ has(input: HTMLInputElement): boolean }> | undefined;
+  /** Called for every open shadow root the scan enters, so a caller can watch it for changes. */
+  readonly onShadowRoot?: ((root: ShadowRoot) => void) | undefined;
+}
+
+const MAX_SHADOW_ROOTS = 200;
+
+/**
+ * Every <input> under `root`, including those inside open shadow roots (web-component
+ * login widgets), in document order per tree. Closed roots cannot be seen and are not.
+ */
+export function collectInputs(
+  root: Document | ShadowRoot,
+  onShadowRoot?: (root: ShadowRoot) => void,
+): HTMLInputElement[] {
+  const inputs: HTMLInputElement[] = [];
+  const queue: Array<Document | ShadowRoot> = [root];
+  let seen = 0;
+  while (queue.length > 0) {
+    const scope = queue.shift()!;
+    inputs.push(...Array.from(scope.querySelectorAll<HTMLInputElement>("input")));
+    for (const host of Array.from(scope.querySelectorAll<HTMLElement>("*"))) {
+      const shadow = host.shadowRoot;
+      if (shadow === null || seen >= MAX_SHADOW_ROOTS) continue;
+      seen += 1;
+      onShadowRoot?.(shadow);
+      queue.push(shadow);
+    }
+  }
+  return inputs;
 }
 
 const USERNAME_PATTERN = /user|email|login|account|phone|identifier|uid|uname/i;
@@ -155,7 +184,7 @@ export function detectLoginFields(
 ): LoginFieldSet[] {
   const isPassword = (input: HTMLInputElement) =>
     isPasswordField(input, options.previousPasswordFields);
-  const inputs = Array.from(root.querySelectorAll<HTMLInputElement>("input"));
+  const inputs = collectInputs(root, options.onShadowRoot);
   const fieldSets: LoginFieldSet[] = inputs.filter(isPassword).map((passwordField) => ({
     usernameField: findUsernameField(passwordField, isPassword),
     passwordField,
