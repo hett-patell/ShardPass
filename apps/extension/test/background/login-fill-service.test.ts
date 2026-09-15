@@ -194,7 +194,7 @@ describe("LoginFillService", () => {
       service.handle(
         request("login.fillConfirm", {
           itemId: stored.id,
-          releaseId: expect.stringMatching(/^[a-f0-9]{32}$/u) as unknown as string,
+          releaseId: expect.stringMatching(/^[a-f0-9]{32}$/u) as string,
         }),
         sender,
       ),
@@ -364,7 +364,7 @@ describe("LoginFillService", () => {
     );
     expect(released).toMatchObject({
       kind: "login.fillRelease",
-      releaseId: expect.stringMatching(/^[a-f0-9]{32}$/u) as unknown as string,
+      releaseId: expect.stringMatching(/^[a-f0-9]{32}$/u) as string,
       signInWith: "google",
       password: "",
     });
@@ -403,7 +403,7 @@ describe("LoginFillService", () => {
     expect(result).toEqual({
       version: 1,
       kind: "login.fillRelease",
-      releaseId: expect.stringMatching(/^[a-f0-9]{32}$/u) as unknown as string,
+      releaseId: expect.stringMatching(/^[a-f0-9]{32}$/u) as string,
       username: "alice",
       password: "s3cret",
     });
@@ -685,7 +685,7 @@ describe("LoginFillService sender binding", () => {
     );
     expect(revealed).toMatchObject({
       kind: "login.fillRelease",
-      releaseId: expect.stringMatching(/^[a-f0-9]{32}$/u) as unknown as string,
+      releaseId: expect.stringMatching(/^[a-f0-9]{32}$/u) as string,
       password: "s3cret",
     });
   });
