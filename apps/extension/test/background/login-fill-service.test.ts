@@ -205,12 +205,17 @@ describe("LoginFillService", () => {
     if (listed.kind !== "login.fillSuggestionsResult") throw new Error("expected suggestions");
     expect(listed.suggestions.map((entry) => entry.itemId)).toEqual([here.id]);
 
-    // ... nor learn whether a password is the one saved there.
+    // ... nor learn whether a password is the one saved there: the offer is judged against
+    // the sender's own site (where "vault-pw" is not the password), never against bank.test.
     const offer = await service.handle(
       request("login.saveOffer", { domain: "bank.test", username: "alice", password: "vault-pw" }),
       sender,
     );
-    expect(offer).toMatchObject({ kind: "login.saveOfferResult", existing: "none" });
+    expect(offer).toMatchObject({
+      kind: "login.saveOfferResult",
+      existing: "different-password",
+      existingName: "Example",
+    });
   });
 
   it("sorts favorites first, then normalized name and username", async () => {
