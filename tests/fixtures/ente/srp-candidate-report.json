@@ -173,7 +173,7 @@
       "disposition": "derived-pass:a789f6c7b0a1bfe6e87408a5a199490d523d075ad822dcc0ffb68add2d9aac92"
     }
   },
-  "disposition": "derived-pass:01d9009d5dfca3740622f07a44dd3ef2d1c304422099fd1666ce6538f33b282c",
+  "disposition": "derived-pass:62dfa96728f8fdc38fec3bb757c42524da847d1f54de8d7755c5afec76929ec7",
   "evidence": {
     "reference": {
       "path": "scripts/replay-ente-srp-reference.mjs",
@@ -197,7 +197,7 @@
     },
     "outputScanner": {
       "path": "scripts/scan-build.mjs",
-      "sha256": "8cc9cd5d280ee160922ec561f06b4be215253975fd52fa6acf35b9390429b82d"
+      "sha256": "bd271e8b5eb4a5b4e4dd3d36c701771967fe65740f3b192eb7286dab2459c15a"
     }
   }
 }

@@ -239,6 +239,23 @@
   font-size: var(--text-md);
   font-weight: 600;
 }
+.settingsCardCopy {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+.settingsToggle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+}
+.settingsError {
+  margin: 0;
+  color: var(--danger, var(--accent));
+  font-size: var(--text-sm);
+}
 
 .sort {
   flex: 0 0 auto;

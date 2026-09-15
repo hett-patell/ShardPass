@@ -220,6 +220,8 @@ describe("VaultApp foundation shell", () => {
     // vault.getState only fires ~250ms later via its connectVaultState fallback timer.
     // FakeExtensionPlatform serves queued responses in strict FIFO order regardless of
     // which request consumes them, so the queue order here must match that send order.
+    // The breach-check card reads its preference first (tree order), then the migration panel asks.
+    platform.queueSendResponse({ version: 1, kind: "security.settings", breachChecks: false });
     platform.queueSendResponse({
       version: 1,
       kind: "migration.status",
@@ -240,6 +242,8 @@ describe("VaultApp foundation shell", () => {
   it("boots into the Settings destination from a #/settings deep link and clears the hash", async () => {
     window.location.hash = "#/settings";
     const platform = readyUnlockedPlatform();
+    // The breach-check card reads its preference first (tree order), then the migration panel asks.
+    platform.queueSendResponse({ version: 1, kind: "security.settings", breachChecks: false });
     platform.queueSendResponse({
       version: 1,
       kind: "migration.status",

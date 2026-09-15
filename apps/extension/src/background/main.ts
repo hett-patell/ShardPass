@@ -29,6 +29,7 @@ import { createEnteRuntimeOwner, type EnteRuntimeDependencies } from "./ente/run
 import { FolderService } from "./folder/folder-service";
 import { PasskeyService } from "./passkey/passkey-service";
 import { ItemService } from "./item/item-service";
+import { BreachCheckService } from "./security/breach-check-service";
 import { LoginFillService } from "./login/login-fill-service";
 import { createInternalHotpLifecycle } from "./otp/hotp-lifecycle";
 import { OtpImportService } from "./otp/import-service";
@@ -169,6 +170,21 @@ export function installBackground(
     offerStore: platform.sessionStorage,
   });
   const passwordGen = new PasswordGenService();
+  // Have I Been Pwned's range endpoint, padded: the reply's size says nothing about the
+  // prefix asked for. Only the first five characters of the password's SHA-1 are sent.
+  const breachCheck = new BreachCheckService({
+    repository: sessions.vaultRepository,
+    local: platform.localStorage,
+    now: () => Date.now(),
+    fetchRange: async (prefix) => {
+      const response = await fetch(`https://api.pwnedpasswords.com/range/${prefix}`, {
+        headers: { "Add-Padding": "true" },
+        cache: "no-store",
+      });
+      if (!response.ok) throw new Error(`range ${response.status}`);
+      return response.text();
+    },
+  });
   const ente = new EnteOtpMetadataStore();
   const credentials = new MigrationCredentialService(platform.localStorage, sessions, {
     now: () => Date.now(),
@@ -399,6 +415,7 @@ export function installBackground(
         passwordGen,
         folder,
         passkey,
+        breachCheck,
       );
       if (parsedVault.success) {
         const state = await sessions.getState();

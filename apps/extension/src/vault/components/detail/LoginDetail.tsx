@@ -7,6 +7,7 @@ import { DeleteItemDialog } from "../DeleteItemDialog";
 import { LoginForm, MATCH_MODE_LABELS } from "../forms/LoginForm";
 import { updateItem } from "../forms/submit-item";
 import { CopyButton } from "./CopyButton";
+import { BreachCheckRow } from "./BreachCheckRow";
 import styles from "./Detail.module.css";
 import { useFocusAfterEdit } from "./useFocusAfterEdit";
 import { DetailActions } from "./DetailActions";
@@ -138,6 +139,7 @@ export function LoginDetail({
       {item.signInWith === undefined || item.password !== "" ? (
         <RevealField label="Password" value={item.password} />
       ) : null}
+      {item.password !== "" ? <BreachCheckRow itemId={item.id} platform={platform} /> : null}
 
       {history.length > 0 ? (
         <div className={styles.fieldGroup}>

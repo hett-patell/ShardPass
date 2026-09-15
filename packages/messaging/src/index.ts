@@ -286,7 +286,12 @@ export {
   parsePasskeyResponseForRequest,
   passkeySenderPolicy,
 } from "./passkey";
-export type { PasskeyCandidate, PasskeyCommandKind, PasskeyRequest, PasskeyResponse } from "./passkey";
+export type {
+  PasskeyCandidate,
+  PasskeyCommandKind,
+  PasskeyRequest,
+  PasskeyResponse,
+} from "./passkey";
 export {
   SaveLoginOfferIdSchema,
   SaveLoginExistingSchema,
@@ -295,7 +300,13 @@ export {
   PendingSaveOfferSchema,
   LoginPendingOfferResultSchema,
 } from "./login-fill";
-export type {
-  SaveLoginExisting,
-  PendingSaveOffer,
-} from "./login-fill";
+export type { SaveLoginExisting, PendingSaveOffer } from "./login-fill";
+export {
+  BreachResultResponseSchema,
+  parseSecurityResponseForRequest,
+  SecurityRequestSchema,
+  SecurityResponseSchema,
+  securitySenderPolicy,
+  SecuritySettingsResponseSchema,
+} from "./security";
+export type { SecurityCommandKind, SecurityRequest, SecurityResponse } from "./security";

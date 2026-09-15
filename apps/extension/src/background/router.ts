@@ -1,48 +1,51 @@
+import type { SecurityResponse } from "@shardpass/messaging";
 import {
   authorizeSender,
   BackupRequestSchema,
   backupSenderPolicy,
-  parseBackupResponseForRequest,
-  FoundationRequestSchema,
-  foundationSenderPolicy,
   EnteRequestSchema,
+  EnteSafeStateSchema,
   enteSenderPolicy,
   FolderRequestSchema,
   folderSenderPolicy,
-  parseFolderResponseForRequest,
+  FoundationRequestSchema,
+  foundationSenderPolicy,
   GeneratePasswordRequestSchema,
   GeneratePasswordResponseSchema,
-  passwordGenSenderPolicy,
   ItemCrudRequestSchema,
   itemCrudSenderPolicy,
-  parseItemCrudResponseForRequest,
   LoginFillRequestSchema,
   loginFillSenderPolicy,
-  parseLoginFillResponseForRequest,
   MigrationRequestSchema,
   MigrationResponseSchema,
+  migrationSenderPolicy,
   OtpFillRequestSchema,
   otpFillSenderPolicy,
-  parseOtpFillResponseForRequest,
   OtpImportRequestSchema,
   OtpImportResponseSchema,
   otpImportSenderPolicy,
-  parseOtpImportResponseForRequest,
-  migrationSenderPolicy,
   OtpRequestSchema,
-  parseOtpResponseForRequest,
   otpSenderPolicy,
-  PasskeyRequestSchema,
+  parseBackupResponseForRequest,
+  parseFolderResponseForRequest,
+  parseItemCrudResponseForRequest,
+  parseLoginFillResponseForRequest,
+  parseOtpFillResponseForRequest,
+  parseOtpImportResponseForRequest,
+  parseOtpResponseForRequest,
   parsePasskeyResponseForRequest,
+  parseSecurityResponseForRequest,
+  PasskeyRequestSchema,
   passkeySenderPolicy,
-  VaultRequestSchema,
-  vaultSenderPolicy,
+  passwordGenSenderPolicy,
+  SecurityRequestSchema,
+  securitySenderPolicy,
   type BackupRequest,
   type BackupResponse,
-  type FoundationResponse,
   type EnteSafeState,
   type FolderRequest,
   type FolderResponse,
+  type FoundationResponse,
   type GeneratePasswordRequest,
   type GeneratePasswordResponse,
   type ItemCrudRequest,
@@ -60,8 +63,9 @@ import {
   type PasskeyResponse,
   type SenderContext,
   type VaultResponse,
-  EnteSafeStateSchema,
+  VaultRequestSchema,
   VaultResponseSchema,
+  vaultSenderPolicy,
   VaultStateResponseSchema,
 } from "@shardpass/messaging";
 import { toSafeError, type SafeError, type SafeErrorCode } from "@shardpass/security";
@@ -81,6 +85,7 @@ import { VaultSessionError } from "./vault/session-service";
 import type { VaultService } from "./vault/vault-service";
 import type { EnteService } from "./ente/ente-service";
 import { EnteProtocolError } from "./ente/protocol";
+import { BreachCheckError, type BreachCheckService } from "./security/breach-check-service";
 
 export type BackgroundErrorResponse = Readonly<{
   version: 1;
@@ -106,6 +111,7 @@ export type BackgroundResponse =
   | PasskeyResponse
   | VaultResponse
   | EnteSafeState
+  | SecurityResponse
   | BackgroundErrorResponse;
 
 const backupErrorCodes = {
@@ -332,7 +338,26 @@ export function routeMessage(
   passwordGenService?: PasswordGenHandler,
   folderService?: FolderHandler,
   passkeyService?: PasskeyHandler,
+  breachCheckService?: Pick<BreachCheckService, "handle">,
 ): Promise<BackgroundResponse> {
+  const securityRequest = SecurityRequestSchema.safeParse(input);
+  if (securityRequest.success) {
+    const policy = securitySenderPolicy[securityRequest.data.kind];
+    if (!authorizeSender(senderContext, { extensionId: expectedExtensionId, ...policy }))
+      return Promise.resolve(errorResponse("UNAUTHORIZED_SENDER"));
+    if (breachCheckService === undefined)
+      return Promise.resolve(errorResponse("VAULT_UNAVAILABLE"));
+    return breachCheckService
+      .handle(securityRequest.data)
+      .then((candidate) => {
+        const parsed = parseSecurityResponseForRequest(securityRequest.data, candidate);
+        return parsed.success ? parsed.data : errorResponse("VAULT_UNAVAILABLE");
+      })
+      .catch((error: unknown) =>
+        errorResponse(error instanceof BreachCheckError ? error.code : "VAULT_UNAVAILABLE"),
+      );
+  }
+
   const passkeyRequest = PasskeyRequestSchema.safeParse(input);
   if (passkeyRequest.success) {
     const policy = passkeySenderPolicy[passkeyRequest.data.kind];

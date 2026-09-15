@@ -605,7 +605,7 @@ export async function scanBuild(directory, options = {}) {
       host_permissions: ["https://api.ente.io/*"],
       content_security_policy: {
         extension_pages:
-          "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'; connect-src 'self' https://api.ente.io; img-src 'self' data:; media-src 'self'; font-src 'self'; style-src 'self'",
+          "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'; connect-src 'self' https://api.ente.io https://api.pwnedpasswords.com; img-src 'self' data:; media-src 'self'; font-src 'self'; style-src 'self'",
       },
     };
     for (const [key, expected] of Object.entries(sourceContract)) {

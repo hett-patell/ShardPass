@@ -18,6 +18,7 @@ import type {
   OtpImportUiExtensionPlatform,
 } from "../platform/extension-platform";
 import { VaultAccess } from "../vault-access/VaultAccess";
+import { BreachCheckSettings } from "./settings/BreachCheckSettings";
 import { EmptyDetailState } from "./components/EmptyDetailState";
 import { EmptyVaultState } from "./components/EmptyVaultState";
 import { CardForm } from "./components/forms/CardForm";
@@ -418,6 +419,7 @@ export function VaultApp({ platform }: VaultAppProps) {
                 securityControls
                 onUnlockedChange={setVaultUnlocked}
               />
+              <BreachCheckSettings platform={platform} active={view === "settings"} />
               <MigrationPanel
                 platform={platform}
                 active={view === "settings"}
