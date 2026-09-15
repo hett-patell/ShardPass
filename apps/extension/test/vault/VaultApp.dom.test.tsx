@@ -263,6 +263,17 @@ describe("VaultApp foundation shell", () => {
     expect(screen.getByRole("button", { name: "Edit" })).toBeVisible();
   });
 
+  it("returns focus to the item's title when its edit form closes", async () => {
+    const platform = readyUnlockedPlatform();
+    render(<VaultApp platform={platform} />);
+    fireEvent.click(await screen.findByRole("button", { name: /Example Note/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Cancel" }));
+    await waitFor(() =>
+      expect(screen.getByRole("heading", { name: "Example Note" })).toHaveFocus(),
+    );
+  });
+
   it("asks before removing a passkey and sends the update only on confirm", async () => {
     const passkey = {
       credentialId: "Y3JlZC0x",

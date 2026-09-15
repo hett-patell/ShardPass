@@ -23,7 +23,8 @@ const deleteUnavailable = "Could not delete this item. Try again.";
 
 /** Names the background's refusal so a failed delete is diagnosable, not just reported. */
 function describeFailure(candidate: unknown): string {
-  if (typeof candidate !== "object" || candidate === null || !("error" in candidate)) return deleteUnavailable;
+  if (typeof candidate !== "object" || candidate === null || !("error" in candidate))
+    return deleteUnavailable;
   const error = (candidate as { error?: { code?: unknown } }).error;
   const code = typeof error?.code === "string" ? error.code : undefined;
   switch (code) {
@@ -45,7 +46,14 @@ function describeFailure(candidate: unknown): string {
  * Deletes through the generic item.delete message (OTP items keep their own otp.delete +
  * DeleteOtpDialog flow, since otp.delete additionally requires an expectedRevision).
  */
-export function DetailActions({ item, folders, platform, onEdit, onUpdate, onDeleted }: DetailActionsProps) {
+export function DetailActions({
+  item,
+  folders,
+  platform,
+  onEdit,
+  onUpdate,
+  onDeleted,
+}: DetailActionsProps) {
   const [confirming, setConfirming] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState("");

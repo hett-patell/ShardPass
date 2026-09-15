@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { ExtensionPlatform } from "../../../platform/extension-platform";
 import { NoteForm } from "../forms/NoteForm";
 import styles from "./Detail.module.css";
+import { useFocusAfterEdit } from "./useFocusAfterEdit";
 import { DetailActions } from "./DetailActions";
 
 export interface NoteDetailProps {
@@ -16,6 +17,7 @@ export interface NoteDetailProps {
 
 export function NoteDetail({ item, platform, folders, onUpdate, onDeleted }: NoteDetailProps) {
   const [editing, setEditing] = useState(false);
+  const titleRef = useFocusAfterEdit(editing);
 
   if (editing) {
     return (
@@ -34,7 +36,9 @@ export function NoteDetail({ item, platform, folders, onUpdate, onDeleted }: Not
   return (
     <div className={styles.detail}>
       <header className={styles.header}>
-        <h2 className={styles.title}>{item.name}</h2>
+        <h2 ref={titleRef} tabIndex={-1} className={styles.title}>
+          {item.name}
+        </h2>
       </header>
 
       {item.tags.length > 0 ? (

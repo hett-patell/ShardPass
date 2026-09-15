@@ -8,6 +8,7 @@ import { LoginForm, MATCH_MODE_LABELS } from "../forms/LoginForm";
 import { updateItem } from "../forms/submit-item";
 import { CopyButton } from "./CopyButton";
 import styles from "./Detail.module.css";
+import { useFocusAfterEdit } from "./useFocusAfterEdit";
 import { DetailActions } from "./DetailActions";
 import { RevealField } from "./RevealField";
 import { useInlineTotp } from "./useInlineTotp";
@@ -33,16 +34,30 @@ function formatChangedAt(iso: string): string {
   return Number.isNaN(date.getTime()) ? iso : date.toLocaleString();
 }
 
-export function LoginDetail({ item, platform, otpItems, folders, onUpdate, onDeleted }: LoginDetailProps) {
+export function LoginDetail({
+  item,
+  platform,
+  otpItems,
+  folders,
+  onUpdate,
+  onDeleted,
+}: LoginDetailProps) {
   const [editing, setEditing] = useState(false);
+  const titleRef = useFocusAfterEdit(editing);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [passkeyToRemove, setPasskeyToRemove] = useState<Passkey | null>(null);
   const [removingPasskey, setRemovingPasskey] = useState(false);
   const [passkeyError, setPasskeyError] = useState("");
   const linkedOtp =
-    item.linkedOtpId === undefined ? null : (otpItems.find((otp) => otp.id === item.linkedOtpId) ?? null);
+    item.linkedOtpId === undefined
+      ? null
+      : (otpItems.find((otp) => otp.id === item.linkedOtpId) ?? null);
   const liveCodeItemId = linkedOtp !== null && linkedOtp.otpType !== "hotp" ? linkedOtp.id : null;
-  const { code, remaining } = useOtpLiveCode(platform, liveCodeItemId, liveCodeItemId !== null && !editing);
+  const { code, remaining } = useOtpLiveCode(
+    platform,
+    liveCodeItemId,
+    liveCodeItemId !== null && !editing,
+  );
   const inline = useInlineTotp(item, !editing);
 
   const confirmRemovePasskey = async () => {
@@ -89,7 +104,9 @@ export function LoginDetail({ item, platform, otpItems, folders, onUpdate, onDel
   return (
     <div className={styles.detail}>
       <header className={styles.header}>
-        <h2 className={styles.title}>{item.name}</h2>
+        <h2 ref={titleRef} tabIndex={-1} className={styles.title}>
+          {item.name}
+        </h2>
       </header>
 
       {item.tags.length > 0 ? (
@@ -118,7 +135,9 @@ export function LoginDetail({ item, platform, otpItems, folders, onUpdate, onDel
           </div>
         </div>
       ) : null}
-      {item.signInWith === undefined || item.password !== "" ? <RevealField label="Password" value={item.password} /> : null}
+      {item.signInWith === undefined || item.password !== "" ? (
+        <RevealField label="Password" value={item.password} />
+      ) : null}
 
       {history.length > 0 ? (
         <div className={styles.fieldGroup}>
@@ -181,7 +200,10 @@ export function LoginDetail({ item, platform, otpItems, folders, onUpdate, onDel
                     {url}
                   </a>
                   {mode !== "domain" ? (
-                    <span className={styles.badge} title={`Autofill match: ${MATCH_MODE_LABELS[mode]}`}>
+                    <span
+                      className={styles.badge}
+                      title={`Autofill match: ${MATCH_MODE_LABELS[mode]}`}
+                    >
                       {MATCH_MODE_LABELS[mode]}
                     </span>
                   ) : null}
@@ -197,7 +219,8 @@ export function LoginDetail({ item, platform, otpItems, folders, onUpdate, onDel
         <div className={styles.section}>
           {customFields.map((field, index) => {
             const key = `${field.name}-${index}`;
-            if (field.type === "hidden") return <RevealField key={key} label={field.name} value={field.value} />;
+            if (field.type === "hidden")
+              return <RevealField key={key} label={field.name} value={field.value} />;
             if (field.type === "linked")
               return (
                 <div key={key} className={styles.fieldGroup}>
@@ -219,7 +242,9 @@ export function LoginDetail({ item, platform, otpItems, folders, onUpdate, onDel
                 <span className={styles.label}>{field.name}</span>
                 <div className={styles.row}>
                   <span className={styles.rowValue}>{field.value || "—"}</span>
-                  {field.value ? <CopyButton label={`Copy ${field.name}`} value={field.value} /> : null}
+                  {field.value ? (
+                    <CopyButton label={`Copy ${field.name}`} value={field.value} />
+                  ) : null}
                 </div>
               </div>
             );
@@ -233,7 +258,9 @@ export function LoginDetail({ item, platform, otpItems, folders, onUpdate, onDel
           <div className={styles.linkedOtp}>
             <span className={styles.linkedOtpName}>{linkedOtp.issuer || linkedOtp.label}</span>
             {linkedOtp.otpType === "hotp" ? (
-              <span className={styles.valueMuted}>Counter-based — open the entry to view a code</span>
+              <span className={styles.valueMuted}>
+                Counter-based — open the entry to view a code
+              </span>
             ) : code === null ? (
               <span className={styles.valueMuted}>Loading code…</span>
             ) : (
@@ -259,7 +286,9 @@ export function LoginDetail({ item, platform, otpItems, folders, onUpdate, onDel
                   <span className={styles.value}>{passkey.rpName ?? passkey.rpId}</span>{" "}
                   <span className={styles.valueMuted}>
                     {passkey.userName} · created {new Date(passkey.createdAt).toLocaleDateString()}
-                    {passkey.lastUsedAt ? ` · used ${new Date(passkey.lastUsedAt).toLocaleDateString()}` : ""}
+                    {passkey.lastUsedAt
+                      ? ` · used ${new Date(passkey.lastUsedAt).toLocaleDateString()}`
+                      : ""}
                   </span>
                 </span>
                 <button

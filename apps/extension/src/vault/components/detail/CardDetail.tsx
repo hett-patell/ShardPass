@@ -5,6 +5,7 @@ import type { ExtensionPlatform } from "../../../platform/extension-platform";
 import { formatCardExpiry, maskCardNumber } from "../../item-support";
 import { CARD_BRAND_LABELS, CardForm } from "../forms/CardForm";
 import styles from "./Detail.module.css";
+import { useFocusAfterEdit } from "./useFocusAfterEdit";
 import { DetailActions } from "./DetailActions";
 import { RevealField } from "./RevealField";
 
@@ -18,6 +19,7 @@ export interface CardDetailProps {
 
 export function CardDetail({ item, platform, folders, onUpdate, onDeleted }: CardDetailProps) {
   const [editing, setEditing] = useState(false);
+  const titleRef = useFocusAfterEdit(editing);
 
   if (editing) {
     return (
@@ -38,7 +40,9 @@ export function CardDetail({ item, platform, folders, onUpdate, onDeleted }: Car
   return (
     <div className={styles.detail}>
       <header className={styles.header}>
-        <h2 className={styles.title}>{item.name}</h2>
+        <h2 ref={titleRef} tabIndex={-1} className={styles.title}>
+          {item.name}
+        </h2>
       </header>
 
       {item.tags.length > 0 ? (
@@ -63,7 +67,11 @@ export function CardDetail({ item, platform, folders, onUpdate, onDeleted }: Car
         <span className={styles.value}>{item.cardholderName || "—"}</span>
       </div>
 
-      <RevealField label="Card number" value={item.number} maskedPreview={maskCardNumber(item.number)} />
+      <RevealField
+        label="Card number"
+        value={item.number}
+        maskedPreview={maskCardNumber(item.number)}
+      />
 
       <div className={styles.fieldGroup}>
         <span className={styles.label}>Expires</span>

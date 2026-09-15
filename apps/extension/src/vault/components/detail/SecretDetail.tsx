@@ -7,6 +7,7 @@ import { secretTypeLabel } from "../../item-support";
 import { SecretForm } from "../forms/SecretForm";
 import { CopyButton } from "./CopyButton";
 import styles from "./Detail.module.css";
+import { useFocusAfterEdit } from "./useFocusAfterEdit";
 import { DetailActions } from "./DetailActions";
 import { RevealField } from "./RevealField";
 
@@ -20,6 +21,7 @@ export interface SecretDetailProps {
 
 export function SecretDetail({ item, platform, folders, onUpdate, onDeleted }: SecretDetailProps) {
   const [editing, setEditing] = useState(false);
+  const titleRef = useFocusAfterEdit(editing);
 
   if (editing) {
     return (
@@ -40,7 +42,9 @@ export function SecretDetail({ item, platform, folders, onUpdate, onDeleted }: S
   return (
     <div className={styles.detail}>
       <header className={styles.header}>
-        <h2 className={styles.title}>{item.name}</h2>
+        <h2 ref={titleRef} tabIndex={-1} className={styles.title}>
+          {item.name}
+        </h2>
       </header>
 
       <div className={styles.tagRow}>

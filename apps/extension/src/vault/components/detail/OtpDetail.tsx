@@ -8,6 +8,7 @@ import { DeleteOtpDialog } from "../../otp/DeleteOtpDialog";
 import { OtpEditor } from "../../otp/OtpEditor";
 import { CopyButton } from "./CopyButton";
 import styles from "./Detail.module.css";
+import { useFocusAfterEdit } from "./useFocusAfterEdit";
 import { OrganizeControls } from "./OrganizeControls";
 import { useOtpLiveCode } from "./useOtpLiveCode";
 
@@ -60,6 +61,7 @@ function errorCode(error: unknown): string | undefined {
  */
 export function OtpDetail({ item, platform, folders, onUpdate, onDeleted }: OtpDetailProps) {
   const [editing, setEditing] = useState(false);
+  const titleRef = useFocusAfterEdit(editing);
   const [submitting, setSubmitting] = useState(false);
   const [conflict, setConflict] = useState(false);
   const [saveError, setSaveError] = useState("");
@@ -131,7 +133,9 @@ export function OtpDetail({ item, platform, folders, onUpdate, onDeleted }: OtpD
     } catch (failure) {
       // Name the refusal: a bare "try again" hides conflicts and locks from the person fixing it.
       const code = (failure as { code?: unknown })?.code;
-      setDeleteError(typeof code === "string" ? `${deleteUnavailable} (${code})` : deleteUnavailable);
+      setDeleteError(
+        typeof code === "string" ? `${deleteUnavailable} (${code})` : deleteUnavailable,
+      );
     } finally {
       setSubmitting(false);
     }
@@ -172,7 +176,9 @@ export function OtpDetail({ item, platform, folders, onUpdate, onDeleted }: OtpD
   return (
     <div className={styles.detail}>
       <header className={styles.header}>
-        <h2 className={styles.title}>{name}</h2>
+        <h2 ref={titleRef} tabIndex={-1} className={styles.title}>
+          {name}
+        </h2>
         {item.issuer ? <p className={styles.valueMuted}>{item.label}</p> : null}
       </header>
 

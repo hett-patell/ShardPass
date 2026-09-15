@@ -37,7 +37,8 @@ export function OrganizeControls({ item, folders, platform, onUpdate }: Organize
     const result = await updateItem(platform, item.id, item.revision, fields);
     setBusy(false);
     if (result.status === "saved") onUpdate();
-    else if (result.status === "conflict") setError("This item changed elsewhere. Reload and try again.");
+    else if (result.status === "conflict")
+      setError("This item changed elsewhere. Reload and try again.");
     else setError(saveFailed);
   };
 
@@ -69,7 +70,11 @@ export function OrganizeControls({ item, folders, platform, onUpdate }: Organize
         disabled={busy}
         onClick={() => void save({ archivedAt: archived ? undefined : new Date().toISOString() })}
       >
-        {archived ? <ArchiveRestore size={14} aria-hidden="true" /> : <Archive size={14} aria-hidden="true" />}
+        {archived ? (
+          <ArchiveRestore size={14} aria-hidden="true" />
+        ) : (
+          <Archive size={14} aria-hidden="true" />
+        )}
         {archived ? "Restore from archive" : "Archive"}
       </Button>
       {error ? (

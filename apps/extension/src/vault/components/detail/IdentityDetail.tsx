@@ -5,6 +5,7 @@ import type { ExtensionPlatform } from "../../../platform/extension-platform";
 import { IdentityForm } from "../forms/IdentityForm";
 import { CopyButton } from "./CopyButton";
 import styles from "./Detail.module.css";
+import { useFocusAfterEdit } from "./useFocusAfterEdit";
 import { DetailActions } from "./DetailActions";
 import { RevealField } from "./RevealField";
 
@@ -18,7 +19,9 @@ export interface IdentityDetailProps {
 
 function addressLines(item: IdentityItem): string[] {
   const cityLine = [item.city, item.state, item.zip].filter((part) => part.length > 0).join(", ");
-  return [item.street, item.address2 ?? "", cityLine, item.country].filter((line) => line.length > 0);
+  return [item.street, item.address2 ?? "", cityLine, item.country].filter(
+    (line) => line.length > 0,
+  );
 }
 
 /** A plain copyable row for a non-secret identity field; renders nothing when blank. */
@@ -35,8 +38,15 @@ function PlainRow({ label, value }: { label: string; value: string | undefined }
   );
 }
 
-export function IdentityDetail({ item, platform, folders, onUpdate, onDeleted }: IdentityDetailProps) {
+export function IdentityDetail({
+  item,
+  platform,
+  folders,
+  onUpdate,
+  onDeleted,
+}: IdentityDetailProps) {
   const [editing, setEditing] = useState(false);
+  const titleRef = useFocusAfterEdit(editing);
 
   if (editing) {
     return (
@@ -60,7 +70,9 @@ export function IdentityDetail({ item, platform, folders, onUpdate, onDeleted }:
   return (
     <div className={styles.detail}>
       <header className={styles.header}>
-        <h2 className={styles.title}>{fullName || item.name}</h2>
+        <h2 ref={titleRef} tabIndex={-1} className={styles.title}>
+          {fullName || item.name}
+        </h2>
         {fullName ? <p className={styles.valueMuted}>{item.name}</p> : null}
       </header>
 
@@ -112,8 +124,12 @@ export function IdentityDetail({ item, platform, folders, onUpdate, onDeleted }:
         </div>
       ) : null}
 
-      {item.passportNumber ? <RevealField label="Passport number" value={item.passportNumber} /> : null}
-      {item.licenseNumber ? <RevealField label="Driving licence" value={item.licenseNumber} /> : null}
+      {item.passportNumber ? (
+        <RevealField label="Passport number" value={item.passportNumber} />
+      ) : null}
+      {item.licenseNumber ? (
+        <RevealField label="Driving licence" value={item.licenseNumber} />
+      ) : null}
       {item.nationalId ? <RevealField label="National ID" value={item.nationalId} /> : null}
 
       {item.notes ? (

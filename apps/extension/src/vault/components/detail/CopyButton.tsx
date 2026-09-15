@@ -29,7 +29,11 @@ export function CopyButton({ label, value }: CopyButtonProps) {
   };
 
   return (
-    <IconButton aria-label={copied ? "Copied" : label} disabled={value.length === 0} onClick={onClick}>
+    <IconButton
+      aria-label={copied ? "Copied" : label}
+      disabled={value.length === 0}
+      onClick={onClick}
+    >
       {copied ? <Check size={16} /> : <Copy size={16} />}
     </IconButton>
   );
