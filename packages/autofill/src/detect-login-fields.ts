@@ -1,3 +1,5 @@
+import { labelTextFor } from "./field-context";
+
 export interface LoginFieldSet {
   usernameField: HTMLInputElement | null;
   /** null for a username-only step: the site asks for the password on a later step or page. */
@@ -34,7 +36,9 @@ function isUsernameCandidate(input: HTMLInputElement): boolean {
     autocompleteOf(input),
     input.getAttribute("aria-label") ?? "",
   ].join(" ");
-  return USERNAME_PATTERN.test(haystack);
+  if (USERNAME_PATTERN.test(haystack)) return true;
+  // Plenty of forms name their fields only in the text beside them.
+  return USERNAME_PATTERN.test(labelTextFor(input));
 }
 
 function isPasswordField(

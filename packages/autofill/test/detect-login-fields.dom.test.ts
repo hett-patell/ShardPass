@@ -49,6 +49,40 @@ describe("detectLoginFields", () => {
     expect(results[0]?.usernameField?.name).toBe("email");
   });
 
+  it("reads the username field's label from the text beside it, a table cell, or a <label for>", () => {
+    document.body.innerHTML = `
+      <form>
+        <div class="field"><span>Your email address</span><input type="text" /></div>
+        <input type="password" name="pw1" />
+      </form>
+      <form>
+        <table><tr><td>Login name</td><td><input type="text" /></td></tr>
+        <tr><td>Password</td><td><input type="password" name="pw2" /></td></tr></table>
+      </form>
+      <form>
+        <label for="u3">Account</label><input id="u3" type="text" />
+        <input type="password" name="pw3" />
+      </form>
+      <form>
+        <div><span>Search</span><input type="text" /></div>
+        <input type="password" name="pw4" />
+      </form>
+    `;
+    const results = detectLoginFields(document);
+    expect(results.map((set) => [set.passwordField?.name, set.usernameField !== null])).toEqual([
+      ["pw1", true],
+      ["pw2", true],
+      ["pw3", true],
+      ["pw4", true],
+    ]);
+    // The first three are named; the last is only the nearest text-like field before the password.
+    expect(results.slice(0, 3).map((set) => set.usernameField?.type)).toEqual([
+      "text",
+      "text",
+      "text",
+    ]);
+  });
+
   it("detects password field without username", () => {
     document.body.innerHTML = `<input type="password" name="pwd" />`;
     const results = detectLoginFields(document);
