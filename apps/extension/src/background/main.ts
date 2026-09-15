@@ -3,6 +3,7 @@ import {
   ItemCrudRequestSchema,
   MigrationRequestSchema,
   normalizeSenderContext,
+  LoginFillRequestSchema,
   OtpFillRequestSchema,
   OtpImportRequestSchema,
   OtpRequestSchema,
@@ -265,7 +266,12 @@ export function installBackground(
       // The next worker instance simply tries again.
       readyFailed = true;
       const named = error as { code?: unknown; name?: unknown; message?: unknown } | null;
-      const code = typeof named?.code === "string" ? named.code : typeof named?.name === "string" ? named.name : "Error";
+      const code =
+        typeof named?.code === "string"
+          ? named.code
+          : typeof named?.name === "string"
+            ? named.name
+            : "Error";
       const message = typeof named?.message === "string" ? named.message : "";
       startupFailure = `startup ${code}${message === "" ? "" : `: ${message}`}`.slice(0, 200);
     }
@@ -341,7 +347,13 @@ export function installBackground(
   const disposeMessage = platform.onMessage(async (payload, rawSenderMetadata) => {
     if (!(await awaitReady())) {
       const base = errorResponse("VAULT_UNAVAILABLE");
-      return startupFailure === undefined ? base : { ...base, error: { ...base.error, detail: startupFailure } };
+      // The failing step is named to the extension's own pages only: a content script on
+      // any site could otherwise read internal error text by asking during a failed start.
+      const context = normalizeSenderContext(rawSenderMetadata, platform.extensionId);
+      const ownPage = context !== null && context.contextKind !== "content";
+      return startupFailure === undefined || !ownPage
+        ? base
+        : { ...base, error: { ...base.error, detail: startupFailure } };
     }
     try {
       const senderContext = normalizeSenderContext(rawSenderMetadata, platform.extensionId);
@@ -361,6 +373,7 @@ export function installBackground(
       const parsedOtp = OtpRequestSchema.safeParse(payload);
       const parsedImport = OtpImportRequestSchema.safeParse(payload);
       const parsedFill = OtpFillRequestSchema.safeParse(payload);
+      const parsedLoginFill = LoginFillRequestSchema.safeParse(payload);
       const parsedItemCrud = ItemCrudRequestSchema.safeParse(payload);
       const response = await routeMessage(
         payload,
@@ -413,6 +426,11 @@ export function installBackground(
           (response.kind === "otp.importConfirmed" || shouldRefreshOtpState(response))) ||
         (parsedFill.success &&
           (response.kind === "otp.fillConfirmed" || shouldRefreshOtpState(response))) ||
+        // A login saved from a page's banner, or one just used (its "last used" moved).
+        (parsedLoginFill.success &&
+          (response.kind === "login.saveResult" ||
+            (response.kind === "login.fillAck" &&
+              parsedLoginFill.data.kind === "login.fillConfirm"))) ||
         (parsedItemCrud.success &&
           (response.kind === "item.mutationResult" ||
             response.kind === "item.deleteResult" ||
@@ -430,7 +448,11 @@ export function installBackground(
         );
       return response;
     } catch (error) {
-      diagnostics.error("[ShardPass] request crashed:", (payload as { kind?: unknown })?.kind, error);
+      diagnostics.error(
+        "[ShardPass] request crashed:",
+        (payload as { kind?: unknown })?.kind,
+        error,
+      );
       return errorResponse("UNEXPECTED");
     }
   });

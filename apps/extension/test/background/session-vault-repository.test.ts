@@ -154,8 +154,10 @@ describe("SessionVaultRepository", () => {
       "replaceOtpItemsAndMetadataIfEpoch",
       "savePendingHotpReservation",
       "tombstone",
+      "touchItem",
       "update",
       "updateItem",
+      "updateItems",
     ]);
   });
 

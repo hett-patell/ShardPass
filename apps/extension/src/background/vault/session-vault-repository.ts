@@ -64,6 +64,12 @@ export interface SessionVaultRepository {
   replaceFolders(folders: readonly Folder[]): Promise<void>;
   /** Generic item update, any kind. The repository re-derives id/kind/schemaVersion/revision/timestamps. */
   updateItem(candidate: VaultItem, expectedRevision: number): Promise<VaultItem>;
+  /** A usage stamp (lastUsedAt): written, but revision and updatedAt stay, and nothing is journaled. */
+  touchItem(candidate: VaultItem, expectedRevision: number): Promise<VaultItem>;
+  /** Several updates under one commit: all revision-checked and applied, or none. */
+  updateItems(
+    changes: readonly Readonly<{ candidate: VaultItem; expectedRevision: number }>[],
+  ): Promise<readonly VaultItem[]>;
   readPortableState(): Promise<PortableVaultState>;
   previewPortableImport(
     candidates: readonly VaultItem[],
@@ -120,6 +126,10 @@ type SessionVaultRepositoryOperations = Readonly<{
   readFolders(): Promise<readonly Folder[]>;
   replaceFolders(folders: readonly Folder[]): Promise<void>;
   updateItem(candidate: VaultItem, expectedRevision: number): Promise<VaultItem>;
+  touchItem(candidate: VaultItem, expectedRevision: number): Promise<VaultItem>;
+  updateItems(
+    changes: readonly Readonly<{ candidate: VaultItem; expectedRevision: number }>[],
+  ): Promise<readonly VaultItem[]>;
   readGenerationMetadata(name: GenerationMetadataName): Promise<Uint8Array | null>;
   readOtpItemsAndMetadata(
     name: GenerationMetadataName,
@@ -193,6 +203,8 @@ export function createSessionVaultRepository(
     readFolders: () => operations.readFolders(),
     replaceFolders: (folders) => operations.replaceFolders(folders),
     updateItem: (candidate, expectedRevision) => operations.updateItem(candidate, expectedRevision),
+    touchItem: (candidate, expectedRevision) => operations.touchItem(candidate, expectedRevision),
+    updateItems: (changes) => operations.updateItems(changes),
     readGenerationMetadata: (name) => operations.readGenerationMetadata(name),
     readOtpItemsAndMetadata: (name) => operations.readOtpItemsAndMetadata(name),
     replaceOtpItemsAndMetadata: (candidates, metadata) =>

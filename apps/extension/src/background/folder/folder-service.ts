@@ -13,14 +13,11 @@ import { diagnostics } from "../../platform/diagnostics";
 
 type FolderRepository = Pick<
   SessionVaultRepository,
-  "readFolders" | "replaceFolders" | "listAllItems" | "updateItem"
+  "readFolders" | "replaceFolders" | "listAllItems" | "updateItems"
 >;
 
 export type FolderServiceErrorCode =
-  | "VAULT_LOCKED"
-  | "VAULT_UNAVAILABLE"
-  | "FOLDER_INVALID"
-  | "FOLDER_NOT_FOUND";
+  "VAULT_LOCKED" | "VAULT_UNAVAILABLE" | "FOLDER_INVALID" | "FOLDER_NOT_FOUND";
 
 export class FolderServiceError extends Error {
   constructor(readonly code: FolderServiceErrorCode) {
@@ -85,7 +82,10 @@ export class FolderService {
       if (folderDepth(current, parentId) >= MAX_FOLDER_DEPTH) invalid();
     }
     assertUniqueSibling(current, name, parentId, undefined);
-    return [...current, { id: this.dependencies.nextId(), name, ...(parentId === undefined ? {} : { parentId }) }];
+    return [
+      ...current,
+      { id: this.dependencies.nextId(), name, ...(parentId === undefined ? {} : { parentId }) },
+    ];
   }
 
   private rename(current: readonly Folder[], id: string, name: string): Folder[] {
@@ -99,14 +99,17 @@ export class FolderService {
   private async remove(current: readonly Folder[], id: string): Promise<Folder[]> {
     if (!current.some((folder) => folder.id === id)) notFound();
     const removed = folderSubtree(current, id);
-    // Un-file items first, so a failure here leaves folders intact rather than orphaning items.
+    // Un-file the items first, under one commit, so a failure leaves folders intact rather
+    // than orphaning items, and a large folder is not one vault rewrite per item.
     const items = await this.dependencies.repository.listAllItems();
-    for (const item of items) {
-      if (item.folderId === undefined || !removed.has(item.folderId)) continue;
-      const { folderId: _dropped, ...rest } = item;
-      void _dropped;
-      await this.dependencies.repository.updateItem(rest, item.revision);
-    }
+    const changes = items
+      .filter((item) => item.folderId !== undefined && removed.has(item.folderId))
+      .map((item) => {
+        const { folderId: _dropped, ...candidate } = item;
+        void _dropped;
+        return { candidate, expectedRevision: item.revision };
+      });
+    if (changes.length > 0) await this.dependencies.repository.updateItems(changes);
     return current.filter((folder) => !removed.has(folder.id));
   }
 }
@@ -128,7 +131,11 @@ function assertUniqueSibling(
 }
 
 function response(folders: readonly Folder[]): FolderResponse {
-  const parsed = FolderResponseSchema.safeParse({ version: 1, kind: "folder.listResult", folders: [...folders] });
+  const parsed = FolderResponseSchema.safeParse({
+    version: 1,
+    kind: "folder.listResult",
+    folders: [...folders],
+  });
   if (!parsed.success) throw new FolderServiceError("VAULT_UNAVAILABLE");
   for (const folder of parsed.data.folders) Object.freeze(folder);
   Object.freeze(parsed.data.folders);
@@ -147,6 +154,8 @@ function mapError(error: unknown): FolderServiceError {
   const code = (error as { code?: unknown } | null)?.code;
   if (code === "VAULT_LOCKED") return new FolderServiceError("VAULT_LOCKED");
   if (code === "VAULT_INVALID") return new FolderServiceError("FOLDER_INVALID");
+  // An item in the folder changed under us (another page): nothing was applied; try again.
+  if (code === "REVISION_CONFLICT") return new FolderServiceError("FOLDER_INVALID");
   diagnostics.error("[ShardPass] folder operation failed; reported as VAULT_UNAVAILABLE:", error);
   return new FolderServiceError("VAULT_UNAVAILABLE");
 }

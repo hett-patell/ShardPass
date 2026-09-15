@@ -1,5 +1,15 @@
 function extractDomain(urlOrDomain: string): string {
-  let d = urlOrDomain.trim().toLowerCase();
+  const trimmed = urlOrDomain.trim();
+  // The URL parser gives the host in its DNS form (punycode for an international name),
+  // which is what the browser reports for the page; a saved "bücher.de" then matches.
+  try {
+    const url = new URL(/^[a-z][a-z0-9+.-]*:\/\//iu.test(trimmed) ? trimmed : `https://${trimmed}`);
+    const host = url.hostname.toLowerCase();
+    if (host !== "") return host.startsWith("www.") ? host.slice(4) : host;
+  } catch {
+    // Not a URL the parser accepts: fall back to plain slicing.
+  }
+  let d = trimmed.toLowerCase();
   const protoIdx = d.indexOf("://");
   if (protoIdx !== -1) d = d.slice(protoIdx + 3);
   const pathIdx = d.indexOf("/");

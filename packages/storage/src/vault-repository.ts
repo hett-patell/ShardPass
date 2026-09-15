@@ -200,6 +200,12 @@ const NOOP_ACTIVATION_COORDINATOR: VaultRepositoryActivationCoordinator = {
 };
 
 type ItemUpdater = (current: VaultItem) => VaultItem;
+export type ItemChange = Readonly<{
+  itemId: string;
+  expectedRevision: number;
+  updater: ItemUpdater;
+}>;
+export type UpdateOptions = Readonly<{ usageOnly?: boolean }>;
 
 export class VaultRepository {
   readonly changes: ChangeJournal;
@@ -560,7 +566,13 @@ export class VaultRepository {
     const plaintext = new TextEncoder().encode(canonicalJson(parsed.data));
     return this.serialize(async () => {
       const loaded = await this.load(context);
-      const metadata = await replaceMetadataEntry(loaded.metadata, "folders", plaintext, context, this.generations);
+      const metadata = await replaceMetadataEntry(
+        loaded.metadata,
+        "folders",
+        plaintext,
+        context,
+        this.generations,
+      );
       await this.commitPlaintextMetadata(
         loaded.root,
         loaded.records,
@@ -797,7 +809,10 @@ export class VaultRepository {
         this.generations,
       );
       if (folderPlan.created > 0) {
-        const document = FoldersDocumentSchema.safeParse({ version: 1, folders: folderPlan.folders });
+        const document = FoldersDocumentSchema.safeParse({
+          version: 1,
+          folders: folderPlan.folders,
+        });
         if (!document.success) throw new StorageError("VAULT_INVALID");
         metadata = [
           ...metadata.filter((entry) => entry.name !== "folders"),
@@ -1080,46 +1095,77 @@ export class VaultRepository {
     expectedRevision: number,
     updater: ItemUpdater,
     context: VaultCryptoContext,
+    options: UpdateOptions = {},
   ): Promise<VaultItem> {
+    const [item] = await this.updateMany(
+      [{ itemId: _candidate.id, expectedRevision, updater }],
+      context,
+      options,
+    );
+    if (item === undefined) conflict();
+    return item;
+  }
+
+  /**
+   * Several items under one commit: every change is revision-checked and applied, or none is.
+   * With `usageOnly` the records are rewritten but keep their revision and updatedAt and are
+   * not journaled: a "last used" stamp is not an edit, and must not turn an open editor's
+   * next save into a conflict.
+   */
+  async updateMany(
+    changes: readonly ItemChange[],
+    context: VaultCryptoContext,
+    options: UpdateOptions = {},
+  ): Promise<VaultItem[]> {
     return this.serialize(async () => {
       const loaded = await this.load(context);
-      const index = loaded.records.findIndex((record) => record.itemId === _candidate.id);
-      if (index < 0 || loaded.records[index]!.revision !== expectedRevision) conflict();
-      const current = await decryptVaultRecord(loaded.records[index]!, context.dek);
-      const proposed = updater(current);
-      const now = context.clock.now();
-      const item = parseCandidate({
-        ...proposed,
-        id: current.id,
-        kind: current.kind,
-        schemaVersion: current.schemaVersion,
-        revision: current.revision + 1,
-        createdAt: current.createdAt,
-        updatedAt: now,
-        deletedAt: undefined,
-      });
       const records = [...loaded.records];
-      records[index] = await encryptVaultRecord(item, context);
-      const newRecord = records[index];
-      const journal = compact(
-        await this.changes.append(
-          loaded.journal,
-          journalEntry(item, "update", now),
-          context.dek,
-          context.random,
-        ),
-        this.limits.maxJournalEntries,
-      );
+      let journal = loaded.journal;
+      const newNonces = new Set<string>();
+      const items: VaultItem[] = [];
+      const seen = new Set<string>();
+      const now = context.clock.now();
+      for (const change of changes) {
+        if (seen.has(change.itemId)) conflict();
+        seen.add(change.itemId);
+        const index = records.findIndex((record) => record.itemId === change.itemId);
+        if (index < 0 || records[index]!.revision !== change.expectedRevision) conflict();
+        const current = await decryptVaultRecord(records[index]!, context.dek);
+        const proposed = change.updater(current);
+        const item = parseCandidate({
+          ...proposed,
+          id: current.id,
+          kind: current.kind,
+          schemaVersion: current.schemaVersion,
+          revision: options.usageOnly ? current.revision : current.revision + 1,
+          createdAt: current.createdAt,
+          updatedAt: options.usageOnly ? current.updatedAt : now,
+          deletedAt: undefined,
+        });
+        const record = await encryptVaultRecord(item, context);
+        records[index] = record;
+        newNonces.add(record.nonce);
+        if (!options.usageOnly) {
+          journal = await this.changes.append(
+            journal,
+            journalEntry(item, "update", now),
+            context.dek,
+            context.random,
+          );
+          newNonces.add(journal.at(-1)!.nonce);
+        }
+        items.push(item);
+      }
       await this.commit(
         loaded.root,
         records,
-        journal,
-        new Set([newRecord.nonce, journal.at(-1)!.nonce]),
+        compact(journal, this.limits.maxJournalEntries),
+        newNonces,
         loaded.receipts,
         loaded.metadata,
         context,
       );
-      return item;
+      return items;
     });
   }
 
@@ -2017,7 +2063,11 @@ function portablePreview(
   let unfiled = 0;
   for (const { candidate, existingIndex } of classified.accepted) {
     byKind[candidate.kind] += 1;
-    if (existingIndex < 0 && candidate.folderId !== undefined && !folderPlan.map.has(candidate.folderId))
+    if (
+      existingIndex < 0 &&
+      candidate.folderId !== undefined &&
+      !folderPlan.map.has(candidate.folderId)
+    )
       unfiled += 1;
   }
   const currentKeys = new Set(currentJournal.map(logicalHistoryKey));
@@ -2111,7 +2161,9 @@ function planPortableFolders(
     if (folders.length >= MAX_FOLDERS) continue;
     if (parentId !== undefined && folderDepth(folders, parentId) >= MAX_FOLDER_DEPTH) continue;
     const id = nextId();
-    folders.push(parentId === undefined ? { id, name: folder.name } : { id, name: folder.name, parentId });
+    folders.push(
+      parentId === undefined ? { id, name: folder.name } : { id, name: folder.name, parentId },
+    );
     map.set(folder.id, id);
     created += 1;
   }
@@ -2160,7 +2212,17 @@ function stablePortableContent(item: VaultItem, otpIds: ReadonlyMap<string, stri
     tags: _tags,
     ...content
   } = item;
-  void [_id, _revision, _createdAt, _updatedAt, _favorite, _archivedAt, _deletedAt, _folderId, _tags];
+  void [
+    _id,
+    _revision,
+    _createdAt,
+    _updatedAt,
+    _favorite,
+    _archivedAt,
+    _deletedAt,
+    _folderId,
+    _tags,
+  ];
   if (content.kind !== "login") return canonicalJson(content);
   const {
     lastUsedAt: _lastUsedAt,
@@ -2196,7 +2258,10 @@ function validatePortableVaultCandidates(candidates: readonly VaultItem[]): void
  * (a duplicate under another id). Ids claimed twice in one file conflict on their second
  * use. `otpIds` maps a file's one-time-code ids to the vault ids they resolved to.
  */
-function classifyPortableVaultItems(existing: readonly VaultItem[], candidates: readonly VaultItem[]) {
+function classifyPortableVaultItems(
+  existing: readonly VaultItem[],
+  candidates: readonly VaultItem[],
+) {
   const accepted: Array<{ candidate: VaultItem; existingIndex: number }> = [];
   const statuses: PortableOtpImportStatus[] = new Array<PortableOtpImportStatus>(
     candidates.length,
@@ -2209,7 +2274,8 @@ function classifyPortableVaultItems(existing: readonly VaultItem[], candidates: 
   });
   const otpIds = new Map<string, string>();
   const otpCandidates = candidates.filter(
-    (candidate, index): candidate is OtpItem => firstClaim[index] === true && candidate.kind === "otp",
+    (candidate, index): candidate is OtpItem =>
+      firstClaim[index] === true && candidate.kind === "otp",
   );
   const otp = classifyPortableItems(existing, otpCandidates);
   let otpIndex = 0;

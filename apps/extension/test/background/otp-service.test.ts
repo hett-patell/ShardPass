@@ -141,6 +141,16 @@ class FakeRepository implements Omit<
   updateItem(candidate: VaultItem, expectedRevision: number): Promise<VaultItem> {
     return this.update(candidate as OtpItem, expectedRevision);
   }
+  touchItem(candidate: VaultItem, expectedRevision: number): Promise<VaultItem> {
+    return this.updateItem(candidate, expectedRevision);
+  }
+  updateItems(
+    changes: readonly Readonly<{ candidate: VaultItem; expectedRevision: number }>[],
+  ): Promise<readonly VaultItem[]> {
+    return Promise.all(
+      changes.map((change) => this.updateItem(change.candidate, change.expectedRevision)),
+    );
+  }
 
   update(candidate: OtpItem, expectedRevision: number): Promise<OtpItem> {
     this.updateCalls += 1;

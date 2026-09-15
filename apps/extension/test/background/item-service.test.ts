@@ -235,6 +235,7 @@ function fixture(
   const activity: string[] = [];
   const service = new ItemService({
     repository,
+    now: () => Date.parse(nowIso),
     notePrivilegedActivity:
       notePrivilegedActivity ??
       (() => {
@@ -673,7 +674,13 @@ describe("item.createMany", () => {
     const response = await service.handle(
       request("item.createMany", {
         items: [
-          loginItem({ id: ids.created, password: "", signInWith: "google", urls: ["https://example.test", "https://mail.example.test"], tags: ["Work"] }),
+          loginItem({
+            id: ids.created,
+            password: "",
+            signInWith: "google",
+            urls: ["https://example.test", "https://mail.example.test"],
+            tags: ["Work"],
+          }),
           loginItem({ id: ids.missing, password: "" }),
         ],
       }),
@@ -686,7 +693,11 @@ describe("item.createMany", () => {
       ],
     });
     const stored = repository.items.get(ids.login);
-    expect(stored).toMatchObject({ signInWith: "google", urls: ["https://example.test", "https://mail.example.test"], tags: ["Work"] });
+    expect(stored).toMatchObject({
+      signInWith: "google",
+      urls: ["https://example.test", "https://mail.example.test"],
+      tags: ["Work"],
+    });
     expect(repository.items.has(ids.created)).toBe(false);
   });
 
@@ -720,7 +731,11 @@ describe("password history on item.update", () => {
   it("records the outgoing password with the time it stopped being current", async () => {
     const { service, repository } = fixture([loginItem()]);
     await service.handle(
-      request("item.update", { itemId: ids.login, expectedRevision: 1, fields: { password: "n3w" } }),
+      request("item.update", {
+        itemId: ids.login,
+        expectedRevision: 1,
+        fields: { password: "n3w" },
+      }),
       vaultSender,
     );
     const stored = repository.items.get(ids.login);
@@ -739,7 +754,11 @@ describe("password history on item.update", () => {
     });
     const { service, repository } = fixture([seeded]);
     await service.handle(
-      request("item.update", { itemId: ids.login, expectedRevision: 1, fields: { password: "n3w" } }),
+      request("item.update", {
+        itemId: ids.login,
+        expectedRevision: 1,
+        fields: { password: "n3w" },
+      }),
       vaultSender,
     );
     const stored = repository.items.get(ids.login);
@@ -752,14 +771,22 @@ describe("password history on item.update", () => {
   it("does not record an unchanged or empty outgoing password", async () => {
     const { service, repository } = fixture([loginItem({ password: "" })]);
     await service.handle(
-      request("item.update", { itemId: ids.login, expectedRevision: 1, fields: { password: "first" } }),
+      request("item.update", {
+        itemId: ids.login,
+        expectedRevision: 1,
+        fields: { password: "first" },
+      }),
       vaultSender,
     );
     expect(repository.items.get(ids.login)).not.toHaveProperty("passwordHistory");
 
     const revision = repository.items.get(ids.login)?.revision ?? 1;
     await service.handle(
-      request("item.update", { itemId: ids.login, expectedRevision: revision, fields: { username: "bob" } }),
+      request("item.update", {
+        itemId: ids.login,
+        expectedRevision: revision,
+        fields: { username: "bob" },
+      }),
       vaultSender,
     );
     expect(repository.items.get(ids.login)).not.toHaveProperty("passwordHistory");
@@ -801,21 +828,35 @@ describe("archive", () => {
   it("keeps archived items out of every ordinary listing and shows them only on request", async () => {
     const archived = loginItem({ id: ids.created, name: "Old", archivedAt: nowIso });
     const { service } = fixture([loginItem(), archived]);
-    const everyday = (await service.handle(request("item.query"), vaultSender)) as { items: { id: string }[] };
+    const everyday = (await service.handle(request("item.query"), vaultSender)) as {
+      items: { id: string }[];
+    };
     expect(everyday.items.map((item) => item.id)).toEqual([ids.login]);
-    const popup = (await service.handle(request("item.list"), popupSender)) as { items: { id: string }[] };
+    const popup = (await service.handle(request("item.list"), popupSender)) as {
+      items: { id: string }[];
+    };
     expect(popup.items.map((item) => item.id)).toEqual([ids.login]);
-    const shelf = (await service.handle(request("item.query", { archived: true }), vaultSender)) as { items: { id: string }[] };
+    const shelf = (await service.handle(
+      request("item.query", { archived: true }),
+      vaultSender,
+    )) as { items: { id: string }[] };
     expect(shelf.items.map((item) => item.id)).toEqual([ids.created]);
   });
 });
 
 describe("update clears", () => {
   it("treats a null field as a request to remove it, so un-filing survives the wire format", async () => {
-    const filed = loginItem({ folderId: "11111111-1111-4111-8111-111111111111", archivedAt: nowIso });
+    const filed = loginItem({
+      folderId: "11111111-1111-4111-8111-111111111111",
+      archivedAt: nowIso,
+    });
     const { service, repository } = fixture([filed]);
     const response = (await service.handle(
-      request("item.update", { itemId: filed.id, expectedRevision: filed.revision, fields: { folderId: null, archivedAt: null } }),
+      request("item.update", {
+        itemId: filed.id,
+        expectedRevision: filed.revision,
+        fields: { folderId: null, archivedAt: null },
+      }),
       vaultSender,
     )) as { item: Record<string, unknown> };
     expect(response.item).not.toHaveProperty("folderId");
@@ -833,11 +874,17 @@ describe("search", () => {
       urls: ["https://github.com/login"],
     });
     const { service } = fixture([loginItem(), github]);
-    const byUser = (await service.handle(request("item.list", { search: "octo" }), popupSender)) as {
+    const byUser = (await service.handle(
+      request("item.list", { search: "octo" }),
+      popupSender,
+    )) as {
       items: { id: string }[];
     };
     expect(byUser.items.map((item) => item.id)).toEqual([ids.created]);
-    const byHost = (await service.handle(request("item.list", { search: "github" }), popupSender)) as {
+    const byHost = (await service.handle(
+      request("item.list", { search: "github" }),
+      popupSender,
+    )) as {
       items: { id: string }[];
     };
     expect(byHost.items.map((item) => item.id)).toEqual([ids.created]);

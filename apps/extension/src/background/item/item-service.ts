@@ -48,6 +48,8 @@ export class ItemServiceError extends Error {
 type ItemServiceDependencies = Readonly<{
   repository: ItemRepository;
   notePrivilegedActivity(): Promise<void>;
+  /** Wall clock, for password-history stamps; Date.now when not given. */
+  now?: () => number;
 }>;
 
 export class ItemService {
@@ -236,7 +238,11 @@ export class ItemService {
     const merged: Record<string, unknown> = {
       ...current,
       ...patch,
-      ...passwordHistoryFor(current, patch),
+      ...passwordHistoryFor(
+        current,
+        patch,
+        new Date((this.dependencies.now ?? Date.now)()).toISOString(),
+      ),
       id: current.id,
       kind: current.kind,
       schemaVersion: current.schemaVersion,
@@ -367,7 +373,9 @@ function listDisplayFields(item: VaultItem): Pick<ItemListItemProjection, "name"
       return masked === undefined ? { name: item.name } : { name: item.name, subtitle: masked };
     }
     case "identity":
-      return item.email.length > 0 ? { name: item.name, subtitle: item.email } : { name: item.name };
+      return item.email.length > 0
+        ? { name: item.name, subtitle: item.email }
+        : { name: item.name };
     case "secret":
       return { name: item.name, subtitle: secretTypeLabel(item.secretType) };
   }
@@ -420,26 +428,44 @@ function secretTypeLabel(secretType: SecretItem["secretType"]): string {
 function enrich(current: VaultItem, candidate: VaultItem): VaultItem | null {
   if (current.kind !== "login" || candidate.kind !== "login") return null;
   const urls = [...current.urls];
-  const urlMatches = current.urlMatches === undefined ? undefined : [...current.urlMatches];
+  // Match modes are positional and may be shorter than the urls (a missing entry means
+  // "domain"); pad to length first, or an appended mode would shift onto another site.
+  const urlMatches = [...(current.urlMatches ?? [])];
+  while (urlMatches.length < urls.length) urlMatches.push("domain");
   candidate.urls.forEach((url, index) => {
     if (urls.length >= MAX_LOGIN_URLS || urls.includes(url)) return;
     urls.push(url);
-    if (urlMatches !== undefined) urlMatches.push(candidate.urlMatches?.[index] ?? "domain");
+    urlMatches.push(candidate.urlMatches?.[index] ?? "domain");
   });
+  const keepMatches =
+    current.urlMatches !== undefined || urlMatches.some((mode) => mode !== "domain");
   const tagKeys = new Set(current.tags.map((tag) => tag.toLocaleLowerCase("en-US")));
-  const tags = [...current.tags, ...candidate.tags.filter((tag) => !tagKeys.has(tag.toLocaleLowerCase("en-US")))].slice(0, MAX_ITEM_TAGS);
+  const tags = [
+    ...current.tags,
+    ...candidate.tags.filter((tag) => !tagKeys.has(tag.toLocaleLowerCase("en-US"))),
+  ].slice(0, MAX_ITEM_TAGS);
   const next: VaultItem = {
     ...current,
     urls,
-    ...(urlMatches === undefined ? {} : { urlMatches }),
+    ...(keepMatches ? { urlMatches } : {}),
     tags,
     favorite: current.favorite || candidate.favorite,
     notes: current.notes === "" ? candidate.notes : current.notes,
-    ...(current.signInWith === undefined && candidate.signInWith !== undefined ? { signInWith: candidate.signInWith } : {}),
-    ...((current.totp ?? "") === "" && (candidate.totp ?? "") !== "" ? { totp: candidate.totp } : {}),
-    ...(current.linkedOtpId === undefined && candidate.linkedOtpId !== undefined ? { linkedOtpId: candidate.linkedOtpId } : {}),
-    ...((current.customFields?.length ?? 0) === 0 && (candidate.customFields?.length ?? 0) > 0 ? { customFields: candidate.customFields } : {}),
-    ...((current.passwordHistory?.length ?? 0) === 0 && (candidate.passwordHistory?.length ?? 0) > 0 ? { passwordHistory: candidate.passwordHistory } : {}),
+    ...(current.signInWith === undefined && candidate.signInWith !== undefined
+      ? { signInWith: candidate.signInWith }
+      : {}),
+    ...((current.totp ?? "") === "" && (candidate.totp ?? "") !== ""
+      ? { totp: candidate.totp }
+      : {}),
+    ...(current.linkedOtpId === undefined && candidate.linkedOtpId !== undefined
+      ? { linkedOtpId: candidate.linkedOtpId }
+      : {}),
+    ...((current.customFields?.length ?? 0) === 0 && (candidate.customFields?.length ?? 0) > 0
+      ? { customFields: candidate.customFields }
+      : {}),
+    ...((current.passwordHistory?.length ?? 0) === 0 && (candidate.passwordHistory?.length ?? 0) > 0
+      ? { passwordHistory: candidate.passwordHistory }
+      : {}),
   };
   return JSON.stringify(next) === JSON.stringify(current) ? null : next;
 }
@@ -449,7 +475,14 @@ function duplicateKey(item: VaultItem): string {
   const folder = item.folderId ?? "";
   switch (item.kind) {
     case "login":
-      return ["login", norm(item.name), norm(item.username), hostOf(item.urls[0] ?? ""), folder, item.password].join("\u0000");
+      return [
+        "login",
+        norm(item.name),
+        norm(item.username),
+        hostOf(item.urls[0] ?? ""),
+        folder,
+        item.password,
+      ].join("\u0000");
     case "otp":
       return ["otp", norm(item.issuer), norm(item.label), item.secret].join("\u0000");
     case "note":
@@ -471,7 +504,9 @@ function hostOf(url: string): string {
   }
 }
 
-function firstIssue(error: { issues?: readonly { path?: readonly PropertyKey[]; message?: string }[] }): string {
+function firstIssue(error: {
+  issues?: readonly { path?: readonly PropertyKey[]; message?: string }[];
+}): string {
   const issue = error.issues?.[0];
   if (issue === undefined) return "Did not match the item schema.";
   const path = (issue.path ?? []).map(String).join(".");
@@ -488,13 +523,15 @@ function firstIssue(error: { issues?: readonly { path?: readonly PropertyKey[]; 
 function passwordHistoryFor(
   current: VaultItem,
   fields: Record<string, unknown>,
+  changedAt: string,
 ): { passwordHistory?: LoginItem["passwordHistory"] } {
   if (current.kind !== "login" || "passwordHistory" in fields) return {};
   const next = fields["password"];
   if (typeof next !== "string" || next === current.password || current.password === "") return {};
   return {
     passwordHistory: [
-      { password: current.password, changedAt: current.updatedAt },
+      // Stamped now: the moment the old password stopped being current, not the item's last edit.
+      { password: current.password, changedAt },
       ...(current.passwordHistory ?? []),
     ].slice(0, MAX_LOGIN_PASSWORD_HISTORY),
   };

@@ -587,6 +587,52 @@ describe("VaultRepository", () => {
     expect(JSON.stringify(await storage.snapshot())).not.toContain('"operation":"delete"');
   });
 
+  it("keeps a usage-only update's revision and timestamp, and applies a batch entirely or not at all", async () => {
+    const storage = new FakeStoragePort();
+    const repository = new VaultRepository(storage, wrappedKey);
+    const crypto = cryptoContext();
+    const issuerOf = async () => {
+      const current = await repository.get(itemId, crypto);
+      return current?.kind === "otp" ? current.issuer : undefined;
+    };
+    const created = await repository.create(item(), crypto);
+
+    const touched = await repository.update(
+      item(1),
+      1,
+      (current) => ({ ...current, issuer: "Used" }),
+      crypto,
+      { usageOnly: true },
+    );
+    expect(touched.revision).toBe(1);
+    expect(touched.updatedAt).toBe(created.updatedAt);
+    expect(await issuerOf()).toBe("Used");
+
+    // The same item twice is a conflict; the first change must not have landed on its own.
+    await expect(
+      repository.updateMany(
+        [
+          { itemId, expectedRevision: 1, updater: (current) => ({ ...current, issuer: "Half" }) },
+          { itemId, expectedRevision: 1, updater: (current) => current },
+        ],
+        crypto,
+      ),
+    ).rejects.toMatchObject({ code: "REVISION_CONFLICT" });
+    expect(await issuerOf()).toBe("Used");
+
+    const [whole] = await repository.updateMany(
+      [{ itemId, expectedRevision: 1, updater: (current) => ({ ...current, issuer: "Whole" }) }],
+      crypto,
+    );
+    expect(whole?.revision).toBe(2);
+    // A usage stamp is not journaled; an edit is.
+    const changes = await repository.changes.listAfter(0, 10, crypto);
+    expect(changes.map((entry) => [entry.operation, entry.revision])).toEqual([
+      ["create", 1],
+      ["update", 2],
+    ]);
+  });
+
   it("preserves four-digit fractional UTC timestamps after encrypted repository restart", async () => {
     const storage = new FakeStoragePort();
     const repository = new VaultRepository(storage, wrappedKey);
@@ -1507,7 +1553,6 @@ describe("createMany", () => {
   });
 });
 
-
 describe("folders metadata", () => {
   it("round-trips folders through an encrypted metadata entry without touching records", async () => {
     const storage = new FakeStoragePort();
@@ -1518,7 +1563,11 @@ describe("folders metadata", () => {
 
     const folders = [
       { id: "11111111-1111-4111-8111-111111111111", name: "Work" },
-      { id: "22222222-2222-4222-8222-222222222222", name: "Clients", parentId: "11111111-1111-4111-8111-111111111111" },
+      {
+        id: "22222222-2222-4222-8222-222222222222",
+        name: "Clients",
+        parentId: "11111111-1111-4111-8111-111111111111",
+      },
     ];
     await repository.replaceFolders(folders, context);
     expect(await repository.readFolders(context)).toEqual(folders);
@@ -1534,8 +1583,16 @@ describe("folders metadata", () => {
     await expect(
       repository.replaceFolders(
         [
-          { id: "11111111-1111-4111-8111-111111111111", name: "a", parentId: "22222222-2222-4222-8222-222222222222" },
-          { id: "22222222-2222-4222-8222-222222222222", name: "b", parentId: "11111111-1111-4111-8111-111111111111" },
+          {
+            id: "11111111-1111-4111-8111-111111111111",
+            name: "a",
+            parentId: "22222222-2222-4222-8222-222222222222",
+          },
+          {
+            id: "22222222-2222-4222-8222-222222222222",
+            name: "b",
+            parentId: "11111111-1111-4111-8111-111111111111",
+          },
         ],
         context,
       ),
@@ -1566,7 +1623,13 @@ describe("full-vault portable state", () => {
   };
   const fileItems = () =>
     [
-      { ...item(), id: otpId, issuer: "Portable", label: "otp@example.test", folderId: folderIds.work },
+      {
+        ...item(),
+        id: otpId,
+        issuer: "Portable",
+        label: "otp@example.test",
+        folderId: folderIds.work,
+      },
       {
         ...base,
         id: loginId,
@@ -1579,7 +1642,14 @@ describe("full-vault portable state", () => {
         notes: "",
         folderId: folderIds.clients,
       },
-      { ...base, id: noteId, kind: "note", name: "Portable note", content: "milk", folderId: folderIds.stray },
+      {
+        ...base,
+        id: noteId,
+        kind: "note",
+        name: "Portable note",
+        content: "milk",
+        folderId: folderIds.stray,
+      },
       {
         ...base,
         id: cardId,
@@ -1682,7 +1752,12 @@ describe("full-vault portable state", () => {
     });
     expect(await repository.readFolders(context)).toHaveLength(1);
 
-    const result = await repository.importPortableState(fileItems(), descriptor(), preview, context);
+    const result = await repository.importPortableState(
+      fileItems(),
+      descriptor(),
+      preview,
+      context,
+    );
     expect(result).toMatchObject({
       imported: 6,
       duplicate: 0,
@@ -1703,7 +1778,9 @@ describe("full-vault portable state", () => {
     const byKind = Object.fromEntries(items.map((entry) => [entry.kind, entry]));
     expect(items).toHaveLength(6);
     // Fresh ids and revision 1, like every other portable import.
-    expect(items.every((entry) => entry.revision === 1 && entry.id.startsWith("0190cccc"))).toBe(true);
+    expect(items.every((entry) => entry.revision === 1 && entry.id.startsWith("0190cccc"))).toBe(
+      true,
+    );
     expect(byKind.otp).toMatchObject({ folderId: existingWork });
     expect(byKind.login).toMatchObject({ folderId: clients!.id, linkedOtpId: byKind.otp!.id });
     expect(byKind.note!.folderId).toBeUndefined();
@@ -1748,7 +1825,12 @@ describe("full-vault portable state", () => {
     const preview = await repository.previewPortableImport(fileItems(), descriptor(), context);
     // One slot left: "Work" is created, "Clients" (under it) and "Personal" are not.
     expect(preview.folders).toEqual({ created: 1, unfiled: 3 });
-    const result = await repository.importPortableState(fileItems(), descriptor(), preview, context);
+    const result = await repository.importPortableState(
+      fileItems(),
+      descriptor(),
+      preview,
+      context,
+    );
     expect(result.folders).toEqual({ created: 1, unfiled: 3 });
     const folders = await repository.readFolders(context);
     expect(folders).toHaveLength(MAX_FOLDERS);
@@ -1774,7 +1856,12 @@ describe("full-vault portable state", () => {
       deepContext,
     );
     expect(deepPreview.folders).toEqual({ created: 3, unfiled: 1 });
-    await deepRepository.importPortableState(deepItems, descriptor(chain), deepPreview, deepContext);
+    await deepRepository.importPortableState(
+      deepItems,
+      descriptor(chain),
+      deepPreview,
+      deepContext,
+    );
     expect((await deepRepository.readFolders(deepContext)).map((folder) => folder.name)).toEqual([
       "A",
       "B",
@@ -1786,7 +1873,12 @@ describe("full-vault portable state", () => {
     const storage = new FakeStoragePort();
     const repository = new VaultRepository(storage, wrappedKey);
     const context = unboundedContext();
-    const existing = loginItem({ id: loginId, folderId: undefined, tags: ["local"], favorite: true });
+    const existing = loginItem({
+      id: loginId,
+      folderId: undefined,
+      tags: ["local"],
+      favorite: true,
+    });
     await repository.create(existing, context);
     const sameContentOtherId = LoginItemSchema.parse({ ...existing, id: cardId, tags: [] });
     const changedPassword = LoginItemSchema.parse({ ...existing, password: "changed" });

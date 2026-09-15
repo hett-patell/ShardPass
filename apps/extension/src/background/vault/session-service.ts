@@ -50,6 +50,10 @@ import {
   type SessionVaultRepository,
 } from "./session-vault-repository";
 
+/**
+ * Failed-unlock backoff, in local storage: it holds no secret, and session storage is wiped
+ * by a browser restart, which would hand a guesser a fresh start every time.
+ */
 const ATTEMPTS_KEY = "shardpass:v1:unlock-attempts";
 /**
  * The unlocked data key, kept in chrome.storage.session (memory-only, extension-private,
@@ -248,6 +252,9 @@ export class SessionService {
         ),
       updateItem: (candidate, expectedRevision) =>
         this.repositoryUpdateItem(candidate, expectedRevision),
+      touchItem: (candidate, expectedRevision) =>
+        this.repositoryTouchItem(candidate, expectedRevision),
+      updateItems: (changes) => this.repositoryUpdateItems(changes),
       readGenerationMetadata: (name) =>
         this.#runRepositoryOperation((repository, context) =>
           repository.readGenerationMetadata(name, context),
@@ -846,10 +853,7 @@ export class SessionService {
 
   lock(): Promise<void> {
     this.beginLock();
-    return this.mutationMutex.run(() => {
-      this.clearLockedState();
-      return Promise.resolve();
-    });
+    return this.mutationMutex.run(() => this.clearLockedState());
   }
 
   private beginLock(): void {
@@ -866,7 +870,7 @@ export class SessionService {
 
   private lockWhileMutationHeld(): void {
     this.beginLock();
-    this.clearLockedState();
+    void this.clearLockedState();
   }
 
   onLockOrDispose(callback: () => void): () => void {
@@ -1155,6 +1159,27 @@ export class SessionService {
   private repositoryUpdateItem(candidate: VaultItem, expectedRevision: number): Promise<VaultItem> {
     return this.#runRepositoryOperation((repository, context) =>
       repository.update(candidate, expectedRevision, () => candidate, context),
+    );
+  }
+
+  private repositoryTouchItem(candidate: VaultItem, expectedRevision: number): Promise<VaultItem> {
+    return this.#runRepositoryOperation((repository, context) =>
+      repository.update(candidate, expectedRevision, () => candidate, context, { usageOnly: true }),
+    );
+  }
+
+  private repositoryUpdateItems(
+    changes: readonly Readonly<{ candidate: VaultItem; expectedRevision: number }>[],
+  ): Promise<readonly VaultItem[]> {
+    return this.#runRepositoryOperation((repository, context) =>
+      repository.updateMany(
+        changes.map(({ candidate, expectedRevision }) => ({
+          itemId: candidate.id,
+          expectedRevision,
+          updater: () => candidate,
+        })),
+        context,
+      ),
     );
   }
 
@@ -1555,14 +1580,15 @@ export class SessionService {
     });
   }
 
-  private clearLockedState(): void {
+  /** Resolves once the session key is out of session storage (or unusable), not before. */
+  private clearLockedState(): Promise<void> {
     this.dek?.fill(0);
     this.dek = null;
     this.expectedRoot = null;
     this.authenticatedActive = null;
     this.commitCandidate = null;
     this.backupAuthorities.clear();
-    this.forgetSession();
+    return this.forgetSession();
   }
 
   /** Writes the unlocked key to session storage; best effort, the vault works without it. */
@@ -1581,8 +1607,20 @@ export class SessionService {
     }
   }
 
-  private forgetSession(): void {
-    void this.dependencies.session.remove([SESSION_KEY]).catch(() => undefined);
+  /**
+   * A lock is only a lock once the next worker instance cannot re-open the vault: the key
+   * is removed, and if that fails it is overwritten with a record restoreSession rejects.
+   */
+  private async forgetSession(): Promise<void> {
+    try {
+      await this.dependencies.session.remove([SESSION_KEY]);
+    } catch {
+      try {
+        await this.dependencies.session.set({ [SESSION_KEY]: { version: 1, dek: "", root: "" } });
+      } catch {
+        // Nothing more can be done from here; the record still fails its root check.
+      }
+    }
   }
 
   /**
@@ -1606,7 +1644,7 @@ export class SessionService {
         typeof record.dek !== "string" ||
         typeof record.root !== "string"
       ) {
-        this.forgetSession();
+        void this.forgetSession();
         return "locked";
       }
       let dek: Uint8Array | null = null;
@@ -1623,7 +1661,7 @@ export class SessionService {
         return "restored";
       } catch {
         dek?.fill(0);
-        this.forgetSession();
+        void this.forgetSession();
         return "locked";
       }
     });
@@ -1656,7 +1694,7 @@ export class SessionService {
       if (actual === null || canonicalJson(actual.root) !== candidate)
         throw new StorageError("EXTERNAL_ROOT_CHANGED");
       if (this.epoch !== operationEpoch) {
-        this.clearLockedState();
+        void this.clearLockedState();
         return { committed: true, state: "locked" };
       }
       this.expectedRoot = activated;
@@ -1756,19 +1794,19 @@ export class SessionService {
   }
 
   private async retryAfter(): Promise<number> {
-    const value = (await this.dependencies.session.get([ATTEMPTS_KEY]))[ATTEMPTS_KEY];
+    const value = (await this.dependencies.local.get([ATTEMPTS_KEY]))[ATTEMPTS_KEY];
     const now = this.now();
     if (value === undefined) return 0;
     if (!isAttemptState(value) || now < value.observedAt) {
       const conservative = conservativeAttempt(now);
-      await this.dependencies.session.set({ [ATTEMPTS_KEY]: conservative });
+      await this.dependencies.local.set({ [ATTEMPTS_KEY]: conservative });
       return BASE_COOLDOWN_MS;
     }
     return Math.min(MAX_COOLDOWN_MS, Math.max(0, value.deadline - now));
   }
 
   private async recordFailure(): Promise<void> {
-    const value = (await this.dependencies.session.get([ATTEMPTS_KEY]))[ATTEMPTS_KEY];
+    const value = (await this.dependencies.local.get([ATTEMPTS_KEY]))[ATTEMPTS_KEY];
     const now = this.now();
     const previous: AttemptState =
       value === undefined
@@ -1786,11 +1824,11 @@ export class SessionService {
       deadline: cooldown === 0 ? 0 : safeAdd(now, cooldown),
       observedAt: now,
     };
-    await this.dependencies.session.set({ [ATTEMPTS_KEY]: state });
+    await this.dependencies.local.set({ [ATTEMPTS_KEY]: state });
   }
 
   private async clearAttempts(): Promise<void> {
-    await this.dependencies.session.remove([ATTEMPTS_KEY]);
+    await this.dependencies.local.remove([ATTEMPTS_KEY]);
   }
 }
 

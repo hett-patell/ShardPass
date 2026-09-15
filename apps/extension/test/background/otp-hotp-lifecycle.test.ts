@@ -137,6 +137,16 @@ class Repository implements Omit<
   updateItem(candidate: VaultItem, expectedRevision: number): Promise<VaultItem> {
     return this.update(candidate as OtpItem, expectedRevision);
   }
+  touchItem(candidate: VaultItem, expectedRevision: number): Promise<VaultItem> {
+    return this.updateItem(candidate, expectedRevision);
+  }
+  updateItems(
+    changes: readonly Readonly<{ candidate: VaultItem; expectedRevision: number }>[],
+  ): Promise<readonly VaultItem[]> {
+    return Promise.all(
+      changes.map((change) => this.updateItem(change.candidate, change.expectedRevision)),
+    );
+  }
   tombstone(_itemId: string, expectedRevision: number): Promise<TombstoneResult> {
     if (this.current === null || this.current.revision !== expectedRevision)
       return Promise.reject(new StorageError("REVISION_CONFLICT"));

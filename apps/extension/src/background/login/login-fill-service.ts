@@ -16,7 +16,7 @@ import type { SessionVaultRepository } from "../vault/session-vault-repository";
 
 type LoginFillRepository = Pick<
   SessionVaultRepository,
-  "listAllItems" | "getItem" | "createItem" | "updateItem"
+  "listAllItems" | "getItem" | "createItem" | "updateItem" | "touchItem"
 >;
 
 const OFFER_TTL_MS = 5 * 60_000;
@@ -70,7 +70,12 @@ type LoginFillServiceDependencies = Readonly<{
 }>;
 
 const OFFERS_KEY = "shardpass:v1:save-offers";
-const MUTATING_KINDS = new Set(["login.saveOffer", "login.saveConfirm", "login.saveDismiss", "login.pendingOffer"]);
+const MUTATING_KINDS = new Set([
+  "login.saveOffer",
+  "login.saveConfirm",
+  "login.saveDismiss",
+  "login.pendingOffer",
+]);
 
 export class LoginFillService {
   private readonly offers = new Map<string, SaveOffer>();
@@ -85,14 +90,16 @@ export class LoginFillService {
       const store = this.dependencies.offerStore;
       if (store === undefined) return;
       try {
-        const stored = (await store.get([OFFERS_KEY]))[OFFERS_KEY] as { version?: unknown; offers?: unknown } | undefined;
+        const stored = (await store.get([OFFERS_KEY]))[OFFERS_KEY] as
+          { version?: unknown; offers?: unknown } | undefined;
         if (stored?.version !== 1 || !Array.isArray(stored.offers)) return;
         const now = this.dependencies.now();
         for (const entry of stored.offers as unknown[]) {
           const record = entry as ({ id?: unknown } & SaveOffer) | null;
           if (typeof record?.id !== "string") continue;
           const { id, ...offer } = record;
-          if (typeof offer.expiresAt !== "number" || offer.expiresAt <= now || this.offers.has(id)) continue;
+          if (typeof offer.expiresAt !== "number" || offer.expiresAt <= now || this.offers.has(id))
+            continue;
           this.offers.set(id, offer);
         }
       } catch {
@@ -129,14 +136,25 @@ export class LoginFillService {
     }
   }
 
-  private async dispatch(request: LoginFillRequest, sender: SenderContext): Promise<LoginFillResponse> {
+  private async dispatch(
+    request: LoginFillRequest,
+    sender: SenderContext,
+  ): Promise<LoginFillResponse> {
     try {
       const parsed = LoginFillRequestSchema.safeParse(request);
       if (!parsed.success) throw new LoginFillServiceError("LOGIN_FILL_INVALID");
       const command = parsed.data;
+      // What a page may learn about, or offer for, is decided by where the message came
+      // from (the sender's URL), never by a domain the page names for itself.
+      const senderPage = (): string => {
+        const url = sender.senderUrl;
+        if (typeof url !== "string" || url === "")
+          throw new LoginFillServiceError("LOGIN_FILL_INVALID");
+        return url;
+      };
       switch (command.kind) {
         case "login.fillSuggestions":
-          return validated(await this.suggestions(command.pageUrl ?? command.domain));
+          return validated(await this.suggestions(senderPage()));
         case "login.fillSelect":
           return validated(
             await this.select(command.itemId, command.expectedRevision, sender.senderUrl),
@@ -146,7 +164,12 @@ export class LoginFillService {
           return validated(await this.select(command.itemId, command.expectedRevision, null));
         case "login.saveOffer":
           return validated(
-            await this.offer(tabOf(sender), command.domain, command.username, command.password),
+            await this.offer(
+              tabOf(sender),
+              hostnameOf(senderPage()),
+              command.username,
+              command.password,
+            ),
           );
         case "login.pendingOffer":
           return validated(await this.pendingOffer(sender));
@@ -172,7 +195,9 @@ export class LoginFillService {
     try {
       const item = await this.dependencies.repository.getItem(itemId);
       if (item === null || !isLiveLogin(item)) return;
-      await this.dependencies.repository.updateItem(
+      // A usage stamp, not an edit: revision and updatedAt stay, so an editor open on this
+      // item elsewhere still saves without a conflict.
+      await this.dependencies.repository.touchItem(
         { ...item, lastUsedAt: new Date(this.dependencies.now()).toISOString() },
         item.revision,
       );
@@ -243,6 +268,7 @@ export class LoginFillService {
         linked !== null &&
         linked.kind === "otp" &&
         linked.deletedAt === undefined &&
+        linked.archivedAt === undefined &&
         linked.otpType !== "hotp"
       ) {
         const generated = await generateOtp(linked, this.dependencies.now());
@@ -349,14 +375,16 @@ export class LoginFillService {
     const items = await this.dependencies.repository.listAllItems();
     const wanted = normalize(username);
     const candidates = items.filter(
-      (item): item is LoginItem => isLiveLogin(item) && matchLoginUrls(domain, item.urls, item.urlMatches),
+      (item): item is LoginItem =>
+        isLiveLogin(item) && matchLoginUrls(domain, item.urls, item.urlMatches),
     );
     const match =
       wanted === ""
         ? (candidates.find((item) => item.password === password) ??
           (candidates.length === 1 ? candidates[0] : undefined))
         : candidates.find((item) => normalize(item.username) === wanted);
-    if (match === undefined) return { existing: "none", existingId: undefined, existingName: undefined };
+    if (match === undefined)
+      return { existing: "none", existingId: undefined, existingName: undefined };
     return {
       existing: match.password === password ? "same" : "different-password",
       existingId: match.id,
@@ -388,9 +416,11 @@ export class LoginFillService {
       return { version: 1, kind: "login.saveResult", itemId: offer.existingId, saved: "updated" };
     if (choice === "update" && offer.existingId !== undefined) {
       const current = await this.dependencies.repository.getItem(offer.existingId);
-      if (current === null || current.kind !== "login") throw new LoginFillServiceError("LOGIN_FILL_NOT_FOUND");
+      if (current === null || current.kind !== "login")
+        throw new LoginFillServiceError("LOGIN_FILL_NOT_FOUND");
+      // The moment the old password stopped being current, not the item's last edit.
       const history = [
-        { password: current.password, changedAt: current.updatedAt },
+        { password: current.password, changedAt: new Date(this.dependencies.now()).toISOString() },
         ...(current.passwordHistory ?? []),
       ].slice(0, 10);
       const updated = await this.dependencies.repository.updateItem(
@@ -436,6 +466,17 @@ export class LoginFillService {
 /** Archived logins are kept, not offered: they neither fill nor claim a submitted credential. */
 function isLiveLogin(item: VaultItem): item is LoginItem {
   return item.kind === "login" && item.deletedAt === undefined && item.archivedAt === undefined;
+}
+
+/** The registrable host of the asking page; a page that has none cannot be offered anything. */
+function hostnameOf(pageUrl: string): string {
+  try {
+    const host = new URL(pageUrl).hostname;
+    if (host === "") throw new Error("no host");
+    return host;
+  } catch {
+    throw new LoginFillServiceError("LOGIN_FILL_INVALID");
+  }
 }
 
 function tabOf(sender: SenderContext): number {
