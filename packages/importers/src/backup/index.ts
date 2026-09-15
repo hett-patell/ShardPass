@@ -1,4 +1,8 @@
-export { encodeCanonicalPayload, exportPortableBackup } from "./export";
+export {
+  encodeCanonicalPayload,
+  encodeLegacyCanonicalPayload,
+  exportPortableBackup,
+} from "./export";
 export type { BackupCryptoOptions } from "./export";
 export {
   encodeLoginsCsvExport,

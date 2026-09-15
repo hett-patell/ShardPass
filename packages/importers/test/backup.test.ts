@@ -15,6 +15,7 @@ import {
   BACKUP_V2_LIMITS,
   encodeBackupV2Header,
   encodeCanonicalPayload,
+  encodeLegacyCanonicalPayload,
   exportPortableBackup,
   importLegacyBackup,
   importPortableBackup,
@@ -388,6 +389,24 @@ describe("ShardPass portable backup v2", () => {
       sourceFormat: "v2",
       payload: mixedPayload,
     });
+  });
+
+  it("accepts a file sealed with the older schema-ordered encoding, and encodes independently of key order", async () => {
+    const older = await envelopeForPlaintext(
+      decoder.decode(encodeLegacyCanonicalPayload(mixedPayload)),
+      2,
+    );
+    await expect(importPortableBackup(older, password, executor())).resolves.toMatchObject({
+      sourceFormat: "v2",
+    });
+    // A field added to a schema later must not change how the fields before it encode.
+    const reordered = {
+      ...mixedPayload,
+      items: mixedPayload.items.map((item) => Object.fromEntries(Object.entries(item).reverse())),
+    } as typeof mixedPayload;
+    expect(decoder.decode(encodeCanonicalPayload(reordered))).toBe(
+      decoder.decode(encodeCanonicalPayload(mixedPayload)),
+    );
   });
 
   it("rejects folders that are not one bounded tree, and bounds their count", async () => {
