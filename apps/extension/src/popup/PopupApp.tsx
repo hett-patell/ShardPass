@@ -414,8 +414,6 @@ export function PopupApp({ platform }: PopupAppProps) {
             ) : screen.kind === "generator" ? (
               <GeneratorScreen
                 platform={platform}
-                onFillData={(item) => withReprompt(item, "fill", () => void fillDataItem(item))}
-                fillingData={fillingData === screen.itemId}
                 onCopy={(value, label) => void copy(value, label)}
               />
             ) : screen.kind === "identity" ? (
@@ -440,6 +438,8 @@ export function PopupApp({ platform }: PopupAppProps) {
                   withReprompt(item, "fill", () => void fillItem(item.id, item.revision))
                 }
                 onCopy={(value, label) => void copy(value, label)}
+                onFillData={(item) => withReprompt(item, "fill", () => void fillDataItem(item))}
+                fillingData={fillingData === screen.itemId}
                 onOpenVault={() => void openVault({ item: screen.itemId })}
               />
             )}
