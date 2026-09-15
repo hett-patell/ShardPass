@@ -3,13 +3,15 @@ import { describe, expect, it } from "vitest";
 import manifest from "../../apps/extension/src/manifest";
 
 export const productionCsp =
-  "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'; connect-src 'self' https://api.ente.io; img-src 'self' data:; media-src 'self'; font-src 'self'; style-src 'self'";
+  "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'; connect-src 'self' https://api.ente.io https://api.pwnedpasswords.com; img-src 'self' data:; media-src 'self'; font-src 'self'; style-src 'self'";
 
 export function assertProductionCsp(candidate: Record<string, unknown>): void {
   expect(candidate.content_security_policy).toEqual({ extension_pages: productionCsp });
   expect(JSON.stringify(candidate)).not.toMatch(/(?:^|[ '])'unsafe-eval'(?:[ ';]|$)/u);
   expect(JSON.stringify(candidate).match(/wasm-unsafe-eval/gu)).toHaveLength(1);
   expect(JSON.stringify(candidate).match(/https:\/\/api\.ente\.io/gu)).toHaveLength(2);
+  // The breach-check host is reachable (CORS) but holds no host permission: CSP only.
+  expect(JSON.stringify(candidate).match(/https:\/\/api\.pwnedpasswords\.com/gu)).toHaveLength(1);
 }
 
 describe("extension source content security policy", () => {
