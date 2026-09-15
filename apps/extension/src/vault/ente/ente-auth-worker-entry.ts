@@ -117,7 +117,8 @@ async function completeResult(
         header?: unknown;
       };
     } catch (error) {
-      if (!(error instanceof EnteProtocolError) || error.code !== "ENTE_AUTH_KEY_MISSING") throw error;
+      if (!(error instanceof EnteProtocolError) || error.code !== "ENTE_AUTH_KEY_MISSING")
+        throw error;
     }
     if (response === null) {
       // A fresh Ente account has no authenticator key yet. The official client creates one
@@ -184,13 +185,15 @@ installEnteAuthWorker(
     try {
       if (request.kind === "ente.auth.totp") {
         const continuation = continuations.get(request.capability);
-        continuations.delete(request.capability);
         if (continuation === undefined) throw new Error("no pending sign-in for this code");
+        // A rejected code leaves the pending sign-in in place: the next code is tried
+        // without deriving the key again. Only a verified code consumes it.
+        const response = (await client.verifyTotp2fa(
+          { code: decoder.decode(request.codeUtf8), sessionID: continuation.sessionId },
+          new AbortController().signal,
+        )) as { encryptedToken?: string; token?: string; keyAttributes?: unknown };
+        continuations.delete(request.capability);
         try {
-          const response = (await client.verifyTotp2fa(
-            { code: decoder.decode(request.codeUtf8), sessionID: continuation.sessionId },
-            new AbortController().signal,
-          )) as { encryptedToken?: string; token?: string; keyAttributes?: unknown };
           const recovered = recoverSession(response, continuation.kek, sodium);
           return await completeResult(
             request.jobId,

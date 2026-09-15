@@ -23,7 +23,10 @@ function describeFailure(jobId: string, failure: unknown): EnteAuthWorkerRespons
     version: 1,
     kind: "ente.auth.error",
     jobId,
-    code: typeof code === "string" && FORWARDED_CODES.has(code) ? (code as WorkerErrorCode) : "ENTE_AUTH_FAILED",
+    code:
+      typeof code === "string" && FORWARDED_CODES.has(code)
+        ? (code as WorkerErrorCode)
+        : "ENTE_AUTH_FAILED",
     ...(typeof detail === "string" && detail !== ""
       ? { detail: detail.slice(0, 160) }
       : message !== "" && message !== "Ente protocol response rejected"
@@ -60,7 +63,11 @@ export function installEnteAuthWorker(
     } else if (!usedPassword) return;
     void execute(current)
       .then(
-        (result) => scope.postMessage(result),
+        (result) => {
+          scope.postMessage(result);
+          // The sign-in is complete; a failed code, by contrast, keeps the worker for a retry.
+          if (current.kind === "ente.auth.totp") scope.close();
+        },
         (failure: unknown) => {
           // Forward the real code and where it failed. Flattening everything to
           // ENTE_AUTH_FAILED made a network error, a rejected proof and a malformed
@@ -73,7 +80,6 @@ export function installEnteAuthWorker(
           current.emailUtf8.fill(0);
           current.passwordUtf8.fill(0);
         } else current.codeUtf8.fill(0);
-        if (current.kind === "ente.auth.totp") scope.close();
       });
   });
 }

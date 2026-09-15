@@ -18,7 +18,11 @@ export function clearSensitiveControl(ref: React.RefObject<HTMLInputElement | nu
   if (ref.current !== null) ref.current.value = "";
 }
 
-export function useEnteSync(input: { platform: EnteUiPlatform; active: boolean; onSynced?: () => void }) {
+export function useEnteSync(input: {
+  platform: EnteUiPlatform;
+  active: boolean;
+  onSynced?: () => void;
+}) {
   const [state, setState] = useState<EnteSafeState>(initialState);
   const [error, setError] = useState(false);
   /** Names a failure for the panel: the background's code, else a bounded message. */
@@ -49,7 +53,9 @@ export function useEnteSync(input: { platform: EnteUiPlatform; active: boolean; 
   const startKeepAlive = useCallback(() => {
     stopKeepAlive();
     keepAlive.current = setInterval(() => {
-      void platformRef.current.sendEnteMessage({ version: 1, kind: "ente.status" }).catch(() => undefined);
+      void platformRef.current
+        .sendEnteMessage({ version: 1, kind: "ente.status" })
+        .catch(() => undefined);
     }, 20_000);
   }, [stopKeepAlive]);
   const onSyncedRef = useRef(input.onSynced);
@@ -262,11 +268,11 @@ export function useEnteSync(input: { platform: EnteUiPlatform; active: boolean; 
           });
       },
       (failure: unknown) => {
+        // A mistyped code is not the end of the sign-in: the worker keeps the session, so
+        // the next code is tried without deriving the key again.
         clearSensitive();
-        authWorker.current?.terminate();
-        authWorker.current = null;
         setError(true);
-        setErrorCode(reasonOf(failure, "Two-factor step failed."));
+        setErrorCode(reasonOf(failure, "Two-factor step failed. Check the code and try again."));
       },
     );
   }, [clearSensitive, send, state.capability]);

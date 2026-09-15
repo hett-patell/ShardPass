@@ -15,6 +15,8 @@ export type EnteConflictBinding = Readonly<{
   remote: EnteOtpProjection | null;
   sender?: string;
 }>;
+const MAX_CONFLICT_CAPABILITIES = 256;
+
 export class EnteConflictCapabilities {
   private readonly values = new Map<string, EnteConflictBinding>();
   constructor(
@@ -22,8 +24,32 @@ export class EnteConflictCapabilities {
     private readonly random: () => string,
   ) {}
   issue(binding: Omit<EnteConflictBinding, "expiresAt">, ttlMs = 5 * 60_000): string {
+    const now = this.now();
+    // Expired bindings hold plaintext projections; they go as soon as anything happens here.
+    for (const [key, value] of this.values) if (value.expiresAt < now) this.values.delete(key);
+    // The panel asks every few seconds: the same conflict for the same sender keeps its
+    // capability (renewed), rather than a fresh copy of its secrets per poll.
+    for (const [key, value] of this.values) {
+      if (
+        value.conflictId === binding.conflictId &&
+        value.sender === binding.sender &&
+        value.sessionEpoch === binding.sessionEpoch &&
+        value.rootDigest === binding.rootDigest &&
+        value.baseDigest === binding.baseDigest &&
+        value.localDigest === binding.localDigest &&
+        value.remoteDigest === binding.remoteDigest
+      ) {
+        this.values.set(key, { ...value, expiresAt: now + ttlMs });
+        return key;
+      }
+    }
+    while (this.values.size >= MAX_CONFLICT_CAPABILITIES) {
+      const oldest = this.values.keys().next().value;
+      if (oldest === undefined) break;
+      this.values.delete(oldest);
+    }
     const capability = this.random();
-    this.values.set(capability, { ...binding, expiresAt: this.now() + ttlMs });
+    this.values.set(capability, { ...binding, expiresAt: now + ttlMs });
     return capability;
   }
   take(input: {

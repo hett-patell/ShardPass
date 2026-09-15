@@ -1,5 +1,10 @@
 import { matchLoginUrls } from "@shardpass/autofill";
-import { ITEM_SCHEMA_VERSION, MAX_LOGIN_PASSKEYS, type LoginItem, type LoginPasskey } from "@shardpass/domain";
+import {
+  ITEM_SCHEMA_VERSION,
+  MAX_LOGIN_PASSKEYS,
+  type LoginItem,
+  type LoginPasskey,
+} from "@shardpass/domain";
 import {
   PasskeyRequestSchema,
   PasskeyResponseSchema,
@@ -23,7 +28,10 @@ import {
 import type { SessionVaultRepository } from "../vault/session-vault-repository";
 import { diagnostics } from "../../platform/diagnostics";
 
-type PasskeyRepository = Pick<SessionVaultRepository, "listAllItems" | "getItem" | "createItem" | "updateItem">;
+type PasskeyRepository = Pick<
+  SessionVaultRepository,
+  "listAllItems" | "getItem" | "createItem" | "updateItem"
+>;
 
 export type PasskeyServiceErrorCode =
   | "VAULT_LOCKED"
@@ -60,6 +68,12 @@ export class PasskeyService {
   constructor(private readonly dependencies: PasskeyServiceDependencies) {}
 
   async handle(request: PasskeyRequest, sender: SenderContext): Promise<PasskeyResponse> {
+    // The origin a ceremony is bound to is the browser's own word on the sender, never a
+    // value the page script put in the message.
+    if ("origin" in request) {
+      const pageOrigin = originOf(sender.senderUrl);
+      if (pageOrigin === null || request.origin !== pageOrigin) invalid();
+    }
     try {
       const parsed = PasskeyRequestSchema.safeParse(request);
       if (!parsed.success) invalid();
@@ -82,13 +96,17 @@ export class PasskeyService {
 
   private async logins(): Promise<LoginItem[]> {
     const items = await this.dependencies.repository.listAllItems();
-    return items.filter((item): item is LoginItem => item.kind === "login" && item.deletedAt === undefined);
+    return items.filter(
+      (item): item is LoginItem => item.kind === "login" && item.deletedAt === undefined,
+    );
   }
 
   private async matchingLogin(rpId: string, userName: string): Promise<LoginItem | null> {
     const wanted = normalize(userName);
     const site = `https://${rpId}`;
-    const candidates = (await this.logins()).filter((item) => matchLoginUrls(site, item.urls, item.urlMatches));
+    const candidates = (await this.logins()).filter((item) =>
+      matchLoginUrls(site, item.urls, item.urlMatches),
+    );
     return candidates.find((item) => normalize(item.username) === wanted) ?? null;
   }
 
@@ -97,22 +115,32 @@ export class PasskeyService {
     return {
       version: 1,
       kind: "passkey.previewResult",
-      login: login === null ? null : { itemId: login.id, name: login.name, username: login.username },
+      login:
+        login === null ? null : { itemId: login.id, name: login.name, username: login.username },
     };
   }
 
-  private async register(command: Extract<PasskeyRequest, { kind: "passkey.register" }>): Promise<PasskeyResponse> {
+  private async register(
+    command: Extract<PasskeyRequest, { kind: "passkey.register" }>,
+  ): Promise<PasskeyResponse> {
     if (!isRegistrableRpId(command.origin, command.rpId)) invalid();
     if (!command.algorithms.includes(ES256)) throw new PasskeyServiceError("PASSKEY_UNSUPPORTED");
     const excluded = new Set(command.excludeCredentialIds);
     const all = await this.logins();
-    if (all.some((item) => (item.passkeys ?? []).some((key) => key.rpId === command.rpId && excluded.has(key.credentialId))))
+    if (
+      all.some((item) =>
+        (item.passkeys ?? []).some(
+          (key) => key.rpId === command.rpId && excluded.has(key.credentialId),
+        ),
+      )
+    )
       throw new PasskeyServiceError("PASSKEY_EXISTS");
 
     let target: LoginItem | null;
     if (command.attachTo !== undefined) {
       const item = await this.dependencies.repository.getItem(command.attachTo);
-      if (item === null || item.kind !== "login") throw new PasskeyServiceError("PASSKEY_NOT_FOUND");
+      if (item === null || item.kind !== "login")
+        throw new PasskeyServiceError("PASSKEY_NOT_FOUND");
       target = item;
     } else target = await this.matchingLogin(command.rpId, command.userName);
     if (target !== null && (target.passkeys?.length ?? 0) >= MAX_LOGIN_PASSKEYS) invalid();
@@ -181,7 +209,9 @@ export class PasskeyService {
     };
   }
 
-  private async candidates(command: Extract<PasskeyRequest, { kind: "passkey.candidates" }>): Promise<PasskeyResponse> {
+  private async candidates(
+    command: Extract<PasskeyRequest, { kind: "passkey.candidates" }>,
+  ): Promise<PasskeyResponse> {
     if (!isRegistrableRpId(command.origin, command.rpId)) invalid();
     const allowed = new Set(command.allowCredentialIds);
     const candidates = [];
@@ -189,29 +219,49 @@ export class PasskeyService {
       for (const key of item.passkeys ?? []) {
         if (key.rpId !== command.rpId) continue;
         if (allowed.size > 0 && !allowed.has(key.credentialId)) continue;
-        candidates.push({ itemId: item.id, credentialId: key.credentialId, userName: key.userName, loginName: item.name });
+        candidates.push({
+          itemId: item.id,
+          credentialId: key.credentialId,
+          userName: key.userName,
+          loginName: item.name,
+        });
       }
     }
     return { version: 1, kind: "passkey.candidatesResult", candidates };
   }
 
-  private async assert(command: Extract<PasskeyRequest, { kind: "passkey.assert" }>): Promise<PasskeyResponse> {
+  private async assert(
+    command: Extract<PasskeyRequest, { kind: "passkey.assert" }>,
+  ): Promise<PasskeyResponse> {
     if (!isRegistrableRpId(command.origin, command.rpId)) invalid();
     const item = await this.dependencies.repository.getItem(command.itemId);
     if (item === null || item.kind !== "login") throw new PasskeyServiceError("PASSKEY_NOT_FOUND");
-    const key = (item.passkeys ?? []).find((candidate) => candidate.credentialId === command.credentialId);
-    if (key === undefined || key.rpId !== command.rpId) throw new PasskeyServiceError("PASSKEY_NOT_FOUND");
+    const key = (item.passkeys ?? []).find(
+      (candidate) => candidate.credentialId === command.credentialId,
+    );
+    if (key === undefined || key.rpId !== command.rpId)
+      throw new PasskeyServiceError("PASSKEY_NOT_FOUND");
     // Synced passkeys keep the counter at zero (WebAuthn §6.1.1): a counter that advanced
     // on one device would make every other copy look cloned.
-    const authenticatorData = await buildAuthenticatorData({ rpId: command.rpId, flags: PASSKEY_FLAGS, counter: 0 });
-    const signature = await signAssertion(fromBase64Url(key.privateKey), authenticatorData, fromBase64Url(command.clientDataJson));
+    const authenticatorData = await buildAuthenticatorData({
+      rpId: command.rpId,
+      flags: PASSKEY_FLAGS,
+      counter: 0,
+    });
+    const signature = await signAssertion(
+      fromBase64Url(key.privateKey),
+      authenticatorData,
+      fromBase64Url(command.clientDataJson),
+    );
     const stamp = new Date(this.dependencies.now()).toISOString();
     try {
       await this.dependencies.repository.updateItem(
         {
           ...item,
           passkeys: (item.passkeys ?? []).map((candidate) =>
-            candidate.credentialId === key.credentialId ? { ...candidate, lastUsedAt: stamp } : candidate,
+            candidate.credentialId === key.credentialId
+              ? { ...candidate, lastUsedAt: stamp }
+              : candidate,
           ),
         },
         item.revision,
@@ -256,4 +306,13 @@ function mapError(error: unknown): PasskeyServiceError {
   if (code === "VAULT_INVALID") return new PasskeyServiceError("PASSKEY_INVALID");
   diagnostics.error("[ShardPass] passkey operation failed; reported as VAULT_UNAVAILABLE:", error);
   return new PasskeyServiceError("VAULT_UNAVAILABLE");
+}
+
+function originOf(url: unknown): string | null {
+  if (typeof url !== "string") return null;
+  try {
+    return new URL(url).origin;
+  } catch {
+    return null;
+  }
 }

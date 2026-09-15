@@ -60,10 +60,12 @@ export class EnteSyncScheduler {
       if (!this.armed) {
         // An alarm Chrome kept from the previous instance keeps its phase; re-creating it on
         // every wake would restart the 15 minutes each time and it would seldom fire.
-        const kept = !this.cleared && (await this.port.enteSyncPending?.().catch(() => false)) === true;
+        const kept =
+          !this.cleared && (await this.port.enteSyncPending?.().catch(() => false)) === true;
+        if (!kept) await this.port.scheduleEnteSync(ENTE_SYNC_LIMITS.schedulerMinutes);
+        // Only once the alarm exists: a rejected create must not leave this instance sure it is armed.
         this.armed = true;
         this.cleared = false;
-        if (!kept) await this.port.scheduleEnteSync(ENTE_SYNC_LIMITS.schedulerMinutes);
       }
     } else await this.disarm();
   }

@@ -228,7 +228,14 @@ export function installBackground(
   const kickEnte = async (trigger: "unlock" | "restart" | "alarm") => {
     try {
       if (!enteUnlocked) return;
-      const connected = (await runtimeOwner?.connected().catch(() => false)) ?? false;
+      // "Could not tell" is not "not connected": a transient read failure must not disarm
+      // the periodic sync until the next unlock.
+      let connected: boolean;
+      try {
+        connected = (await runtimeOwner?.connected()) ?? false;
+      } catch {
+        return;
+      }
       await enteScheduler?.setState(connected, true);
       if (!connected) return;
       // A restart is not a reason to sync: the worker wakes on most page loads.

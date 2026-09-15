@@ -9,7 +9,8 @@ export const FLAG_BACKUP_ELIGIBLE = 0x08;
 export const FLAG_BACKED_UP = 0x10;
 export const FLAG_ATTESTED_CREDENTIAL = 0x40;
 /** A synced, vault-held passkey: present, verified (the vault was unlocked), backup-eligible and backed up. */
-export const PASSKEY_FLAGS = FLAG_USER_PRESENT | FLAG_USER_VERIFIED | FLAG_BACKUP_ELIGIBLE | FLAG_BACKED_UP;
+export const PASSKEY_FLAGS =
+  FLAG_USER_PRESENT | FLAG_USER_VERIFIED | FLAG_BACKUP_ELIGIBLE | FLAG_BACKED_UP;
 const AAGUID = new Uint8Array(16);
 
 const encoder = new TextEncoder();
@@ -37,7 +38,8 @@ export function isRegistrableRpId(origin: string, rpId: string): boolean {
   let host: string;
   try {
     const url = new URL(origin);
-    if (url.protocol !== "https:" && !(url.protocol === "http:" && url.hostname === "localhost")) return false;
+    if (url.protocol !== "https:" && !(url.protocol === "http:" && url.hostname === "localhost"))
+      return false;
     host = url.hostname.toLowerCase();
   } catch {
     return false;
@@ -46,11 +48,112 @@ export function isRegistrableRpId(origin: string, rpId: string): boolean {
   if (candidate === "" || candidate.length > 253) return false;
   if (/^[0-9.]+$/u.test(candidate) || candidate.includes(":")) return false;
   if (candidate !== "localhost" && !candidate.includes(".")) return false;
-  if (!/^[a-z0-9.-]+$/u.test(candidate) || candidate.startsWith(".") || candidate.endsWith(".")) return false;
+  if (!/^[a-z0-9.-]+$/u.test(candidate) || candidate.startsWith(".") || candidate.endsWith("."))
+    return false;
+  // Two unrelated sites under one hosting or country suffix must never share a credential.
+  if (PUBLIC_SUFFIXES.has(candidate)) return false;
   return host === candidate || host.endsWith(`.${candidate}`);
 }
 
-export function clientDataJson(type: "webauthn.create" | "webauthn.get", challenge: string, origin: string): Uint8Array {
+/**
+ * Multi-label public suffixes and hosting suffixes under which every subdomain is a
+ * different site. Single-label suffixes are already refused (an rpId needs a dot).
+ */
+const PUBLIC_SUFFIXES: ReadonlySet<string> = new Set([
+  "co.uk",
+  "org.uk",
+  "ac.uk",
+  "gov.uk",
+  "me.uk",
+  "ltd.uk",
+  "plc.uk",
+  "com.au",
+  "net.au",
+  "org.au",
+  "edu.au",
+  "gov.au",
+  "co.nz",
+  "org.nz",
+  "net.nz",
+  "co.jp",
+  "ne.jp",
+  "or.jp",
+  "ac.jp",
+  "co.kr",
+  "or.kr",
+  "com.br",
+  "org.br",
+  "net.br",
+  "gov.br",
+  "com.mx",
+  "org.mx",
+  "co.in",
+  "net.in",
+  "org.in",
+  "firm.in",
+  "gen.in",
+  "co.za",
+  "org.za",
+  "web.za",
+  "com.cn",
+  "net.cn",
+  "org.cn",
+  "com.tw",
+  "com.hk",
+  "com.sg",
+  "com.tr",
+  "com.ar",
+  "com.co",
+  "com.pe",
+  "com.ve",
+  "github.io",
+  "gitlab.io",
+  "bitbucket.io",
+  "vercel.app",
+  "netlify.app",
+  "pages.dev",
+  "workers.dev",
+  "herokuapp.com",
+  "azurewebsites.net",
+  "cloudfront.net",
+  "amazonaws.com",
+  "s3.amazonaws.com",
+  "web.app",
+  "firebaseapp.com",
+  "blogspot.com",
+  "wordpress.com",
+  "glitch.me",
+  "repl.co",
+  "replit.app",
+  "onrender.com",
+  "fly.dev",
+  "surge.sh",
+  "neocities.org",
+  "000webhostapp.com",
+  "appspot.com",
+  "cloudfunctions.net",
+  "webflow.io",
+  "squarespace.com",
+  "myshopify.com",
+  "wixsite.com",
+  "weebly.com",
+  "godaddysites.com",
+  "ngrok.io",
+  "ngrok.app",
+  "ngrok-free.app",
+  "trycloudflare.com",
+  "githubusercontent.com",
+  "cloudflare-ipfs.com",
+  "ipfs.io",
+  "vercel.sh",
+  "now.sh",
+]);
+
+export function clientDataJson(
+  type: "webauthn.create" | "webauthn.get",
+  challenge: string,
+  origin: string,
+): Uint8Array {
   return encoder.encode(JSON.stringify({ type, challenge, origin, crossOrigin: false }));
 }
 
@@ -64,7 +167,10 @@ export type Es256KeyPair = Readonly<{
 }>;
 
 export async function generateEs256KeyPair(): Promise<Es256KeyPair> {
-  const pair = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"]);
+  const pair = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, [
+    "sign",
+    "verify",
+  ]);
   const [privateKey, publicKeySpki, jwk] = await Promise.all([
     crypto.subtle.exportKey("pkcs8", pair.privateKey),
     crypto.subtle.exportKey("spki", pair.publicKey),
@@ -80,7 +186,8 @@ export async function generateEs256KeyPair(): Promise<Es256KeyPair> {
 
 /** COSE_Key for an EC2 P-256 key: kty 2, alg ES256, crv P-256, x, y (RFC 9053). */
 export function coseEs256PublicKey(x: Uint8Array, y: Uint8Array): Uint8Array {
-  if (x.byteLength !== 32 || y.byteLength !== 32) throw new RangeError("P-256 coordinates are 32 bytes");
+  if (x.byteLength !== 32 || y.byteLength !== 32)
+    throw new RangeError("P-256 coordinates are 32 bytes");
   return encodeCbor(
     new Map<number, Uint8Array | number>([
       [1, 2],
@@ -101,7 +208,9 @@ export async function buildAuthenticatorData(input: {
   const rpIdHash = await sha256(encoder.encode(input.rpId));
   const counter = new Uint8Array(4);
   new DataView(counter.buffer).setUint32(0, input.counter);
-  const flags = Uint8Array.of(input.flags | (input.attestedCredential ? FLAG_ATTESTED_CREDENTIAL : 0));
+  const flags = Uint8Array.of(
+    input.flags | (input.attestedCredential ? FLAG_ATTESTED_CREDENTIAL : 0),
+  );
   if (input.attestedCredential === undefined) return concat(rpIdHash, flags, counter);
   const { credentialId, publicKeyCose } = input.attestedCredential;
   const idLength = new Uint8Array(2);
@@ -142,7 +251,13 @@ export async function signAssertion(
     ["sign"],
   );
   const message = concat(authenticatorData, await sha256(clientDataJsonBytes));
-  const raw = new Uint8Array(await crypto.subtle.sign({ name: "ECDSA", hash: "SHA-256" }, key, Uint8Array.from(message).buffer));
+  const raw = new Uint8Array(
+    await crypto.subtle.sign(
+      { name: "ECDSA", hash: "SHA-256" },
+      key,
+      Uint8Array.from(message).buffer,
+    ),
+  );
   return rawToDerSignature(raw);
 }
 

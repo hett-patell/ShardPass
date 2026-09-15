@@ -41,21 +41,34 @@ export class EnteService {
     private readonly readStatus?: () => Promise<EntePersistedStatus | null>,
   ) {}
   snapshot(): EnteSafeState {
-    return { ...this.state, ...(this.lastFailure === undefined ? {} : { lastFailure: this.lastFailure }) };
+    return {
+      ...this.state,
+      ...(this.lastFailure === undefined ? {} : { lastFailure: this.lastFailure }),
+    };
   }
 
   /** A background cycle failed: the panel gets the code and detail, and restarts back off. */
   noteFailure(error: unknown, now: number): void {
     const candidate = error as { code?: unknown; detail?: unknown } | null;
-    const code = typeof candidate?.code === "string" ? candidate.code.slice(0, 64) : "ENTE_UNAVAILABLE";
-    const detail = typeof candidate?.detail === "string" ? candidate.detail.slice(0, 200) : undefined;
+    const code =
+      typeof candidate?.code === "string" ? candidate.code.slice(0, 64) : "ENTE_UNAVAILABLE";
+    const detail =
+      typeof candidate?.detail === "string" ? candidate.detail.slice(0, 200) : undefined;
     this.failures += 1;
     this.lastFailure = { code, ...(detail === undefined ? {} : { detail }), at: now };
+    this.settle();
   }
 
   noteSuccess(): void {
     this.failures = 0;
     this.lastFailure = undefined;
+    this.settle();
+  }
+
+  /** "connecting"/"syncing" describe a cycle in flight; once it ends, the panel must move on. */
+  private settle(): void {
+    if (this.state.state === "connecting" || this.state.state === "syncing")
+      this.state = { ...this.state, state: "idle" };
   }
 
   /**
@@ -71,7 +84,8 @@ export class EnteService {
     }
     const persisted = await this.readStatus?.().catch(() => null);
     const lastAttemptAt = persisted?.lastAttemptAt ?? null;
-    if (lastAttemptAt !== null) return now - lastAttemptAt >= ENTE_SYNC_LIMITS.schedulerMinutes * 60_000;
+    if (lastAttemptAt !== null)
+      return now - lastAttemptAt >= ENTE_SYNC_LIMITS.schedulerMinutes * 60_000;
     return true;
   }
 
@@ -84,7 +98,8 @@ export class EnteService {
     if (this.readStatus === undefined) return;
     const persisted = await this.readStatus().catch(() => null);
     if (persisted === null) {
-      if (this.state.connected) this.state = { ...this.state, connected: false, state: "disconnected" };
+      if (this.state.connected)
+        this.state = { ...this.state, connected: false, state: "disconnected" };
       return;
     }
     const transient = this.state.state === "connecting" || this.state.state === "syncing";
@@ -164,7 +179,11 @@ export class EnteService {
         if (this.activateSession === undefined) throw new EnteProtocolError("ENTE_AUTH_FAILED");
         this.state = { ...this.state, state: "connecting" };
         try {
-          await this.activateSession(request.capability, Uint8Array.from(request.ciphertext), sender);
+          await this.activateSession(
+            request.capability,
+            Uint8Array.from(request.ciphertext),
+            sender,
+          );
         } catch (error) {
           // A failed sign-in leaves nothing behind: not a "connecting" panel forever.
           this.state = { ...this.state, state: "disconnected", connected: false };
