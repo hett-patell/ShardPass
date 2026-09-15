@@ -42,6 +42,7 @@ function renderSidebar(overrides: Partial<VaultSidebarProps> = {}) {
     view: "vault",
     onOpenSettings: vi.fn(),
     onOpenEnte: vi.fn(),
+    onOpenHealth: vi.fn(),
     ...overrides,
   };
   return { ...render(<VaultSidebar {...props} />), props };

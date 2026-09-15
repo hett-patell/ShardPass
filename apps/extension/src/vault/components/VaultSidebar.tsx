@@ -5,6 +5,7 @@ import {
   Cloud,
   Folder as FolderIcon,
   FolderPlus,
+  HeartPulse,
   Pencil,
   Plus,
   Settings,
@@ -16,7 +17,7 @@ import { folderSubtreeIds, folderTree } from "../item-support";
 import { FolderDeleteDialog } from "./FolderDeleteDialog";
 import styles from "./VaultSidebar.module.css";
 
-export type VaultSidebarView = "vault" | "settings" | "ente";
+export type VaultSidebarView = "vault" | "settings" | "ente" | "health";
 
 export interface VaultSidebarProps {
   category: CategoryKey;
@@ -39,6 +40,9 @@ export interface VaultSidebarProps {
   view: VaultSidebarView;
   onOpenSettings: () => void;
   onOpenEnte: () => void;
+  onOpenHealth: () => void;
+  /** Findings worth a look (reused passwords, unencrypted sites), shown beside "Health". */
+  healthCount?: number | undefined;
 }
 
 type FolderEdit =
@@ -66,6 +70,8 @@ export function VaultSidebar({
   view,
   onOpenSettings,
   onOpenEnte,
+  onOpenHealth,
+  healthCount = 0,
 }: VaultSidebarProps) {
   const [edit, setEdit] = useState<FolderEdit | null>(null);
   const [pendingDelete, setPendingDelete] = useState<Folder | null>(null);
@@ -280,6 +286,16 @@ export function VaultSidebar({
         >
           <Cloud size={16} aria-hidden="true" />
           <span>Ente sync</span>
+        </button>
+        <button
+          type="button"
+          className={`${styles.footerButton} ${view === "health" ? styles.footerButtonActive : ""}`}
+          aria-current={view === "health" ? "true" : undefined}
+          onClick={onOpenHealth}
+        >
+          <HeartPulse size={16} aria-hidden="true" />
+          <span>Health</span>
+          {healthCount > 0 ? <span className={styles.folderCount}>{healthCount}</span> : null}
         </button>
         <button
           type="button"

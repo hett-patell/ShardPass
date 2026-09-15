@@ -8,7 +8,7 @@ import {
   type CategoryKey,
   type Status,
 } from "@shardpass/ui";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useFoundationStatus } from "../foundation/useFoundationStatus";
 import type {
@@ -18,6 +18,8 @@ import type {
   OtpImportUiExtensionPlatform,
 } from "../platform/extension-platform";
 import { RepromptPrompt } from "../vault-access/RepromptPrompt";
+import { computeHealth } from "./health/health-report";
+import { HealthView } from "./health/HealthView";
 import { VaultAccess } from "../vault-access/VaultAccess";
 import { BreachCheckSettings } from "./settings/BreachCheckSettings";
 import { EmptyDetailState } from "./components/EmptyDetailState";
@@ -87,6 +89,13 @@ export function VaultApp({ platform }: VaultAppProps) {
       : null;
   const otpItems = vaultState.allItems.filter((item): item is OtpItem => item.kind === "otp");
   const folderCounts = countItemsByFolder(vaultState.liveItems);
+  // The findings the vault can count on its own: shared passwords and unencrypted sites.
+  const healthCount = useMemo(() => {
+    const report = computeHealth(vaultState.liveItems, vaultState.redactedIds);
+    return (
+      report.reused.reduce((sum, group) => sum + group.logins.length, 0) + report.unsecured.length
+    );
+  }, [vaultState.liveItems, vaultState.redactedIds]);
 
   const goToVaultView = useCallback(() => {
     setView("vault");
@@ -294,6 +303,8 @@ export function VaultApp({ platform }: VaultAppProps) {
                 view={view}
                 onOpenSettings={() => setView("settings")}
                 onOpenEnte={() => setView("ente")}
+                onOpenHealth={() => setView("health")}
+                healthCount={healthCount}
               />
             </div>
 
@@ -441,6 +452,20 @@ export function VaultApp({ platform }: VaultAppProps) {
                 onDone={goToVaultView}
               />
             </div>
+            {view === "health" ? (
+              <div className={`${styles.settingsPanel} ${styles.settingsPanelSingle}`}>
+                <HealthView
+                  platform={platform}
+                  items={vaultState.liveItems}
+                  redactedIds={vaultState.redactedIds}
+                  active={view === "health"}
+                  onOpenItem={(itemId) => {
+                    goToVaultView();
+                    vaultState.setSelectedId(itemId);
+                  }}
+                />
+              </div>
+            ) : null}
             <div
               className={`${styles.settingsPanel} ${styles.settingsPanelSingle}`}
               hidden={view !== "ente"}
