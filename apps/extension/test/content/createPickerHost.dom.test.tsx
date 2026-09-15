@@ -260,6 +260,7 @@ describe("createPickerHost", () => {
       toJSON: () => ({}),
     });
     // The picker measures 300px tall; the frame is only 150px.
+    // eslint-disable-next-line @typescript-eslint/unbound-method
     const originalRect = HTMLElement.prototype.getBoundingClientRect;
     vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
       this: HTMLElement,
@@ -275,7 +276,7 @@ describe("createPickerHost", () => {
           width: 320,
           height: 300,
           toJSON: () => ({}),
-        } as DOMRect;
+        };
       return originalRect.call(this);
     });
     vi.spyOn(window, "innerHeight", "get").mockReturnValue(150);
