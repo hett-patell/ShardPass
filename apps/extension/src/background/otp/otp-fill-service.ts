@@ -1,4 +1,11 @@
-import { LoginItemSchema, OtpItemSchema, type OtpItem } from "@shardpass/domain";
+import {
+  LoginItemSchema,
+  MAX_OTP_ISSUER_LENGTH,
+  MAX_OTP_LABEL_LENGTH,
+  OtpItemSchema,
+  type LoginItem,
+  type OtpItem,
+} from "@shardpass/domain";
 import { matchLoginUrls, registrableDomain } from "@shardpass/autofill";
 import {
   OTP_FILL_LIMITS,
@@ -9,7 +16,7 @@ import {
   type OtpFillSuggestion,
   type SenderContext,
 } from "@shardpass/messaging";
-import { generateOtp, type ReservationBinding } from "@shardpass/otp";
+import { generateOtp, inlineTotpItem, type ReservationBinding } from "@shardpass/otp";
 
 import type { InternalHotpLifecycle } from "./hotp-lifecycle";
 import type { SessionVaultRepository } from "../vault/session-vault-repository";
@@ -31,7 +38,7 @@ export class OtpFillServiceError extends Error {
 }
 
 type SessionAuthority = object;
-type Repository = Pick<SessionVaultRepository, "listItems" | "get">;
+type Repository = Pick<SessionVaultRepository, "listItems" | "getItem">;
 type Binding = Readonly<{
   extensionId: string;
   tabId: number;
@@ -174,22 +181,38 @@ export class OtpFillService {
       const linked = new Set<string>();
       for (const candidate of candidates) {
         const login = LoginItemSchema.safeParse(candidate);
-        if (!login.success || login.data.deletedAt !== undefined || login.data.archivedAt !== undefined) continue;
-        if (login.data.linkedOtpId !== undefined && matchLoginUrls(site.host, login.data.urls, login.data.urlMatches))
+        if (
+          !login.success ||
+          login.data.deletedAt !== undefined ||
+          login.data.archivedAt !== undefined
+        )
+          continue;
+        if (
+          login.data.linkedOtpId !== undefined &&
+          matchLoginUrls(site.host, login.data.urls, login.data.urlMatches)
+        )
           linked.add(login.data.linkedOtpId);
       }
       const all: OtpFillSuggestion[] = [];
       for (const candidate of candidates) {
-        const parsed = OtpItemSchema.safeParse(candidate);
-        if (!parsed.success || parsed.data.deletedAt !== undefined || parsed.data.archivedAt !== undefined) continue;
-        const siteMatch = linked.has(parsed.data.id) || namesSite(parsed.data, site);
+        const source = otpSourceOf(candidate);
+        if (source === null) continue;
+        const parsed = { data: source.item };
+        // A login's own one-time secret belongs to the sites the login is saved for.
+        const siteMatch =
+          source.login !== undefined
+            ? matchLoginUrls(site.host, source.login.urls, source.login.urlMatches)
+            : linked.has(parsed.data.id) || namesSite(parsed.data, site);
         // A time-based code for the page's own account is shown in the dropdown; a
         // counter-based one is never generated before a pick (it would burn the counter).
         let preview: OtpFillSuggestion["preview"];
         if (siteMatch && parsed.data.otpType !== "hotp") {
           try {
             const generated = await generateOtp(parsed.data, this.dependencies.now());
-            preview = { code: generated.code, expiresAt: generated.expiresAt ?? this.dependencies.now() };
+            preview = {
+              code: generated.code,
+              expiresAt: generated.expiresAt ?? this.dependencies.now(),
+            };
           } catch {
             preview = undefined;
           }
@@ -265,15 +288,12 @@ export class OtpFillService {
   ): Promise<OtpFillResponse> {
     await this.assertAuthority(capability.authority);
     this.assertGeneration(generation);
-    const candidate = await this.dependencies.repository.get(itemId);
+    const candidate = await this.dependencies.repository.getItem(itemId);
     this.assertGeneration(generation);
-    const parsed = OtpItemSchema.safeParse(candidate);
-    if (
-      !parsed.success ||
-      parsed.data.deletedAt !== undefined ||
-      parsed.data.revision !== expectedRevision
-    )
+    const source = otpSourceOf(candidate);
+    if (source === null || source.item.revision !== expectedRevision)
       throw new OtpFillServiceError("OTP_FILL_ITEM_CHANGED");
+    const parsed = { data: source.item };
     await this.assertAuthority(capability.authority);
     this.assertGeneration(generation);
 
@@ -378,13 +398,9 @@ export class OtpFillService {
     }
     await this.assertAuthority(release.authority);
     this.assertGeneration(generation);
-    const current = OtpItemSchema.safeParse(await this.dependencies.repository.get(release.itemId));
+    const current = otpSourceOf(await this.dependencies.repository.getItem(release.itemId));
     this.assertGeneration(generation);
-    if (
-      !current.success ||
-      current.data.deletedAt !== undefined ||
-      current.data.revision !== release.itemRevision
-    ) {
+    if (current === null || current.item.revision !== release.itemRevision) {
       void this.cancelHotp(release);
       throw new OtpFillServiceError("OTP_FILL_ITEM_CHANGED");
     }
@@ -582,7 +598,11 @@ function bindingKey(binding: Binding): string {
     binding.fieldHandle,
   ].join("\u0000");
 }
-function project(item: OtpItem, siteMatch: boolean, preview: OtpFillSuggestion["preview"]): OtpFillSuggestion {
+function project(
+  item: OtpItem,
+  siteMatch: boolean,
+  preview: OtpFillSuggestion["preview"],
+): OtpFillSuggestion {
   return Object.freeze({
     itemId: item.id,
     expectedRevision: item.revision,
@@ -594,6 +614,37 @@ function project(item: OtpItem, siteMatch: boolean, preview: OtpFillSuggestion["
     siteMatch,
     ...(preview === undefined ? {} : { preview: Object.freeze(preview) }),
   });
+}
+
+/**
+ * What can produce a code: a live authenticator item as it is, or a live login carrying an
+ * inline one-time secret (the way 1Password and Bitwarden exports arrive), presented under
+ * the login's name and username with the login's own id and revision. A login's secret that
+ * parses as counter-based is left out: a counter lives on an authenticator item only.
+ */
+function otpSourceOf(candidate: unknown): Readonly<{ item: OtpItem; login?: LoginItem }> | null {
+  const otp = OtpItemSchema.safeParse(candidate);
+  if (otp.success) {
+    if (otp.data.deletedAt !== undefined || otp.data.archivedAt !== undefined) return null;
+    return { item: otp.data };
+  }
+  const login = LoginItemSchema.safeParse(candidate);
+  if (!login.success || login.data.deletedAt !== undefined || login.data.archivedAt !== undefined)
+    return null;
+  const inline = inlineTotpItem(login.data);
+  if (inline === null || inline.otpType === "hotp") return null;
+  const username = login.data.username.trim();
+  return {
+    login: login.data,
+    item: {
+      ...inline,
+      issuer: login.data.name.slice(0, MAX_OTP_ISSUER_LENGTH),
+      label:
+        (username === "" ? inline.label : username).slice(0, MAX_OTP_LABEL_LENGTH) || inline.label,
+      favorite: login.data.favorite,
+      tags: [...login.data.tags],
+    },
+  };
 }
 
 type Site = Readonly<{ host: string; domain: string; brand: string }>;

@@ -290,13 +290,37 @@ export function createOtpFillController(
     }
   };
 
+  // A code field is often focused the moment its step renders, while it is still fading in
+  // or its wrapper is still inert: not eligible yet, eligible a moment later. Look again.
+  const RECHECK_DELAYS_MS = [300, 1_200];
+  let recheckTimers: number[] = [];
+  const clearRechecks = (): void => {
+    for (const timer of recheckTimers) options.window.clearTimeout(timer);
+    recheckTimers = [];
+  };
+  const recheckLater = (input: HTMLInputElement): void => {
+    clearRechecks();
+    recheckTimers = RECHECK_DELAYS_MS.map((delay) =>
+      options.window.setTimeout(() => {
+        if (disposed || options.document.activeElement !== input) return;
+        if (discovery.revalidateFocusedField() !== input) return;
+        if (owner?.input === input && host?.status === "open") return;
+        showTrigger(input);
+      }, delay),
+    );
+  };
+
   const onFocusIn = (event?: FocusEvent): void => {
     if (disposed) return;
     if (event?.target instanceof Element && event.target.localName === "shardpass-picker-host")
       return;
+    clearRechecks();
     const input = discovery.revalidateFocusedField();
     if (input === null) {
       invalidate(false);
+      const active = options.document.activeElement;
+      if (active instanceof HTMLInputElement && active.ownerDocument.defaultView === options.window)
+        recheckLater(active);
       return;
     }
     if (owner?.input === input && host?.status === "open") return;
@@ -318,6 +342,7 @@ export function createOtpFillController(
       onFocusIn();
     },
     dispose() {
+      clearRechecks();
       if (disposed) return;
       disposed = true;
       started = false;

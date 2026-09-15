@@ -54,7 +54,8 @@ function harness(items: OtpItem[] = [otp()]) {
   const service = new OtpFillService({
     repository: {
       listItems: () => Promise.resolve(items.map((item) => structuredClone(item))),
-      get: (id) => Promise.resolve(structuredClone(items.find((item) => item.id === id) ?? null)),
+      getItem: (id) =>
+        Promise.resolve(structuredClone(items.find((item) => item.id === id) ?? null)),
     },
     hotp,
     now: () => now,
@@ -104,6 +105,53 @@ async function release(
 }
 
 describe("OTP fill service", () => {
+  it("offers a login's inline one-time secret for the sites the login is saved for, and releases its code", async () => {
+    const login = {
+      id: otherItemId,
+      schemaVersion: 2,
+      revision: 3,
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+      favorite: false,
+      tags: ["imported"],
+      kind: "login",
+      name: "Example Mail",
+      username: "alice@example.test",
+      password: "s3cret",
+      urls: ["https://example.test/login"],
+      notes: "",
+      totp: "JBSWY3DPEHPK3PXP",
+    } as unknown as OtpItem;
+    const { service } = harness([otp(), login]);
+    const response = await suggestions(service);
+    if (response.kind !== "otp.fillSuggestionsResult") throw new Error("expected suggestions");
+    expect(response.suggestions).toContainEqual({
+      itemId: otherItemId,
+      expectedRevision: 3,
+      issuer: "Example Mail",
+      label: "alice@example.test",
+      otpType: "totp",
+      favorite: false,
+      tags: ["imported"],
+      siteMatch: true,
+      preview: {
+        code: expect.stringMatching(/^\d{6}$/u) as unknown,
+        expiresAt: expect.any(Number) as unknown,
+      },
+    });
+    expect(JSON.stringify(response)).not.toContain("JBSWY3DPEHPK3PXP");
+    expect(JSON.stringify(response)).not.toContain("s3cret");
+
+    const released = await release(service, response.capability, {
+      itemId: otherItemId,
+      expectedRevision: 3,
+    });
+    expect(released).toMatchObject({
+      kind: "otp.fillRelease",
+      code: expect.stringMatching(/^\d{6}$/u) as unknown,
+    });
+  });
+
   it("returns bounded favorite-first metadata and no code before explicit selection", async () => {
     const favorite = otp({
       id: otherItemId,
@@ -128,7 +176,10 @@ describe("OTP fill service", () => {
           favorite: true,
           tags: ["work"],
           siteMatch: true,
-          preview: { code: expect.stringMatching(/^\d{6}$/u) as unknown, expiresAt: expect.any(Number) as unknown },
+          preview: {
+            code: expect.stringMatching(/^\d{6}$/u) as unknown,
+            expiresAt: expect.any(Number) as unknown,
+          },
         },
         {
           itemId,
@@ -139,7 +190,10 @@ describe("OTP fill service", () => {
           favorite: false,
           tags: ["work"],
           siteMatch: true,
-          preview: { code: expect.stringMatching(/^\d{6}$/u) as unknown, expiresAt: expect.any(Number) as unknown },
+          preview: {
+            code: expect.stringMatching(/^\d{6}$/u) as unknown,
+            expiresAt: expect.any(Number) as unknown,
+          },
         },
       ],
     });
@@ -148,20 +202,35 @@ describe("OTP fill service", () => {
   });
 
   it("puts the page's own accounts first, previews only their codes, and never a look-alike's", async () => {
-    const elsewhere = otp({ id: otherItemId, issuer: "Other Service", label: "someone", favorite: true, secret: "GEZDGNBVGY3TQOJQ" });
+    const elsewhere = otp({
+      id: otherItemId,
+      issuer: "Other Service",
+      label: "someone",
+      favorite: true,
+      secret: "GEZDGNBVGY3TQOJQ",
+    });
     const { service } = harness([elsewhere, otp()]);
-    const response = (await suggestions(service)) as { suggestions: Array<{ itemId: string; siteMatch?: boolean; preview?: unknown }> };
-    expect(response.suggestions.map((item) => [item.itemId, item.siteMatch, item.preview !== undefined])).toEqual([
+    const response = (await suggestions(service)) as {
+      suggestions: Array<{ itemId: string; siteMatch?: boolean; preview?: unknown }>;
+    };
+    expect(
+      response.suggestions.map((item) => [item.itemId, item.siteMatch, item.preview !== undefined]),
+    ).toEqual([
       [itemId, true, true],
       [otherItemId, false, false],
     ]);
     // A brand contained in a longer word is not the brand: "evil-example.test" gets no code.
     const lookalike = harness([otp()]);
     const spoofed = (await lookalike.service.handle(
-      request("otp.fillSuggestions", { requestId: "request_0123456789abcdef", fieldHandle: "field_0123456789abcdef" }),
+      request("otp.fillSuggestions", {
+        requestId: "request_0123456789abcdef",
+        fieldHandle: "field_0123456789abcdef",
+      }),
       { ...sender, senderUrl: "https://evil-example.test/form" },
     )) as { suggestions: Array<{ siteMatch?: boolean; preview?: unknown }> };
-    expect(spoofed.suggestions.map((item) => [item.siteMatch, item.preview !== undefined])).toEqual([[false, false]]);
+    expect(spoofed.suggestions.map((item) => [item.siteMatch, item.preview !== undefined])).toEqual(
+      [[false, false]],
+    );
   });
 
   it("binds capabilities and releases to exact sender origin field item revision and session", async () => {
@@ -307,7 +376,7 @@ describe("OTP fill service", () => {
     const service = new OtpFillService({
       repository: {
         listItems: () => list,
-        get: () => Promise.resolve(otp()),
+        getItem: () => Promise.resolve(otp()),
       },
       hotp: { reserve: vi.fn(), confirm: vi.fn(), cancel: vi.fn() },
       now: () => 1_000,
@@ -376,7 +445,7 @@ describe("OTP fill service", () => {
     const service = new OtpFillService({
       repository: {
         listItems: () => new Promise<OtpItem[]>((resolve) => lists.push(resolve)),
-        get: () => Promise.resolve(otp()),
+        getItem: () => Promise.resolve(otp()),
       },
       hotp: { reserve: vi.fn(), confirm: vi.fn(), cancel: vi.fn() },
       now: () => 1_000,
@@ -538,7 +607,7 @@ describe("OTP fill service", () => {
     const service = new OtpFillService({
       repository: {
         listItems: () => new Promise((resolve) => (settleList = resolve)),
-        get: () => new Promise((resolve) => (settleGet = resolve)),
+        getItem: () => new Promise((resolve) => (settleGet = resolve)),
       },
       hotp: { reserve: vi.fn(), confirm: vi.fn(), cancel: vi.fn() },
       now: () => 1_000,
@@ -560,7 +629,7 @@ describe("OTP fill service", () => {
     const pendingSelectService = new OtpFillService({
       repository: {
         listItems: () => Promise.resolve([otp()]),
-        get: () => new Promise((resolve) => (settleGet = resolve)),
+        getItem: () => new Promise((resolve) => (settleGet = resolve)),
       },
       hotp: { reserve: vi.fn(), confirm: vi.fn(), cancel: vi.fn() },
       now: () => 1_000,

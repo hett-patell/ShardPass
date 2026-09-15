@@ -100,6 +100,31 @@ afterEach(() => {
 });
 
 describe("OTP fill controller", () => {
+  it("looks again at a field focused while its step was still hidden, and shows the trigger once it can", async () => {
+    const roots = captureClosedRoots();
+    const wrapper = document.createElement("div");
+    wrapper.setAttribute("aria-hidden", "true");
+    document.body.append(wrapper);
+    const input = eligibleField();
+    wrapper.append(input);
+    start(platform(() => Promise.reject(new Error("not requested"))));
+    focusField(input);
+    await flush();
+    expect(roots).toHaveLength(0);
+
+    // The step finished rendering: its wrapper is no longer hidden.
+    wrapper.removeAttribute("aria-hidden");
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 400));
+    });
+    expect(roots).toHaveLength(1);
+    expect(
+      within(roots[0] as unknown as HTMLElement).getByRole("button", {
+        name: "Fill one-time code with ShardPass",
+      }),
+    ).toBeVisible();
+  });
+
   it("shows one isolated field-relative trigger only for the focused eligible field", async () => {
     const roots = captureClosedRoots();
     const first = eligibleField();
@@ -148,28 +173,58 @@ describe("OTP fill controller", () => {
           capability: "capability_0123456789abcdef",
           expiresAt: Date.now() + 300_000,
           suggestions: [
-            { itemId: "018f47a6-7d11-7c2f-8bd9-a1d37f147a20", expectedRevision: 1, issuer: "Example", label: "Member", otpType: "totp", favorite: false, tags: [] },
+            {
+              itemId: "018f47a6-7d11-7c2f-8bd9-a1d37f147a20",
+              expectedRevision: 1,
+              issuer: "Example",
+              label: "Member",
+              otpType: "totp",
+              favorite: false,
+              tags: [],
+            },
           ],
         };
       if (request.kind === "otp.fillSelect") {
         // The page locks the field between the pick and the write: the fill cannot land.
         input.readOnly = true;
-        return { version: 1, kind: "otp.fillRelease", releaseId: "release_0123456789abcdef", code: "246810", expiresAt: Date.now() + 5_000, codeLength: 6, characterClass: "digits" };
+        return {
+          version: 1,
+          kind: "otp.fillRelease",
+          releaseId: "release_0123456789abcdef",
+          code: "246810",
+          expiresAt: Date.now() + 5_000,
+          codeLength: 6,
+          characterClass: "digits",
+        };
       }
       return { version: 1, kind: "otp.fillCancelled", cancelled: true };
     });
     start(candidate);
     focusField(input);
     await flush();
-    await clickAndFlush(within(roots[0] as unknown as HTMLElement).getByRole("button", { name: "Fill one-time code with ShardPass" }));
+    await clickAndFlush(
+      within(roots[0] as unknown as HTMLElement).getByRole("button", {
+        name: "Fill one-time code with ShardPass",
+      }),
+    );
     await flush();
-    await clickAndFlush(within(roots.at(-1) as unknown as HTMLElement).getByRole("button", { name: /Use OTP account/u }));
+    await clickAndFlush(
+      within(roots.at(-1) as unknown as HTMLElement).getByRole("button", {
+        name: /Use OTP account/u,
+      }),
+    );
     await flush();
 
     expect(input.value).toBe("");
     expect(writeText).toHaveBeenCalledWith("246810");
-    expect(within(roots.at(-1) as unknown as HTMLElement).getByRole("status")).toHaveTextContent("It was copied instead: paste it.");
-    expect(vi.mocked(candidate.sendOtpFillMessage).mock.calls.some(([request]) => request.kind === "otp.fillCancel")).toBe(true);
+    expect(within(roots.at(-1) as unknown as HTMLElement).getByRole("status")).toHaveTextContent(
+      "It was copied instead: paste it.",
+    );
+    expect(
+      vi
+        .mocked(candidate.sendOtpFillMessage)
+        .mock.calls.some(([request]) => request.kind === "otp.fillCancel"),
+    ).toBe(true);
   });
 
   it("opens metadata only on explicit click, sorts favorites, searches, fills exactly once, and confirms after synchronous code cleanup", async () => {
