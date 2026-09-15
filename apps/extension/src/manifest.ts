@@ -4,7 +4,7 @@ export default defineManifest({
   manifest_version: 3,
   name: "ShardPass",
   short_name: "ShardPass",
-  version: "2.0.0.6",
+  version: "2.0.0.7",
   // 111: content scripts may run in the page's main world, which passkey support needs.
   minimum_chrome_version: "111",
   description: "Local-first password manager foundation.",
