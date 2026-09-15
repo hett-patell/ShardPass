@@ -151,7 +151,13 @@ export function parseOtpAuthUri(uri: string): OtpImportCandidate {
   const separator = decodedPath.indexOf(":");
   const labelIssuer = separator < 0 ? "" : decodedPath.slice(0, separator).trim();
   if (separator >= 0 && labelIssuer === "") fail("IMPORT_MALFORMED");
-  if (queryIssuer !== null && separator >= 0 && !decodedPath.startsWith(`${queryIssuer}:`))
+  // "GitHub:alice" with issuer=github is one issuer spelled two ways, not a conflict.
+  const fold = (value: string) => value.normalize("NFKC").toLowerCase();
+  if (
+    queryIssuer !== null &&
+    separator >= 0 &&
+    !fold(decodedPath).startsWith(`${fold(queryIssuer)}:`)
+  )
     fail("IMPORT_MALFORMED");
 
   const secretValue = parsed.searchParams.get("secret");
@@ -188,7 +194,9 @@ export function parseOtpAuthUri(uri: string): OtpImportCandidate {
   if (steam) {
     if (algorithm !== "SHA1" || digits !== 5 || period !== 30) fail("IMPORT_UNSUPPORTED");
   } else if (
-    (digits !== 6 && digits !== 8) ||
+    // What the vault's schema and generator accept: six to ten digits.
+    digits < 6 ||
+    digits > 10 ||
     (authority === "totp" && (period < 1 || period > 300))
   ) {
     fail("IMPORT_UNSUPPORTED");

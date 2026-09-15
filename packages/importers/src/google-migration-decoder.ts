@@ -167,6 +167,9 @@ function validText(value: string, minimum: number, maximum: number): boolean {
 }
 
 function mapAlgorithm(value: Algorithm): "SHA1" | "SHA256" | "SHA512" {
+  // proto3 leaves a default-valued field out of the wire form; the enum's zero value
+  // ("unspecified") therefore means the protocol's default, SHA1 with six digits.
+  if (Number(value) === 0) return "SHA1";
   if (value === Algorithm.SHA1) return "SHA1";
   if (value === Algorithm.SHA256) return "SHA256";
   if (value === Algorithm.SHA512) return "SHA512";
@@ -174,6 +177,7 @@ function mapAlgorithm(value: Algorithm): "SHA1" | "SHA256" | "SHA512" {
 }
 
 function mapDigits(value: DigitCount): 6 | 8 {
+  if (Number(value) === 0) return 6;
   if (value === DigitCount.SIX) return 6;
   if (value === DigitCount.EIGHT) return 8;
   return fail("IMPORT_UNSUPPORTED");

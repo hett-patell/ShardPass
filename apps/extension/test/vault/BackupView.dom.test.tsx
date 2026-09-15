@@ -430,6 +430,20 @@ describe("BackupView", () => {
     expect(cryptoPort.importPortableBackup).toHaveBeenCalledTimes(2);
   });
 
+  it("names a wrong password on a current-format backup instead of trying the legacy reader", async () => {
+    const { value } = createPlatform();
+    const cryptoPort = createCrypto();
+    vi.mocked(cryptoPort.importPortableBackup).mockRejectedValueOnce(
+      new Error("Backup authentication or parsing failed."),
+    );
+    render(<BackupView platform={value} active kdfExecutor={kdfExecutor} crypto={cryptoPort} />);
+    chooseFileThenPassword(localFile(), "wrong-private-password");
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "The backup password is incorrect, or the file is damaged.",
+    );
+    expect(cryptoPort.importLegacyBackup).not.toHaveBeenCalled();
+  });
+
   it("supports legacy input, changed-preview reconfirmation, confirm, and cancel without exposing rows", async () => {
     let confirmCount = 0;
     const { value, snapshots } = createPlatform((request) => {
@@ -525,7 +539,9 @@ describe("BackupView", () => {
     fireEvent.click(screen.getByRole("button", { name: "Import backup" }));
     expect(await screen.findByRole("status")).toHaveTextContent("2 imported");
     expect(
-      screen.getByText(/Added 1 login, 1 one-time code and created 1 folder, as one vault generation\./u),
+      screen.getByText(
+        /Added 1 login, 1 one-time code and created 1 folder, as one vault generation\./u,
+      ),
     ).toBeVisible();
     expect(onImported).toHaveBeenCalledTimes(1);
   });

@@ -173,7 +173,7 @@ const mixedPayload: PortableBackupPayloadV2 = {
       kind: "login",
       name: "Synthetic mail",
       username: "fixture@example.invalid",
-      password: "correct horse, \"battery\" staple",
+      password: 'correct horse, "battery" staple',
       urls: ["https://mail.example.invalid/login", "https://example.invalid"],
       urlMatches: ["domain", "host"],
       linkedOtpId: "11111111-1111-4111-8111-111111111111",
@@ -700,16 +700,7 @@ describe("authorized legacy backup import-only compatibility", () => {
     expect(imported.payload.items).toHaveLength(8);
     expect(
       imported.payload.items.map((item) => (item.kind === "otp" ? item.otpType : item.kind)),
-    ).toEqual([
-      "totp",
-      "totp",
-      "totp",
-      "totp",
-      "hotp",
-      "hotp",
-      "steam",
-      "totp",
-    ]);
+    ).toEqual(["totp", "totp", "totp", "totp", "hotp", "hotp", "steam", "totp"]);
     expect(imported.payload.settings).toEqual({ autoLockMinutes: 15, lockOnScreenLock: true });
     expect(imported.payload.history).toEqual({ journal: [], tombstones: [] });
     expect(JSON.stringify(imported)).not.toContain("authToken");

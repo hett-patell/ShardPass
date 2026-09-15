@@ -100,30 +100,49 @@ export async function exportPortableBackup(
 
 /**
  * One fixed field order per payload version, so the decrypted bytes can be compared
- * against a re-encoding of what they parsed to.
+ * against a re-encoding of what they parsed to. Inside the payload every object's keys
+ * are sorted: the schema's own key order changes whenever a field is added, and a file
+ * written before such a change must still compare equal.
  */
 export function encodeCanonicalPayload(input: PortableBackupPayload): Uint8Array {
-  const payload = parsePayload(input);
-  return encoder.encode(
-    JSON.stringify(
-      payload.schemaVersion === 1
-        ? {
-            schemaVersion: payload.schemaVersion,
-            exportedAt: payload.exportedAt,
-            items: payload.items,
-            settings: payload.settings,
-            history: payload.history,
-          }
-        : {
-            schemaVersion: payload.schemaVersion,
-            exportedAt: payload.exportedAt,
-            items: payload.items,
-            folders: payload.folders,
-            settings: payload.settings,
-            history: payload.history,
-          },
-    ),
-  );
+  return encoder.encode(JSON.stringify(sortKeysDeep(orderedPayload(parsePayload(input)))));
+}
+
+/**
+ * The encoding used by builds before keys were sorted (schema key order); a file written
+ * by one of them is still accepted by comparing against this form as well.
+ */
+export function encodeLegacyCanonicalPayload(input: PortableBackupPayload): Uint8Array {
+  return encoder.encode(JSON.stringify(orderedPayload(parsePayload(input))));
+}
+
+function orderedPayload(payload: PortableBackupPayload): Record<string, unknown> {
+  return payload.schemaVersion === 1
+    ? {
+        schemaVersion: payload.schemaVersion,
+        exportedAt: payload.exportedAt,
+        items: payload.items,
+        settings: payload.settings,
+        history: payload.history,
+      }
+    : {
+        schemaVersion: payload.schemaVersion,
+        exportedAt: payload.exportedAt,
+        items: payload.items,
+        folders: payload.folders,
+        settings: payload.settings,
+        history: payload.history,
+      };
+}
+
+/** Objects get their keys in code-unit order, at every depth; arrays keep their order. */
+function sortKeysDeep(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(sortKeysDeep);
+  if (typeof value !== "object" || value === null) return value;
+  const record = value as Record<string, unknown>;
+  const sorted: Record<string, unknown> = {};
+  for (const key of Object.keys(record).sort()) sorted[key] = sortKeysDeep(record[key]);
+  return sorted;
 }
 
 function parsePayload(input: unknown): PortableBackupPayload {

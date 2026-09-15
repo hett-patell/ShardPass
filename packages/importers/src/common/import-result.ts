@@ -35,12 +35,16 @@ export function createFolderIndex(): {
       let parentId: string | undefined;
       let key = "";
       for (const rawName of path) {
-        const name = rawName.trim().slice(0, 80);
+        const name = Array.from(rawName.trim()).slice(0, 80).join("").trim();
         if (name === "") continue;
         key = `${key}/${name.toLowerCase()}`;
         let folder = byPath.get(key);
         if (folder === undefined) {
-          folder = { id: crypto.randomUUID(), name, ...(parentId === undefined ? {} : { parentId }) };
+          folder = {
+            id: crypto.randomUUID(),
+            name,
+            ...(parentId === undefined ? {} : { parentId }),
+          };
           byPath.set(key, folder);
         }
         parentId = folder.id;

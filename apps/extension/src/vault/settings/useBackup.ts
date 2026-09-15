@@ -145,6 +145,8 @@ function fixedError(error: unknown): string {
   switch (code) {
     case "BACKUP_AUTH_FAILED":
       return "The current vault password is incorrect.";
+    case "BACKUP_WRONG_PASSWORD":
+      return "The backup password is incorrect, or the file is damaged.";
     case "BACKUP_EXPIRED":
       return "Backup authorization expired. Start again.";
     case "BACKUP_CHANGED":
@@ -416,8 +418,7 @@ export function useBackup({
           if (!isOwner(job) || verified.sourceFormat !== "v2") return;
           expectedCanonical = crypto.canonicalPayload(snapshot.payload);
           verifiedCanonical = crypto.canonicalPayload(verified.payload);
-          if (!equalBytes(expectedCanonical, verifiedCanonical))
-            throw new Error("BACKUP_INVALID");
+          if (!equalBytes(expectedCanonical, verifiedCanonical)) throw new Error("BACKUP_INVALID");
           status = "Encrypted backup verified locally.";
         } else if (kind === "json") {
           fileBytes = crypto.encodePlaintextJson(snapshot.payload);
@@ -427,7 +428,9 @@ export function useBackup({
           status = "CSV export ready. The file is not encrypted.";
         }
         const blobBytes = fileBytes.slice().buffer;
-        const url = URL.createObjectURL(new Blob([blobBytes], { type: EXPORT_FILES[kind].mimeType }));
+        const url = URL.createObjectURL(
+          new Blob([blobBytes], { type: EXPORT_FILES[kind].mimeType }),
+        );
         if (!isOwner(job)) {
           URL.revokeObjectURL(url);
           return;
@@ -554,8 +557,18 @@ export function useBackup({
           imported = await crypto.importPortableBackup(job.bytes, job.password!, kdfExecutor, {
             signal: job.controller.signal,
           });
-        } catch {
+        } catch (error) {
           if (!isOwner(job)) return;
+          // A current-format file that decrypted or parsed badly did so because of its
+          // password (or damage): say so. Anything else is not a current backup, and the
+          // legacy reader gets its turn.
+          if (
+            error instanceof Error &&
+            error.message === "Backup authentication or parsing failed."
+          )
+            throw Object.assign(new Error("Backup password rejected."), {
+              code: "BACKUP_WRONG_PASSWORD",
+            });
           imported = await crypto.importLegacyBackup(job.bytes, job.password!);
         }
         if (!isOwner(job)) return;

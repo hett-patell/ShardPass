@@ -160,13 +160,21 @@ describe("Google Authenticator migration import", () => {
     const unsupported = [
       HEX.unknownAlgorithm,
       HEX.md5Algorithm,
-      HEX.absentAlgorithm,
       HEX.unknownDigits,
-      HEX.absentDigits,
       HEX.unknownType,
       HEX.absentType,
       HEX.unsafeCounter,
     ];
+    // proto3 omits default-valued fields: an absent algorithm or digit count is the
+    // protocol's default (SHA1, six digits), not an unsupported value.
+    expect(decodeGoogleMigrationUris([migrationUri(HEX.absentAlgorithm)])).toMatchObject({
+      candidates: [expect.objectContaining({ algorithm: "SHA1" })],
+      rejected: [],
+    });
+    expect(decodeGoogleMigrationUris([migrationUri(HEX.absentDigits)])).toMatchObject({
+      candidates: [expect.objectContaining({ digits: 6 })],
+      rejected: [],
+    });
     for (const hex of unsupported) {
       expect(decodeGoogleMigrationUris([migrationUri(hex)])).toEqual({
         format: "google-migration",

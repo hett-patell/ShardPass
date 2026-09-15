@@ -51,6 +51,27 @@ describe("strict otpauth import parsing", () => {
     expect(parsed).toMatchObject({ issuer: "組織", label: "account+primary:device" });
   });
 
+  it("accepts every digit count the vault generates, and an issuer spelled in another case", () => {
+    expect(
+      parseOtpAuthUri(
+        uri("Site:me", [
+          ["secret", SYNTHETIC_SECRET],
+          ["digits", "7"],
+        ]),
+      ),
+    ).toMatchObject({
+      digits: 7,
+    });
+    expect(
+      parseOtpAuthUri(
+        uri("GitHub%3Aalice", [
+          ["secret", SYNTHETIC_SECRET],
+          ["issuer", "github"],
+        ]),
+      ),
+    ).toMatchObject({ label: "alice" });
+  });
+
   it("preserves supported algorithms, digits, periods, and HOTP boundary counters", () => {
     expect(
       parseOtpAuthUri(
@@ -122,10 +143,28 @@ describe("strict otpauth import parsing", () => {
     expect(parseOtpAuthUri(uri("Steam%20account"))).toMatchObject({ otpType: "totp" });
     // Steam never uses eight digits or another hash; the strict shape still holds.
     expectSafeFailure(() =>
-      parseOtpAuthUri(uri("Account", [["secret", SYNTHETIC_SECRET], ["digits", "8"]], "steam")),
+      parseOtpAuthUri(
+        uri(
+          "Account",
+          [
+            ["secret", SYNTHETIC_SECRET],
+            ["digits", "8"],
+          ],
+          "steam",
+        ),
+      ),
     );
     expectSafeFailure(() =>
-      parseOtpAuthUri(uri("Account", [["secret", SYNTHETIC_SECRET], ["algorithm", "SHA256"]], "steam")),
+      parseOtpAuthUri(
+        uri(
+          "Account",
+          [
+            ["secret", SYNTHETIC_SECRET],
+            ["algorithm", "SHA256"],
+          ],
+          "steam",
+        ),
+      ),
     );
   });
 
@@ -184,7 +223,7 @@ describe("strict otpauth import parsing", () => {
   it.each<[string, [string, string]]>([
     ["critical extension", ["x-critical", "true"]],
     ["unsupported algorithm", ["algorithm", "MD5"]],
-    ["unsupported digits", ["digits", "7"]],
+    ["unsupported digits", ["digits", "11"]],
     ["unsupported period zero", ["period", "0"]],
     ["unsupported period high", ["period", "301"]],
     ["TOTP counter", ["counter", "0"]],
@@ -270,7 +309,7 @@ describe("bounded otpauth multiline parsing", () => {
         "otpauth://totp/Broken",
         uri("Third", [
           ["secret", SYNTHETIC_SECRET],
-          ["digits", "7"],
+          ["digits", "11"],
         ]),
         uri("Fourth"),
       ].join("\n"),

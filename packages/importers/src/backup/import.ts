@@ -3,7 +3,7 @@ import { decodeCanonicalBase64 } from "@shardpass/security";
 import { z } from "zod/mini";
 
 import { decryptLegacyVault, mapLegacyAccount, MAX_LEGACY_CIPHERTEXT_BYTES } from "../legacy-v1";
-import { encodeCanonicalPayload } from "./export";
+import { encodeCanonicalPayload, encodeLegacyCanonicalPayload } from "./export";
 import {
   PortableBackupPayloadSchema,
   type ImportedPortableBackup,
@@ -68,7 +68,12 @@ export async function importPortableBackup(
     if (payload.schemaVersion !== envelope.payloadSchemaVersion)
       throw new Error("Invalid backup payload.");
     canonical = encodeCanonicalPayload(payload);
-    if (!equalBytes(plaintext, canonical)) throw new Error("Invalid backup payload.");
+    // Files from before keys were sorted carry the schema-ordered encoding of their day.
+    if (
+      !equalBytes(plaintext, canonical) &&
+      !equalBytes(plaintext, encodeLegacyCanonicalPayload(payload))
+    )
+      throw new Error("Invalid backup payload.");
     return { sourceFormat: "v2", payload };
   } catch {
     throw new Error("Backup authentication or parsing failed.");

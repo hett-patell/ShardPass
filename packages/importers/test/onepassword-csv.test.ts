@@ -25,7 +25,9 @@ AWS Console,admin,s3cret,https://aws.amazon.com,`;
     const csv = `Title,Username,Password,URL,Notes\nEmpty,user,,https://example.com,`;
     const result = importOnePasswordCsv(csv);
     expect(result.items).toHaveLength(1);
-    expect(result.warnings).toEqual(['"Empty": imported without a password (the export has none).']);
+    expect(result.warnings).toEqual([
+      '"Empty": imported without a password (the export has none).',
+    ]);
   });
 
   it("reads the columns 1Password 8 writes: OTPAuth, Favorite, Archived and Tags", () => {
@@ -51,6 +53,16 @@ Old site,https://old.example,me,pw2,,false,true,,gone`;
     const item = result.items[0]!;
     if (item.kind !== "login") throw new Error("expected login");
     expect(item.name).toBe("GitLab");
+  });
+
+  it("reads a YYYYMM card expiry as year then month, like the 1PUX importer", () => {
+    const result = importOnePasswordCsv(
+      ["Title,Type,ccnum,expiry", "Visa,Credit Card,4111111111111111,203012"].join("\n"),
+    );
+    const [card] = result.items;
+    if (card?.kind !== "card") throw new Error("expected card");
+    expect(card.expMonth).toBe("12");
+    expect(card.expYear).toBe("2030");
   });
 
   it("routes rows by the Type column to note, card, and identity kinds", () => {
@@ -126,7 +138,9 @@ Bad,user,pw,https://b.example,not a secret at all`;
   });
 
   it("keeps more than the URL limit by dropping the extras with a warning", () => {
-    const urls = Array.from({ length: 20 }, (_, index) => `https://site${index}.example`).join("\n");
+    const urls = Array.from({ length: 20 }, (_, index) => `https://site${index}.example`).join(
+      "\n",
+    );
     const csv = `Title,Username,Password,URL,Notes\nMany,user,pw,"${urls}",`;
     const result = importOnePasswordCsv(csv);
     const item = result.items[0];

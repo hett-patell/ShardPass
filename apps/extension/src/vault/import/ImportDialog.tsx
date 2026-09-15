@@ -28,16 +28,21 @@ import styles from "./ImportDialog.module.css";
 
 /** Local file read cap for a third-party export: generous for thousands of rows, still bounded. */
 const MAX_THIRD_PARTY_IMPORT_BYTES = 4 * 1024 * 1024;
+/** A 1PUX archive or a KeePass database with attachments; the parsers bound their own reads. */
+const MAX_BINARY_IMPORT_BYTES = 64 * 1024 * 1024;
 /** KeePass accepts any file as a key file; a photo is common, a video is not. */
 const MAX_KEY_FILE_BYTES = 8 * 1024 * 1024;
 const MAX_VISIBLE_WARNINGS = 20;
 /** Rows per item.createMany call: bounds message size and gives the progress bar steps. */
 const IMPORT_BATCH_SIZE = 100;
 
-type ThirdPartySourceId = "chrome" | "firefox" | "bitwarden" | "onepassword" | "onepassword-1pux" | "keepass";
+type ThirdPartySourceId =
+  "chrome" | "firefox" | "bitwarden" | "onepassword" | "onepassword-1pux" | "keepass";
 type SourceId = "otp" | "backup" | ThirdPartySourceId;
 
 interface ThirdPartySource {
+  /** Read cap for this source's files; the text parsers' default is 4 MiB. */
+  maxBytes?: number;
   readonly id: ThirdPartySourceId;
   readonly label: string;
   readonly accept: string;
@@ -90,6 +95,8 @@ const THIRD_PARTY_SOURCES: readonly ThirdPartySource[] = Object.freeze([
   {
     id: "onepassword-1pux",
     label: "1Password 1PUX",
+    // The archive carries attachments and documents; only export.data is ever read.
+    maxBytes: MAX_BINARY_IMPORT_BYTES,
     accept: ".1pux,application/zip",
     instructions:
       "In 1Password, File → Export → 1PUX. It keeps every field, tags, several URLs, one-time secrets and " +
@@ -99,6 +106,7 @@ const THIRD_PARTY_SOURCES: readonly ThirdPartySource[] = Object.freeze([
   {
     id: "keepass",
     label: "KeePass database",
+    maxBytes: MAX_BINARY_IMPORT_BYTES,
     accept: ".kdbx,application/x-keepass",
     instructions:
       "Choose your .kdbx database, then enter its master password and, if the database uses one, " +
@@ -313,7 +321,8 @@ export function ImportDialog({ platform, active, onImported, onDone }: ImportDia
   }, []);
   // One round trip per preview so the folder summary can count what already exists.
   useEffect(() => {
-    if (state.phase !== "preview" || state.folders.length === 0 || state.existingFolders !== null) return;
+    if (state.phase !== "preview" || state.folders.length === 0 || state.existingFolders !== null)
+      return;
     const owner = ownerRef.current;
     void sendFolderRequest(platform, { version: 1, kind: "folder.list" }).then((folders) => {
       if (!mountedRef.current || owner !== ownerRef.current) return;
@@ -334,7 +343,7 @@ export function ImportDialog({ platform, active, onImported, onDone }: ImportDia
       setState({ ...INITIAL_THIRD_PARTY_STATE, error: "The file is empty." });
       return;
     }
-    if (file.size > MAX_THIRD_PARTY_IMPORT_BYTES) {
+    if (file.size > (parser.maxBytes ?? MAX_THIRD_PARTY_IMPORT_BYTES)) {
       setState({ ...INITIAL_THIRD_PARTY_STATE, error: "The file is too large to import safely." });
       return;
     }
@@ -358,7 +367,10 @@ export function ImportDialog({ platform, active, onImported, onDone }: ImportDia
         // is an unreadable file.
         setState({
           ...INITIAL_THIRD_PARTY_STATE,
-          error: error instanceof OnePassword1puxFormatError ? error.message : "The file could not be read.",
+          error:
+            error instanceof OnePassword1puxFormatError
+              ? error.message
+              : "The file could not be read.",
         });
       },
     );
@@ -411,15 +423,24 @@ export function ImportDialog({ platform, active, onImported, onDone }: ImportDia
   };
 
   const toggleAll = (selected: boolean) => {
-    setState((current) => ({ ...current, rows: current.rows.map((row) => ({ ...row, selected })) }));
+    setState((current) => ({
+      ...current,
+      rows: current.rows.map((row) => ({ ...row, selected })),
+    }));
   };
 
   const confirmImport = async () => {
     const selected = state.rows.filter((row) => row.selected);
+    // The vault's folders decide what gets reused; if their list has not arrived yet, wait
+    // for it rather than recreating every folder beside its namesake.
+    let existingFolders = state.existingFolders;
+    if (existingFolders === null && state.folders.length > 0)
+      existingFolders =
+        (await sendFolderRequest(platform, { version: 1, kind: "folder.list" })) ?? [];
     const plan = planFolders(
       state.folders,
       selected.map((row) => row.item.folderId),
-      state.existingFolders ?? [],
+      existingFolders ?? [],
     );
     importingRef.current = true;
     setState((current) => ({
@@ -469,7 +490,11 @@ export function ImportDialog({ platform, active, onImported, onDone }: ImportDia
           }
           if (entry.status === "updated") {
             updated += 1;
-            outcomes.push({ name: itemDisplayName(row.item), kind: row.item.kind, status: "updated" });
+            outcomes.push({
+              name: itemDisplayName(row.item),
+              kind: row.item.kind,
+              status: "updated",
+            });
             continue;
           }
           if (entry.status === "duplicate") duplicates += 1;
@@ -478,7 +503,9 @@ export function ImportDialog({ platform, active, onImported, onDone }: ImportDia
             name: itemDisplayName(row.item),
             kind: row.item.kind,
             status: entry.status,
-            ...(entry.status === "invalid" && entry.reason !== undefined ? { reason: entry.reason } : {}),
+            ...(entry.status === "invalid" && entry.reason !== undefined
+              ? { reason: entry.reason }
+              : {}),
           });
         }
         const done = Math.min(start + chunk.length, selected.length);
@@ -583,9 +610,9 @@ export function ImportDialog({ platform, active, onImported, onDone }: ImportDia
                 onChange={(event) => selectKeyFile(event.currentTarget.files?.[0])}
               />
               <p className={styles.unlockHint}>
-                Only needed when the database was locked with a key file as well as, or instead
-                of, a password. Opening a database is deliberately slow: KeePass key derivation
-                can take several seconds.
+                Only needed when the database was locked with a key file as well as, or instead of,
+                a password. Opening a database is deliberately slow: KeePass key derivation can take
+                several seconds.
               </p>
               <div className={styles.unlockActions}>
                 <Button
@@ -619,7 +646,9 @@ export function ImportDialog({ platform, active, onImported, onDone }: ImportDia
               >
                 <span aria-hidden="true">↓</span>
                 <strong>
-                  {state.phase === "reading" ? "Reading locally…" : `Choose ${thirdParty.label} file`}
+                  {state.phase === "reading"
+                    ? "Reading locally…"
+                    : `Choose ${thirdParty.label} file`}
                 </strong>
                 <small>Processed locally and never uploaded.</small>
               </button>
@@ -630,9 +659,7 @@ export function ImportDialog({ platform, active, onImported, onDone }: ImportDia
               <span>
                 {plural(state.imported, "item")} imported
                 {state.updated > 0 ? `, ${state.updated} brought up to date` : ""}
-                {state.duplicates > 0
-                  ? `, ${state.duplicates} already in your vault`
-                  : ""}
+                {state.duplicates > 0 ? `, ${state.duplicates} already in your vault` : ""}
                 {state.failed > 0 ? `, ${state.failed} failed` : ""}
                 {state.unfiled > 0 ? `, ${state.unfiled} without a folder` : ""}.
               </span>
@@ -713,7 +740,9 @@ export function ImportDialog({ platform, active, onImported, onDone }: ImportDia
                       <li key={warning}>{warning}</li>
                     ))}
                     {state.warnings.length > MAX_VISIBLE_WARNINGS ? (
-                      <li className={styles.outcomeMore}>and {state.warnings.length - MAX_VISIBLE_WARNINGS} more</li>
+                      <li className={styles.outcomeMore}>
+                        and {state.warnings.length - MAX_VISIBLE_WARNINGS} more
+                      </li>
                     ) : null}
                   </ul>
                 </details>
@@ -803,7 +832,9 @@ function refile(
     return {
       item: rest,
       unfiled:
-        planned !== undefined && plan.overLimit.has(planned) ? FOLDER_LIMIT_REASON : FOLDER_FAILED_REASON,
+        planned !== undefined && plan.overLimit.has(planned)
+          ? FOLDER_LIMIT_REASON
+          : FOLDER_FAILED_REASON,
     };
   }
   return { item: real === item.folderId ? item : { ...item, folderId: real } };
@@ -842,7 +873,8 @@ async function realizeFolders(
     });
     if (created === null) continue;
     const real = created.find(
-      (candidate) => candidate.parentId === parentReal && sameFolderName(candidate.name, folder.name),
+      (candidate) =>
+        candidate.parentId === parentReal && sameFolderName(candidate.name, folder.name),
     );
     if (real !== undefined) resolved.set(folder.id, real.id);
   }

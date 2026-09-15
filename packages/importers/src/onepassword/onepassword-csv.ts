@@ -13,6 +13,12 @@ import {
 } from "@shardpass/domain";
 
 import { clampName, clampText, keepIfValid, normalizeTags, warningLabel } from "../common/clamp";
+
+// What CardItemSchema bounds these small fields to; longer values are cut, with a notice.
+const MAX_CARD_EXP_MONTH_LENGTH = 2;
+const MAX_CARD_EXP_YEAR_LENGTH = 4;
+const MAX_CARD_CVV_LENGTH = 8;
+const MAX_CARD_PIN_LENGTH = 16;
 import { buildHeaderIndex, pickField } from "../common/csv-fields";
 import { parseCsv } from "../common/csv-parser";
 import { newItemBase } from "../common/item-base";
@@ -67,7 +73,8 @@ export function importOnePasswordCsv(text: string): ImportResult {
       const password = pickField(row, headerIndex, "password");
       // A login without a password (passkey-only, username-only) is still worth keeping:
       // the username, site and notes are what the person will look for.
-      if (!password) warnings.push(`"${label}": imported without a password (the export has none).`);
+      if (!password)
+        warnings.push(`"${label}": imported without a password (the export has none).`);
       const totp = pickField(row, headerIndex, "otpauth", "one-time password", "totp").trim();
       emitLogin(
         base,
@@ -121,10 +128,22 @@ export function importOnePasswordCsv(text: string): ImportResult {
           label,
           warnings,
         ),
-        expMonth: month,
-        expYear: year,
-        cvv: pickField(row, headerIndex, "cvv", "security code"),
-        pin: pickField(row, headerIndex, "pin"),
+        expMonth: clampText(month, MAX_CARD_EXP_MONTH_LENGTH, "expiry month", label, warnings),
+        expYear: clampText(year, MAX_CARD_EXP_YEAR_LENGTH, "expiry year", label, warnings),
+        cvv: clampText(
+          pickField(row, headerIndex, "cvv", "security code"),
+          MAX_CARD_CVV_LENGTH,
+          "security code",
+          label,
+          warnings,
+        ),
+        pin: clampText(
+          pickField(row, headerIndex, "pin"),
+          MAX_CARD_PIN_LENGTH,
+          "PIN",
+          label,
+          warnings,
+        ),
         notes: clampText(notes, MAX_CARD_NOTES_LENGTH, "notes", label, warnings),
       };
       keepIfValid(CardItemSchema, candidate, "card", label, warnings, items);
@@ -160,7 +179,10 @@ function truthy(value: string): boolean {
 
 /** 1Password writes tags comma- or semicolon-separated in one cell. */
 function splitTags(value: string): string[] {
-  return value.split(/[,;]/u).map((tag) => tag.trim()).filter((tag) => tag !== "");
+  return value
+    .split(/[,;]/u)
+    .map((tag) => tag.trim())
+    .filter((tag) => tag !== "");
 }
 
 const URL_START = /^(?:[a-z][a-z0-9+.-]*:\/\/|www\.|[\w-]+(?:\.[\w-]+)+)/iu;
@@ -203,7 +225,11 @@ function splitExpiry(
 ): { month: string; year: string } {
   if (monthField || yearField) return { month: monthField, year: yearField };
   const digits = combinedField.replace(/\D/gu, "");
-  if (digits.length === 6) return { month: digits.slice(0, 2), year: digits.slice(2) };
+  // Six digits are MMYYYY unless they start like a year (no month starts with 19 or 20).
+  if (digits.length === 6)
+    return /^(?:19|20)/u.test(digits)
+      ? { month: digits.slice(4), year: digits.slice(0, 4) }
+      : { month: digits.slice(0, 2), year: digits.slice(2) };
   if (digits.length === 4) return { month: digits.slice(0, 2), year: `20${digits.slice(2)}` };
   return { month: "", year: "" };
 }
