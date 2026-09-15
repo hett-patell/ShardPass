@@ -11,7 +11,8 @@ import {
 import { Button, PasswordInput } from "@shardpass/ui";
 
 import { passwordStrength } from "./password-strength";
-import { useEffect, useRef, useState } from "react";
+import { createStrengthEstimator, type StrengthEstimate } from "./strength-estimator";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { ExtensionPlatform } from "../platform/extension-platform";
 import { createPageKdfExecutor } from "../platform/kdf-executor";
@@ -67,6 +68,27 @@ export function VaultAccess({
   const [settingsError, setSettingsError] = useState("");
   // Time left on the failed-unlock cooldown the background reported; counts down on screen.
   const [retryAfterMs, setRetryAfterMs] = useState(0);
+  // The full estimate (zxcvbn, in its worker) arrives a moment after typing pauses; until
+  // then, and wherever workers are missing, the quick arithmetic stands in.
+  const estimator = useMemo(() => createStrengthEstimator(), []);
+  useEffect(() => () => estimator.dispose(), [estimator]);
+  const [refined, setRefined] = useState<Readonly<{
+    password: string;
+    estimate: StrengthEstimate;
+  }> | null>(null);
+  useEffect(() => {
+    if (state !== "unconfigured" || password === "") return;
+    let live = true;
+    const timer = setTimeout(() => {
+      void estimator.estimate(password).then((estimate) => {
+        if (live) setRefined({ password, estimate });
+      });
+    }, 150);
+    return () => {
+      live = false;
+      clearTimeout(timer);
+    };
+  }, [estimator, password, state]);
   useEffect(() => {
     if (retryAfterMs <= 0) return;
     const timer = setTimeout(() => setRetryAfterMs((left) => Math.max(0, left - 1_000)), 1_000);
@@ -476,7 +498,10 @@ export function VaultAccess({
     );
   }
   const setup = state === "unconfigured";
-  const strength = passwordStrength(password);
+  const strength: StrengthEstimate =
+    refined?.password === password
+      ? refined.estimate
+      : { ...passwordStrength(password), source: "quick" };
   return (
     <section className={styles.panel}>
       <h2>{setup ? "Create your vault" : "Unlock ShardPass"}</h2>
@@ -519,6 +544,9 @@ export function VaultAccess({
               <span className={styles.meterFill} data-level={strength.level} />
             </div>
             <span className={styles.strengthLabel}>{strength.label}</span>
+            {strength.advice !== undefined ? (
+              <span className={styles.strengthAdvice}>{strength.advice}</span>
+            ) : null}
           </div>
         ) : null}
         {setup &&

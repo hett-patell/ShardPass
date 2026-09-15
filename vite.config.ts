@@ -36,6 +36,18 @@ function config(command: "build" | "serve"): UserConfig {
     // else, React resolves its development entry (389 KB of console.error) into the popup.
     define: command === "build" ? { "process.env.NODE_ENV": JSON.stringify("production") } : {},
     plugins: [
+      // zxcvbn logs a notice when a matcher is registered twice; nothing here registers one.
+      // The call is removed from the worker chunk so the build's console rule stays exact.
+      {
+        name: "shardpass-strip-zxcvbn-console",
+        renderChunk(code: string, chunk: { name: string }) {
+          if (chunk.name !== "strengthWorkerEntry" || !code.includes("console.info(")) return null;
+          return {
+            code: code.replace(/console\.info\(/gu, "((..._notice) => undefined)("),
+            map: null,
+          };
+        },
+      },
       enteSrpVitePlugin({
         workspaceRoot,
         productionEntry: path.resolve(
@@ -61,7 +73,9 @@ function config(command: "build" | "serve"): UserConfig {
               ? "assets/ente-auth-worker-entry.js"
               : chunk.name === "kdfWorkerEntry"
                 ? "assets/kdf-worker-entry.js"
-                : "assets/[name]-[hash].js",
+                : chunk.name === "strengthWorkerEntry"
+                  ? "assets/strength-worker-entry.js"
+                  : "assets/[name]-[hash].js",
         },
         input: {
           popup: "apps/extension/popup/index.html",
@@ -74,6 +88,8 @@ function config(command: "build" | "serve"): UserConfig {
           // The vault KDF worker: built here, not as a nested worker bundle, so libsodium is
           // packaged once and the scanner's single-module identity check covers it too.
           kdfWorkerEntry: "packages/crypto/src/kdf-worker-entry.ts",
+          // zxcvbn and its dictionaries: off the page thread, and out of the page bundles.
+          strengthWorkerEntry: "apps/extension/src/vault-access/strength-worker-entry.ts",
         },
       },
     },

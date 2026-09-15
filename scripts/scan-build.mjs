@@ -21,8 +21,9 @@ const legacyName =
   /(?:_commonjsHelpers-BNVkcQi_|detect-GJf8O2wT|format-BF4VSr4S|index\.html-XjjvDkko|index\.ts-BbWVF1-a|index\.ts-DTcWtSwh|index\.ts-loader-BWnrBa67|index-wA3AHzJ-|log-B-C8fiGH)/u;
 const testArtifactPath =
   /(?:^|[/_.-])(?:__tests__|tests?|fixtures?|picker-harness|test-harness|vitest|playwright)(?:$|[/_.-])/iu;
+// Module names, not the English word "playwright": the strength worker ships a dictionary.
 const testHarnessText =
-  /(?:picker-harness|test-harness|tests\/fixtures|__tests__|playwright|vitest)/iu;
+  /(?:picker-harness|test-harness|tests\/fixtures|__tests__|@playwright\/|playwright\/test|playwright-core|vitest)/iu;
 const cryptoTestArtifact =
   /(?:crypto-smoke|__shardpassRunDefaultArgon2idBenchmark|ShardPass browser benchmark|runDefaultArgon2idBenchmark|createVaultKeyMaterialForTesting|packages\/crypto\/test\/compatibility-fixture|synthetic separate backup password|JBSWY3DPEHPK3PXP|TEST-ONLY ShardPass fixture password|srp-(?:legacy-1\.2\.1|current-pin)-transcript|expected(?:A|M1|M2|SessionKey)Hex|clientPrivateHex|serverPrivateHex|sodium-wire-vectors)/u;
 const textExtensions = new Set([".css", ".html", ".js", ".json", ".mjs", ".svg", ".txt"]);

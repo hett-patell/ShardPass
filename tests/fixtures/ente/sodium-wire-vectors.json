@@ -6,7 +6,7 @@
   "generatorSha256": "38f1c14bb6cc5cb07fd4e54a00bdc6d732f0cd6e8a00eb2d41f5799ba5475499",
   "loaderSha256": "40de1ef7cb8f2caae02c2a8f04809151904fa28cb9364cadedc57af89a6c9284",
   "browserHarnessSha256": "8972cac33391402e90a8f082ca18f7f11cef663d3860e93870f1235893276328",
-  "outputScannerSha256": "bd271e8b5eb4a5b4e4dd3d36c701771967fe65740f3b192eb7286dab2459c15a",
+  "outputScannerSha256": "255090e45e3fbcfa6986531ead995590735bbcb7f938f8181c81f27a7749c2aa",
   "sumoModuleSha256": "71db3efbdef65b5bff9bc885b558a9414a1504e667ef36df95c7eec459fde3c1",
   "decodedWasmSha256": "b15a381270ba8869e3a6b91d45e5a6439370c769e25ceef78aee9439f791d18f",
   "wasmImports": [
