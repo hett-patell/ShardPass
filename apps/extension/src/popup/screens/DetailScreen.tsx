@@ -1,4 +1,4 @@
-import type { LoginItem, VaultItem } from "@shardpass/domain";
+import type { CardItem, IdentityItem, LoginItem, VaultItem } from "@shardpass/domain";
 import { SIGN_IN_PROVIDER_LABELS } from "@shardpass/domain";
 import { parseItemCrudResponseForRequest } from "@shardpass/messaging";
 import { Button, SectionLabel } from "@shardpass/ui";
@@ -21,6 +21,9 @@ export interface DetailScreenProps {
   tabMatches: boolean;
   filling: boolean;
   onFill: (item: LoginItem) => void;
+  /** Fill a card or an identity into the open tab; not tied to a site, so offered on any. */
+  onFillData: (item: CardItem | IdentityItem) => void;
+  fillingData: boolean;
   onCopy: (value: string, label: string) => void;
   onOpenVault: () => void;
 }
@@ -39,6 +42,8 @@ export function DetailScreen({
   tabMatches,
   filling,
   onFill,
+  onFillData,
+  fillingData,
   onCopy,
   onOpenVault,
 }: DetailScreenProps) {
@@ -117,6 +122,17 @@ export function DetailScreen({
         </div>
       </header>
 
+      {(item.kind === "card" || item.kind === "identity") && tab !== null ? (
+        <div className={styles.primaryAction}>
+          <Button
+            className={styles.fillButton}
+            loading={fillingData}
+            onClick={() => onFillData(item)}
+          >
+            {`Fill in ${tab.host}`}
+          </Button>
+        </div>
+      ) : null}
       {item.kind === "login" && tab !== null ? (
         <div className={styles.primaryAction}>
           <Button

@@ -1,4 +1,5 @@
 import { createChromePlatform } from "../platform/chrome-platform";
+import { createDataFillController } from "./data/data-fill-controller";
 import { createLoginFillController } from "./login/login-fill-controller";
 import { createOtpFillController } from "./otp/otp-fill-controller";
 import { createPasskeyBridge } from "./passkey/passkey-bridge";
@@ -7,6 +8,7 @@ type Controllers = Readonly<{
   otpController: ReturnType<typeof createOtpFillController>;
   loginController: ReturnType<typeof createLoginFillController>;
   passkeyBridge: ReturnType<typeof createPasskeyBridge>;
+  dataFillController: ReturnType<typeof createDataFillController>;
 }>;
 
 const platform = createChromePlatform();
@@ -15,16 +17,24 @@ function startControllers(): Controllers {
   const otpController = createOtpFillController({ document, window, platform });
   const loginController = createLoginFillController({ document, window, platform });
   const passkeyBridge = createPasskeyBridge({ document, window, platform });
+  const dataFillController = createDataFillController({ document, platform });
   otpController.start();
   loginController.start();
   passkeyBridge.start();
-  return { otpController, loginController, passkeyBridge };
+  dataFillController.start();
+  return { otpController, loginController, passkeyBridge, dataFillController };
 }
 
-function disposeControllers({ otpController, loginController, passkeyBridge }: Controllers): void {
+function disposeControllers({
+  otpController,
+  loginController,
+  passkeyBridge,
+  dataFillController,
+}: Controllers): void {
   otpController.dispose();
   loginController.dispose();
   passkeyBridge.dispose();
+  dataFillController.dispose();
 }
 
 let controllers: Controllers | null = startControllers();

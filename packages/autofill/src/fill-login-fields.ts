@@ -16,7 +16,7 @@ function setNativeValue(el: HTMLInputElement, value: string): void {
  * field was not the one being typed in -- blur, so validation that waits for a field to be
  * left runs too. No key names are sent; the events only carry the value itself.
  */
-function fillLikeTyping(el: HTMLInputElement, value: string): void {
+export function fillInputLikeTyping(el: HTMLInputElement, value: string): void {
   const wasFocused = el.ownerDocument.activeElement === el;
   if (!wasFocused) el.dispatchEvent(new FocusEvent("focus"));
   el.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, cancelable: true }));
@@ -40,7 +40,7 @@ function fillLikeTyping(el: HTMLInputElement, value: string): void {
 /** A username-only step (no password field) gets just the username. */
 export function fillLoginFields(fieldSet: LoginFieldSet, username: string, password: string): void {
   if (fieldSet.usernameField && username) {
-    fillLikeTyping(fieldSet.usernameField, username);
+    fillInputLikeTyping(fieldSet.usernameField, username);
   }
-  if (fieldSet.passwordField) fillLikeTyping(fieldSet.passwordField, password);
+  if (fieldSet.passwordField) fillInputLikeTyping(fieldSet.passwordField, password);
 }

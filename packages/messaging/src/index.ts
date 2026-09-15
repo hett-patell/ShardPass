@@ -310,3 +310,13 @@ export {
   SecuritySettingsResponseSchema,
 } from "./security";
 export type { SecurityCommandKind, SecurityRequest, SecurityResponse } from "./security";
+export {
+  CardFillValuesSchema,
+  DataFillReleaseResponseSchema,
+  DataFillRequestSchema,
+  DataFillResponseSchema,
+  dataFillSenderPolicy,
+  IdentityFillValuesSchema,
+  parseDataFillResponseForRequest,
+} from "./data-fill";
+export type { DataFillCommandKind, DataFillRequest, DataFillResponse } from "./data-fill";

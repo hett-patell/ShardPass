@@ -31,6 +31,7 @@ import { PasskeyService } from "./passkey/passkey-service";
 import { ItemService } from "./item/item-service";
 import { BreachCheckService } from "./security/breach-check-service";
 import { RepromptGrants } from "./vault/reprompt-grants";
+import { DataFillService } from "./login/data-fill-service";
 import { createFillCommand } from "./login/fill-command";
 import { LoginFillService } from "./login/login-fill-service";
 import { createInternalHotpLifecycle } from "./otp/hotp-lifecycle";
@@ -175,6 +176,12 @@ export function installBackground(
     repromptGranted: (itemId) => repromptGrants.granted(itemId),
   });
   const passwordGen = new PasswordGenService();
+  const dataFill = new DataFillService({
+    repository: sessions.vaultRepository,
+    now: () => Date.now(),
+    notePrivilegedActivity: () => settings.notePrivilegedActivity(),
+    repromptGranted: (itemId) => repromptGrants.granted(itemId),
+  });
   // Have I Been Pwned's range endpoint, padded: the reply's size says nothing about the
   // prefix asked for. Only the first five characters of the password's SHA-1 are sent.
   const breachCheck = new BreachCheckService({
@@ -447,6 +454,7 @@ export function installBackground(
         folder,
         passkey,
         breachCheck,
+        dataFill,
       );
       if (parsedVault.success) {
         const state = await sessions.getState();

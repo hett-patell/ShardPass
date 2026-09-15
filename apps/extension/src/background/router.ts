@@ -1,8 +1,10 @@
-import type { SecurityResponse } from "@shardpass/messaging";
+import type { SecurityResponse, DataFillResponse } from "@shardpass/messaging";
 import {
   authorizeSender,
   BackupRequestSchema,
   backupSenderPolicy,
+  DataFillRequestSchema,
+  dataFillSenderPolicy,
   EnteRequestSchema,
   EnteSafeStateSchema,
   enteSenderPolicy,
@@ -27,6 +29,7 @@ import {
   OtpRequestSchema,
   otpSenderPolicy,
   parseBackupResponseForRequest,
+  parseDataFillResponseForRequest,
   parseFolderResponseForRequest,
   parseItemCrudResponseForRequest,
   parseLoginFillResponseForRequest,
@@ -85,6 +88,7 @@ import { VaultSessionError } from "./vault/session-service";
 import type { VaultService } from "./vault/vault-service";
 import type { EnteService } from "./ente/ente-service";
 import { EnteProtocolError } from "./ente/protocol";
+import { DataFillServiceError, type DataFillService } from "./login/data-fill-service";
 import { BreachCheckError, type BreachCheckService } from "./security/breach-check-service";
 
 export type BackgroundErrorResponse = Readonly<{
@@ -112,6 +116,7 @@ export type BackgroundResponse =
   | VaultResponse
   | EnteSafeState
   | SecurityResponse
+  | DataFillResponse
   | BackgroundErrorResponse;
 
 const backupErrorCodes = {
@@ -342,7 +347,25 @@ export function routeMessage(
   folderService?: FolderHandler,
   passkeyService?: PasskeyHandler,
   breachCheckService?: Pick<BreachCheckService, "handle">,
+  dataFillService?: Pick<DataFillService, "handle">,
 ): Promise<BackgroundResponse> {
+  const dataFillRequest = DataFillRequestSchema.safeParse(input);
+  if (dataFillRequest.success) {
+    const policy = dataFillSenderPolicy[dataFillRequest.data.kind];
+    if (!authorizeSender(senderContext, { extensionId: expectedExtensionId, ...policy }))
+      return Promise.resolve(errorResponse("UNAUTHORIZED_SENDER"));
+    if (dataFillService === undefined) return Promise.resolve(errorResponse("VAULT_UNAVAILABLE"));
+    return dataFillService
+      .handle(dataFillRequest.data, senderContext as SenderContext)
+      .then((candidate) => {
+        const parsed = parseDataFillResponseForRequest(dataFillRequest.data, candidate);
+        return parsed.success ? parsed.data : errorResponse("VAULT_UNAVAILABLE");
+      })
+      .catch((error: unknown) =>
+        errorResponse(error instanceof DataFillServiceError ? error.code : "VAULT_UNAVAILABLE"),
+      );
+  }
+
   const securityRequest = SecurityRequestSchema.safeParse(input);
   if (securityRequest.success) {
     const policy = securitySenderPolicy[securityRequest.data.kind];

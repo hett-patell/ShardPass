@@ -1,4 +1,4 @@
-import type { LoginItem, VaultItemKind } from "@shardpass/domain";
+import type { CardItem, IdentityItem, LoginItem, VaultItemKind } from "@shardpass/domain";
 import { matchLoginUrls, type UrlMatchMode } from "@shardpass/autofill";
 import {
   parseLoginFillResponseForRequest,
@@ -14,6 +14,7 @@ import { VaultAccess } from "../vault-access/VaultAccess";
 import { PopupTitleBar } from "./components/PopupTitleBar";
 import { useActiveTab } from "./hooks/useActiveTab";
 import { useCopy } from "./hooks/useClipboard";
+import { useFillDataIntoTab } from "./hooks/useFillDataIntoTab";
 import { useFillIntoTab } from "./hooks/useFillIntoTab";
 import { itemsInCategory, useVaultItems, type CategoryId } from "./hooks/useVaultItems";
 import { DetailScreen } from "./screens/DetailScreen";
@@ -177,6 +178,28 @@ export function PopupApp({ platform }: PopupAppProps) {
   const { actionError, openVault } = useOpenVaultAction(platform);
   const copy = useCopy(platform, notify);
   const { fill, filling } = useFillIntoTab(platform, tab);
+  const { fill: fillData, filling: fillingData } = useFillDataIntoTab(platform, tab);
+  const fillDataItem = useCallback(
+    async (item: CardItem | IdentityItem) => {
+      const outcome = await fillData(item.id);
+      if (outcome === "filled") {
+        window.close();
+        return;
+      }
+      notify(
+        outcome === "no-form"
+          ? `No ${item.kind === "card" ? "card" : "address"} fields found on this page.`
+          : outcome === "no-tab"
+            ? "This page can't be filled."
+            : outcome === "no-script"
+              ? "Reload the page, then try again."
+              : outcome === "reprompt"
+                ? "Enter your master password for this item first."
+                : "Could not fill. Try again.",
+      );
+    },
+    [fillData, notify],
+  );
 
   const screen = stack[stack.length - 1] ?? { kind: "home" };
   // Lists, the generator and the identity chooser are remembered for a few minutes; a detail
@@ -391,6 +414,8 @@ export function PopupApp({ platform }: PopupAppProps) {
             ) : screen.kind === "generator" ? (
               <GeneratorScreen
                 platform={platform}
+                onFillData={(item) => withReprompt(item, "fill", () => void fillDataItem(item))}
+                fillingData={fillingData === screen.itemId}
                 onCopy={(value, label) => void copy(value, label)}
               />
             ) : screen.kind === "identity" ? (

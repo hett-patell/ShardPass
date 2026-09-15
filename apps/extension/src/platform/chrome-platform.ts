@@ -1,20 +1,14 @@
 /// <reference types="chrome" />
 
 import {
-  EnteSafeStateSchema,
-  parseBackupResponseForRequest,
-  parseLoginFillResponseForRequest,
-  parsePasskeyResponseForRequest,
-  parseOtpFillResponseForRequest,
-  parseOtpImportResponseForRequest,
-  parseOtpResponseForRequest,
   type BackupRequest,
   type BackupResponse,
+  type DataFillRequest,
+  type DataFillResponse,
   type EnteRequest,
   type EnteSafeState,
+  EnteSafeStateSchema,
   type LoginFillRequest,
-  type PasskeyRequest,
-  type PasskeyResponse,
   type LoginFillResponse,
   type OtpFillRequest,
   type OtpFillResponse,
@@ -22,6 +16,15 @@ import {
   type OtpImportResponse,
   type OtpRequest,
   type OtpResponse,
+  parseBackupResponseForRequest,
+  parseDataFillResponseForRequest,
+  parseLoginFillResponseForRequest,
+  parseOtpFillResponseForRequest,
+  parseOtpImportResponseForRequest,
+  parseOtpResponseForRequest,
+  parsePasskeyResponseForRequest,
+  type PasskeyRequest,
+  type PasskeyResponse,
   type RawSenderMetadata,
 } from "@shardpass/messaging";
 import { toSafeError, type SafeErrorCode } from "@shardpass/security";
@@ -29,9 +32,10 @@ import { toSafeError, type SafeErrorCode } from "@shardpass/security";
 import { createChromeStoragePort } from "./chrome-storage-port";
 import type {
   BackgroundExtensionPlatform,
-  ExtensionPlatform,
   BackupUiExtensionPlatform,
+  DataFillContentPlatform,
   EnteUiPlatform,
+  ExtensionPlatform,
   LoginFillContentPlatform,
   OtpFillContentPlatform,
   OtpImportUiExtensionPlatform,
@@ -123,6 +127,9 @@ const safeErrorCodes = new Set<SafeErrorCode>([
   "PASSKEY_EXISTS",
   "PASSKEY_UNSUPPORTED",
   "REPROMPT_REQUIRED",
+  "DATA_FILL_INVALID",
+  "DATA_FILL_NOT_FOUND",
+  "DATA_FILL_UNAVAILABLE",
   "CLIPBOARD_UNAVAILABLE",
   "THROTTLED",
   "UNAUTHORIZED_SENDER",
@@ -242,6 +249,7 @@ export function createChromePlatform(): BackgroundExtensionPlatform &
   OtpImportUiExtensionPlatform &
   OtpFillContentPlatform &
   LoginFillContentPlatform &
+  DataFillContentPlatform &
   PasskeyContentPlatform &
   ExtensionPlatform {
   const activePorts = new Set<chrome.runtime.Port>();
@@ -568,6 +576,18 @@ export function createChromePlatform(): BackgroundExtensionPlatform &
       const parsed = parseLoginFillResponseForRequest(request, candidate);
       if (parsed.success) return parsed.data;
       throw safeUiFailure(candidate, "LOGIN_FILL_UNAVAILABLE");
+    },
+
+    async sendDataFillMessage(request: DataFillRequest): Promise<DataFillResponse> {
+      let candidate: unknown;
+      try {
+        candidate = await this.sendMessage({ ...request });
+      } catch {
+        throw safeUiFailure(undefined, "DATA_FILL_UNAVAILABLE");
+      }
+      const parsed = parseDataFillResponseForRequest(request, candidate);
+      if (parsed.success) return parsed.data;
+      throw safeUiFailure(candidate, "DATA_FILL_UNAVAILABLE");
     },
 
     async sendPasskeyMessage(request: PasskeyRequest): Promise<PasskeyResponse> {

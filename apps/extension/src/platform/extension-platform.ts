@@ -1,6 +1,8 @@
 import type {
   BackupRequest,
   BackupResponse,
+  DataFillRequest,
+  DataFillResponse,
   EnteRequest,
   EnteSafeState,
   GeneratePasswordRequest,
@@ -62,6 +64,10 @@ export interface ItemUiPlatform extends RuntimeExtensionPlatform {
 
 export interface LoginFillContentPlatform extends RuntimeExtensionPlatform {
   sendLoginFillMessage(request: LoginFillRequest): Promise<LoginFillResponse>;
+}
+
+export interface DataFillContentPlatform extends RuntimeExtensionPlatform {
+  sendDataFillMessage(request: DataFillRequest): Promise<DataFillResponse>;
 }
 
 export interface PasskeyContentPlatform extends RuntimeExtensionPlatform {
