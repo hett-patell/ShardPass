@@ -107,9 +107,20 @@ describe("createPickerHost", () => {
   it("lets hosts in different slots coexist: a banner does not evict the chip", () => {
     installClosedShadowCapture();
     const anchor = makeAnchor();
-    const chip = createPickerHost(anchor, { positionToAnchor: true, content: <button type="button">SP</button> });
-    const banner = createPickerHost(document.body, { positionToAnchor: false, slot: "banner", content: <p>Save?</p> });
-    const prompt = createPickerHost(document.body, { positionToAnchor: false, slot: "prompt", content: <p>Passkey?</p> });
+    const chip = createPickerHost(anchor, {
+      positionToAnchor: true,
+      content: <button type="button">SP</button>,
+    });
+    const banner = createPickerHost(document.body, {
+      positionToAnchor: false,
+      slot: "banner",
+      content: <p>Save?</p>,
+    });
+    const prompt = createPickerHost(document.body, {
+      positionToAnchor: false,
+      slot: "prompt",
+      content: <p>Passkey?</p>,
+    });
 
     expect(chip.status).toBe("open");
     expect(banner.status).toBe("open");
@@ -125,8 +136,22 @@ describe("createPickerHost", () => {
   it("sizes a fitted chip to its content and parks it inside the field's right edge", () => {
     installClosedShadowCapture();
     const anchor = makeAnchor();
-    anchor.getBoundingClientRect = () => ({ left: 100, right: 400, top: 200, bottom: 240, width: 300, height: 40, x: 100, y: 200, toJSON: () => ({}) });
-    const chip = createPickerHost(anchor, { positionToAnchor: true, fit: "content", content: <button type="button">SP</button> });
+    anchor.getBoundingClientRect = () => ({
+      left: 100,
+      right: 400,
+      top: 200,
+      bottom: 240,
+      width: 300,
+      height: 40,
+      x: 100,
+      y: 200,
+      toJSON: () => ({}),
+    });
+    const chip = createPickerHost(anchor, {
+      positionToAnchor: true,
+      fit: "content",
+      content: <button type="button">SP</button>,
+    });
     const host = document.body.querySelector<HTMLElement>("shardpass-picker-host");
     expect(host?.style.width).toBe("max-content");
     // jsdom measures 0x0, so the fallback 30px chip lands 6px inside the right edge.
@@ -139,7 +164,11 @@ describe("createPickerHost", () => {
     installClosedShadowCapture();
     const anchor = makeAnchor();
     const onRequestClose = vi.fn();
-    const handle = createPickerHost(anchor, { positionToAnchor: true, content: <button type="button">SP</button>, onRequestClose });
+    const handle = createPickerHost(anchor, {
+      positionToAnchor: true,
+      content: <button type="button">SP</button>,
+      onRequestClose,
+    });
     anchor.focus();
     const event = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
     anchor.dispatchEvent(event);
@@ -215,6 +244,55 @@ describe("createPickerHost", () => {
     expect(host?.style.left).not.toBe("");
     expect(host?.style.top).not.toBe("");
     expect(handle.status).toBe("open");
+  });
+
+  it("fits a tall picker into a short frame: the roomier side with a height cap, or over the field", () => {
+    const anchor = makeAnchor();
+    vi.spyOn(anchor, "getBoundingClientRect").mockReturnValue({
+      x: 20,
+      y: 40,
+      top: 40,
+      left: 20,
+      right: 220,
+      bottom: 70,
+      width: 200,
+      height: 30,
+      toJSON: () => ({}),
+    });
+    // The picker measures 300px tall; the frame is only 150px.
+    const originalRect = HTMLElement.prototype.getBoundingClientRect;
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
+      this: HTMLElement,
+    ) {
+      if (this.tagName === "SHARDPASS-PICKER-HOST")
+        return {
+          x: 0,
+          y: 0,
+          top: 0,
+          left: 0,
+          right: 320,
+          bottom: 300,
+          width: 320,
+          height: 300,
+          toJSON: () => ({}),
+        } as DOMRect;
+      return originalRect.call(this);
+    });
+    vi.spyOn(window, "innerHeight", "get").mockReturnValue(150);
+    vi.spyOn(window, "innerWidth", "get").mockReturnValue(400);
+
+    openPicker(anchor, { content: <div>rows</div>, positionToAnchor: true });
+    const host = document.querySelector<HTMLElement>("shardpass-picker-host");
+    // 64px below and 24px above: too little either way, so the picker takes the frame.
+    expect(host?.style.top).toBe("8px");
+    expect(host?.style.maxHeight).toBe("134px");
+
+    // A taller frame with 200px below the field: below, capped to that room.
+    vi.spyOn(window, "innerHeight", "get").mockReturnValue(286);
+    openPicker(anchor, { content: <div>rows</div>, positionToAnchor: true });
+    const again = document.querySelector<HTMLElement>("shardpass-picker-host");
+    expect(again?.style.top).toBe("78px");
+    expect(again?.style.maxHeight).toBe("200px");
   });
 
   it("bounds scroll and resize repositioning and removes listeners on close", async () => {

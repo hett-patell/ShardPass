@@ -108,6 +108,8 @@ export function createPickerHost(
   let closeQueued = false;
   let positionFrame: number | null = null;
   const margin = 8;
+  /** Below this the picker is a bar and a row: still worth flipping for, not worth shrinking to. */
+  const MIN_USABLE_PICKER_HEIGHT = 96;
 
   const position = (): void => {
     if (!options.positionToAnchor || !anchor.isConnected || !host.isConnected) return;
@@ -116,8 +118,15 @@ export function createPickerHost(
     // A picker takes the field's own width (within reason), so it reads as part of the form.
     if (options.fit === "anchor")
       host.style.width = `${Math.round(Math.min(Math.max(rect.width, 260), 360, Math.max(0, viewportWidth - margin * 2)))}px`;
+    // The frame's own viewport: inside an iframe this is the iframe's box, and nothing drawn
+    // past its edges is ever seen. The picker therefore fits itself to whatever room the
+    // frame has, scrolling its rows when that room is short.
+    const visual = ownerWindow?.visualViewport ?? null;
+    const viewportHeight =
+      visual !== null && visual.height > 0 ? visual.height : (ownerWindow?.innerHeight ?? 640);
+    host.style.maxHeight = "";
+    host.style.removeProperty("--picker-max-height");
     const measured = host.getBoundingClientRect();
-    const viewportHeight = ownerWindow?.innerHeight ?? 640;
     let left: number;
     let top: number;
     if (options.fit === "content") {
@@ -133,12 +142,29 @@ export function createPickerHost(
       );
       const height = measured.height || 32;
       const below = rect.bottom + margin;
-      top =
-        below + height <= viewportHeight - margin
-          ? below
-          : Math.max(margin, rect.top - height - margin);
+      const roomBelow = viewportHeight - margin - below;
+      const roomAbove = rect.top - margin - margin;
+      if (height <= roomBelow) top = below;
+      else if (height <= roomAbove) top = rect.top - margin - height;
+      else {
+        // Neither side holds the whole picker: take the roomier side and let the rows
+        // scroll. A frame too short for even a few rows gets the picker over the field
+        // instead, using the frame's full height, rather than a sliver at its edge.
+        const roomiest = Math.max(roomBelow, roomAbove);
+        if (roomiest >= MIN_USABLE_PICKER_HEIGHT) {
+          top = roomBelow >= roomAbove ? below : margin;
+          host.style.maxHeight = `${Math.round(roomiest)}px`;
+        } else {
+          top = margin;
+          host.style.maxHeight = `${Math.round(Math.max(0, viewportHeight - margin * 2))}px`;
+        }
+      }
       left = Math.max(margin, Math.min(rect.left, viewportWidth - width - margin));
     }
+    // The surfaces inside read the cap through the custom property; the host's own box is a
+    // transparent, non-interactive frame for them.
+    if (host.style.maxHeight !== "")
+      host.style.setProperty("--picker-max-height", host.style.maxHeight);
     host.style.position = "fixed";
     host.style.left = `${Math.round(left)}px`;
     host.style.top = `${Math.round(top)}px`;
