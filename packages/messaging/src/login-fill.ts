@@ -41,9 +41,13 @@ export const LoginFillSelectRequestSchema = z.strictObject({
   expectedRevision: z.int().check(z.positive()),
 });
 
+/** Names one release; the page hands it back with login.fillConfirm, and nothing else. */
+export const LoginFillReleaseIdSchema = z.string().check(z.regex(/^[a-f0-9]{32}$/u));
+
 export const LoginFillReleaseResponseSchema = z.strictObject({
   version: z.literal(MESSAGE_VERSION),
   kind: z.literal("login.fillRelease"),
+  releaseId: LoginFillReleaseIdSchema,
   username: z.string(),
   password: z.string(),
   signInWith: z.optional(z.enum(SIGN_IN_PROVIDERS)),
@@ -65,6 +69,8 @@ export const LoginFillConfirmRequestSchema = z.strictObject({
   version: z.literal(MESSAGE_VERSION),
   kind: z.literal("login.fillConfirm"),
   itemId: z.uuid(),
+  // Without this a page could stamp any login it learned of, as often as it liked.
+  releaseId: LoginFillReleaseIdSchema,
 });
 
 export const LoginFillCancelRequestSchema = z.strictObject({

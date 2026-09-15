@@ -19,15 +19,23 @@ export interface StatusBadgeProps {
   className?: string;
   icon?: ReactElement<SVGProps<SVGSVGElement>>;
   status?: Status;
+  /** Announce changes (a live region): for the one badge that reports a changing state. */
+  live?: boolean;
 }
 
-export function StatusBadge({ children, className, icon, status = "neutral" }: StatusBadgeProps) {
+export function StatusBadge({
+  children,
+  className,
+  icon,
+  status = "neutral",
+  live = false,
+}: StatusBadgeProps) {
   const statusIcon = cloneElement(icon ?? defaultIcons[status], { "aria-hidden": true });
 
   return (
     <span
       className={[styles.badge, styles[status], className].filter(Boolean).join(" ")}
-      role="status"
+      role={live ? "status" : undefined}
       data-status={status}
     >
       {statusIcon}

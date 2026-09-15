@@ -37,16 +37,16 @@
   border-color: var(--border-hover);
 }
 
+/* Text inputs match :focus-visible whenever focused; a vermillion box on every open would
+   read as an error. The accent border marks focus instead, at a contrast a hover cannot. */
 .input:focus {
   background: var(--bg-tertiary);
-  border-color: var(--border-hover);
+  border-color: var(--accent);
   outline: none;
   box-shadow: none;
 }
-/* Text inputs match :focus-visible whenever focused; a vermillion box on every open would
-   read as an error. Keyboard users still get the caret and the lifted surface. */
 .input:focus-visible {
-  border-color: var(--border-hover);
+  border-color: var(--accent);
   box-shadow: none;
 }
 

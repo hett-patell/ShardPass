@@ -30,7 +30,7 @@ const suggestion = {
 const requests = [
   { version: 1, kind: "login.fillSuggestions", domain: "example.com" },
   { version: 1, kind: "login.fillSelect", itemId, expectedRevision: 1 },
-  { version: 1, kind: "login.fillConfirm", itemId },
+  { version: 1, kind: "login.fillConfirm", itemId, releaseId: "0123456789abcdef0123456789abcdef" },
   { version: 1, kind: "login.fillCancel", itemId },
   {
     version: 1,
@@ -45,12 +45,23 @@ const requests = [
 
 const responses = [
   { version: 1, kind: "login.fillSuggestionsResult", suggestions: [suggestion] },
-  { version: 1, kind: "login.fillRelease", username: "alice", password: "s3cret" },
+  {
+    version: 1,
+    kind: "login.fillRelease",
+    releaseId: "0123456789abcdef0123456789abcdef",
+    username: "alice",
+    password: "s3cret",
+  },
   { version: 1, kind: "login.pendingOfferResult", offer: null },
   {
     version: 1,
     kind: "login.pendingOfferResult",
-    offer: { offerId: "b".repeat(32), domain: "example.com", username: "alice", existing: "locked" },
+    offer: {
+      offerId: "b".repeat(32),
+      domain: "example.com",
+      username: "alice",
+      existing: "locked",
+    },
   },
   { version: 1, kind: "login.saveOfferResult", offerId: "c".repeat(32), existing: "locked" },
 ] as const;
@@ -121,7 +132,12 @@ describe("held save offers", () => {
   it("are asked for and dismissed by content scripts only, and never carry a password", () => {
     expect(loginFillSenderPolicy["login.pendingOffer"].allowedContexts).toEqual(["content"]);
     expect(loginFillSenderPolicy["login.saveDismiss"].allowedContexts).toEqual(["content"]);
-    const offer = { offerId: "b".repeat(32), domain: "example.com", username: "alice", existing: "none" };
+    const offer = {
+      offerId: "b".repeat(32),
+      domain: "example.com",
+      username: "alice",
+      existing: "none",
+    };
     expect(
       LoginFillResponseSchema.safeParse({
         version: 1,
@@ -162,6 +178,7 @@ describe("login.reveal", () => {
       parseLoginFillResponseForRequest(request, {
         version: 1,
         kind: "login.fillRelease",
+        releaseId: "0123456789abcdef0123456789abcdef",
         username: "u",
         password: "p",
       }).success,

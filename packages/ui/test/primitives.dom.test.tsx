@@ -98,7 +98,11 @@ describe("Field", () => {
 
 describe("StatusBadge", () => {
   it("communicates semantic status with text and a hidden icon", async () => {
-    const { container } = render(<StatusBadge status="error">Connection failed</StatusBadge>);
+    const { container } = render(
+      <StatusBadge live status="error">
+        Connection failed
+      </StatusBadge>,
+    );
     const status = screen.getByRole("status");
 
     expect(status).toHaveTextContent("Connection failed");
@@ -109,7 +113,7 @@ describe("StatusBadge", () => {
 
   it("accepts a decorative custom icon while retaining visible text", () => {
     render(
-      <StatusBadge status="warning" icon={<CircleAlert data-testid="custom-icon" />}>
+      <StatusBadge live status="warning" icon={<CircleAlert data-testid="custom-icon" />}>
         Review required
       </StatusBadge>,
     );

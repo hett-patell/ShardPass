@@ -604,7 +604,7 @@ describe("installed background migration runtime", () => {
     await platform.dispatchMessage({ version: 1, kind: "vault.lock" }, vaultSender);
     await expect(
       platform.dispatchMessage({ version: 1, kind: "otp.list", query: "" }, popupSender),
-    ).resolves.toEqual({ version: 1, kind: "otp.listResult", items: [] });
+    ).resolves.toMatchObject({ kind: "error", error: { code: "VAULT_LOCKED" } });
     await expect(
       platform.dispatchMessage({ version: 1, kind: "otp.getCode", itemId }, popupSender),
     ).resolves.toMatchObject({ kind: "error", error: { code: "VAULT_LOCKED" } });

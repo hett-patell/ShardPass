@@ -16,7 +16,7 @@
   /* Ink */
   --text-primary: #f4f4f5;
   --text-secondary: #a1a1aa;
-  --text-tertiary: #71717a;
+  --text-tertiary: #8b8b94; /* 5.0:1 on the elevated surface; #71717a fell short of 4.5:1 */
 
   /* Accent: vermillion. `--accent` for focus, selection, icons and active states;
      `--accent-fill` (deeper, 4.6:1 with white) for filled buttons. */

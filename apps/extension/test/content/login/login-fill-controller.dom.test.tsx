@@ -64,6 +64,7 @@ const account: LoginFillSuggestion = {
 const release: LoginFillResponse = {
   version: 1,
   kind: "login.fillRelease",
+  releaseId: "0123456789abcdef0123456789abcdef",
   username: "user@example.test",
   password: "s3cret!",
 };
@@ -417,7 +418,14 @@ describe("Login fill controller", () => {
       if (request.kind === "login.fillSuggestions")
         return { version: 1, kind: "login.fillSuggestionsResult", suggestions: [viaGoogle] };
       if (request.kind === "login.fillSelect")
-        throw new Error("a provider account releases nothing");
+        return {
+          version: 1,
+          kind: "login.fillRelease",
+          releaseId: "0123456789abcdef0123456789abcdef",
+          username: "",
+          password: "",
+          signInWith: "google",
+        };
       return undefined;
     });
     start(candidate);
@@ -611,6 +619,7 @@ describe("Login fill controller", () => {
           return {
             version: 1,
             kind: "login.fillRelease",
+            releaseId: "0123456789abcdef0123456789abcdef",
             username: "owner@example.test",
             password: "s3cret!",
           };
@@ -696,6 +705,7 @@ describe("Login fill controller", () => {
         return {
           version: 1,
           kind: "login.fillRelease",
+          releaseId: "0123456789abcdef0123456789abcdef",
           username: "user@example.test",
           password: "s3cret!",
         };

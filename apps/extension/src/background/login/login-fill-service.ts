@@ -79,6 +79,36 @@ const MUTATING_KINDS = new Set([
 
 export class LoginFillService {
   private readonly offers = new Map<string, SaveOffer>();
+  /** Releases handed out, each good for one confirmation from the tab it went to. */
+  private readonly releases = new Map<
+    string,
+    Readonly<{ itemId: string; tab: number | null; expiresAt: number }>
+  >();
+
+  private issueRelease(itemId: string, tab: number | null): string {
+    const now = this.dependencies.now();
+    for (const [id, entry] of this.releases) if (entry.expiresAt <= now) this.releases.delete(id);
+    while (this.releases.size >= MAX_RELEASES) {
+      const oldest = this.releases.keys().next().value;
+      if (oldest === undefined) break;
+      this.releases.delete(oldest);
+    }
+    const releaseId = this.dependencies.nextOfferId?.() ?? randomOfferId();
+    this.releases.set(releaseId, { itemId, tab, expiresAt: now + RELEASE_TTL_MS });
+    return releaseId;
+  }
+
+  private consumeRelease(releaseId: string, itemId: string, tab: number): void {
+    const entry = this.releases.get(releaseId);
+    this.releases.delete(releaseId);
+    if (
+      entry === undefined ||
+      entry.itemId !== itemId ||
+      entry.tab !== tab ||
+      entry.expiresAt <= this.dependencies.now()
+    )
+      throw new LoginFillServiceError("LOGIN_FILL_INVALID");
+  }
   private loaded: Promise<void> | null = null;
 
   constructor(private readonly dependencies: LoginFillServiceDependencies) {}
@@ -157,11 +187,16 @@ export class LoginFillService {
           return validated(await this.suggestions(senderPage()));
         case "login.fillSelect":
           return validated(
-            await this.select(command.itemId, command.expectedRevision, sender.senderUrl),
+            await this.select(
+              command.itemId,
+              command.expectedRevision,
+              sender.senderUrl,
+              tabOf(sender),
+            ),
           );
         case "login.reveal":
           // A deliberate act on an extension page, not a page asking for itself.
-          return validated(await this.select(command.itemId, command.expectedRevision, null));
+          return validated(await this.select(command.itemId, command.expectedRevision, null, null));
         case "login.saveOffer":
           return validated(
             await this.offer(
@@ -179,7 +214,9 @@ export class LoginFillService {
           this.offers.delete(command.offerId);
           return validated({ version: 1, kind: "login.fillAck", ok: true });
         case "login.fillConfirm":
-          // A fill happened: remember when, so this login leads next time. Best effort.
+          // A fill happened: remember when, so this login leads next time. Only the page
+          // that was handed the release, once, and only for that login.
+          this.consumeRelease(command.releaseId, command.itemId, tabOf(sender));
           await this.touch(command.itemId);
           return validated({ version: 1, kind: "login.fillAck", ok: true });
         case "login.fillCancel":
@@ -239,6 +276,7 @@ export class LoginFillService {
     itemId: string,
     expectedRevision: number,
     pageUrl: string | null,
+    tab: number | null,
   ): Promise<LoginFillResponse> {
     const item = await this.dependencies.repository.getItem(itemId);
     if (item === null || item.kind !== "login" || item.deletedAt !== undefined)
@@ -279,6 +317,7 @@ export class LoginFillService {
     return {
       version: 1,
       kind: "login.fillRelease",
+      releaseId: this.issueRelease(item.id, tab),
       username: item.username,
       password: item.password,
       ...(item.signInWith === undefined ? {} : { signInWith: item.signInWith }),
@@ -503,6 +542,9 @@ function normalize(value: string): string {
 function compareText(left: string, right: string): number {
   return left < right ? -1 : left > right ? 1 : 0;
 }
+
+const RELEASE_TTL_MS = 5 * 60_000;
+const MAX_RELEASES = 64;
 
 function randomOfferId(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(16));

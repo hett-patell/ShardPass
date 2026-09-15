@@ -60,6 +60,9 @@ import {
   type PasskeyResponse,
   type SenderContext,
   type VaultResponse,
+  EnteSafeStateSchema,
+  VaultResponseSchema,
+  VaultStateResponseSchema,
 } from "@shardpass/messaging";
 import { toSafeError, type SafeError, type SafeErrorCode } from "@shardpass/security";
 
@@ -69,7 +72,10 @@ import { LoginFillServiceError, type LoginFillServiceErrorCode } from "./login/l
 import { OtpFillServiceError, type OtpFillServiceErrorCode } from "./otp/otp-fill-service";
 import { OtpServiceError, type OtpService, type OtpServiceErrorCode } from "./otp/otp-service";
 import { PasskeyServiceError, type PasskeyServiceErrorCode } from "./passkey/passkey-service";
-import { PasswordGenServiceError, type PasswordGenServiceErrorCode } from "./password/password-gen-service";
+import {
+  PasswordGenServiceError,
+  type PasswordGenServiceErrorCode,
+} from "./password/password-gen-service";
 import { BackupServiceError, type BackupServiceErrorCode } from "./vault/backup-service";
 import { VaultSessionError } from "./vault/session-service";
 import type { VaultService } from "./vault/vault-service";
@@ -298,6 +304,17 @@ function projectMigrationResponse(response: unknown): MigrationResponse | Backgr
   return parsed.success ? parsed.data : errorResponse("VAULT_UNAVAILABLE");
 }
 
+/** The one reply each vault command may be answered with. */
+const vaultResponseKindByRequest = {
+  "vault.getState": "vault.state",
+  "vault.getKdfChallenge": "vault.kdfChallenge",
+  "vault.setup": "vault.ok",
+  "vault.unlock": "vault.ok",
+  "vault.lock": "vault.ok",
+  "vault.changePassword": "vault.ok",
+  "vault.updateLockSettings": "vault.ok",
+} as const;
+
 export function routeMessage(
   input: unknown,
   senderContext: unknown,
@@ -329,7 +346,9 @@ export function routeMessage(
         return parsed.success ? parsed.data : errorResponse("VAULT_UNAVAILABLE");
       })
       .catch((error: unknown) =>
-        errorResponse(error instanceof PasskeyServiceError ? passkeyErrorCodes[error.code] : "UNEXPECTED"),
+        errorResponse(
+          error instanceof PasskeyServiceError ? passkeyErrorCodes[error.code] : "UNEXPECTED",
+        ),
       );
   }
 
@@ -346,7 +365,9 @@ export function routeMessage(
         return parsed.success ? parsed.data : errorResponse("VAULT_UNAVAILABLE");
       })
       .catch((error: unknown) =>
-        errorResponse(error instanceof FolderServiceError ? folderErrorCodes[error.code] : "UNEXPECTED"),
+        errorResponse(
+          error instanceof FolderServiceError ? folderErrorCodes[error.code] : "UNEXPECTED",
+        ),
       );
   }
 
@@ -363,7 +384,9 @@ export function routeMessage(
         return parsed.success ? parsed.data : errorResponse("VAULT_UNAVAILABLE");
       })
       .catch((error: unknown) =>
-        errorResponse(error instanceof ItemServiceError ? itemErrorCodes[error.code] : "UNEXPECTED"),
+        errorResponse(
+          error instanceof ItemServiceError ? itemErrorCodes[error.code] : "UNEXPECTED",
+        ),
       );
   }
 
@@ -419,6 +442,12 @@ export function routeMessage(
     if (enteService === undefined) return Promise.resolve(errorResponse("VAULT_UNAVAILABLE"));
     return enteService
       .handle(enteRequest.data, senderContext as SenderContext)
+      .then((candidate) => {
+        // The safe projection is what leaves the worker, enforced here rather than by
+        // the service's hand-built object: no session or key material rides along.
+        const parsed = EnteSafeStateSchema.safeParse(candidate);
+        return parsed.success ? parsed.data : errorResponse("VAULT_UNAVAILABLE");
+      })
       .catch((error: unknown) => enteErrorResponse(error));
   }
 
@@ -491,8 +520,8 @@ export function routeMessage(
       })
       .catch((error: unknown) => {
         if (error instanceof OtpServiceError) {
-          if (error.code === "VAULT_LOCKED" && otpRequest.data.kind === "otp.list")
-            return { version: 1, kind: "otp.listResult", items: [] };
+          // A vault that locked mid-request answers "locked" (which drives the lock screen),
+          // never "no codes": an empty list would read as an empty vault.
           return errorResponse(otpErrorCodes[error.code]);
         }
         return errorResponse("UNEXPECTED");
@@ -521,11 +550,25 @@ export function routeMessage(
     if (vaultService === undefined) return Promise.resolve(errorResponse("UNEXPECTED"));
     if (vaultRequest.data.kind === "vault.getState") {
       if (getState === undefined) return Promise.resolve(errorResponse("UNEXPECTED"));
-      return getState().catch(() => errorResponse("VAULT_UNAVAILABLE"));
+      return getState()
+        .then((candidate) => {
+          const parsed = VaultStateResponseSchema.safeParse(candidate);
+          return parsed.success ? parsed.data : errorResponse("VAULT_UNAVAILABLE");
+        })
+        .catch(() => errorResponse("VAULT_UNAVAILABLE"));
     }
     const boundSender = senderContext as Parameters<VaultService["handle"]>[1];
+    const expectedKind = vaultResponseKindByRequest[vaultRequest.data.kind];
     return vaultService
       .handle(vaultRequest.data, boundSender)
+      .then((candidate) => {
+        // Validated and matched to the request, like every other family: a challenge is
+        // never answered with an ok, and nothing beyond the schema leaves the worker.
+        const parsed = VaultResponseSchema.safeParse(candidate);
+        return parsed.success && parsed.data.kind === expectedKind
+          ? parsed.data
+          : errorResponse("VAULT_UNAVAILABLE");
+      })
       .catch((error: unknown) =>
         errorResponse(error instanceof VaultSessionError ? error.code : "UNEXPECTED"),
       );

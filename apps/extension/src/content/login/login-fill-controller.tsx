@@ -472,12 +472,13 @@ export function createLoginFillController(
     });
   };
 
-  const sendConfirm = async (itemId: string): Promise<void> => {
+  const sendConfirm = async (itemId: string, releaseId: string): Promise<void> => {
     try {
       await options.platform.sendLoginFillMessage({
         version: 1,
         kind: "login.fillConfirm",
         itemId,
+        releaseId,
       });
     } catch {
       // Confirmation is a best-effort acknowledgement; a failure here cannot
@@ -508,10 +509,10 @@ export function createLoginFillController(
    * A provider account has nothing to fill: the page's own "Continue with Google" button is
    * pressed instead. When the page has no such button, the person is told where to look.
    */
-  const signInThroughProvider = (
+  const signInThroughProvider = async (
     candidate: Owner | null,
     suggestion: LoginPickerSuggestion,
-  ): void => {
+  ): Promise<void> => {
     const provider = suggestion.signInWith;
     if (provider === undefined) return;
     closeHost();
@@ -519,7 +520,21 @@ export function createLoginFillController(
     closeBanner();
     const label = SIGN_IN_PROVIDER_LABELS[provider];
     const button = findProviderButton(options.document, provider);
-    void sendConfirm(suggestion.itemId);
+    // The release names the login for this page and mints the confirmation's capability;
+    // a refusal (the login is not for this site) still lets the person use the button.
+    let releaseId: string | null = null;
+    try {
+      const response = await options.platform.sendLoginFillMessage({
+        version: 1,
+        kind: "login.fillSelect",
+        itemId: suggestion.itemId,
+        expectedRevision: suggestion.expectedRevision,
+      });
+      if (response.kind === "login.fillRelease") releaseId = response.releaseId;
+    } catch {
+      // Not recorded as used; the sign-in itself goes ahead.
+    }
+    if (releaseId !== null) void sendConfirm(suggestion.itemId, releaseId);
     if (button !== null) {
       button.focus({ preventScroll: true });
       button.click();
@@ -544,7 +559,7 @@ export function createLoginFillController(
   ): Promise<void> => {
     if (!owns(candidate)) return;
     if (suggestion.signInWith !== undefined) {
-      signInThroughProvider(candidate, suggestion);
+      void signInThroughProvider(candidate, suggestion);
       return;
     }
     try {
@@ -570,7 +585,7 @@ export function createLoginFillController(
       closeHost();
       if (bannerDismissedBy === null) bannerDismissedBy = "fill";
       closeBanner();
-      await sendConfirm(suggestion.itemId);
+      await sendConfirm(suggestion.itemId, response.releaseId);
       if (mode.submit) submitForm(candidate.fieldSet);
       if (response.linkedOtpCode !== undefined)
         await offerOtpCode(candidate.input, response.linkedOtpCode);
@@ -680,7 +695,7 @@ export function createLoginFillController(
     if (bannerBusy || disposed) return;
     if (suggestion.signInWith !== undefined) {
       // A provider account needs no field: the page's own button is pressed.
-      signInThroughProvider(fieldSet === null ? null : ownerFor(fieldSet), suggestion);
+      void signInThroughProvider(fieldSet === null ? null : ownerFor(fieldSet), suggestion);
       return;
     }
     if (fieldSet === null) return;
@@ -910,7 +925,7 @@ export function createLoginFillController(
           return { version: 1, kind: "login.fillFromPopupResult", status: "no-form" };
         button.focus({ preventScroll: true });
         button.click();
-        await sendConfirm(itemId);
+        await sendConfirm(itemId, response.releaseId);
         return { version: 1, kind: "login.fillFromPopupResult", status: "filled" };
       }
       if (!fieldsReady(fieldSet)) {
@@ -921,7 +936,7 @@ export function createLoginFillController(
       invalidate(false);
       if (bannerDismissedBy === null) bannerDismissedBy = "fill";
       closeBanner();
-      await sendConfirm(itemId);
+      await sendConfirm(itemId, response.releaseId);
       // Answer first so the popup can close; the code offer waits for focus on its own.
       const anchor = fieldSet.passwordField ?? fieldSet.usernameField;
       if (response.linkedOtpCode !== undefined && anchor !== null)

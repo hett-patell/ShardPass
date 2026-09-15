@@ -70,10 +70,30 @@ export const ItemGetRequestSchema = z.strictObject({
   itemId,
 });
 
+/**
+ * A candidate item or a patch of fields, judged by the item schemas in the service; here
+ * only its shape is bounded (depth, node count, string length) so no request carries an
+ * unbounded object across the boundary.
+ */
+const MAX_PAYLOAD_DEPTH = 8;
+const MAX_PAYLOAD_NODES = 20_000;
+const MAX_PAYLOAD_STRING_LENGTH = 1_048_576;
+function boundedShape(value: unknown, depth = 0, budget = { nodes: 0 }): boolean {
+  if (depth > MAX_PAYLOAD_DEPTH || ++budget.nodes > MAX_PAYLOAD_NODES) return false;
+  if (typeof value === "string") return value.length <= MAX_PAYLOAD_STRING_LENGTH;
+  if (Array.isArray(value)) return value.every((entry) => boundedShape(entry, depth + 1, budget));
+  if (typeof value === "object" && value !== null)
+    return Object.values(value as Record<string, unknown>).every((entry) =>
+      boundedShape(entry, depth + 1, budget),
+    );
+  return true;
+}
+const boundedPayload = z.custom<unknown>((value) => boundedShape(value));
+
 export const ItemCreateRequestSchema = z.strictObject({
   version: z.literal(MESSAGE_VERSION),
   kind: z.literal("item.create"),
-  item: z.unknown(),
+  item: boundedPayload,
 });
 
 // Batch creation for imports. Each candidate is judged on its own -- one malformed entry
@@ -82,7 +102,7 @@ export const ItemCreateRequestSchema = z.strictObject({
 export const ItemCreateManyRequestSchema = z.strictObject({
   version: z.literal(MESSAGE_VERSION),
   kind: z.literal("item.createMany"),
-  items: z.array(z.unknown()).check(z.maxLength(MAX_ITEM_CREATE_MANY)),
+  items: z.array(boundedPayload).check(z.maxLength(MAX_ITEM_CREATE_MANY)),
 });
 
 const batchIndex = z.int().check(z.nonnegative(), z.maximum(MAX_ITEM_CREATE_MANY));
@@ -107,7 +127,7 @@ export const ItemUpdateRequestSchema = z.strictObject({
   kind: z.literal("item.update"),
   itemId,
   expectedRevision: positiveSafeInteger,
-  fields: z.unknown(),
+  fields: boundedPayload,
 });
 
 export const ItemDeleteRequestSchema = z.strictObject({
@@ -203,10 +223,12 @@ const popupAndVault = { allowedContexts: ["popup", "vault"], requireDocument: tr
 // Unlike otp.list/otp.getCode (which return a secret-free projection safe for the
 // popup surface), item.query/item.get/item.create/item.update/item.delete return the
 // full VaultItem — including the plaintext login password, card number, identity
-// fields, or secret value — for every kind. Those commands are therefore restricted
-// to the vault page, the same full-secret-access surface as
-// otp.getEditor/create/update/delete. item.list is the secret-free counterpart (see
-// ItemListItemProjectionSchema above) and is safe for the popup, mirroring otp.list.
+// fields, or secret value — for every kind. Writes and the whole-vault query are
+// restricted to the vault page, the same full-secret-access surface as
+// otp.getEditor/create/update/delete. item.get is also open to the popup: its detail
+// screen shows one item at a time, and popup and vault page share one origin.
+// item.list is the secret-free counterpart (see ItemListItemProjectionSchema above)
+// and is what the popup lists with, mirroring otp.list.
 export const itemCrudSenderPolicy = {
   "item.query": vaultOnly,
   // The popup's detail screen needs the whole item; popup and vault page share one origin.

@@ -187,6 +187,56 @@ describe("LoginFillService", () => {
     expect(result.suggestions).toHaveLength(1);
   });
 
+  it("stamps a login as used only with the release it was handed, and only once", async () => {
+    const stored = loginItem({ urls: ["https://example.test"] });
+    const { service, repository } = fixture([stored]);
+    await expect(
+      service.handle(
+        request("login.fillConfirm", {
+          itemId: stored.id,
+          releaseId: expect.stringMatching(/^[a-f0-9]{32}$/u) as unknown as string,
+        }),
+        sender,
+      ),
+    ).rejects.toMatchObject({ code: "LOGIN_FILL_INVALID" });
+    const untouched = await repository.getItem(stored.id);
+    expect(untouched?.kind === "login" ? untouched.lastUsedAt : undefined).toBeUndefined();
+
+    const release = await service.handle(
+      request("login.fillSelect", { itemId: stored.id, expectedRevision: 1 }),
+      sender,
+    );
+    if (release.kind !== "login.fillRelease") throw new Error("expected release");
+    // Another tab cannot spend it ...
+    await expect(
+      service.handle(
+        request("login.fillConfirm", { itemId: stored.id, releaseId: release.releaseId }),
+        {
+          ...sender,
+          tabId: 99,
+        },
+      ),
+    ).rejects.toMatchObject({ code: "LOGIN_FILL_INVALID" });
+    // ... and it is spent in one go.
+    const again = await service.handle(
+      request("login.fillSelect", { itemId: stored.id, expectedRevision: 1 }),
+      sender,
+    );
+    if (again.kind !== "login.fillRelease") throw new Error("expected release");
+    await service.handle(
+      request("login.fillConfirm", { itemId: stored.id, releaseId: again.releaseId }),
+      sender,
+    );
+    const stamped = await repository.getItem(stored.id);
+    expect(stamped?.kind === "login" ? stamped.lastUsedAt : undefined).toBeDefined();
+    await expect(
+      service.handle(
+        request("login.fillConfirm", { itemId: stored.id, releaseId: again.releaseId }),
+        sender,
+      ),
+    ).rejects.toMatchObject({ code: "LOGIN_FILL_INVALID" });
+  });
+
   it("answers for the page the message came from, whatever domain the page names", async () => {
     const here = loginItem({ id: ids.login, urls: ["https://example.test/login"] });
     const elsewhere = loginItem({
@@ -256,7 +306,15 @@ describe("LoginFillService", () => {
     if (before.kind !== "login.fillSuggestionsResult") throw new Error("expected suggestions");
     expect(before.suggestions.map((item) => item.name)).toEqual(["Newer", "Older"]);
 
-    await service.handle(request("login.fillConfirm", { itemId: ids.login }), sender);
+    const release = await service.handle(
+      request("login.fillSelect", { itemId: ids.login, expectedRevision: 1 }),
+      sender,
+    );
+    if (release.kind !== "login.fillRelease") throw new Error("expected release");
+    await service.handle(
+      request("login.fillConfirm", { itemId: ids.login, releaseId: release.releaseId }),
+      sender,
+    );
     const touched = await repository.getItem(ids.login);
     expect(touched).toMatchObject({ lastUsedAt: "2026-08-10T12:00:00.000Z" });
     const after = await service.handle(
@@ -306,6 +364,7 @@ describe("LoginFillService", () => {
     );
     expect(released).toMatchObject({
       kind: "login.fillRelease",
+      releaseId: expect.stringMatching(/^[a-f0-9]{32}$/u) as unknown as string,
       signInWith: "google",
       password: "",
     });
@@ -344,6 +403,7 @@ describe("LoginFillService", () => {
     expect(result).toEqual({
       version: 1,
       kind: "login.fillRelease",
+      releaseId: expect.stringMatching(/^[a-f0-9]{32}$/u) as unknown as string,
       username: "alice",
       password: "s3cret",
     });
@@ -435,14 +495,14 @@ describe("LoginFillService", () => {
     expect(activity).toEqual([]);
   });
 
-  it.each(["login.fillConfirm", "login.fillCancel"] as const)(
-    "acknowledges %s for an id the repository has never seen",
-    async (kind) => {
-      const { service } = fixture();
-      const result = await service.handle(request(kind, { itemId: ids.missing }), sender);
-      expect(result).toEqual({ version: 1, kind: "login.fillAck", ok: true });
-    },
-  );
+  it("acknowledges login.fillCancel for an id the repository has never seen", async () => {
+    const { service } = fixture();
+    const result = await service.handle(
+      request("login.fillCancel", { itemId: ids.missing }),
+      sender,
+    );
+    expect(result).toEqual({ version: 1, kind: "login.fillAck", ok: true });
+  });
 
   it("answers saveOffer with an offer and creates nothing until it is confirmed", async () => {
     const { repository, service } = fixture();
@@ -473,13 +533,18 @@ describe("LoginFillService", () => {
   it("returns responses accepted by the strict login fill messaging schema, deeply frozen", async () => {
     const stored = loginItem({ urls: ["https://example.test"] });
     const { service } = fixture([stored]);
+    const selected = await service.handle(
+      request("login.fillSelect", { itemId: stored.id, expectedRevision: 1 }),
+      sender,
+    );
+    if (selected.kind !== "login.fillRelease") throw new Error("expected release");
     for (const result of [
       await service.handle(request("login.fillSuggestions", { domain: "example.test" }), sender),
+      selected,
       await service.handle(
-        request("login.fillSelect", { itemId: stored.id, expectedRevision: 1 }),
+        request("login.fillConfirm", { itemId: stored.id, releaseId: selected.releaseId }),
         sender,
       ),
-      await service.handle(request("login.fillConfirm", { itemId: stored.id }), sender),
     ]) {
       expect(LoginFillResponseSchema.safeParse(result).success).toBe(true);
       expect(Object.isFrozen(result)).toBe(true);
@@ -618,7 +683,11 @@ describe("LoginFillService sender binding", () => {
       request("login.reveal", { itemId: stored.id, expectedRevision: 1 }),
       popup,
     );
-    expect(revealed).toMatchObject({ kind: "login.fillRelease", password: "s3cret" });
+    expect(revealed).toMatchObject({
+      kind: "login.fillRelease",
+      releaseId: expect.stringMatching(/^[a-f0-9]{32}$/u) as unknown as string,
+      password: "s3cret",
+    });
   });
 
   it("neither suggests nor matches an archived login", async () => {

@@ -78,7 +78,9 @@ async function setTrustedAccess(area: chrome.storage.StorageArea, label: string)
  */
 function runtimeError(): (Error & { code: string; detail: string }) | null {
   const message = chrome.runtime.lastError?.message;
-  return message === undefined ? null : Object.assign(new Error(message), { code: "NO_REPLY", detail: message.slice(0, 160) });
+  return message === undefined
+    ? null
+    : Object.assign(new Error(message), { code: "NO_REPLY", detail: message.slice(0, 160) });
 }
 
 const safeErrorCodes = new Set<SafeErrorCode>([
@@ -114,6 +116,12 @@ const safeErrorCodes = new Set<SafeErrorCode>([
   "LOGIN_FILL_UNAVAILABLE",
   "LOGIN_FILL_NOT_FOUND",
   "LOGIN_FILL_ITEM_CHANGED",
+  // A site's excludeCredentials that matches a stored passkey must reach the page as
+  // "exists" (InvalidStateError), not as a fallback to the browser's own dialog.
+  "PASSKEY_INVALID",
+  "PASSKEY_NOT_FOUND",
+  "PASSKEY_EXISTS",
+  "PASSKEY_UNSUPPORTED",
   "CLIPBOARD_UNAVAILABLE",
   "THROTTLED",
   "UNAUTHORIZED_SENDER",
@@ -167,15 +175,25 @@ function rawSenderMetadata(sender: chrome.runtime.MessageSender): RawSenderMetad
   return metadata as RawSenderMetadata;
 }
 
-type ExtensionContextLike = { contextType?: string; documentUrl?: string; tabId?: number; windowId?: number };
+type ExtensionContextLike = {
+  contextType?: string;
+  documentUrl?: string;
+  tabId?: number;
+  windowId?: number;
+};
 
 /**
  * Finds the open vault tab, if any. `chrome.runtime.getContexts` (Chromium 116+) needs no
  * permission and sees every page of this extension; older runtimes fall back to
  * `tabs.query`, which can read this extension's own URLs without the tabs permission.
  */
-function findVaultTab(base: string, done: (tab: { id: number; windowId: number } | undefined) => void): void {
-  const runtime = chrome.runtime as { getContexts?: (filter: object, callback: (contexts: ExtensionContextLike[]) => void) => void };
+function findVaultTab(
+  base: string,
+  done: (tab: { id: number; windowId: number } | undefined) => void,
+): void {
+  const runtime = chrome.runtime as {
+    getContexts?: (filter: object, callback: (contexts: ExtensionContextLike[]) => void) => void;
+  };
   const fromContexts = (contexts: ExtensionContextLike[]) =>
     contexts.find(
       (context) =>
@@ -194,7 +212,11 @@ function findVaultTab(base: string, done: (tab: { id: number; windowId: number }
         return;
       }
       const found = fromContexts(contexts);
-      done(found === undefined ? undefined : { id: found.tabId as number, windowId: found.windowId as number });
+      done(
+        found === undefined
+          ? undefined
+          : { id: found.tabId as number, windowId: found.windowId as number },
+      );
     });
     return;
   }
@@ -410,13 +432,19 @@ export function createChromePlatform(): BackgroundExtensionPlatform &
         // No reply at all: the port closed, or the worker was gone. Chrome's own wording
         // ("The message port closed before a response was received.") is the useful part.
         const why = failure instanceof Error ? failure.message.slice(0, 120) : "";
-        throw enteFailure("ENTE_UNAVAILABLE", `no reply from the background${why ? ` (${why})` : ""}`);
+        throw enteFailure(
+          "ENTE_UNAVAILABLE",
+          `no reply from the background${why ? ` (${why})` : ""}`,
+        );
       }
       const parsed = EnteSafeStateSchema.safeParse(candidate);
       if (parsed.success) return parsed.data;
       // The background's error envelope. Its code and detail are the whole diagnosis of a
       // failed cycle; flattening them to "unavailable" left every sync failure unreadable.
-      const envelope = candidate as { kind?: unknown; error?: { code?: unknown; detail?: unknown } } | null;
+      const envelope = candidate as {
+        kind?: unknown;
+        error?: { code?: unknown; detail?: unknown };
+      } | null;
       if (envelope?.kind === "error" && typeof envelope.error?.code === "string")
         throw enteFailure(
           envelope.error.code,
@@ -583,18 +611,22 @@ export function createChromePlatform(): BackgroundExtensionPlatform &
             create();
             return;
           }
-          chrome.tabs.update(existing.id, target === undefined ? { active: true } : { url, active: true }, () => {
-            if (runtimeError() !== null) {
-              create();
-              return;
-            }
-            if (typeof chrome.windows?.update === "function") {
-              chrome.windows.update(existing.windowId, { focused: true }, () => {
-                runtimeError();
-                resolve();
-              });
-            } else resolve();
-          });
+          chrome.tabs.update(
+            existing.id,
+            target === undefined ? { active: true } : { url, active: true },
+            () => {
+              if (runtimeError() !== null) {
+                create();
+                return;
+              }
+              if (typeof chrome.windows?.update === "function") {
+                chrome.windows.update(existing.windowId, { focused: true }, () => {
+                  runtimeError();
+                  resolve();
+                });
+              } else resolve();
+            },
+          );
         });
       });
     },

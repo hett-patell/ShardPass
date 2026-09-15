@@ -6,6 +6,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 
 import { createChromePlatform } from "../platform/chrome-platform";
+import { diagnostics } from "../platform/diagnostics";
 import { reloadWhenContextInvalidated } from "../platform/extension-context";
 import { VaultApp } from "./VaultApp";
 
@@ -23,7 +24,10 @@ reloadWhenContextInvalidated();
 
 createRoot(rootElement).render(
   <StrictMode>
-    <AppErrorBoundary surface="the vault page">
+    <AppErrorBoundary
+      surface="the vault page"
+      onError={(error) => diagnostics.error("[ShardPass] A page failed to render.", error)}
+    >
       <VaultApp platform={platform} />
     </AppErrorBoundary>
   </StrictMode>,

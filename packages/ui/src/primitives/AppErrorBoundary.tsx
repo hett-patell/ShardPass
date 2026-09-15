@@ -7,6 +7,8 @@ interface Props {
   children: ReactNode;
   /** What the page is called in the copy ("the popup", "the vault page"). */
   surface: string;
+  /** Where the error goes (the app's diagnostics); without it the cause is lost. */
+  onError?: (error: unknown) => void;
 }
 interface State {
   failed: boolean;
@@ -23,6 +25,10 @@ export class AppErrorBoundary extends Component<Props, State> {
     return { failed: true };
   }
 
+  override componentDidCatch(error: unknown): void {
+    this.props.onError?.(error);
+  }
+
   override render(): ReactNode {
     if (!this.state.failed) return this.props.children;
     return (
@@ -31,7 +37,12 @@ export class AppErrorBoundary extends Component<Props, State> {
         <p className={styles.crashCopy}>
           {`ShardPass hit an error while drawing ${this.props.surface}. Reloading fixes it; nothing in your vault is affected.`}
         </p>
-        <Button onClick={() => globalThis.location.reload()}>Reload</Button>
+        <div className={styles.crashActions}>
+          <Button variant="secondary" onClick={() => this.setState({ failed: false })}>
+            Try again
+          </Button>
+          <Button onClick={() => globalThis.location.reload()}>Reload</Button>
+        </div>
       </div>
     );
   }

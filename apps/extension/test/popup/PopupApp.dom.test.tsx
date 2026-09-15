@@ -98,6 +98,7 @@ function createTestPlatform(
       return Promise.resolve({
         version: 1,
         kind: "login.fillRelease",
+        releaseId: "0123456789abcdef0123456789abcdef",
         username: "alice@example.test",
         password: "hunter2",
       });

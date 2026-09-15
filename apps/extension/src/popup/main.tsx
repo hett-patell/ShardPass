@@ -6,6 +6,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 
 import { createChromePlatform } from "../platform/chrome-platform";
+import { diagnostics } from "../platform/diagnostics";
 import { reloadWhenContextInvalidated } from "../platform/extension-context";
 import { PopupApp } from "./PopupApp";
 
@@ -23,7 +24,10 @@ reloadWhenContextInvalidated();
 
 createRoot(rootElement).render(
   <StrictMode>
-    <AppErrorBoundary surface="the popup">
+    <AppErrorBoundary
+      surface="the popup"
+      onError={(error) => diagnostics.error("[ShardPass] A page failed to render.", error)}
+    >
       <PopupApp platform={platform} />
     </AppErrorBoundary>
   </StrictMode>,

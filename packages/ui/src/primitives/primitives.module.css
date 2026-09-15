@@ -416,3 +416,8 @@
   font-size: var(--text-md);
   line-height: var(--line-body);
 }
+
+.crashActions {
+  display: flex;
+  gap: var(--space-2);
+}

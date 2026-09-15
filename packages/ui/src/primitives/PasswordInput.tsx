@@ -13,7 +13,14 @@ export interface PasswordInputProps extends Omit<InputHTMLAttributes<HTMLInputEl
  * A password field a person can read back: the eye toggles between hidden and shown, and a
  * quiet note appears while Caps Lock is on. Every password field in ShardPass uses this.
  */
-export function PasswordInput({ className, capsLockHint = true, ref, onKeyDown, onKeyUp, ...props }: PasswordInputProps) {
+export function PasswordInput({
+  className,
+  capsLockHint = true,
+  ref,
+  onKeyDown,
+  onKeyUp,
+  ...props
+}: PasswordInputProps) {
   const [shown, setShown] = useState(false);
   const [capsLock, setCapsLock] = useState(false);
   const watchCaps = (event: KeyboardEvent<HTMLInputElement>) => {
@@ -23,6 +30,10 @@ export function PasswordInput({ className, capsLockHint = true, ref, onKeyDown, 
     <div className={styles.passwordField}>
       <div className={styles.passwordWrap}>
         <input
+          // Shown as text, the value must still never leave the page for spell-checking.
+          spellCheck={false}
+          autoCorrect="off"
+          autoCapitalize="off"
           {...props}
           ref={ref}
           type={shown ? "text" : "password"}

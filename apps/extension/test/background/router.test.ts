@@ -425,11 +425,18 @@ describe("item routing", () => {
   });
 
   it("routes item.get from the popup and the vault page, never from a content script", async () => {
-    const request = { version: 1, kind: "item.get", itemId: "10000000-0000-4000-8000-000000000001" } as const;
+    const request = {
+      version: 1,
+      kind: "item.get",
+      itemId: "10000000-0000-4000-8000-000000000001",
+    } as const;
     const response = { version: 1, kind: "item.getResult", item: { id: request.itemId } } as const;
     for (const sender of [popupSender(), vaultSender()]) {
       const service = { handle: vi.fn().mockResolvedValue(response) };
-      await expect(routeItem(request, sender, service)).resolves.not.toMatchObject({ kind: "error", error: { code: "UNAUTHORIZED_SENDER" } });
+      await expect(routeItem(request, sender, service)).resolves.not.toMatchObject({
+        kind: "error",
+        error: { code: "UNAUTHORIZED_SENDER" },
+      });
       expect(service.handle).toHaveBeenCalledWith(request, sender);
     }
     const deniedService = { handle: vi.fn().mockResolvedValue(response) };
@@ -522,7 +529,13 @@ describe("login fill routing", () => {
         itemId: "018f47a6-7d11-7c2f-8bd9-a1d37f147a20",
         expectedRevision: 1,
       },
-      { version: 1, kind: "login.fillRelease", username: "alice", password: "s3cret" },
+      {
+        version: 1,
+        kind: "login.fillRelease",
+        releaseId: "0123456789abcdef0123456789abcdef",
+        username: "alice",
+        password: "s3cret",
+      },
     ],
   ] as const;
 
@@ -1231,14 +1244,24 @@ describe("Ente route error envelopes", () => {
     expect((response as { error: Record<string, unknown> }).error).not.toHaveProperty("detail");
 
     const foreign = { handle: vi.fn(() => Promise.reject(new Error("secret stack"))) };
-    const unavailable = await routeEnte({ version: 1, kind: "ente.manualSync" }, vaultSender(), foreign);
+    const unavailable = await routeEnte(
+      { version: 1, kind: "ente.manualSync" },
+      vaultSender(),
+      foreign,
+    );
     expect(unavailable).toMatchObject({ kind: "error", error: { code: "ENTE_UNAVAILABLE" } });
     expect(JSON.stringify(unavailable)).not.toContain("secret stack");
   });
 });
 
 describe("login.reveal routing", () => {
-  const release = { version: 1, kind: "login.fillRelease", username: "u", password: "p" };
+  const release = {
+    version: 1,
+    kind: "login.fillRelease",
+    releaseId: "0123456789abcdef0123456789abcdef",
+    username: "u",
+    password: "p",
+  };
   const request = {
     version: 1,
     kind: "login.reveal",
