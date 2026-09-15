@@ -12,8 +12,9 @@ import {
   folderSenderPolicy,
   FoundationRequestSchema,
   foundationSenderPolicy,
-  GeneratePasswordRequestSchema,
-  GeneratePasswordResponseSchema,
+  PasswordGenRequestSchema,
+  PasswordGenResponseSchema,
+  passwordGenResponseKindByRequest,
   ItemCrudRequestSchema,
   itemCrudSenderPolicy,
   LoginFillRequestSchema,
@@ -49,8 +50,8 @@ import {
   type FolderRequest,
   type FolderResponse,
   type FoundationResponse,
-  type GeneratePasswordRequest,
-  type GeneratePasswordResponse,
+  type PasswordGenRequest,
+  type PasswordGenResponse,
   type ItemCrudRequest,
   type ItemCrudResponse,
   type LoginFillRequest,
@@ -105,7 +106,7 @@ export type BackgroundResponse =
   | BackupResponse
   | FolderResponse
   | FoundationResponse
-  | GeneratePasswordResponse
+  | PasswordGenResponse
   | ItemCrudResponse
   | LoginFillResponse
   | MigrationResponse
@@ -207,7 +208,7 @@ type LoginFillHandler = Readonly<{
   handle(request: LoginFillRequest, sender: SenderContext): Promise<unknown>;
 }>;
 type PasswordGenHandler = Readonly<{
-  handle(request: GeneratePasswordRequest): Promise<unknown>;
+  handle(request: PasswordGenRequest): Promise<unknown>;
 }>;
 type FolderHandler = Readonly<{
   handle(request: FolderRequest, sender: SenderContext): Promise<unknown>;
@@ -467,7 +468,7 @@ export function routeMessage(
       );
   }
 
-  const passwordGenRequest = GeneratePasswordRequestSchema.safeParse(input);
+  const passwordGenRequest = PasswordGenRequestSchema.safeParse(input);
   if (passwordGenRequest.success) {
     const policy = passwordGenSenderPolicy[passwordGenRequest.data.kind];
     if (!authorizeSender(senderContext, { extensionId: expectedExtensionId, ...policy }))
@@ -477,8 +478,11 @@ export function routeMessage(
     return passwordGenService
       .handle(passwordGenRequest.data)
       .then((candidate) => {
-        const parsed = GeneratePasswordResponseSchema.safeParse(candidate);
-        return parsed.success ? parsed.data : errorResponse("PASSWORD_GEN_INVALID");
+        const parsed = PasswordGenResponseSchema.safeParse(candidate);
+        return parsed.success &&
+          parsed.data.kind === passwordGenResponseKindByRequest[passwordGenRequest.data.kind]
+          ? parsed.data
+          : errorResponse("PASSWORD_GEN_INVALID");
       })
       .catch((error: unknown) =>
         errorResponse(

@@ -23,7 +23,11 @@ export interface LoginPickerProps {
   /** The row the arrow keys have reached; -1 for none. */
   readonly activeIndex?: number;
   /** On a sign-up form: a fresh password to offer, before any saved login. */
-  readonly generated?: Readonly<{ password: string; onUse: () => void; onAnother: () => void }> | undefined;
+  readonly generated?:
+    Readonly<{ password: string; onUse: () => void; onAnother: () => void }> | undefined;
+  /** A username for a sign-up form, from the person's own settings (plus-address, catch-all, or words). */
+  readonly suggestedUsername?:
+    Readonly<{ username: string; onUse: () => void; onAnother: () => void }> | undefined;
   readonly onClose: () => void;
   readonly onSelect: (suggestion: LoginPickerSuggestion) => void;
 }
@@ -34,7 +38,10 @@ const STATUS: Readonly<
   busy: { text: "Loading logins" },
   empty: { text: "No saved logins for this site" },
   error: { text: "Saved logins are unavailable" },
-  locked: { text: "ShardPass is locked", hint: "Unlock it from the toolbar, then click here again." },
+  locked: {
+    text: "ShardPass is locked",
+    hint: "Unlock it from the toolbar, then click here again.",
+  },
 });
 
 /**
@@ -51,7 +58,11 @@ export function filterSuggestions(
     .filter((item) => {
       if (typed === "") return true;
       const username = item.username.toLocaleLowerCase();
-      return username.startsWith(typed) || typed.startsWith(username) || item.name.toLocaleLowerCase().includes(typed);
+      return (
+        username.startsWith(typed) ||
+        typed.startsWith(username) ||
+        item.name.toLocaleLowerCase().includes(typed)
+      );
     })
     .sort(
       (left, right) =>
@@ -66,8 +77,41 @@ export function filterSuggestions(
  * The on-page login list: a slim bar and the rows, nothing else. It never takes focus from
  * the field; typing there narrows the rows and the arrow keys walk them.
  */
-export function LoginPicker({ suggestions, state, filter = "", activeIndex = -1, generated, onClose, onSelect }: LoginPickerProps) {
+export function LoginPicker({
+  suggestions,
+  state,
+  filter = "",
+  activeIndex = -1,
+  generated,
+  suggestedUsername,
+  onClose,
+  onSelect,
+}: LoginPickerProps) {
   const visible = filterSuggestions(suggestions, filter);
+  const usernameRow = suggestedUsername ? (
+    <div className="suggestRow">
+      <button
+        className="suggestUse"
+        type="button"
+        aria-label={`Use suggested username ${suggestedUsername.username}`}
+        onMouseDown={(event) => event.preventDefault()}
+        onClick={suggestedUsername.onUse}
+      >
+        <span className="suggestCaption">Use suggested username</span>
+        <span className="suggestValue">{suggestedUsername.username}</span>
+      </button>
+      <button
+        className="suggestAnother"
+        type="button"
+        aria-label="Suggest a different username"
+        title="Suggest a different username"
+        onMouseDown={(event) => event.preventDefault()}
+        onClick={suggestedUsername.onAnother}
+      >
+        ↻
+      </button>
+    </div>
+  ) : null;
   const suggestion = generated ? (
     <div className="suggestRow">
       <button
@@ -96,12 +140,20 @@ export function LoginPicker({ suggestions, state, filter = "", activeIndex = -1,
     <section className="loginPicker" role="region" aria-label="ShardPass login picker">
       <div className="pickerBar">
         <span className="pickerBrand">ShardPass</span>
-        <button className="pickerClose" type="button" aria-label="Close ShardPass picker" onClick={onClose}>
+        <button
+          className="pickerClose"
+          type="button"
+          aria-label="Close ShardPass picker"
+          onClick={onClose}
+        >
           <span aria-hidden="true">×</span>
         </button>
       </div>
+      {usernameRow}
       {suggestion}
-      {generated && (state === "empty" || (state === "ready" && visible.length === 0)) ? null : state !== "ready" ? (
+      {(generated || suggestedUsername) &&
+      (state === "empty" || (state === "ready" && visible.length === 0)) ? null : state !==
+        "ready" ? (
         <p className="status" role="status">
           {STATUS[state].text}
           {STATUS[state].hint === undefined ? null : (
@@ -132,7 +184,10 @@ export function LoginPicker({ suggestions, state, filter = "", activeIndex = -1,
               <span className="loginName">{item.name}</span>
               <span className="loginUsername">{item.username}</span>
               {item.signInWith !== undefined ? (
-                <span className="loginOtpBadge" aria-label={`Signs in with ${SIGN_IN_PROVIDER_LABELS[item.signInWith]}`}>
+                <span
+                  className="loginOtpBadge"
+                  aria-label={`Signs in with ${SIGN_IN_PROVIDER_LABELS[item.signInWith]}`}
+                >
                   {SIGN_IN_PROVIDER_LABELS[item.signInWith]}
                 </span>
               ) : item.hasLinkedOtp ? (

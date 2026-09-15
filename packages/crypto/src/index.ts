@@ -40,3 +40,10 @@ export type {
 export { createDeterministicRandomSource, webCryptoRandomSource } from "./random";
 export type { RandomSource } from "./random";
 export { EFF_WORDLIST } from "./wordlist";
+export {
+  generateUsername,
+  siteSlug,
+  type GeneratedUsername,
+  type UsernameKind,
+  type UsernameOptions,
+} from "./username-generator";

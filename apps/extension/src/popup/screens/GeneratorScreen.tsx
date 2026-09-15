@@ -1,5 +1,5 @@
-import type { GeneratePasswordRequest } from "@shardpass/messaging";
-import { GeneratePasswordResponseSchema } from "@shardpass/messaging";
+import type { PasswordGenRequest } from "@shardpass/messaging";
+import { PasswordGenResponseSchema } from "@shardpass/messaging";
 import { Button, StatusBadge, type Status } from "@shardpass/ui";
 import { Copy, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -12,7 +12,14 @@ export interface GeneratorScreenProps {
   onCopy: (value: string, label: string) => void;
 }
 
-type Mode = "random" | "passphrase";
+type Mode = "random" | "passphrase" | "username";
+type UsernameKind = "word" | "random" | "plus" | "catchall";
+const usernameKindOptions: readonly { value: UsernameKind; label: string }[] = [
+  { value: "word", label: "Two words and a number" },
+  { value: "random", label: "Random letters" },
+  { value: "plus", label: "Plus-address on my e-mail" },
+  { value: "catchall", label: "Address on my catch-all domain" },
+];
 type Separator = "hyphen" | "space" | "period" | "none";
 
 const GENERATE_SETTLE_MS = 120;
@@ -46,12 +53,56 @@ export function GeneratorScreen({ platform, onCopy }: GeneratorScreenProps) {
   const [wordCount, setWordCount] = useState(4);
   const [separator, setSeparator] = useState<Separator>("hyphen");
   const [capitalize, setCapitalize] = useState(false);
+  const [usernameKind, setUsernameKind] = useState<UsernameKind>("word");
+  const [email, setEmail] = useState("");
+  const [domain, setDomain] = useState("");
   const [password, setPassword] = useState("");
   const [entropyBits, setEntropyBits] = useState(0);
   const [error, setError] = useState("");
   const generation = useRef(0);
+  const settingsLoaded = useRef(false);
 
-  const buildRequest = useCallback((): GeneratePasswordRequest => {
+  // The saved address and domain are fetched once, the first time the username tab opens.
+  useEffect(() => {
+    if (mode !== "username" || settingsLoaded.current) return;
+    settingsLoaded.current = true;
+    platform
+      .sendMessage({ version: 1, kind: "password.getGeneratorSettings" })
+      .then((candidate) => {
+        const parsed = PasswordGenResponseSchema.safeParse(candidate);
+        if (parsed.success && parsed.data.kind === "password.generatorSettings") {
+          setEmail(parsed.data.email);
+          setDomain(parsed.data.domain);
+        }
+      })
+      .catch(() => undefined);
+  }, [mode, platform]);
+
+  const saveSettings = useCallback(
+    (next: { email: string; domain: string }) => {
+      platform
+        .sendMessage({ version: 1, kind: "password.setGeneratorSettings", ...next })
+        .catch(() => undefined);
+    },
+    [platform],
+  );
+
+  const usernameNeeds =
+    mode === "username" && usernameKind === "plus" && email.trim() === ""
+      ? "Enter the e-mail address the plus-addresses should build on."
+      : mode === "username" && usernameKind === "catchall" && domain.trim() === ""
+        ? "Enter the domain that catches all addresses."
+        : "";
+
+  const buildRequest = useCallback((): PasswordGenRequest => {
+    if (mode === "username")
+      return {
+        version: 1,
+        kind: "password.generateUsername",
+        usernameKind,
+        ...(email.trim() === "" ? {} : { email: email.trim() }),
+        ...(domain.trim() === "" ? {} : { domain: domain.trim() }),
+      };
     return mode === "random"
       ? {
           version: 1,
@@ -67,6 +118,9 @@ export function GeneratorScreen({ platform, onCopy }: GeneratorScreenProps) {
       : { version: 1, kind: "password.generate", mode, wordCount, separator, capitalize };
   }, [
     mode,
+    usernameKind,
+    email,
+    domain,
     length,
     uppercase,
     lowercase,
@@ -81,20 +135,29 @@ export function GeneratorScreen({ platform, onCopy }: GeneratorScreenProps) {
   const regenerate = useCallback(() => {
     const token = ++generation.current;
     setError("");
+    if (usernameNeeds !== "") {
+      setPassword("");
+      setEntropyBits(0);
+      return;
+    }
+    const what = mode === "username" ? "a username" : "a password";
     platform.sendMessage(buildRequest()).then(
       (candidate) => {
         if (token !== generation.current) return;
-        const parsed = GeneratePasswordResponseSchema.safeParse(candidate);
-        if (parsed.success) {
+        const parsed = PasswordGenResponseSchema.safeParse(candidate);
+        if (parsed.success && parsed.data.kind === "password.generateResult") {
           setPassword(parsed.data.password);
           setEntropyBits(parsed.data.entropyBits);
-        } else setError("Could not generate a password. Try again.");
+        } else if (parsed.success && parsed.data.kind === "password.generateUsernameResult") {
+          setPassword(parsed.data.username);
+          setEntropyBits(parsed.data.entropyBits);
+        } else setError(`Could not generate ${what}. Try again.`);
       },
       () => {
-        if (token === generation.current) setError("Could not generate a password. Try again.");
+        if (token === generation.current) setError(`Could not generate ${what}. Try again.`);
       },
     );
-  }, [buildRequest, platform]);
+  }, [buildRequest, mode, platform, usernameNeeds]);
 
   // Options settle first: a slider drag would otherwise flicker through dozens of
   // passwords and send a request per pixel.
@@ -134,19 +197,41 @@ export function GeneratorScreen({ platform, onCopy }: GeneratorScreenProps) {
         >
           Passphrase
         </button>
+        <button
+          type="button"
+          role="tab"
+          className={styles.tab}
+          aria-selected={mode === "username"}
+          onClick={() => setMode("username")}
+        >
+          Username
+        </button>
       </div>
 
-      <output className={styles.preview} aria-label="Generated password" aria-live="polite">
-        {password || "\u2026"}
+      <output
+        className={styles.preview}
+        aria-label={mode === "username" ? "Generated username" : "Generated password"}
+        aria-live="polite"
+      >
+        {password || (usernameNeeds !== "" ? "" : "\u2026")}
       </output>
 
       <div className={styles.meta}>
-        <StatusBadge status={grade.status}>{password ? grade.word : "Generating"}</StatusBadge>
-        <span>{password ? `${Math.round(entropyBits)} bits of entropy` : ""}</span>
+        {mode === "username" ? (
+          <span>{password ? `${Math.round(entropyBits)} bits of entropy` : usernameNeeds}</span>
+        ) : (
+          <>
+            <StatusBadge status={grade.status}>{password ? grade.word : "Generating"}</StatusBadge>
+            <span>{password ? `${Math.round(entropyBits)} bits of entropy` : ""}</span>
+          </>
+        )}
       </div>
 
       <div className={styles.actions}>
-        <Button disabled={password.length === 0} onClick={() => onCopy(password, "Password")}>
+        <Button
+          disabled={password.length === 0}
+          onClick={() => onCopy(password, mode === "username" ? "Username" : "Password")}
+        >
           <Copy size={14} aria-hidden="true" /> Copy
         </Button>
         <Button variant="ghost" onClick={regenerate}>
@@ -161,7 +246,59 @@ export function GeneratorScreen({ platform, onCopy }: GeneratorScreenProps) {
       ) : null}
 
       <div className={styles.options}>
-        {mode === "random" ? (
+        {mode === "username" ? (
+          <>
+            <label className={styles.selectRow}>
+              <span>Kind</span>
+              <select
+                className={styles.select}
+                value={usernameKind}
+                onChange={(event) => setUsernameKind(event.target.value as UsernameKind)}
+              >
+                {usernameKindOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {usernameKind === "plus" ? (
+              <label className={styles.selectRow}>
+                <span>My e-mail</span>
+                <input
+                  className={styles.select}
+                  type="email"
+                  autoComplete="off"
+                  placeholder="me@example.com"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  onBlur={() => saveSettings({ email: email.trim(), domain: domain.trim() })}
+                />
+              </label>
+            ) : null}
+            {usernameKind === "catchall" ? (
+              <label className={styles.selectRow}>
+                <span>My domain</span>
+                <input
+                  className={styles.select}
+                  type="text"
+                  autoComplete="off"
+                  placeholder="example.com"
+                  value={domain}
+                  onChange={(event) => setDomain(event.target.value)}
+                  onBlur={() => saveSettings({ email: email.trim(), domain: domain.trim() })}
+                />
+              </label>
+            ) : null}
+            <p className={styles.hint}>
+              {usernameKind === "plus"
+                ? "Mail to me+tag@… lands in your inbox; each site gets its own tag, so you can see who shared your address."
+                : usernameKind === "catchall"
+                  ? "Needs a domain whose mail all reaches you. Each site gets a fresh address."
+                  : "Sign-up forms offer one of these when you pick the username field."}
+            </p>
+          </>
+        ) : mode === "random" ? (
           <>
             <label className={styles.sliderRow}>
               <span className={styles.sliderLabel}>

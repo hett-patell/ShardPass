@@ -70,6 +70,8 @@ type LoginFillServiceDependencies = Readonly<{
    * same place the session key lives), so a save banner survives the worker's idle teardown.
    */
   offerStore?: StoragePort;
+  /** A username the sign-up form on this host might like; null when nothing is configured. */
+  suggestUsername?(host: string): Promise<string | null>;
 }>;
 
 const OFFERS_KEY = "shardpass:v1:save-offers";
@@ -188,6 +190,14 @@ export class LoginFillService {
       switch (command.kind) {
         case "login.fillSuggestions":
           return validated(await this.suggestions(senderPage()));
+        case "login.suggestUsername": {
+          const suggest = this.dependencies.suggestUsername;
+          const username =
+            suggest === undefined
+              ? null
+              : await suggest(hostnameOf(senderPage())).catch(() => null);
+          return validated({ version: 1, kind: "login.usernameSuggestion", username });
+        }
         case "login.fillSelect":
           return validated(
             await this.select(

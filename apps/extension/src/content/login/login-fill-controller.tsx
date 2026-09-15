@@ -98,6 +98,8 @@ type PickerView = {
   candidate: Owner;
   /** A sign-up form's suggested password, when this is one. */
   generated: string | null;
+  /** A username for the sign-up form's username field, once the background has answered. */
+  suggestedUsername: string | null;
   state: LoginPickerState;
   suggestions: readonly LoginPickerSuggestion[];
   /** What the person typed into the field since the picker opened; a prefill does not count. */
@@ -348,12 +350,47 @@ export function createLoginFillController(
     closeHost();
   };
 
+  const useSuggestedUsername = (view: PickerView): void => {
+    if (view.suggestedUsername === null || !owns(view.candidate)) return;
+    fillLoginFields(
+      { usernameField: view.candidate.input, passwordField: null, form: null },
+      view.suggestedUsername,
+      "",
+    );
+    view.candidate.input.focus({ preventScroll: true });
+    closeHost();
+  };
+
+  /** Only a sign-up form's username field asks; the answer is whatever the person configured. */
+  const requestUsername = async (view: PickerView): Promise<void> => {
+    try {
+      const response = await options.platform.sendLoginFillMessage({
+        version: 1,
+        kind: "login.suggestUsername",
+      });
+      if (picker !== view || response.kind !== "login.usernameSuggestion") return;
+      view.suggestedUsername = response.username;
+      refreshPicker();
+    } catch {
+      // No suggestion is not an error the page needs to hear about.
+    }
+  };
+
   const pickerContent = (view: PickerView) => (
     <LoginPicker
       suggestions={view.suggestions}
       state={view.state}
       filter={view.typed ? view.filter : ""}
       activeIndex={view.activeIndex}
+      suggestedUsername={
+        view.suggestedUsername === null
+          ? undefined
+          : {
+              username: view.suggestedUsername,
+              onUse: () => useSuggestedUsername(view),
+              onAnother: () => void requestUsername(view),
+            }
+      }
       generated={
         view.generated === null
           ? undefined
@@ -424,11 +461,11 @@ export function createLoginFillController(
     const previous = picker !== null && picker.candidate === candidate ? picker : null;
     closeHost();
     if (!owns(candidate)) return;
+    const signup = signupFieldsOf(candidate.fieldSet) !== null;
     const view: PickerView = {
       candidate,
-      generated:
-        previous?.generated ??
-        (signupFieldsOf(candidate.fieldSet) === null ? null : suggestPassword()),
+      generated: previous?.generated ?? (signup ? suggestPassword() : null),
+      suggestedUsername: previous?.suggestedUsername ?? null,
       state,
       suggestions,
       filter: previous?.filter ?? "",
@@ -436,6 +473,12 @@ export function createLoginFillController(
       activeIndex: -1,
     };
     picker = view;
+    if (
+      signup &&
+      view.suggestedUsername === null &&
+      candidate.fieldSet.usernameField === candidate.input
+    )
+      void requestUsername(view);
     candidate.input.addEventListener("keydown", onPickerKeyDown, true);
     candidate.input.addEventListener("input", onPickerInput);
     host = createPickerHost(candidate.input, {

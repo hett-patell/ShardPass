@@ -208,6 +208,8 @@ export {
   SaveLoginOfferResultSchema,
   SaveLoginConfirmRequestSchema,
   SaveLoginResultSchema,
+  LoginSuggestUsernameRequestSchema,
+  LoginUsernameSuggestionSchema,
 } from "./login-fill";
 export type {
   LoginFillCommandKind,
@@ -220,11 +222,23 @@ export {
   GeneratePasswordRequestSchema,
   GeneratePasswordResponseSchema,
   passwordGenSenderPolicy,
+  GenerateUsernameRequestSchema,
+  GenerateUsernameResponseSchema,
+  GetGeneratorSettingsRequestSchema,
+  SetGeneratorSettingsRequestSchema,
+  GeneratorSettingsResponseSchema,
+  PasswordGenRequestSchema,
+  PasswordGenResponseSchema,
+  passwordGenResponseKindByRequest,
 } from "./password-gen";
 export type {
   GeneratePasswordRequest,
   GeneratePasswordResponse,
   PasswordGenCommandKind,
+  GenerateUsernameRequest,
+  GenerateUsernameResponse,
+  PasswordGenRequest,
+  PasswordGenResponse,
 } from "./password-gen";
 export {
   ItemCreateManyEntrySchema,

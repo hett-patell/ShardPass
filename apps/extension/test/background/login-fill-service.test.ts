@@ -860,3 +860,35 @@ describe("LoginFillService sender binding", () => {
     });
   });
 });
+
+describe("LoginFillService username suggestions", () => {
+  it("asks the generator for the page's host and answers null when nothing is configured", async () => {
+    const hosts: string[] = [];
+    const service = new LoginFillService({
+      repository: new FakeRepository([]),
+      now: () => 15_000,
+      notePrivilegedActivity: () => Promise.resolve(),
+      suggestUsername: (host) => {
+        hosts.push(host);
+        return Promise.resolve(host === "example.test" ? "me+example1234@example.com" : null);
+      },
+    });
+    const result = await service.handle({ version: 1, kind: "login.suggestUsername" }, sender);
+    expect(result).toEqual({
+      version: 1,
+      kind: "login.usernameSuggestion",
+      username: "me+example1234@example.com",
+    });
+    expect(hosts).toEqual(["example.test"]);
+    const bare = new LoginFillService({
+      repository: new FakeRepository([]),
+      now: () => 15_000,
+      notePrivilegedActivity: () => Promise.resolve(),
+    });
+    expect(await bare.handle({ version: 1, kind: "login.suggestUsername" }, sender)).toEqual({
+      version: 1,
+      kind: "login.usernameSuggestion",
+      username: null,
+    });
+  });
+});

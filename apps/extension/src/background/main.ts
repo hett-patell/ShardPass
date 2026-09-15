@@ -168,14 +168,15 @@ export function installBackground(
     now: () => Date.now(),
     notePrivilegedActivity: () => settings.notePrivilegedActivity(),
   });
+  const passwordGen = new PasswordGenService({ local: platform.localStorage });
   const loginFill = new LoginFillService({
     repository: sessions.vaultRepository,
     now: () => Date.now(),
     notePrivilegedActivity: () => settings.notePrivilegedActivity(),
     offerStore: platform.sessionStorage,
     repromptGranted: (itemId) => repromptGrants.granted(itemId),
+    suggestUsername: (host) => passwordGen.suggestForSite(host),
   });
-  const passwordGen = new PasswordGenService();
   const dataFill = new DataFillService({
     repository: sessions.vaultRepository,
     now: () => Date.now(),

@@ -24,7 +24,7 @@ const UINT32_RANGE = 0x1_0000_0000;
  * than `value % max`) avoids modulo bias for ranges that do not evenly divide
  * 2^32.
  */
-function secureRandomIndex(max: number): number {
+export function secureRandomIndex(max: number): number {
   if (!Number.isInteger(max) || max <= 0 || max > UINT32_RANGE) {
     throw new RangeError("secureRandomIndex requires an integer max in (0, 2^32].");
   }

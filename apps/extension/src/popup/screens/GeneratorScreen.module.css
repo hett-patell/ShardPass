@@ -134,3 +134,10 @@
   font: inherit;
   font-size: var(--text-sm);
 }
+
+.hint {
+  margin: 0;
+  font-size: var(--text-xs, 0.75rem);
+  color: var(--text-muted, inherit);
+  line-height: 1.4;
+}

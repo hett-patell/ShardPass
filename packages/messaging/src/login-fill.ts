@@ -158,7 +158,19 @@ export const SaveLoginResultSchema = z.strictObject({
   saved: z.enum(["created", "updated"]),
 });
 
+/** A sign-up form asks for a username the person might like; the answer builds on saved settings. */
+export const LoginSuggestUsernameRequestSchema = z.strictObject({
+  version: z.literal(MESSAGE_VERSION),
+  kind: z.literal("login.suggestUsername"),
+});
+export const LoginUsernameSuggestionSchema = z.strictObject({
+  version: z.literal(MESSAGE_VERSION),
+  kind: z.literal("login.usernameSuggestion"),
+  username: z.nullable(z.string().check(z.maxLength(320))),
+});
+
 export const LoginFillRequestSchema = z.discriminatedUnion("kind", [
+  LoginSuggestUsernameRequestSchema,
   LoginFillSuggestionsRequestSchema,
   LoginFillSelectRequestSchema,
   LoginRevealRequestSchema,
@@ -179,6 +191,7 @@ export const LoginFillAckSchema = z.strictObject({
 
 export const LoginFillResponseSchema = z.discriminatedUnion("kind", [
   LoginFillSuggestionsResponseSchema,
+  LoginUsernameSuggestionSchema,
   LoginFillReleaseResponseSchema,
   LoginFillAckSchema,
   SaveLoginOfferResultSchema,
@@ -193,6 +206,7 @@ export type LoginFillResponseKind = LoginFillResponse["kind"];
 
 export const loginFillResponseKindByRequest = {
   "login.fillSuggestions": "login.fillSuggestionsResult",
+  "login.suggestUsername": "login.usernameSuggestion",
   "login.fillSelect": "login.fillRelease",
   "login.reveal": "login.fillRelease",
   "login.fillConfirm": "login.fillAck",
@@ -221,6 +235,7 @@ const contentOnly = {
 const extensionPage = { allowedContexts: ["popup", "vault"], requireDocument: true } as const;
 
 export const loginFillSenderPolicy = {
+  "login.suggestUsername": contentOnly,
   "login.fillSuggestions": contentOnly,
   "login.fillSelect": contentOnly,
   "login.reveal": extensionPage,
