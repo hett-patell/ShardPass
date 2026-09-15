@@ -43,6 +43,8 @@ import {
   type VaultCryptoContext,
   type VaultRoot,
   type VerifiedStagedGeneration,
+  WrappedVaultKeySchema,
+  type WrappedVaultKey,
 } from "@shardpass/storage";
 
 import {
@@ -63,6 +65,29 @@ const ATTEMPTS_KEY = "shardpass:v1:unlock-attempts";
  */
 const SESSION_KEY = "shardpass:v1:session";
 const ATTEMPT_VERSION = 1;
+const PIN_KEY = "shardpass:v1:pin";
+function wipe(bytes: Uint8Array | null): void {
+  bytes?.fill(0);
+}
+const MAX_PIN_FAILURES = 5;
+type PinKdf = Readonly<{
+  algorithm: "argon2id";
+  salt: string;
+  memoryKiB: number;
+  iterations: number;
+  parallelism: number;
+}>;
+type PinRecord = Readonly<{ version: 1; wrapped: WrappedVaultKey; failures: number }>;
+function isPinRecord(value: unknown): value is PinRecord {
+  if (typeof value !== "object" || value === null) return false;
+  const candidate = value as { version?: unknown; wrapped?: unknown; failures?: unknown };
+  return (
+    candidate.version === 1 &&
+    WrappedVaultKeySchema.safeParse(candidate.wrapped).success &&
+    Number.isSafeInteger(candidate.failures) &&
+    (candidate.failures as number) >= 0
+  );
+}
 const CHALLENGE_LIFETIME_MS = 300_000;
 const FAILURE_THRESHOLD = 5;
 const BASE_COOLDOWN_MS = 30_000;
@@ -89,7 +114,10 @@ export type VaultSessionErrorCode =
   | "VAULT_ALREADY_CONFIGURED"
   | "VAULT_LOCKED"
   | "VAULT_NOT_CONFIGURED"
-  | "VAULT_UNAVAILABLE";
+  | "VAULT_UNAVAILABLE"
+  | "PIN_INVALID"
+  | "PIN_REMOVED"
+  | "PIN_UNAVAILABLE";
 
 export class VaultSessionError extends Error {
   constructor(
@@ -101,7 +129,8 @@ export class VaultSessionError extends Error {
   }
 }
 
-type ChallengePurpose = "setup" | "unlock" | "change-current" | "change-new" | "reprompt";
+type KdfChallengePurpose = "setup" | "unlock" | "change-current" | "change-new" | "reprompt";
+type ChallengePurpose = KdfChallengePurpose | "pin";
 export type SenderBinding = Readonly<{
   extensionId: string;
   contextKind: "popup" | "vault";
@@ -360,17 +389,124 @@ export class SessionService {
     });
   }
 
-  async getState(): Promise<{ state: VaultState; retryAfterMs: number }> {
+  async getState(): Promise<{ state: VaultState; retryAfterMs: number; pinAvailable: boolean }> {
     if (this.dek !== null) await this.assertActiveRoot();
     const root = await this.readRoot();
     const retryAfterMs = await this.retryAfter();
     return {
       state: root === null ? "unconfigured" : this.dek === null ? "locked" : "unlocked",
       retryAfterMs,
+      pinAvailable: root !== null && (await this.readPin()) !== null,
     };
   }
 
-  async createChallenge(purpose: ChallengePurpose, sender: SenderBinding) {
+  // --- PIN unlock: the data key wrapped a second time, under a key derived from a short PIN ---
+
+  private async readPin(): Promise<PinRecord | null> {
+    try {
+      const stored = (await this.dependencies.local.get([PIN_KEY]))[PIN_KEY];
+      return isPinRecord(stored) ? stored : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Wraps the open vault's data key under the PIN key; the page derived that key from the PIN. */
+  async setPin(pinKey: Uint8Array, kdf: PinKdf): Promise<void> {
+    try {
+      if (this.dek === null) throw new VaultSessionError("VAULT_LOCKED");
+      const { salt, ...parameters } = kdf;
+      const wrapped = await wrapVaultDataKeyWithKeyEncryptionKey(
+        pinKey,
+        decodeBase64(salt),
+        parameters,
+        this.dek,
+        this.dependencies.random,
+      );
+      const record: PinRecord = { version: 1, wrapped, failures: 0 };
+      await this.dependencies.local.set({ [PIN_KEY]: record });
+    } finally {
+      pinKey.fill(0);
+    }
+  }
+
+  async removePin(): Promise<void> {
+    await this.dependencies.local.remove([PIN_KEY]);
+  }
+
+  /** The stored PIN key parameters (the page must derive with the same salt), bound like every challenge. */
+  async createPinChallenge(sender: SenderBinding) {
+    if (!sender.documentId) throw new VaultSessionError("CHALLENGE_INVALID");
+    const root = await this.readRoot();
+    if (root === null) throw new VaultSessionError("VAULT_NOT_CONFIGURED");
+    const record = await this.readPin();
+    if (record === null) throw new VaultSessionError("PIN_UNAVAILABLE");
+    const challenge: Challenge = {
+      challengeId: hex(this.dependencies.random.randomBytes(16)),
+      purpose: "pin",
+      salt: decodeBase64(record.wrapped.kdf.salt),
+      rootBinding: canonicalJson(root),
+      senderBinding: sender,
+      expiresAt: safeAdd(this.now(), CHALLENGE_LIFETIME_MS),
+    };
+    this.challenges.set(challenge.challengeId, challenge);
+    return {
+      challengeId: challenge.challengeId,
+      kdf: record.wrapped.kdf,
+      expiresAt: challenge.expiresAt,
+    };
+  }
+
+  /**
+   * Unlocks with the PIN key. A wrong key counts against the PIN alone: the fifth failure
+   * removes it, since a short PIN is only as safe as the number of tries it allows.
+   */
+  async unlockWithPin(
+    challengeId: string,
+    pinKey: Uint8Array,
+    sender: SenderBinding,
+  ): Promise<void> {
+    await this.credentialMutex.run(async () => {
+      const operationEpoch = this.epoch;
+      let candidateDek: Uint8Array | null = null;
+      try {
+        const challenge = this.consume(challengeId, "pin", sender);
+        const root = await this.readRoot();
+        this.assertEpoch(operationEpoch);
+        if (root === null || canonicalJson(root) !== challenge.rootBinding)
+          throw new VaultSessionError("CHALLENGE_INVALID");
+        const record = await this.readPin();
+        if (record === null) throw new VaultSessionError("PIN_UNAVAILABLE");
+        try {
+          candidateDek = await unwrapVaultDataKeyWithKeyEncryptionKey(pinKey, record.wrapped);
+          this.assertEpoch(operationEpoch);
+          const active = await this.generations.readActive({ dek: candidateDek });
+          this.assertEpoch(operationEpoch);
+          this.dek = candidateDek;
+          candidateDek = null;
+          this.expectedRoot = root;
+          this.rememberAuthenticatedActive(active);
+          await this.dependencies.local.set({ [PIN_KEY]: { ...record, failures: 0 } });
+          await this.rememberSession();
+        } catch (error) {
+          if (error instanceof VaultSessionError && error.code === "VAULT_LOCKED") throw error;
+          const failures = record.failures + 1;
+          if (failures >= MAX_PIN_FAILURES) {
+            await this.dependencies.local.remove([PIN_KEY]);
+            throw new VaultSessionError("PIN_REMOVED");
+          }
+          await this.dependencies.local.set({ [PIN_KEY]: { ...record, failures } });
+          throw new VaultSessionError("PIN_INVALID");
+        }
+      } finally {
+        wipe(candidateDek);
+        pinKey.fill(0);
+      }
+    });
+    this.scheduleOrphanCollection();
+  }
+
+  async createChallenge(purpose: KdfChallengePurpose, sender: SenderBinding) {
     if (!sender.documentId) throw new VaultSessionError("CHALLENGE_INVALID");
     if (this.dek !== null) await this.assertActiveRoot();
     const retryAfterMs = await this.credentialMutex.run(() => this.retryAfter());

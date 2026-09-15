@@ -93,10 +93,12 @@ describe("vault messaging", () => {
     ).toBe(false);
   });
 
-  it("allows summary, setup, unlock, lock, and settings in popup/vault but password changes only in vault", () => {
+  it("allows summary, setup, unlock, lock, and settings in popup/vault but password and PIN changes only in vault", () => {
     for (const [kind, policy] of Object.entries(vaultSenderPolicy)) {
       expect(policy.allowedContexts).toEqual(
-        kind === "vault.changePassword" ? ["vault"] : ["popup", "vault"],
+        kind === "vault.changePassword" || kind === "vault.setPin" || kind === "vault.removePin"
+          ? ["vault"]
+          : ["popup", "vault"],
       );
     }
   });

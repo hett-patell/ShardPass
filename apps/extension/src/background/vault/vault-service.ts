@@ -54,14 +54,20 @@ export class VaultService {
           decodeKey(request.keyEncryptionKey),
           sender,
         );
-        try {
-          await this.reconcileSettings();
-        } catch {
-          await this.sessions.lock();
-          await this.settings.cancelAutoLock().catch(() => undefined);
-          throw new Error("settings projection failed");
-        }
-        await this.migrateIfNeeded();
+        return this.afterUnlock();
+      case "vault.getPinChallenge": {
+        const challenge = await this.sessions.createPinChallenge(sender);
+        return { version: 1, kind: "vault.pinChallenge", ...challenge };
+      }
+      case "vault.unlockWithPin":
+        await this.sessions.unlockWithPin(request.challengeId, decodeKey(request.pinKey), sender);
+        return this.afterUnlock();
+      case "vault.setPin":
+        await this.sessions.setPin(decodeKey(request.pinKey), request.kdf);
+        await this.settings.notePrivilegedActivity();
+        return { version: 1, kind: "vault.ok", state: "unlocked" };
+      case "vault.removePin":
+        await this.sessions.removePin();
         return { version: 1, kind: "vault.ok", state: "unlocked" };
       case "vault.lock":
         await this.sessions.lock();
@@ -107,6 +113,19 @@ export class VaultService {
         return { version: 1, kind: "vault.ok", ...outcome };
       }
     }
+  }
+
+  /** What every unlock does once the session holds the key. */
+  private async afterUnlock(): Promise<VaultResponse> {
+    try {
+      await this.reconcileSettings();
+    } catch {
+      await this.sessions.lock();
+      await this.settings.cancelAutoLock().catch(() => undefined);
+      throw new Error("settings projection failed");
+    }
+    await this.migrateIfNeeded();
+    return { version: 1, kind: "vault.ok", state: "unlocked" };
   }
 
   private async reconcileSettings(): Promise<void> {

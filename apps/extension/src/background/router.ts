@@ -327,6 +327,10 @@ const vaultResponseKindByRequest = {
   "vault.changePassword": "vault.ok",
   "vault.updateLockSettings": "vault.ok",
   "vault.confirmReprompt": "vault.ok",
+  "vault.getPinChallenge": "vault.pinChallenge",
+  "vault.unlockWithPin": "vault.ok",
+  "vault.setPin": "vault.ok",
+  "vault.removePin": "vault.ok",
 } as const;
 
 export function routeMessage(

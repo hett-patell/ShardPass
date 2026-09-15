@@ -2,9 +2,11 @@ import {
   MAX_PASSWORD_UTF8_BYTES,
   MIN_SETUP_PASSWORD_CODE_POINTS,
   type Argon2idWorkParameters,
+  DEFAULT_ARGON2ID_PARAMETERS,
 } from "@shardpass/crypto";
 import {
   VaultKdfChallengeResponseSchema,
+  VaultPinChallengeResponseSchema,
   VaultStateResponseSchema,
   VaultStateUnavailableSchema,
   type VaultLockSettings,
@@ -18,6 +20,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { ExtensionPlatform } from "../platform/extension-platform";
 import { createPageKdfExecutor } from "../platform/kdf-executor";
 import styles from "./VaultAccess.module.css";
+
+const MIN_PIN_CODE_POINTS = 4;
+const MAX_PIN_UTF8_BYTES = 64;
 
 export type DerivePageKey = (
   password: string,
@@ -72,6 +77,11 @@ export function VaultAccess({
   const [settingsError, setSettingsError] = useState("");
   // Time left on the failed-unlock cooldown the background reported; counts down on screen.
   const [retryAfterMs, setRetryAfterMs] = useState(0);
+  const [pinAvailable, setPinAvailable] = useState(false);
+  const [pinMode, setPinMode] = useState(true);
+  const [pin, setPin] = useState("");
+  const [pinConfirmation, setPinConfirmation] = useState("");
+  const [pinNotice, setPinNotice] = useState("");
   // The full estimate (zxcvbn, in its worker) arrives a moment after typing pauses; until
   // then, and wherever workers are missing, the quick arithmetic stands in.
   const estimator = useMemo(() => createStrengthEstimator(), []);
@@ -194,6 +204,7 @@ export function VaultAccess({
       onUnlockedChange?.(parsed.data.state === "unlocked");
       setState(parsed.data.state);
       setRetryAfterMs(parsed.data.retryAfterMs);
+      setPinAvailable(parsed.data.pinAvailable === true);
       setSettings({
         autoLockMinutes: parsed.data.autoLockMinutes,
         lockOnScreenLock: parsed.data.lockOnScreenLock,
@@ -320,6 +331,96 @@ export function VaultAccess({
       setCurrentPassword("");
       setNewPassword("");
       setNewConfirmation("");
+      setWorking(false);
+    }
+  }
+
+  async function unlockWithPin(): Promise<void> {
+    setError("");
+    if (pin.length === 0) return;
+    setWorking(true);
+    try {
+      const challenge = VaultPinChallengeResponseSchema.parse(
+        await platform.sendMessage({ version: 1, kind: "vault.getPinChallenge" }),
+      );
+      const { salt, ...parameters } = challenge.kdf;
+      const key = await deriveKey(pin, parameters, decodeBase64(salt));
+      const response = await platform.sendMessage({
+        version: 1,
+        kind: "vault.unlockWithPin",
+        challengeId: challenge.challengeId,
+        pinKey: encodeBase64(key),
+      });
+      if (isUnlocked(response)) {
+        onUnlockedChange?.(true);
+        setPin("");
+        setState("unlocked");
+        return;
+      }
+      if (errorCode(response) === "PIN_REMOVED" || errorCode(response) === "PIN_UNAVAILABLE") {
+        setPinAvailable(false);
+        setPinMode(false);
+      }
+      setPin("");
+      setError(safeError(response));
+    } catch {
+      setError("The vault could not be unlocked. Try again.");
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function setPinForDevice(): Promise<void> {
+    setPinNotice("");
+    setSettingsError("");
+    if (Array.from(pin).length < MIN_PIN_CODE_POINTS) {
+      setSettingsError(`Use at least ${MIN_PIN_CODE_POINTS} characters for the PIN.`);
+      return;
+    }
+    if (new TextEncoder().encode(pin).byteLength > MAX_PIN_UTF8_BYTES) {
+      setSettingsError("The PIN is too long.");
+      return;
+    }
+    if (pin !== pinConfirmation) {
+      setSettingsError("The PINs do not match.");
+      return;
+    }
+    setWorking(true);
+    try {
+      const salt = crypto.getRandomValues(new Uint8Array(16));
+      const key = await deriveKey(pin, DEFAULT_ARGON2ID_PARAMETERS, salt);
+      const response = await platform.sendMessage({
+        version: 1,
+        kind: "vault.setPin",
+        pinKey: encodeBase64(key),
+        kdf: { ...DEFAULT_ARGON2ID_PARAMETERS, salt: encodeBase64(salt) },
+      });
+      if (isUnlocked(response)) {
+        setPin("");
+        setPinConfirmation("");
+        setPinAvailable(true);
+        setPinNotice("PIN set. The lock screen offers it from now on.");
+      } else setSettingsError(safeError(response));
+    } catch {
+      setSettingsError("The PIN could not be set. Try again.");
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function removePin(): Promise<void> {
+    setPinNotice("");
+    setSettingsError("");
+    setWorking(true);
+    try {
+      const response = await platform.sendMessage({ version: 1, kind: "vault.removePin" });
+      if (isUnlocked(response)) {
+        setPinAvailable(false);
+        setPinNotice("PIN removed. The lock screen asks for your master password.");
+      } else setSettingsError(safeError(response));
+    } catch {
+      setSettingsError("The PIN could not be removed. Try again.");
+    } finally {
       setWorking(false);
     }
   }
@@ -462,6 +563,58 @@ export function VaultAccess({
               />
               Lock when the screen locks
             </label>
+            <h3>Unlock with a PIN</h3>
+            <p className={styles.weakNote}>
+              A PIN is shorter than your master password, so it only counts for this browser
+              profile: after five wrong PINs it is removed and the master password is required
+              again.
+            </p>
+            {pinNotice !== "" ? (
+              <p className={styles.working} role="status">
+                {pinNotice}
+              </p>
+            ) : null}
+            {pinAvailable ? (
+              <div className={styles.pinRow}>
+                <span>A PIN is set for this profile.</span>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => void removePin()}
+                  disabled={working}
+                >
+                  Remove PIN
+                </Button>
+              </div>
+            ) : (
+              <form
+                className={styles.changePassword}
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  if (!working) void setPinForDevice();
+                }}
+              >
+                <label>
+                  New PIN
+                  <PasswordInput
+                    autoComplete="off"
+                    value={pin}
+                    onChange={(event) => setPin(event.target.value)}
+                  />
+                </label>
+                <label>
+                  Confirm PIN
+                  <PasswordInput
+                    autoComplete="off"
+                    value={pinConfirmation}
+                    onChange={(event) => setPinConfirmation(event.target.value)}
+                  />
+                </label>
+                <Button type="submit" loading={working}>
+                  Set PIN
+                </Button>
+              </form>
+            )}
             <h3>Change master password</h3>
             <form
               className={styles.changePassword}
@@ -525,6 +678,50 @@ export function VaultAccess({
     refined?.password === password
       ? refined.estimate
       : { ...passwordStrength(password), source: "quick" };
+  if (!setup && pinAvailable && pinMode) {
+    return (
+      <section className={styles.panel}>
+        <h2>Unlock ShardPass</h2>
+        <p>Enter your PIN.</p>
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (!working) void unlockWithPin();
+          }}
+          className={styles.form}
+        >
+          <label>
+            PIN
+            <PasswordInput
+              autoFocus
+              autoComplete="off"
+              value={pin}
+              onChange={(event) => setPin(event.target.value)}
+            />
+          </label>
+          {error ? (
+            <p className={styles.error} role="alert">
+              {error}
+            </p>
+          ) : null}
+          <Button type="submit" loading={working}>
+            Unlock vault
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            disabled={working}
+            onClick={() => {
+              setError("");
+              setPinMode(false);
+            }}
+          >
+            Use master password instead
+          </Button>
+        </form>
+      </section>
+    );
+  }
   return (
     <section className={styles.panel}>
       <h2>{setup ? "Create your vault" : "Unlock ShardPass"}</h2>
@@ -621,6 +818,19 @@ export function VaultAccess({
         <Button type="submit" loading={working} disabled={retryAfterMs > 0}>
           {setup ? "Create vault" : "Unlock vault"}
         </Button>
+        {!setup && pinAvailable ? (
+          <Button
+            type="button"
+            variant="ghost"
+            disabled={working}
+            onClick={() => {
+              setError("");
+              setPinMode(true);
+            }}
+          >
+            Use PIN instead
+          </Button>
+        ) : null}
         {working ? (
           <p className={styles.working} role="status">
             Deriving your key on this device. It is never sent anywhere.
@@ -647,6 +857,15 @@ function isCommittedLocked(value: unknown): boolean {
     (value as { state?: unknown }).state === "locked" &&
     (value as { committed?: unknown }).committed === true
   );
+}
+function errorCode(value: unknown): string | undefined {
+  if (
+    typeof value === "object" &&
+    value !== null &&
+    typeof (value as { error?: { code?: unknown } }).error?.code === "string"
+  )
+    return (value as { error: { code: string } }).error.code;
+  return undefined;
 }
 function safeError(value: unknown): string {
   if (

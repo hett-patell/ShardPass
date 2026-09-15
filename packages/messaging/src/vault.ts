@@ -7,6 +7,13 @@ const challengeId = z.string().check(z.regex(/^[0-9a-f]{32}$/));
 const canonicalKek = z.string().check(z.regex(/^[A-Za-z0-9+/]{43}=$/));
 const lockMinutes = z.int().check(z.nonnegative(), z.maximum(1_440));
 const purpose = z.enum(["setup", "unlock", "change-current", "change-new", "reprompt"]);
+const kdfParameters = z.strictObject({
+  algorithm: z.literal("argon2id"),
+  salt: z.string().check(z.regex(/^[A-Za-z0-9+/]{22}==$/)),
+  memoryKiB: z.int().check(z.minimum(8192), z.maximum(131072)),
+  iterations: z.int().check(z.minimum(1), z.maximum(10)),
+  parallelism: z.int().check(z.minimum(1), z.maximum(4)),
+});
 const request = <T extends z.ZodMiniObject>(shape: T) => shape;
 
 export const VaultGetStateRequestSchema = request(
@@ -70,6 +77,34 @@ export const VaultConfirmRepromptRequestSchema = request(
   }),
 );
 
+/**
+ * PIN unlock: the vault's data key is wrapped a second time under a key derived from a
+ * short PIN. The wrap and every check happen in the background; the page only derives the
+ * PIN key, as it derives the master key. Five wrong PINs remove the PIN.
+ */
+export const VaultGetPinChallengeRequestSchema = request(
+  z.strictObject({ version: z.literal(MESSAGE_VERSION), kind: z.literal("vault.getPinChallenge") }),
+);
+export const VaultUnlockWithPinRequestSchema = request(
+  z.strictObject({
+    version: z.literal(MESSAGE_VERSION),
+    kind: z.literal("vault.unlockWithPin"),
+    challengeId,
+    pinKey: canonicalKek,
+  }),
+);
+export const VaultSetPinRequestSchema = request(
+  z.strictObject({
+    version: z.literal(MESSAGE_VERSION),
+    kind: z.literal("vault.setPin"),
+    pinKey: canonicalKek,
+    kdf: kdfParameters,
+  }),
+);
+export const VaultRemovePinRequestSchema = request(
+  z.strictObject({ version: z.literal(MESSAGE_VERSION), kind: z.literal("vault.removePin") }),
+);
+
 export const VaultRequestSchema = z.discriminatedUnion("kind", [
   VaultGetStateRequestSchema,
   VaultGetKdfChallengeRequestSchema,
@@ -79,6 +114,10 @@ export const VaultRequestSchema = z.discriminatedUnion("kind", [
   VaultChangePasswordRequestSchema,
   VaultUpdateLockSettingsRequestSchema,
   VaultConfirmRepromptRequestSchema,
+  VaultGetPinChallengeRequestSchema,
+  VaultUnlockWithPinRequestSchema,
+  VaultSetPinRequestSchema,
+  VaultRemovePinRequestSchema,
 ]);
 
 const state = z.enum(["unconfigured", "locked", "unlocked"]);
@@ -89,6 +128,8 @@ export const VaultStateResponseSchema = z.strictObject({
   autoLockMinutes: lockMinutes,
   lockOnScreenLock: z.boolean(),
   lockWhenClosed: z.optional(z.boolean()),
+  /** A PIN is set, so the lock screen may offer it. */
+  pinAvailable: z.optional(z.boolean()),
   retryAfterMs: z.int().check(z.nonnegative()),
   streamId: z.string().check(z.regex(/^[0-9a-f]{32}$/)),
   sequence: z.int().check(z.positive()),
@@ -119,9 +160,17 @@ export const VaultOkResponseSchema = z.strictObject({
   state,
   committed: z.optional(z.boolean()),
 });
+export const VaultPinChallengeResponseSchema = z.strictObject({
+  version: z.literal(MESSAGE_VERSION),
+  kind: z.literal("vault.pinChallenge"),
+  challengeId,
+  kdf: kdfParameters,
+  expiresAt: z.number().check(z.nonnegative()),
+});
 export const VaultResponseSchema = z.discriminatedUnion("kind", [
   VaultStateResponseSchema,
   VaultKdfChallengeResponseSchema,
+  VaultPinChallengeResponseSchema,
   VaultOkResponseSchema,
 ]);
 
@@ -148,4 +197,8 @@ export const vaultSenderPolicy = {
   "vault.changePassword": vaultDocumentOnly,
   "vault.updateLockSettings": privileged,
   "vault.confirmReprompt": documentBound,
+  "vault.getPinChallenge": documentBound,
+  "vault.unlockWithPin": documentBound,
+  "vault.setPin": vaultDocumentOnly,
+  "vault.removePin": vaultDocumentOnly,
 } satisfies Record<VaultCommandKind, CommandSenderPolicy>;

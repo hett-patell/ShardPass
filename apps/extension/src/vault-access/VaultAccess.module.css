@@ -175,3 +175,11 @@
   color: var(--text-secondary);
   font-size: var(--text-xs);
 }
+
+.pinRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3, 0.75rem);
+  flex-wrap: wrap;
+}

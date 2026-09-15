@@ -169,6 +169,7 @@ export {
   VaultGetKdfChallengeRequestSchema,
   VaultGetStateRequestSchema,
   VaultKdfChallengeResponseSchema,
+  VaultPinChallengeResponseSchema,
   VaultLockRequestSchema,
   VaultOkResponseSchema,
   VaultRequestSchema,
