@@ -27,7 +27,14 @@ function assertManifestPolicy(candidate: Record<string, unknown>): void {
   expect(candidate.minimum_chrome_version).toBe("111");
   // unlimitedStorage: every commit writes a full generation; without it a real vault hits the
   // 10 MB storage.local quota and every write fails while reads keep working.
-  expect(candidate.permissions).toEqual(["storage", "unlimitedStorage", "alarms", "idle", "activeTab"]);
+  expect(candidate.permissions).toEqual([
+    "storage",
+    "unlimitedStorage",
+    "alarms",
+    "idle",
+    "activeTab",
+    "contextMenus",
+  ]);
   expect(candidate.permissions).not.toContain("downloads");
   expect(candidate.permissions).not.toContain("clipboardRead");
   expect(candidate.permissions).not.toContain("clipboardWrite");
@@ -43,7 +50,11 @@ function assertManifestPolicy(candidate: Record<string, unknown>): void {
   });
   expect(candidate.options_page).toBe("vault/index.html");
   // Two commands: opening the popup, and locking the vault. Nothing else runs from a keystroke.
-  expect(Object.keys(candidate.commands as object)).toEqual(["_execute_action", "lock-vault"]);
+  expect(Object.keys(candidate.commands as object)).toEqual([
+    "_execute_action",
+    "lock-vault",
+    "fill-login",
+  ]);
   expect(candidate.commands).toMatchObject({ "lock-vault": { description: "Lock ShardPass" } });
   expect(Object.keys(candidate.action as object).sort()).toEqual([
     "default_popup",

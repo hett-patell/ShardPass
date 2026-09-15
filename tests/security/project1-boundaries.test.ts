@@ -289,10 +289,17 @@ describe("Project 1 minimized responses and execution boundaries", () => {
       host_permissions: string[];
       content_security_policy: { extension_pages: string };
     };
-    expect(productionManifest.permissions).toEqual(["storage", "unlimitedStorage", "alarms", "idle", "activeTab"]);
+    expect(productionManifest.permissions).toEqual([
+      "storage",
+      "unlimitedStorage",
+      "alarms",
+      "idle",
+      "activeTab",
+      "contextMenus",
+    ]);
     expect(productionManifest.host_permissions).toEqual(["https://api.ente.io/*"]);
     expect(productionManifest.content_security_policy.extension_pages).toBe(
-      "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'; connect-src 'self' https://api.ente.io; img-src 'self' data:; media-src 'self'; font-src 'self'; style-src 'self'",
+      "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'; connect-src 'self' https://api.ente.io https://api.pwnedpasswords.com; img-src 'self' data:; media-src 'self'; font-src 'self'; style-src 'self'",
     );
     const protocol = await readFile(
       new URL("../../apps/extension/src/background/ente/protocol.ts", import.meta.url),

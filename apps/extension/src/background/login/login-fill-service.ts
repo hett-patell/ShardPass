@@ -246,6 +246,12 @@ export class LoginFillService {
     }
   }
 
+  /** The logins saved for a page, for the worker's own fill command; no sender involved. */
+  async suggestionsForPage(pageUrl: string): Promise<readonly LoginFillSuggestion[]> {
+    const response = await this.suggestions(pageUrl);
+    return response.kind === "login.fillSuggestionsResult" ? response.suggestions : [];
+  }
+
   private async suggestions(domain: string): Promise<LoginFillResponse> {
     const items = await this.dependencies.repository.listAllItems();
     const suggestions: LoginFillSuggestion[] = [];

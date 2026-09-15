@@ -291,7 +291,7 @@ export function createOtpFillController(
   };
 
   // A code field is often focused the moment its step renders, while it is still fading in
-  // or its wrapper is still inert: not eligible yet, eligible a moment later. Look again.
+  // or sits in a container that is still inert: not eligible yet, eligible a moment later. Look again.
   const RECHECK_DELAYS_MS = [300, 1_200];
   let recheckTimers: number[] = [];
   const clearRechecks = (): void => {

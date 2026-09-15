@@ -17,7 +17,9 @@ export default defineManifest({
   // working, which is how a quota error presents. Password managers universally hold this.
   // activeTab: the popup reads the open tab's URL to suggest logins for it and asks that
   // tab's content script to fill. Granted only while the person is using the popup.
-  permissions: ["storage", "unlimitedStorage", "alarms", "idle", "activeTab"],
+  // contextMenus: a "Fill login with ShardPass" entry on editable fields; the click carries
+  // the tab, and activeTab then covers reading its URL and messaging its content script.
+  permissions: ["storage", "unlimitedStorage", "alarms", "idle", "activeTab", "contextMenus"],
   host_permissions: ["https://api.ente.io/*"],
   // A shortcut to open the popup, as every password manager has; changeable at
   // chrome://extensions/shortcuts.
@@ -28,6 +30,8 @@ export default defineManifest({
     },
     // No default key: a chord that locks everything is for the person to choose.
     "lock-vault": { description: "Lock ShardPass" },
+    // Fills the one login saved for the page; with several, or none, the popup opens instead.
+    "fill-login": { description: "Fill the login for this page" },
   },
   action: {
     default_popup: "popup/index.html",

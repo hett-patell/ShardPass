@@ -34,7 +34,7 @@ const safeManifest = JSON.stringify({
   version: "2.0.0.12",
   minimum_chrome_version: "111",
   description: "Local-first password manager foundation.",
-  permissions: ["storage", "unlimitedStorage", "alarms", "idle", "activeTab"],
+  permissions: ["storage", "unlimitedStorage", "alarms", "idle", "activeTab", "contextMenus"],
   host_permissions: ["https://api.ente.io/*"],
   action: { default_popup: "popup/index.html", default_title: "ShardPass" },
   options_page: "vault/index.html",

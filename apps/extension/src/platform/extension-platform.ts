@@ -82,6 +82,9 @@ export interface ExtensionPlatform extends RuntimeExtensionPlatform {
 }
 
 export interface BackgroundExtensionPlatform extends RuntimeExtensionPlatform {
+  /** The current window's active tab and a message to its content script, for the fill command. */
+  activeTab?(): Promise<Readonly<{ id: number; url: string }> | null>;
+  sendToTab?(tabId: number, payload: unknown): Promise<unknown>;
   readonly localStorage: StoragePort;
   readonly sessionStorage: StoragePort;
   initializeTrustedStorage(): Promise<void>;
@@ -91,6 +94,15 @@ export interface BackgroundExtensionPlatform extends RuntimeExtensionPlatform {
   onAutoLock(handler: () => void): () => void;
   /** Keyboard commands declared in the manifest, by name ("lock-vault"). */
   onCommand?(handler: (name: string) => void): () => void;
+  /** Replaces the extension's context-menu entries with these. */
+  installContextMenu?(
+    items: readonly Readonly<{ id: string; title: string; contexts: readonly string[] }>[],
+  ): Promise<void>;
+  onContextMenuClicked?(
+    handler: (menuId: string, tab: Readonly<{ id: number; url: string }> | null) => void,
+  ): () => void;
+  /** Opens the action popup on the current window, where the browser allows it. */
+  openPopup?(): Promise<void>;
   scheduleEnteSync?(minutes: 15 | null): Promise<void>;
   enteSyncPending?(): Promise<boolean>;
   onEnteSyncAlarm?(handler: () => void): () => void;

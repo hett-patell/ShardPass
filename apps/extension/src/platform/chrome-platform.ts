@@ -299,6 +299,52 @@ export function createChromePlatform(): BackgroundExtensionPlatform &
       return () => commands.onCommand?.removeListener(listener);
     },
 
+    installContextMenu(items) {
+      type Menus = {
+        removeAll(callback: () => void): void;
+        create(properties: { id: string; title: string; contexts: string[] }): void;
+      };
+      const menus = (chrome as { contextMenus?: Menus }).contextMenus;
+      if (menus === undefined) return Promise.resolve();
+      return new Promise((resolve) => {
+        menus.removeAll(() => {
+          for (const item of items)
+            menus.create({ id: item.id, title: item.title, contexts: [...item.contexts] });
+          void chrome.runtime.lastError;
+          resolve();
+        });
+      });
+    },
+
+    onContextMenuClicked(handler) {
+      type ClickInfo = { menuItemId: string | number };
+      type ClickTab = { id?: number; url?: string } | undefined;
+      type ClickEvent = {
+        addListener(callback: (info: ClickInfo, tab: ClickTab) => void): void;
+        removeListener(callback: (info: ClickInfo, tab: ClickTab) => void): void;
+      };
+      const menus = (chrome as { contextMenus?: { onClicked?: ClickEvent } }).contextMenus;
+      if (menus?.onClicked === undefined) return () => undefined;
+      const listener = (info: ClickInfo, tab: ClickTab) =>
+        handler(
+          String(info.menuItemId),
+          tab?.id === undefined || typeof tab.url !== "string"
+            ? null
+            : { id: tab.id, url: tab.url },
+        );
+      menus.onClicked.addListener(listener);
+      return () => menus.onClicked?.removeListener(listener);
+    },
+
+    async openPopup() {
+      const action = (chrome as { action?: { openPopup?: () => Promise<void> } }).action;
+      try {
+        await action?.openPopup?.();
+      } catch {
+        // Not allowed outside a user gesture, or already open: nothing more to do.
+      }
+    },
+
     onAutoLock(handler) {
       const listener = (alarm: chrome.alarms.Alarm) => {
         if (alarm.name === AUTO_LOCK_ALARM) handler();

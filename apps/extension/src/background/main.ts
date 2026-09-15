@@ -31,6 +31,7 @@ import { PasskeyService } from "./passkey/passkey-service";
 import { ItemService } from "./item/item-service";
 import { BreachCheckService } from "./security/breach-check-service";
 import { RepromptGrants } from "./vault/reprompt-grants";
+import { createFillCommand } from "./login/fill-command";
 import { LoginFillService } from "./login/login-fill-service";
 import { createInternalHotpLifecycle } from "./otp/hotp-lifecycle";
 import { OtpImportService } from "./otp/import-service";
@@ -328,9 +329,30 @@ export function installBackground(
   };
 
   const disposeAlarm = platform.onAutoLock(() => void lockAndPublish());
-  // The "Lock ShardPass" keyboard command: lock everything now, from anywhere.
+  const fillCommand = createFillCommand({
+    activeTab: () => platform.activeTab?.() ?? Promise.resolve(null),
+    suggestionsFor: (pageUrl) => loginFill.suggestionsForPage(pageUrl),
+    fillInTab: (tabId, itemId, expectedRevision) =>
+      platform.sendToTab === undefined
+        ? Promise.resolve(undefined)
+        : platform.sendToTab(tabId, {
+            version: 1,
+            kind: "login.fillFromPopup",
+            itemId,
+            expectedRevision,
+          }),
+    openPopup: () => platform.openPopup?.() ?? Promise.resolve(),
+  });
+  // The keyboard commands: lock everything now, or fill the page's one login, from anywhere.
   const disposeCommands = platform.onCommand?.((name) => {
     if (name === "lock-vault") void lockAndPublish();
+    if (name === "fill-login") void fillCommand.run(null);
+  });
+  void platform.installContextMenu?.([
+    { id: "shardpass-fill-login", title: "Fill login with ShardPass", contexts: ["editable"] },
+  ]);
+  const disposeContextMenu = platform.onContextMenuClicked?.((menuId, tab) => {
+    if (menuId === "shardpass-fill-login") void fillCommand.run(tab);
   });
   const disposeEnteAlarm =
     platform.onEnteSyncAlarm?.(() => {
@@ -496,6 +518,7 @@ export function installBackground(
     disposeMessage();
     disposeAlarm();
     disposeCommands?.();
+    disposeContextMenu?.();
     disposeEnteAlarm();
     void enteScheduler?.dispose();
     enteService.dispose();
