@@ -3,3 +3,4 @@ export type { DetectLoginFieldsOptions, LoginFieldSet } from "./detect-login-fie
 export { matchDomain, matchLoginUrl, matchLoginUrls, registrableDomain } from "./domain-match";
 export type { UrlMatchMode } from "./domain-match";
 export { fillLoginFields } from "./fill-login-fields";
+export { equivalentDomainsOf } from "./equivalent-domains";

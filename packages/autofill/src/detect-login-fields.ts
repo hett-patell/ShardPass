@@ -52,12 +52,42 @@ function isPasswordField(
 // report as hidden. Fall back to computed style (which jsdom *does* resolve
 // from inline styles / stylesheets) so this stays testable under jsdom while
 // still filtering out honeypot/decoy fields in a real browser.
+/** Clip shapes that leave nothing of the element visible. */
+const HIDING_CLIPS = new Set([
+  "inset(50%)",
+  "inset(100%)",
+  "circle(0)",
+  "circle(0px)",
+  "circle(0%)",
+  "polygon(0 0,0 0,0 0)",
+  "polygon(0px 0px,0px 0px,0px 0px)",
+]);
+
+/**
+ * A field a person could see. Besides display/visibility this refuses the honeypot
+ * tricks: opacity 0, a clip-path that hides everything, and a box parked far off-screen.
+ * Sizes are judged only when the engine reports them (jsdom reports zeros for everything).
+ */
 function isVisible(input: HTMLInputElement): boolean {
   if (input.type === "hidden") return false;
   const view = input.ownerDocument.defaultView;
   if (!view) return true;
   const style = view.getComputedStyle(input);
-  return style.display !== "none" && style.visibility !== "hidden";
+  if (style.display === "none" || style.visibility === "hidden" || style.visibility === "collapse")
+    return false;
+  const opacity = Number.parseFloat(style.opacity);
+  if (Number.isFinite(opacity) && opacity <= 0) return false;
+  const clip = (style.clipPath ?? "").replace(/\s+/gu, "").toLowerCase();
+  if (clip !== "" && HIDING_CLIPS.has(clip)) return false;
+  const rect = input.getBoundingClientRect();
+  if (rect.width === 0 && rect.height === 0 && rect.left === 0 && rect.top === 0) return true;
+  if (rect.width < 10 || rect.height < 10) return false;
+  const doc = input.ownerDocument.documentElement;
+  const pageRight = Math.max(doc.scrollWidth, view.innerWidth);
+  const pageBottom = Math.max(doc.scrollHeight, view.innerHeight);
+  if (rect.right < 0 || rect.bottom < 0) return false;
+  if (rect.left > pageRight + view.scrollX || rect.top > pageBottom + view.scrollY) return false;
+  return true;
 }
 
 /**

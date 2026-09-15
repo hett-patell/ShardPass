@@ -1,3 +1,5 @@
+import { equivalentDomainsOf } from "./equivalent-domains";
+
 function extractDomain(urlOrDomain: string): string {
   const trimmed = urlOrDomain.trim();
   // The URL parser gives the host in its DNS form (punycode for an international name),
@@ -87,7 +89,12 @@ export function registrableDomain(host: string): string {
 export function matchDomain(pageDomain: string, urls: readonly string[]): boolean {
   const page = registrableDomain(extractDomain(pageDomain));
   if (page === "") return false;
-  return urls.some((url) => registrableDomain(extractDomain(url)) === page);
+  // One sign-in serves a company's sites: a login saved for google.com is offered on youtube.com.
+  const equivalents = equivalentDomainsOf(page);
+  return urls.some((url) => {
+    const saved = registrableDomain(extractDomain(url));
+    return saved === page || (equivalents !== undefined && equivalents.has(saved));
+  });
 }
 
 export type UrlMatchMode = "domain" | "host" | "startsWith" | "exact" | "never";

@@ -57,4 +57,13 @@ describe("registrableDomain", () => {
     expect(registrableDomain("localhost")).toBe("localhost");
     expect(registrableDomain("10.0.0.1")).toBe("10.0.0.1");
   });
+
+  it("offers a login across the sites that share its sign-in, and nowhere else", () => {
+    expect(matchDomain("https://www.youtube.com/watch", ["https://accounts.google.com"])).toBe(
+      true,
+    );
+    expect(matchDomain("https://icloud.com", ["https://appleid.apple.com"])).toBe(true);
+    expect(matchDomain("https://youtube.com.evil.test", ["https://google.com"])).toBe(false);
+    expect(matchDomain("https://github.com", ["https://google.com"])).toBe(false);
+  });
 });

@@ -29,7 +29,9 @@ function fillLikeTyping(el: HTMLInputElement, value: string): void {
     }),
   );
   setNativeValue(el, value);
-  el.dispatchEvent(new InputEvent("input", { inputType: "insertText", data: value, bubbles: true }));
+  el.dispatchEvent(
+    new InputEvent("input", { inputType: "insertText", data: value, bubbles: true }),
+  );
   el.dispatchEvent(new KeyboardEvent("keyup", { bubbles: true, cancelable: true }));
   el.dispatchEvent(new Event("change", { bubbles: true }));
   if (!wasFocused) el.dispatchEvent(new FocusEvent("blur"));
