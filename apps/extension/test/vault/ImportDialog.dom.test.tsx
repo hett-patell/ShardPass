@@ -87,7 +87,10 @@ function chromeFile(): File {
   return new File([CHROME_CSV], "passwords.csv", { type: "text/csv" });
 }
 
-function bitwardenFile(folders: readonly { id: string; name: string }[], items: readonly { name: string; folderId: string | null }[]): File {
+function bitwardenFile(
+  folders: readonly { id: string; name: string }[],
+  items: readonly { name: string; folderId: string | null }[],
+): File {
   const json = {
     encrypted: false,
     folders,
@@ -149,7 +152,9 @@ function storedZip(entries: readonly { name: string; data: string }[]): Uint8Arr
   return out;
 }
 
-function onePasswordFile(vaults: readonly { name: string; items: readonly { title: string; sso?: string }[] }[]): File {
+function onePasswordFile(
+  vaults: readonly { name: string; items: readonly { title: string; sso?: string }[] }[],
+): File {
   const data = {
     accounts: [
       {
@@ -165,13 +170,27 @@ function onePasswordFile(vaults: readonly { name: string; items: readonly { titl
             categoryUuid: "001",
             details: {
               loginFields: [
-                { value: `user${index}@example.com`, name: "email", fieldType: "E", designation: "username" },
-                ...(entry.sso === undefined ? [{ value: "pw", name: "password", fieldType: "P", designation: "password" }] : []),
+                {
+                  value: `user${index}@example.com`,
+                  name: "email",
+                  fieldType: "E",
+                  designation: "username",
+                },
+                ...(entry.sso === undefined
+                  ? [{ value: "pw", name: "password", fieldType: "P", designation: "password" }]
+                  : []),
               ],
               notesPlain: "",
-              sections: entry.sso === undefined ? [] : [{ title: "", fields: [{ title: "", id: "sso", value: { sso: entry.sso } }] }],
+              sections:
+                entry.sso === undefined
+                  ? []
+                  : [{ title: "", fields: [{ title: "", id: "sso", value: { sso: entry.sso } }] }],
             },
-            overview: { title: entry.title, urls: [{ label: "website", url: "https://example.com" }], tags: [] },
+            overview: {
+              title: entry.title,
+              urls: [{ label: "website", url: "https://example.com" }],
+              tags: [],
+            },
           })),
         })),
       },
@@ -205,9 +224,16 @@ describe("ImportDialog", () => {
     for (const label of [
       "Chrome CSV",
       "Firefox CSV",
+      "Safari CSV",
       "Bitwarden JSON",
       "1Password CSV",
       "1Password 1PUX",
+      "LastPass CSV",
+      "Dashlane export",
+      "NordPass CSV",
+      "Proton Pass export",
+      "KeePass database",
+      "Any CSV (map columns)",
       "QR code / otpauth://",
       "ShardPass backup",
     ]) {
@@ -227,11 +253,35 @@ describe("ImportDialog", () => {
     expect(screen.getByText(/1Password 8 writes only logins to CSV/u)).toBeVisible();
   });
 
+  it("maps the columns of any CSV before previewing it", async () => {
+    const { platform } = createPlatform();
+    render(<ImportDialog platform={platform} active onImported={() => undefined} />);
+    fireEvent.click(screen.getByRole("button", { name: "Any CSV (map columns)" }));
+    const csv = "site,login,pw,extra\nhttps://a.example,alice,pw-1,keep\n";
+    fireEvent.change(screen.getByLabelText("Choose a local Any CSV (map columns) file"), {
+      target: { files: [new File([csv], "export.csv", { type: "text/csv" })] },
+    });
+    const password = await screen.findByLabelText("Password");
+    expect(password).toHaveValue("pw");
+    expect(screen.getByLabelText("Username")).toHaveValue("login");
+    expect(screen.getByLabelText("Name")).toHaveValue("site");
+    expect(screen.getByLabelText("Notes")).toHaveValue("extra");
+    // The guess put "site" under Name; the person moves it to the URL and clears Name.
+    fireEvent.change(screen.getByLabelText("Site or URL"), { target: { value: "site" } });
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "" } });
+    fireEvent.click(screen.getByRole("button", { name: "Preview" }));
+    expect(await screen.findByText("a.example")).toBeVisible();
+    expect(screen.getByText("alice")).toBeVisible();
+    expect(screen.getByRole("checkbox", { name: "Import a.example" })).toBeChecked();
+  });
+
   it("says an empty file is empty rather than too large", async () => {
     const { platform } = createPlatform();
     render(<ImportDialog platform={platform} active onImported={() => undefined} />);
     const fileInput = screen.getByLabelText("Choose a local Chrome CSV file");
-    fireEvent.change(fileInput, { target: { files: [new File([], "empty.csv", { type: "text/csv" })] } });
+    fireEvent.change(fileInput, {
+      target: { files: [new File([], "empty.csv", { type: "text/csv" })] },
+    });
     expect(await screen.findByText("The file is empty.")).toBeVisible();
   });
 
@@ -303,7 +353,11 @@ describe("ImportDialog", () => {
       return {
         version: 1,
         kind: "item.createManyResult",
-        results: (request.items ?? []).map((entry, index) => ({ index, status: "created", itemId: entry.id })),
+        results: (request.items ?? []).map((entry, index) => ({
+          index,
+          status: "created",
+          itemId: entry.id,
+        })),
       };
     });
     render(<ImportDialog platform={platform} active onImported={() => undefined} />);
@@ -329,10 +383,17 @@ describe("ImportDialog", () => {
       return Promise.resolve({
         version: 1,
         kind: "item.createManyResult",
-        results: request.items.map((entry, index) => ({ index, status: "created", itemId: entry.id })),
+        results: request.items.map((entry, index) => ({
+          index,
+          status: "created",
+          itemId: entry.id,
+        })),
       });
     });
-    const folders = Array.from({ length: 66 }, (_, index) => ({ id: `f${index}`, name: `Folder ${index}` }));
+    const folders = Array.from({ length: 66 }, (_, index) => ({
+      id: `f${index}`,
+      name: `Folder ${index}`,
+    }));
     folders.push({ id: "deep", name: "Work/Clients/Acme/2024" });
     const items = folders.map((folder, index) => ({ name: `Item ${index}`, folderId: folder.id }));
     render(<ImportDialog platform={platform} active onImported={() => undefined} />);
@@ -343,16 +404,24 @@ describe("ImportDialog", () => {
 
     await waitFor(() => expect(screen.getByText("Item 0")).toBeVisible());
     const summary = await screen.findByText(/64 folders will be created/u);
-    expect(summary).toHaveTextContent(/1 nested deeper than 3 levels was folded into its parent's name/u);
-    expect(summary).toHaveTextContent(/5 cannot be created: a vault holds at most 64 folders, so 3 items will be imported without a folder/u);
+    expect(summary).toHaveTextContent(
+      /1 nested deeper than 3 levels was folded into its parent's name/u,
+    );
+    expect(summary).toHaveTextContent(
+      /5 cannot be created: a vault holds at most 64 folders, so 3 items will be imported without a folder/u,
+    );
 
     fireEvent.click(screen.getByRole("button", { name: "Import selected" }));
     await waitFor(() => expect(screen.getByText(/67 items imported/u)).toBeVisible());
     expect(background.created).toHaveLength(64);
     expect(background.created).not.toContain("Acme / 2024");
     expect(screen.getByText(/3 without a folder/u)).toBeVisible();
-    expect(screen.getAllByText("Imported without a folder: the vault's folder limit was reached.")).toHaveLength(3);
-    const sent = createRequests.flatMap((request) => (request as { items: { folderId?: string }[] }).items);
+    expect(
+      screen.getAllByText("Imported without a folder: the vault's folder limit was reached."),
+    ).toHaveLength(3);
+    const sent = createRequests.flatMap(
+      (request) => (request as { items: { folderId?: string }[] }).items,
+    );
     expect(sent.filter((item) => item.folderId === undefined)).toHaveLength(3);
   });
 
@@ -365,7 +434,11 @@ describe("ImportDialog", () => {
       return Promise.resolve({
         version: 1,
         kind: "item.createManyResult",
-        results: request.items.map((entry, index) => ({ index, status: "created", itemId: entry.id })),
+        results: request.items.map((entry, index) => ({
+          index,
+          status: "created",
+          itemId: entry.id,
+        })),
       });
     });
     render(<ImportDialog platform={platform} active onImported={() => undefined} />);
@@ -390,9 +463,13 @@ describe("ImportDialog", () => {
     await waitFor(() => expect(screen.getByText(/2 items imported/u)).toBeVisible());
     expect(background.created).toEqual(["Personal", "Work"]);
     const sent = createRequests.flatMap(
-      (request) => (request as { items: { name: string; signInWith?: string; password?: string }[] }).items,
+      (request) =>
+        (request as { items: { name: string; signInWith?: string; password?: string }[] }).items,
     );
-    expect(sent.find((entry) => entry.name === "Google-backed")).toMatchObject({ signInWith: "google", password: "" });
+    expect(sent.find((entry) => entry.name === "Google-backed")).toMatchObject({
+      signInWith: "google",
+      password: "",
+    });
     expect(sent.find((entry) => entry.name === "Office")?.signInWith).toBeUndefined();
   });
 
@@ -427,8 +504,12 @@ describe("ImportDialog", () => {
     const [file, password, keyFile] = vi.mocked(runKeePassImport).mock.calls[0]!;
     expect(new Uint8Array(file)).toEqual(new Uint8Array([1, 2, 3]));
     expect(password).toBe("");
-    expect(keyFile === undefined ? undefined : new Uint8Array(keyFile)).toEqual(new Uint8Array([9, 9]));
-    expect(await screen.findByText("No importable entries were found in this database.")).toBeVisible();
+    expect(keyFile === undefined ? undefined : new Uint8Array(keyFile)).toEqual(
+      new Uint8Array([9, 9]),
+    );
+    expect(
+      await screen.findByText("No importable entries were found in this database."),
+    ).toBeVisible();
   });
 
   it("switches to the existing OTP and ShardPass backup import surfaces", () => {
@@ -444,7 +525,11 @@ describe("ImportDialog", () => {
 });
 
 describe("planFolders", () => {
-  const folder = (id: string, name: string, parentId?: string) => ({ id, name, ...(parentId === undefined ? {} : { parentId }) });
+  const folder = (id: string, name: string, parentId?: string) => ({
+    id,
+    name,
+    ...(parentId === undefined ? {} : { parentId }),
+  });
 
   it("reuses same-named folders under the same parent and creates the rest, parents first", () => {
     const existingWork: Folder = { id: crypto.randomUUID(), name: "work" };
@@ -463,7 +548,13 @@ describe("planFolders", () => {
 
   it("folds a path deeper than the vault allows into the deepest allowed level", () => {
     const plan = planFolders(
-      [folder("a", "A"), folder("b", "B", "a"), folder("c", "C", "b"), folder("d", "D", "c"), folder("e", "E", "d")],
+      [
+        folder("a", "A"),
+        folder("b", "B", "a"),
+        folder("c", "C", "b"),
+        folder("d", "D", "c"),
+        folder("e", "E", "d"),
+      ],
       ["e", "c"],
       [],
     );
@@ -473,7 +564,10 @@ describe("planFolders", () => {
   });
 
   it("stops creating once the vault would hold more than its limit, blocking children too", () => {
-    const existing = Array.from({ length: 63 }, (_, index): Folder => ({ id: crypto.randomUUID(), name: `Old ${index}` }));
+    const existing = Array.from({ length: 63 }, (_, index): Folder => ({
+      id: crypto.randomUUID(),
+      name: `Old ${index}`,
+    }));
     const plan = planFolders(
       [folder("a", "A"), folder("b", "B", "a"), folder("c", "C")],
       ["b", "c"],

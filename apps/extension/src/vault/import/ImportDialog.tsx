@@ -1,13 +1,22 @@
 import { MAX_FOLDERS, MAX_FOLDER_DEPTH, type Folder, type VaultItem } from "@shardpass/domain";
 import {
+  GENERIC_CSV_FIELDS,
+  type GenericCsvMapping,
+  guessCsvMapping,
   type ImportFolder,
   importBitwardenJson,
   importChromeCsv,
+  importDashlane,
   importFirefoxCsv,
+  importGenericCsv,
+  importLastPassCsv,
+  importNordPassCsv,
   importOnePassword1pux,
   importOnePasswordCsv,
+  importProtonPass,
+  importSafariCsv,
   type ImportResult,
-  OnePassword1puxFormatError,
+  readCsvHeaders,
 } from "@shardpass/importers";
 import { parseFolderResponseForRequest, type FolderRequest } from "@shardpass/messaging";
 import { Button, PasswordInput } from "@shardpass/ui";
@@ -37,7 +46,18 @@ const MAX_VISIBLE_WARNINGS = 20;
 const IMPORT_BATCH_SIZE = 100;
 
 type ThirdPartySourceId =
-  "chrome" | "firefox" | "bitwarden" | "onepassword" | "onepassword-1pux" | "keepass";
+  | "chrome"
+  | "firefox"
+  | "safari"
+  | "bitwarden"
+  | "onepassword"
+  | "onepassword-1pux"
+  | "lastpass"
+  | "dashlane"
+  | "nordpass"
+  | "protonpass"
+  | "keepass"
+  | "generic";
 type SourceId = "otp" | "backup" | ThirdPartySourceId;
 
 interface ThirdPartySource {
@@ -55,6 +75,8 @@ interface ThirdPartySource {
   readonly parse?: (text: string) => ImportResult;
   readonly parseBytes?: (bytes: ArrayBuffer) => Promise<ImportResult>;
   readonly encrypted?: true;
+  /** The columns are unknown until the file is read; the person maps them before the preview. */
+  readonly mapped?: true;
 }
 
 const THIRD_PARTY_SOURCES: readonly ThirdPartySource[] = Object.freeze([
@@ -73,6 +95,14 @@ const THIRD_PARTY_SOURCES: readonly ThirdPartySource[] = Object.freeze([
     instructions:
       'In Firefox, open about:logins, open the "⋯" menu, choose "Export Logins…", then select the downloaded file below.',
     parse: importFirefoxCsv,
+  },
+  {
+    id: "safari",
+    label: "Safari CSV",
+    accept: ".csv,text/csv",
+    instructions:
+      "In Safari, open Settings → Passwords (or the Passwords app), choose Export Passwords from the ⋯ menu, then select the downloaded file below.",
+    parse: importSafariCsv,
   },
   {
     id: "bitwarden",
@@ -104,6 +134,43 @@ const THIRD_PARTY_SOURCES: readonly ThirdPartySource[] = Object.freeze([
     parseBytes: importOnePassword1pux,
   },
   {
+    id: "lastpass",
+    label: "LastPass CSV",
+    accept: ".csv,text/csv",
+    instructions:
+      "In the LastPass extension, open Account Options → Advanced → Export, or in the web vault Advanced Options → Export, and save the CSV. " +
+      "Logins, secure notes, credit cards and addresses are all in that file; other typed notes keep their fields as note text.",
+    parse: importLastPassCsv,
+  },
+  {
+    id: "dashlane",
+    label: "Dashlane export",
+    maxBytes: MAX_BINARY_IMPORT_BYTES,
+    accept: ".zip,.csv,application/zip,text/csv",
+    instructions:
+      "In Dashlane, open My account → Settings → Export data → Export to CSV, then select the downloaded ZIP below (or any one of the CSVs inside it). " +
+      "Logins, secure notes, payment cards, personal details and IDs are all imported.",
+    parseBytes: importDashlane,
+  },
+  {
+    id: "nordpass",
+    label: "NordPass CSV",
+    accept: ".csv,text/csv",
+    instructions:
+      "In NordPass, open Settings → Export items and save the CSV, then select it below. Passwords, notes, cards, identities and folders are imported.",
+    parse: importNordPassCsv,
+  },
+  {
+    id: "protonpass",
+    label: "Proton Pass export",
+    maxBytes: MAX_BINARY_IMPORT_BYTES,
+    accept: ".zip,.json,.csv,application/zip,application/json,text/csv",
+    instructions:
+      "In Proton Pass, open Settings → Export, choose JSON without encryption (or CSV), then select the downloaded file below. " +
+      "The JSON export keeps cards, identities, custom fields and one-time codes; the CSV keeps logins and notes. Each vault becomes a folder.",
+    parseBytes: importProtonPass,
+  },
+  {
     id: "keepass",
     label: "KeePass database",
     maxBytes: MAX_BINARY_IMPORT_BYTES,
@@ -113,15 +180,29 @@ const THIRD_PARTY_SOURCES: readonly ThirdPartySource[] = Object.freeze([
       "its key file. Everything is decrypted on this device and nothing leaves your machine.",
     encrypted: true,
   },
+  {
+    id: "generic",
+    label: "Any CSV (map columns)",
+    accept: ".csv,.txt,text/csv,text/plain",
+    instructions:
+      "For a manager that is not listed, or a spreadsheet of your own: choose the CSV, then say which column holds the name, site, username, password, notes, one-time code and folder. Only the columns you map are read.",
+    mapped: true,
+  },
 ]);
 
 const SOURCE_OPTIONS: readonly Readonly<{ id: SourceId; label: string }>[] = Object.freeze([
   { id: "chrome", label: "Chrome CSV" },
   { id: "firefox", label: "Firefox CSV" },
+  { id: "safari", label: "Safari CSV" },
   { id: "bitwarden", label: "Bitwarden JSON" },
   { id: "onepassword", label: "1Password CSV" },
   { id: "onepassword-1pux", label: "1Password 1PUX" },
+  { id: "lastpass", label: "LastPass CSV" },
+  { id: "dashlane", label: "Dashlane export" },
+  { id: "nordpass", label: "NordPass CSV" },
+  { id: "protonpass", label: "Proton Pass export" },
   { id: "keepass", label: "KeePass database" },
+  { id: "generic", label: "Any CSV (map columns)" },
   { id: "otp", label: "QR code / otpauth://" },
   { id: "backup", label: "ShardPass backup" },
 ]);
@@ -135,8 +216,11 @@ type ImportOutcome = Readonly<{
   reason?: string;
 }>;
 type ThirdPartyState = Readonly<{
-  phase: "pick" | "reading" | "password" | "unlocking" | "preview" | "importing" | "done";
+  phase: "pick" | "reading" | "map" | "password" | "unlocking" | "preview" | "importing" | "done";
   rows: readonly Row[];
+  /** The columns of a CSV awaiting a mapping, in file order. */
+  headers: readonly string[];
+  mapping: GenericCsvMapping;
   /** Provisional folders from the source; created for real, parents first, on confirm. */
   folders: readonly ImportFolder[];
   /** Folders already in the vault, fetched once per preview; null until known. */
@@ -157,6 +241,8 @@ type ThirdPartyState = Readonly<{
 const INITIAL_THIRD_PARTY_STATE: ThirdPartyState = Object.freeze({
   phase: "pick",
   rows: [],
+  headers: [],
+  mapping: {},
   folders: [],
   existingFolders: null,
   duplicateRowIds: new Set<string>(),
@@ -287,11 +373,14 @@ export function ImportDialog({ platform, active, onImported, onDone }: ImportDia
   const [keyFile, setKeyFile] = useState<File | null>(null);
   // Held only between choosing an encrypted file and unlocking it.
   const pendingFileRef = useRef<File | null>(null);
+  // Held only between reading a CSV's columns and mapping them.
+  const pendingTextRef = useRef<string | null>(null);
 
   const resetThirdParty = useCallback(() => {
     ownerRef.current += 1;
     if (fileRef.current !== null) fileRef.current.value = "";
     pendingFileRef.current = null;
+    pendingTextRef.current = null;
     setPassword("");
     setKeyFile(null);
     setState(INITIAL_THIRD_PARTY_STATE);
@@ -356,6 +445,30 @@ export function ImportDialog({ platform, active, onImported, onDone }: ImportDia
     }
     const owner = ++ownerRef.current;
     setState({ ...INITIAL_THIRD_PARTY_STATE, phase: "reading" });
+    if (parser.mapped === true) {
+      void file.text().then(
+        (text) => {
+          if (owner !== ownerRef.current) return;
+          const headers = readCsvHeaders(text);
+          if (headers.length === 0) {
+            setState({ ...INITIAL_THIRD_PARTY_STATE, error: "The file has no header row." });
+            return;
+          }
+          pendingTextRef.current = text;
+          setState({
+            ...INITIAL_THIRD_PARTY_STATE,
+            phase: "map",
+            headers,
+            mapping: guessCsvMapping(headers),
+          });
+        },
+        () => {
+          if (owner !== ownerRef.current) return;
+          setState({ ...INITIAL_THIRD_PARTY_STATE, error: "The file could not be read." });
+        },
+      );
+      return;
+    }
     void parseFile(parser, file).then(
       (result) => {
         if (owner !== ownerRef.current) return;
@@ -367,12 +480,21 @@ export function ImportDialog({ platform, active, onImported, onDone }: ImportDia
         // is an unreadable file.
         setState({
           ...INITIAL_THIRD_PARTY_STATE,
-          error:
-            error instanceof OnePassword1puxFormatError
-              ? error.message
-              : "The file could not be read.",
+          error: isFormatError(error) ? error.message : "The file could not be read.",
         });
       },
+    );
+  };
+
+  const previewMapped = () => {
+    const text = pendingTextRef.current;
+    if (text === null) return;
+    pendingTextRef.current = null;
+    setState(
+      previewState(
+        importGenericCsv(text, state.mapping),
+        "No rows could be imported with this mapping.",
+      ),
     );
   };
 
@@ -630,6 +752,59 @@ export function ImportDialog({ platform, active, onImported, onDone }: ImportDia
                 </Button>
               </div>
             </form>
+          ) : state.phase === "map" ? (
+            <form
+              className={styles.unlockForm}
+              onSubmit={(event) => {
+                event.preventDefault();
+                previewMapped();
+              }}
+            >
+              <p className={styles.unlockHint}>
+                Which column holds what? Columns left as "not in this file" are ignored.
+              </p>
+              {GENERIC_CSV_FIELDS.map((field) => (
+                <label key={field} className={styles.unlockLabel} htmlFor={`import-map-${field}`}>
+                  {MAPPING_LABELS[field]}
+                  <select
+                    id={`import-map-${field}`}
+                    className={styles.mappingSelect}
+                    value={state.mapping[field] ?? ""}
+                    onChange={(event) => {
+                      const column = event.currentTarget.value;
+                      setState((current) => {
+                        const { [field]: _dropped, ...rest } = current.mapping;
+                        void _dropped;
+                        return {
+                          ...current,
+                          mapping: column === "" ? rest : { ...rest, [field]: column },
+                        };
+                      });
+                    }}
+                  >
+                    <option value="">not in this file</option>
+                    {state.headers.map((header, index) => (
+                      <option key={`${header}-${index}`} value={header}>
+                        {header === "" ? `(column ${index + 1})` : header}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ))}
+              <div className={styles.unlockActions}>
+                <Button
+                  type="submit"
+                  disabled={
+                    state.mapping.password === undefined && state.mapping.username === undefined
+                  }
+                >
+                  Preview
+                </Button>
+                <Button variant="secondary" type="button" onClick={resetThirdParty}>
+                  Cancel
+                </Button>
+              </div>
+            </form>
           ) : state.phase === "pick" || state.phase === "reading" ? (
             <>
               <input
@@ -805,6 +980,26 @@ export function ImportDialog({ platform, active, onImported, onDone }: ImportDia
         </div>
       ) : null}
     </section>
+  );
+}
+
+const MAPPING_LABELS: Record<(typeof GENERIC_CSV_FIELDS)[number], string> = {
+  name: "Name",
+  url: "Site or URL",
+  username: "Username",
+  password: "Password",
+  notes: "Notes",
+  totp: "One-time code",
+  folder: "Folder",
+};
+
+/** A parser's own verdict on the file (not a ZIP, no data.json…) is worth showing as is. */
+function isFormatError(error: unknown): error is Error {
+  return (
+    error instanceof Error &&
+    ["OnePassword1puxFormatError", "DashlaneFormatError", "ProtonPassFormatError"].includes(
+      error.name,
+    )
   );
 }
 

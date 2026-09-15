@@ -353,3 +353,15 @@
   font-family: inherit;
   font-size: var(--text-sm);
 }
+
+.mappingSelect {
+  display: block;
+  width: 100%;
+  margin-top: var(--space-1, 0.25rem);
+  padding: var(--space-2, 0.5rem) var(--space-3, 0.75rem);
+  font: inherit;
+  color: var(--text, inherit);
+  background: var(--surface, transparent);
+  border: 1px solid var(--border, currentColor);
+  border-radius: var(--radius-sm, 6px);
+}
