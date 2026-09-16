@@ -14,7 +14,7 @@ export interface OtpPickerSuggestion {
 
 export interface OtpPickerProps {
   readonly suggestions: readonly OtpPickerSuggestion[];
-  readonly state: "busy" | "ready" | "empty" | "error" | "failed";
+  readonly state: "busy" | "ready" | "empty" | "error" | "failed" | "stale";
   /** Seconds left on the shown codes, from the controller's clock. */
   readonly now?: number;
   readonly onClose: () => void;
@@ -26,6 +26,7 @@ const STATUS = Object.freeze({
   empty: "No OTP accounts available",
   error: "OTP accounts are unavailable",
   failed: "This field would not take the code. It was copied instead: paste it.",
+  stale: "That code could not be fetched. Click the account again.",
 });
 
 function grouped(code: string): string {

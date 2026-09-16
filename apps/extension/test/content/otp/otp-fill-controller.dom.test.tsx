@@ -318,6 +318,118 @@ describe("OTP fill controller", () => {
     );
   });
 
+  it("asks again with a fresh permission when the first attempt is refused as out of date", async () => {
+    const roots = captureClosedRoots();
+    const input = eligibleField();
+    let revision = 1;
+    let selects = 0;
+    const candidate = platform((request) => {
+      if (request.kind === "otp.fillSuggestions")
+        return {
+          version: 1,
+          kind: "otp.fillSuggestionsResult",
+          capability: `capability_0123456789abcde${revision}`,
+          expiresAt: Date.now() + 300_000,
+          suggestions: [
+            {
+              itemId: "018f47a6-7d11-7c2f-8bd9-a1d37f147a20",
+              expectedRevision: revision,
+              issuer: "Primary",
+              label: "Owner",
+              otpType: "totp",
+              favorite: true,
+              tags: [],
+            },
+          ],
+        };
+      if (request.kind === "otp.fillSelect") {
+        selects += 1;
+        // The item moved on between listing and clicking, exactly as a sync or a touch does.
+        if (selects === 1) {
+          revision = 2;
+          throw Object.assign(new Error("stale"), { code: "OTP_FILL_ITEM_CHANGED" });
+        }
+        return {
+          version: 1,
+          kind: "otp.fillRelease",
+          releaseId: "release_0123456789abcdef",
+          code: "135790",
+          expiresAt: Date.now() + 5_000,
+          codeLength: 6,
+          characterClass: "digits",
+        };
+      }
+      if (request.kind === "otp.fillConfirm")
+        return { version: 1, kind: "otp.fillConfirmed", result: "committed" };
+      return { version: 1, kind: "otp.fillCancelled", cancelled: true };
+    });
+    start(candidate);
+    focusField(input);
+    await flush();
+    await clickAndFlush(
+      within(roots[0] as unknown as HTMLElement).getByRole("button", {
+        name: "Fill one-time code with ShardPass",
+      }),
+    );
+    await clickAndFlush(
+      within(roots.at(-1) as unknown as HTMLElement).getByRole("button", {
+        name: /Use OTP account/u,
+      }),
+    );
+
+    expect(selects).toBe(2);
+    expect(input.value).toBe("135790");
+    expect(document.querySelector("shardpass-picker-host")).toBeNull();
+  });
+
+  it("says why a click did nothing when the code still cannot be fetched", async () => {
+    const roots = captureClosedRoots();
+    const input = eligibleField();
+    const candidate = platform((request) => {
+      if (request.kind === "otp.fillSuggestions")
+        return {
+          version: 1,
+          kind: "otp.fillSuggestionsResult",
+          capability: "capability_0123456789abcdef",
+          expiresAt: Date.now() + 300_000,
+          suggestions: [
+            {
+              itemId: "018f47a6-7d11-7c2f-8bd9-a1d37f147a20",
+              expectedRevision: 1,
+              issuer: "Primary",
+              label: "Owner",
+              otpType: "totp",
+              favorite: true,
+              tags: [],
+            },
+          ],
+        };
+      if (request.kind === "otp.fillSelect")
+        throw Object.assign(new Error("gone"), { code: "OTP_FILL_EXPIRED" });
+      return { version: 1, kind: "otp.fillCancelled", cancelled: true };
+    });
+    start(candidate);
+    focusField(input);
+    await flush();
+    await clickAndFlush(
+      within(roots[0] as unknown as HTMLElement).getByRole("button", {
+        name: "Fill one-time code with ShardPass",
+      }),
+    );
+    await clickAndFlush(
+      within(roots.at(-1) as unknown as HTMLElement).getByRole("button", {
+        name: /Use OTP account/u,
+      }),
+    );
+
+    // The picker stays and explains: it used to close as though nothing had been clicked.
+    expect(document.querySelector("shardpass-picker-host")).not.toBeNull();
+    expect(
+      within(roots.at(-1) as unknown as HTMLElement).getByText(/could not be fetched/u),
+    ).toBeVisible();
+    expect(input.value).toBe("");
+  });
+
   it("cancels one selected release on replacement and never retries, submits, or advances focus", async () => {
     const roots = captureClosedRoots();
     const form = document.createElement("form");

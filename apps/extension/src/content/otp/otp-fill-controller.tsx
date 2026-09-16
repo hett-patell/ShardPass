@@ -43,6 +43,12 @@ function samePage(left: string, right: string): boolean {
   }
 }
 
+/** The background's own error code, when the failure carried one. */
+function errorCode(error: unknown): string | undefined {
+  const code = (error as { code?: unknown } | null)?.code;
+  return typeof code === "string" ? code : undefined;
+}
+
 function originOf(ownerWindow: Window): string | null {
   try {
     const origin = new URL(ownerWindow.location.href).origin;
@@ -169,7 +175,7 @@ export function createOtpFillController(
 
   const pickerContent = (
     candidate: Owner,
-    state: "busy" | "ready" | "empty" | "error" | "failed",
+    state: "busy" | "ready" | "empty" | "error" | "failed" | "stale",
     suggestions: readonly OtpPickerSuggestion[],
   ) => (
     <OtpPicker
@@ -183,7 +189,7 @@ export function createOtpFillController(
 
   const renderPicker = (
     candidate: Owner,
-    state: "busy" | "ready" | "empty" | "error" | "failed",
+    state: "busy" | "ready" | "empty" | "error" | "failed" | "stale",
     suggestions: readonly OtpPickerSuggestion[],
   ): void => {
     if (!owns(candidate)) return;
@@ -238,23 +244,90 @@ export function createOtpFillController(
     }
   };
 
+  /**
+   * Asks for the code, once, and again with a fresh capability if the first attempt was
+   * refused for being out of date. The permission and the item's revision are both pinned at
+   * the moment the list was fetched, and either can move while the person is choosing (the
+   * vault syncing, or simply a slow read): the answer to that is to ask again, not to close
+   * in silence, which is what "clicking the code does nothing" was.
+   */
+  const requestRelease = async (
+    candidate: Owner,
+    suggestion: OtpPickerSuggestion,
+    permission: string,
+  ): Promise<OtpFillResponse | "stale"> => {
+    try {
+      return await options.platform.sendOtpFillMessage({
+        version: 1,
+        kind: "otp.fillSelect",
+        capability: permission,
+        itemId: suggestion.itemId,
+        expectedRevision: suggestion.expectedRevision,
+        fieldHandle: candidate.fieldHandle,
+      });
+    } catch (error) {
+      const code = errorCode(error);
+      if (
+        code !== "OTP_FILL_ITEM_CHANGED" &&
+        code !== "OTP_FILL_EXPIRED" &&
+        code !== "OTP_FILL_INVALID"
+      )
+        throw error;
+      return "stale";
+    }
+  };
+
+  /** A fresh capability and the same account's current revision, for one retry. */
+  const refreshSuggestion = async (
+    candidate: Owner,
+    suggestion: OtpPickerSuggestion,
+  ): Promise<Readonly<{ permission: string; suggestion: OtpPickerSuggestion }> | null> => {
+    const response = await options.platform.sendOtpFillMessage({
+      version: 1,
+      kind: "otp.fillSuggestions",
+      requestId: randomOpaqueId(),
+      fieldHandle: candidate.fieldHandle,
+    });
+    if (response.kind !== "otp.fillSuggestionsResult") return null;
+    capability = response.capability;
+    const fresh = response.suggestions.find((item) => item.itemId === suggestion.itemId);
+    return fresh === undefined ? null : { permission: response.capability, suggestion: fresh };
+  };
+
+  /** Says why a click did nothing, but only into a picker that is still on screen. */
+  const reportStale = (candidate: Owner): void => {
+    if (host?.status === "open" && owns(candidate)) renderPicker(candidate, "stale", []);
+  };
+
   const selectSuggestion = async (
     candidate: Owner,
     suggestion: OtpPickerSuggestion,
   ): Promise<void> => {
     const selectedCapability = capability;
     capability = null;
-    if (!owns(candidate) || selectedCapability === null) return;
+    if (!owns(candidate) || selectedCapability === null) {
+      // The list on screen no longer matches what the background will release: say so rather
+      // than letting the click disappear.
+      reportStale(candidate);
+      return;
+    }
     try {
-      const response = await options.platform.sendOtpFillMessage({
-        version: 1,
-        kind: "otp.fillSelect",
-        capability: selectedCapability,
-        itemId: suggestion.itemId,
-        expectedRevision: suggestion.expectedRevision,
-        fieldHandle: candidate.fieldHandle,
-      });
-      if (response.kind !== "otp.fillRelease") return;
+      let chosen = suggestion;
+      let response = await requestRelease(candidate, chosen, selectedCapability);
+      if (response === "stale") {
+        const refreshed = owns(candidate) ? await refreshSuggestion(candidate, chosen) : null;
+        if (refreshed === null) {
+          reportStale(candidate);
+          return;
+        }
+        chosen = refreshed.suggestion;
+        capability = null;
+        response = await requestRelease(candidate, chosen, refreshed.permission);
+      }
+      if (response === "stale" || response.kind !== "otp.fillRelease") {
+        reportStale(candidate);
+        return;
+      }
       release = response;
       if (!owns(candidate)) {
         const stale = clearRelease();
@@ -301,7 +374,10 @@ export function createOtpFillController(
     } catch {
       const stale = clearRelease();
       if (stale !== null) sendCancel(candidate, stale.releaseId);
-      invalidate(false);
+      // The picker stays, saying what happened: closing it made a refused click look like a
+      // click that did nothing at all.
+      if (host?.status === "open" && owns(candidate)) reportStale(candidate);
+      else invalidate(false);
     }
   };
 

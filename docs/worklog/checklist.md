@@ -101,6 +101,14 @@ Baseline at 2.3.0: typecheck clean, lint clean after one test fix, full suite gr
 - [ ] E9 low (still open, narrow) · `login.fillFromPopup` first-answer race across frames (narrow).
 - [x] E10 low · dead `useOtpList.ts`; stale scan-build/manifest-test comments; GeneratorScreen's deferred settings fetch overwrites what was typed and requests a username per keystroke.
 
+## 2026-09-16 · Clicking a one-time code (2.6.1)
+
+Reported: the list appears, clicking the account does nothing, the code has to be typed by hand.
+
+- [x] The permission to release a code and the account's revision are both pinned when the list is fetched. Either can move while the person is choosing (a sync, a touch, a slow read, or simply the five-minute window running out), and the background then refuses with ITEM_CHANGED, EXPIRED or INVALID. The content script caught that, closed the picker and said nothing, which is exactly "clicking does nothing".
+- [x] A refusal of that kind now asks again with a fresh permission and the account's current revision, and fills. Anything still refused leaves the picker open with "That code could not be fetched. Click the account again."
+- [x] Both covered by tests: one where the first attempt is refused and the second fills, one where every attempt is refused and the reason is on screen.
+
 ## 2026-09-16 · Small things with real weight (2.6.0)
 
 - [x] The passkey prompt's header used a class no stylesheet defines, so it had no grid, no column for the close button and none of the save banner's spacing: cramped box, close glyph outside it. It now uses the shared heading row, with a wider prompt and more room around the title, rows and buttons.
