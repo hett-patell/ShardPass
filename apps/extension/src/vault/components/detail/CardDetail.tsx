@@ -1,4 +1,5 @@
-import type { CardItem, Folder } from "@shardpass/domain";
+import { CardBrandMark } from "@shardpass/ui";
+import { type CardItem, type Folder, cardBrandFromNumber } from "@shardpass/domain";
 import { useState } from "react";
 
 import type { ExtensionPlatform } from "../../../platform/extension-platform";
@@ -37,6 +38,7 @@ export function CardDetail({ item, platform, folders, onUpdate, onDeleted }: Car
 
   const expiry = formatCardExpiry(item.expMonth, item.expYear);
 
+  const brand = item.brand ?? cardBrandFromNumber(item.number);
   return (
     <div className={styles.detail}>
       <header className={styles.header}>
@@ -55,10 +57,16 @@ export function CardDetail({ item, platform, folders, onUpdate, onDeleted }: Car
         </div>
       ) : null}
 
-      {item.brand ? (
+      {brand !== undefined ? (
         <div className={styles.fieldGroup}>
           <span className={styles.label}>Brand</span>
-          <span className={styles.value}>{CARD_BRAND_LABELS[item.brand]}</span>
+          <span className={`${styles.value} ${styles.brandRow}`}>
+            <CardBrandMark brand={brand} size={20} />
+            {CARD_BRAND_LABELS[brand]}
+            {item.brand === undefined ? (
+              <span className={styles.hint}>(from the number)</span>
+            ) : null}
+          </span>
         </div>
       ) : null}
 

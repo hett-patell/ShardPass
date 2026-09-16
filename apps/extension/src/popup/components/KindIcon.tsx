@@ -1,4 +1,5 @@
-import type { VaultItemKind } from "@shardpass/domain";
+import type { CardBrand, VaultItemKind } from "@shardpass/domain";
+import { CardBrandMark } from "@shardpass/ui";
 import { CreditCard, Globe, KeyRound, Lock, StickyNote, User, type LucideIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 
@@ -26,11 +27,14 @@ export function KindIcon({
   kind,
   size = "md",
   iconUrl,
+  brand,
 }: {
   kind: VaultItemKind;
   size?: "md" | "lg";
   /** The site's own icon; the kind's icon stands in until it loads or when it cannot. */
   iconUrl?: string | undefined;
+  /** A card's network, drawn as its mark. */
+  brand?: CardBrand | undefined;
 }) {
   const Icon = KIND_ICONS[kind];
   const [broken, setBroken] = useState(false);
@@ -38,7 +42,9 @@ export function KindIcon({
   const pixels = size === "lg" ? 20 : 16;
   return (
     <span className={`${styles.icon} ${size === "lg" ? styles.large : ""}`} aria-hidden="true">
-      {iconUrl !== undefined && !broken ? (
+      {brand !== undefined ? (
+        <CardBrandMark brand={brand} size={size === "lg" ? 22 : 18} />
+      ) : iconUrl !== undefined && !broken ? (
         <img
           className={styles.favicon}
           src={iconUrl}

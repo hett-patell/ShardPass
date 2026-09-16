@@ -7,6 +7,8 @@ import {
   type VaultItem,
   MAX_LOGIN_URLS,
   MAX_ITEM_TAGS,
+  cardBrandFromNumber,
+  type CardItem,
 } from "@shardpass/domain";
 import {
   ItemCrudRequestSchema,
@@ -405,6 +407,7 @@ function toListProjection(item: VaultItem): ItemListItemProjection {
     tags,
     ...(item.reprompt === true ? { reprompt: true } : {}),
     ...listDisplayFields(item),
+    ...(item.kind === "card" ? cardBrandField(item) : {}),
     ...(item.kind === "login" && item.urls.length > 0
       ? {
           urls: [...item.urls],
@@ -413,6 +416,12 @@ function toListProjection(item: VaultItem): ItemListItemProjection {
         }
       : {}),
   };
+}
+
+/** The saved network, else the one the number announces; nothing when neither says. */
+function cardBrandField(item: CardItem): Pick<ItemListItemProjection, "brand"> {
+  const brand = item.brand ?? cardBrandFromNumber(item.number);
+  return brand === undefined ? {} : { brand };
 }
 
 function listDisplayFields(item: VaultItem): Pick<ItemListItemProjection, "name" | "subtitle"> {

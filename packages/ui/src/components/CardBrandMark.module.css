@@ -1,0 +1,99 @@
+.mark {
+  display: inline-block;
+  flex-shrink: 0;
+  vertical-align: middle;
+}
+
+.face {
+  fill: var(--brand-face, var(--bg-tertiary));
+  stroke: var(--border);
+}
+
+.text {
+  fill: var(--brand-ink, var(--text-primary));
+  font-family: var(--font-sans);
+  font-style: italic;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.visa {
+  --brand-face: #1a1f71;
+  --brand-ink: #ffffff;
+}
+
+.amex {
+  --brand-face: #2e77bc;
+  --brand-ink: #ffffff;
+}
+
+.mastercard {
+  --brand-face: #1f1f1f;
+}
+
+.leftCircle {
+  fill: #eb001b;
+}
+
+.rightCircle {
+  fill: #f79e1b;
+  fill-opacity: 0.9;
+}
+
+.discover {
+  --brand-face: #f4f4f4;
+  --brand-ink: #1f1f1f;
+}
+
+.discover .text {
+  font-style: normal;
+}
+
+.dot {
+  fill: #f58220;
+}
+
+.jcb {
+  --brand-face: #ffffff;
+}
+
+.jcb .stripeA {
+  fill: #0e4c96;
+}
+
+.jcb .stripeB {
+  fill: #d61f26;
+}
+
+.jcb .stripeC {
+  fill: #0b8043;
+}
+
+.unionpay {
+  --brand-face: #ffffff;
+}
+
+.unionpay .stripeA {
+  fill: #d0202b;
+}
+
+.unionpay .stripeB {
+  fill: #0a4a8f;
+}
+
+.unionpay .stripeC {
+  fill: #0b8043;
+}
+
+.other {
+  --brand-face: var(--bg-tertiary);
+}
+
+.chip {
+  fill: var(--text-tertiary);
+}
+
+.line {
+  fill: var(--text-tertiary);
+  fill-opacity: 0.6;
+}

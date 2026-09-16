@@ -29,6 +29,8 @@ export interface ItemRowProps {
   subtitle?: string;
   /** The site's own icon, when the caller has one; the kind's icon stands in until it loads. */
   iconUrl?: string | undefined;
+  /** A drawn icon (a card network's mark) in place of the kind's icon. */
+  icon?: ReactNode;
 }
 
 function ItemRowView({
@@ -40,6 +42,7 @@ function ItemRowView({
   actions,
   subtitle,
   iconUrl,
+  icon,
 }: ItemRowProps) {
   const Icon = ICONS[kind];
   const [broken, setBroken] = useState(false);
@@ -55,7 +58,9 @@ function ItemRowView({
       aria-current={active ? "true" : undefined}
     >
       <span className={styles.icon} aria-hidden="true">
-        {showImage ? (
+        {icon !== undefined ? (
+          icon
+        ) : showImage ? (
           <img
             className={styles.favicon}
             src={iconUrl}

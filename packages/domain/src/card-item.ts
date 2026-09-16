@@ -7,7 +7,15 @@ export const MAX_CARD_NAME_LENGTH = 256;
 export const MAX_CARD_HOLDER_LENGTH = 256;
 export const MAX_CARD_NUMBER_LENGTH = 32;
 export const MAX_CARD_NOTES_LENGTH = 8192;
-export const CARD_BRANDS = ["visa", "mastercard", "amex", "discover", "jcb", "unionpay", "other"] as const;
+export const CARD_BRANDS = [
+  "visa",
+  "mastercard",
+  "amex",
+  "discover",
+  "jcb",
+  "unionpay",
+  "other",
+] as const;
 export type CardBrand = (typeof CARD_BRANDS)[number];
 
 const boundedString = (maximum: number) =>
@@ -33,3 +41,16 @@ export const CardItemSchema = z.extend(ItemMetadataSchema, {
 });
 
 export type CardItem = z.infer<typeof CardItemSchema>;
+
+/** The network a card number's leading digits announce; undefined when they announce none. */
+export function cardBrandFromNumber(number: string): CardBrand | undefined {
+  const digits = number.replace(/\D/gu, "");
+  if (digits.length < 4) return undefined;
+  if (digits.startsWith("4")) return "visa";
+  if (/^(?:5[1-5]|2[2-7])/u.test(digits)) return "mastercard";
+  if (/^3[47]/u.test(digits)) return "amex";
+  if (/^(?:6011|65|64[4-9])/u.test(digits)) return "discover";
+  if (/^35/u.test(digits)) return "jcb";
+  if (/^62/u.test(digits)) return "unionpay";
+  return undefined;
+}

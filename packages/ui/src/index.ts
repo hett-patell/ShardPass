@@ -17,6 +17,8 @@ export type { SectionLabelProps } from "./primitives/SectionLabel";
 export { StatusBadge } from "./primitives/StatusBadge";
 export type { Status, StatusBadgeProps } from "./primitives/StatusBadge";
 
+export { CardBrandMark, CARD_BRAND_NAMES } from "./components/CardBrandMark";
+export type { CardBrandMarkProps } from "./components/CardBrandMark";
 export { CategoryNav } from "./components/CategoryNav";
 export { HealthGauge, healthBand } from "./components/HealthGauge";
 export type { HealthBand, HealthGaugeProps } from "./components/HealthGauge";

@@ -4,6 +4,7 @@ import {
   VAULT_ITEM_KINDS,
   VaultItemSchema,
   SIGN_IN_PROVIDERS,
+  CARD_BRANDS,
 } from "@shardpass/domain";
 import { z } from "zod/mini";
 
@@ -62,6 +63,8 @@ export const ItemListItemProjectionSchema = z.strictObject({
   ),
   /** A login that signs in through a provider rather than a password. */
   signInWith: z.optional(z.enum(SIGN_IN_PROVIDERS)),
+  /** A card's network, saved or read off its number, so a list can show the mark. */
+  brand: z.optional(z.enum(CARD_BRANDS)),
   /** The master password is asked for again before this item is used. */
   reprompt: z.optional(z.boolean()),
 });

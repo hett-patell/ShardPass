@@ -1,6 +1,6 @@
-import { memo } from "react";
-import type { VaultItem } from "@shardpass/domain";
-import { Button, ItemRow } from "@shardpass/ui";
+import { memo, type ReactNode } from "react";
+import { cardBrandFromNumber, type VaultItem } from "@shardpass/domain";
+import { Button, ItemRow, CardBrandMark } from "@shardpass/ui";
 
 import { itemDisplayName, itemDisplaySubtitle } from "../item-support";
 import { faviconUrl } from "../../platform/favicon";
@@ -144,6 +144,14 @@ export function ItemListPanel({
             onSelect={onSelect}
             {...(subtitle === undefined ? {} : { subtitle })}
             iconUrl={item.kind === "login" ? faviconUrl(item.urls[0]) : undefined}
+            icon={
+              item.kind === "card" ? (
+                <CardBrandMark
+                  brand={item.brand ?? cardBrandFromNumber(item.number) ?? "other"}
+                  size={18}
+                />
+              ) : undefined
+            }
           />
         );
       })}
@@ -164,6 +172,7 @@ const ListRow = memo(function ListRow({
   active: boolean;
   subtitle?: string;
   iconUrl?: string | undefined;
+  icon?: ReactNode;
 }>) {
   return <ItemRow {...rest} onClick={() => onSelect(id)} />;
 });

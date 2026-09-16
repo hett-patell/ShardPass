@@ -1,7 +1,7 @@
 import type { CardItem, IdentityItem, LoginItem, VaultItem } from "@shardpass/domain";
-import { SIGN_IN_PROVIDER_LABELS } from "@shardpass/domain";
+import { SIGN_IN_PROVIDER_LABELS, cardBrandFromNumber } from "@shardpass/domain";
 import { parseItemCrudResponseForRequest } from "@shardpass/messaging";
-import { Button, SectionLabel } from "@shardpass/ui";
+import { Button, SectionLabel, CardBrandMark, CARD_BRAND_NAMES } from "@shardpass/ui";
 import { Copy, Eye, EyeOff } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 
@@ -167,6 +167,17 @@ export function DetailScreen({
         ) : null}
         {item.kind === "card" ? (
           <>
+            {(item.brand ?? cardBrandFromNumber(item.number)) !== undefined ? (
+              <Field label="Brand">
+                <span className={styles.brandRow}>
+                  <CardBrandMark
+                    brand={item.brand ?? cardBrandFromNumber(item.number) ?? "other"}
+                    size={20}
+                  />
+                  {CARD_BRAND_NAMES[item.brand ?? cardBrandFromNumber(item.number) ?? "other"]}
+                </span>
+              </Field>
+            ) : null}
             <TextField label="Cardholder" value={item.cardholderName} onCopy={onCopy} />
             <SecretField label="Number" value={item.number} onCopy={onCopy} mask={maskCard} />
             <TextField

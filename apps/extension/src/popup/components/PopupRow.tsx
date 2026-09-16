@@ -23,6 +23,7 @@ export function PopupRow({ item, onOpen, actions, trailing }: PopupRowProps) {
         <KindIcon
           kind={item.kind}
           iconUrl={item.kind === "login" ? faviconUrl(item.urls?.[0]) : undefined}
+          brand={item.kind === "card" ? (item.brand ?? "other") : undefined}
         />
         <span className={styles.text}>
           <span className={styles.name}>{item.name}</span>
