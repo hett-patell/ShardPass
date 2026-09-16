@@ -47,10 +47,7 @@
       "packageJsonSha256": "5b105ac0abbf5985cbe62ad28a34032d85c7ef623e0eb01f39441b0feb419004",
       "licenseFile": "LICENSE",
       "licenseSha256": "06bafa45fdad2579ba0e43b0c9b2c6290287c99c4203c300254a462b38a307f6",
-      "dependencies": [
-        "base64-js@1.5.1",
-        "ieee754@1.2.1"
-      ],
+      "dependencies": ["base64-js@1.5.1", "ieee754@1.2.1"],
       "sourceGraph": [
         {
           "path": "index.js",
@@ -157,13 +154,7 @@
   "output": {
     "productionEntry": "ente-srp-worker-entry",
     "inventoryManifest": "dist/.ente-srp-production-graph.json",
-    "forbidden": [
-      "randomBytes",
-      "node-externals",
-      "dynamic-code",
-      "network",
-      "transcripts"
-    ]
+    "forbidden": ["randomBytes", "node-externals", "dynamic-code", "network", "transcripts"]
   },
   "replays": {
     "legacy": {
