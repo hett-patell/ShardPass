@@ -456,10 +456,13 @@ describe("content entry and style packaging contracts", () => {
     expect(source).toContain("createOtpFillController");
     expect(source).toContain("createLoginFillController");
     expect(source).toContain("createChromePlatform");
-    expect(source).toContain("otpController.start()");
-    expect(source).toContain("loginController.start()");
-    expect(source).toContain("otpController.dispose()");
-    expect(source).toContain("loginController.dispose()");
+    expect(source).toContain("createPasskeyBridge");
+    expect(source).toContain("createDataFillController");
+    // Each controller is started on its own and disposed on its own, so one page that upsets
+    // one of them cannot leave the site without the rest of ShardPass.
+    expect(source).toMatch(/startSafely\(create[A-Za-z]+\(/u);
+    expect(source).toMatch(/controller\.dispose\(\)/u);
+    expect((source.match(/catch\b/gu) ?? []).length).toBeGreaterThanOrEqual(2);
     expect(source).not.toMatch(
       /createPickerHost|querySelector|MutationObserver|sendMessage|createRoot|fetch\s*\(|XMLHttpRequest|WebSocket|clipboard|mediaDevices|console\./,
     );

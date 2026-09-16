@@ -13,28 +13,38 @@ type Controllers = Readonly<{
 
 const platform = createChromePlatform();
 
-function startControllers(): Controllers {
-  const otpController = createOtpFillController({ document, window, platform });
-  const loginController = createLoginFillController({ document, window, platform });
-  const passkeyBridge = createPasskeyBridge({ document, window, platform });
-  const dataFillController = createDataFillController({ document, platform });
-  otpController.start();
-  loginController.start();
-  passkeyBridge.start();
-  dataFillController.start();
-  return { otpController, loginController, passkeyBridge, dataFillController };
+/**
+ * Starts one controller without letting it take the others down. A page can put a controller
+ * in a state its author never saw -- a getter that throws, a DOM the engine refuses to
+ * measure -- and when that happened at start-up the whole content script died, so the site
+ * had no ShardPass at all while every other manager worked. Each part now stands alone.
+ */
+function startSafely<T extends { start(): void }>(controller: T): T {
+  try {
+    controller.start();
+  } catch {
+    // This part is not available on this page; the rest of ShardPass still is.
+  }
+  return controller;
 }
 
-function disposeControllers({
-  otpController,
-  loginController,
-  passkeyBridge,
-  dataFillController,
-}: Controllers): void {
-  otpController.dispose();
-  loginController.dispose();
-  passkeyBridge.dispose();
-  dataFillController.dispose();
+function startControllers(): Controllers {
+  return {
+    otpController: startSafely(createOtpFillController({ document, window, platform })),
+    loginController: startSafely(createLoginFillController({ document, window, platform })),
+    passkeyBridge: startSafely(createPasskeyBridge({ document, window, platform })),
+    dataFillController: startSafely(createDataFillController({ document, platform })),
+  };
+}
+
+function disposeControllers(controllers: Controllers): void {
+  for (const controller of Object.values(controllers)) {
+    try {
+      controller.dispose();
+    } catch {
+      // Already gone, or the page took it with it; the others still get their turn.
+    }
+  }
 }
 
 let controllers: Controllers | null = startControllers();
