@@ -34,6 +34,7 @@ function assertManifestPolicy(candidate: Record<string, unknown>): void {
     "idle",
     "activeTab",
     "contextMenus",
+    "favicon",
   ]);
   expect(candidate.permissions).not.toContain("downloads");
   expect(candidate.permissions).not.toContain("clipboardRead");

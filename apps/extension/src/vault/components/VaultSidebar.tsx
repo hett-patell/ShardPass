@@ -8,6 +8,7 @@ import {
   FolderPlus,
   HeartPulse,
   KeyRound,
+  LayoutDashboard,
   Mail,
   Pencil,
   Plus,
@@ -20,7 +21,8 @@ import { folderSubtreeIds, folderTree } from "../item-support";
 import { FolderDeleteDialog } from "./FolderDeleteDialog";
 import styles from "./VaultSidebar.module.css";
 
-export type VaultSidebarView = "vault" | "settings" | "ente" | "health" | "generator" | "aliases";
+export type VaultSidebarView =
+  "vault" | "overview" | "settings" | "ente" | "health" | "generator" | "aliases";
 export type GeneratorTool = "random" | "username";
 
 export interface VaultSidebarProps {
@@ -50,6 +52,7 @@ export interface VaultSidebarProps {
   /** The Tools section: password or username generator, and e-mail aliases. */
   onOpenGenerator: (tool: GeneratorTool) => void;
   onOpenAliases: () => void;
+  onOpenOverview: () => void;
   /** Which generator tab is open, so the matching tool row reads as current. */
   generatorTool?: GeneratorTool | undefined;
 }
@@ -83,6 +86,7 @@ export function VaultSidebar({
   healthCount = 0,
   onOpenGenerator,
   onOpenAliases,
+  onOpenOverview,
   generatorTool = "random",
 }: VaultSidebarProps) {
   const [edit, setEdit] = useState<FolderEdit | null>(null);
@@ -146,6 +150,17 @@ export function VaultSidebar({
   return (
     <aside className={styles.sidebar}>
       <div className={styles.scroll}>
+        <nav className={styles.tools} aria-label="Overview">
+          <button
+            type="button"
+            className={`${styles.toolButton} ${view === "overview" ? styles.toolButtonActive : ""}`}
+            aria-current={view === "overview" ? "true" : undefined}
+            onClick={onOpenOverview}
+          >
+            <LayoutDashboard size={16} aria-hidden="true" />
+            <span>Overview</span>
+          </button>
+        </nav>
         <nav className={styles.tools} aria-label="Tools">
           <p className={styles.sectionLabel}>Tools</p>
           <button

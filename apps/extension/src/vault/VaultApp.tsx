@@ -34,6 +34,7 @@ import { ItemDetailPanel } from "./components/ItemDetailPanel";
 import { ItemListPanel } from "./components/ItemListPanel";
 import { NewItemMenu } from "./components/NewItemMenu";
 import { VaultSidebar, type GeneratorTool, type VaultSidebarView } from "./components/VaultSidebar";
+import { OverviewView } from "./overview/OverviewView";
 import { EmailAliasView } from "./tools/EmailAliasView";
 import { GeneratorView } from "./tools/GeneratorView";
 import { EnteSettings } from "./ente/EnteSettings";
@@ -316,6 +317,7 @@ export function VaultApp({ platform }: VaultAppProps) {
                   setView("generator");
                 }}
                 onOpenAliases={() => setView("aliases")}
+                onOpenOverview={() => setView("overview")}
                 generatorTool={generatorTool}
               />
             </div>
@@ -474,6 +476,31 @@ export function VaultApp({ platform }: VaultAppProps) {
                   onOpenItem={(itemId) => {
                     goToVaultView();
                     vaultState.setSelectedId(itemId);
+                  }}
+                />
+              </div>
+            ) : null}
+            {view === "overview" ? (
+              <div className={`${styles.settingsPanel} ${styles.settingsPanelSingle}`}>
+                <OverviewView
+                  platform={platform}
+                  items={vaultState.liveItems}
+                  folderCount={folderState.folders.length}
+                  redactedIds={vaultState.redactedIds}
+                  active={view === "overview"}
+                  onOpenItem={(itemId) => {
+                    goToVaultView();
+                    vaultState.setSelectedId(itemId);
+                  }}
+                  onOpenHealth={() => setView("health")}
+                  onOpenGenerator={() => {
+                    setGeneratorTool("random");
+                    setView("generator");
+                  }}
+                  onOpenImport={() => setView("settings")}
+                  onNewLogin={() => {
+                    goToVaultView();
+                    startCreate("login");
                   }}
                 />
               </div>

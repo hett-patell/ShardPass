@@ -602,7 +602,7 @@ export async function scanBuild(directory, options = {}) {
     const sourceContract = {
       manifest_version: 3,
       minimum_chrome_version: "111",
-      permissions: ["storage", "unlimitedStorage", "alarms", "idle", "activeTab", "contextMenus"],
+      permissions: ["storage", "unlimitedStorage", "alarms", "idle", "activeTab", "contextMenus", "favicon"],
       host_permissions: ["https://api.ente.io/*", "https://quack.duckduckgo.com/*"],
       content_security_policy: {
         extension_pages:

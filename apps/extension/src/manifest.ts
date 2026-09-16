@@ -19,7 +19,15 @@ export default defineManifest({
   // tab's content script to fill. Granted only while the person is using the popup.
   // contextMenus: a "Fill login with ShardPass" entry on editable fields; the click carries
   // the tab, and activeTab then covers reading its URL and messaging its content script.
-  permissions: ["storage", "unlimitedStorage", "alarms", "idle", "activeTab", "contextMenus"],
+  permissions: [
+    "storage",
+    "unlimitedStorage",
+    "alarms",
+    "idle",
+    "activeTab",
+    "contextMenus",
+    "favicon",
+  ],
   host_permissions: ["https://api.ente.io/*", "https://quack.duckduckgo.com/*"],
   // A shortcut to open the popup, as every password manager has; changeable at
   // chrome://extensions/shortcuts.

@@ -18,6 +18,8 @@ export { StatusBadge } from "./primitives/StatusBadge";
 export type { Status, StatusBadgeProps } from "./primitives/StatusBadge";
 
 export { CategoryNav } from "./components/CategoryNav";
+export { HealthGauge, healthBand } from "./components/HealthGauge";
+export type { HealthBand, HealthGaugeProps } from "./components/HealthGauge";
 export type { CategoryKey, CategoryNavProps } from "./components/CategoryNav";
 export { ItemRow } from "./components/ItemRow";
 export type { ItemRowProps } from "./components/ItemRow";

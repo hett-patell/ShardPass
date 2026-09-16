@@ -37,5 +37,7 @@ describe("tool routes", () => {
       expect(parseVaultPageHash(`#/tools/${view}`)).toEqual({ view });
     }
     expect(parseVaultPageHash("#/tools/other")).toBeNull();
+    expect(vaultPageHash({ view: "overview" })).toBe("#/overview");
+    expect(parseVaultPageHash("#/overview")).toEqual({ view: "overview" });
   });
 });

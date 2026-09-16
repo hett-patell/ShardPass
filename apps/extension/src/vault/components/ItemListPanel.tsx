@@ -3,6 +3,7 @@ import type { VaultItem } from "@shardpass/domain";
 import { Button, ItemRow } from "@shardpass/ui";
 
 import { itemDisplayName, itemDisplaySubtitle } from "../item-support";
+import { faviconUrl } from "../../platform/favicon";
 import styles from "./ItemListPanel.module.css";
 
 export interface ItemListPanelProps {
@@ -33,14 +34,29 @@ function emptyCopy(
   folderName: string | undefined,
 ): { title: string; body: string } {
   if (archived && search === "")
-    return { title: "Nothing archived", body: "Archive an item from its detail view to tuck it away without deleting it." };
+    return {
+      title: "Nothing archived",
+      body: "Archive an item from its detail view to tuck it away without deleting it.",
+    };
   if (search.trim() !== "")
-    return { title: `No results for “${search.trim()}”`, body: "Check the spelling, or search a different field." };
+    return {
+      title: `No results for “${search.trim()}”`,
+      body: "Check the spelling, or search a different field.",
+    };
   if (folderName !== undefined)
-    return { title: `Nothing in “${folderName}” yet`, body: "Move items here from their Folder control, or add one from New item." };
+    return {
+      title: `Nothing in “${folderName}” yet`,
+      body: "Move items here from their Folder control, or add one from New item.",
+    };
   if (category !== "all" && category !== "")
-    return { title: "Nothing in this category yet", body: "Add one from the New button, or import from another manager." };
-  return { title: "Your vault is empty", body: "Add a login, or bring everything over from your browser, 1Password, Bitwarden or KeePass." };
+    return {
+      title: "Nothing in this category yet",
+      body: "Add one from the New button, or import from another manager.",
+    };
+  return {
+    title: "Your vault is empty",
+    body: "Add a login, or bring everything over from your browser, 1Password, Bitwarden or KeePass.",
+  };
 }
 
 /** The item list, with honest loading, error and empty states. */
@@ -100,7 +116,10 @@ export function ItemListPanel({
                 Add a login
               </Button>
             ) : null}
-            {onImport && (category === "all" || category === "") && !archived && folderName === undefined ? (
+            {onImport &&
+            (category === "all" || category === "") &&
+            !archived &&
+            folderName === undefined ? (
               <Button variant="secondary" onClick={onImport}>
                 Import passwords
               </Button>
@@ -124,6 +143,7 @@ export function ItemListPanel({
             active={item.id === selectedId}
             onSelect={onSelect}
             {...(subtitle === undefined ? {} : { subtitle })}
+            iconUrl={item.kind === "login" ? faviconUrl(item.urls[0]) : undefined}
           />
         );
       })}
@@ -136,6 +156,14 @@ const ListRow = memo(function ListRow({
   id,
   onSelect,
   ...rest
-}: Readonly<{ id: string; onSelect: (id: string) => void; kind: VaultItem["kind"]; name: string; active: boolean; subtitle?: string }>) {
+}: Readonly<{
+  id: string;
+  onSelect: (id: string) => void;
+  kind: VaultItem["kind"];
+  name: string;
+  active: boolean;
+  subtitle?: string;
+  iconUrl?: string | undefined;
+}>) {
   return <ItemRow {...rest} onClick={() => onSelect(id)} />;
 });

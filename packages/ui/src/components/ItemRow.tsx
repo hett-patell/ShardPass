@@ -1,4 +1,4 @@
-import { memo } from "react";
+import { memo, useEffect, useState } from "react";
 import { CreditCard, Globe, KeyRound, Lock, StickyNote, User } from "lucide-react";
 import type { ComponentType, ReactNode } from "react";
 import type { VaultItemKind } from "@shardpass/domain";
@@ -27,6 +27,8 @@ export interface ItemRowProps {
    */
   actions?: ReactNode;
   subtitle?: string;
+  /** The site's own icon, when the caller has one; the kind's icon stands in until it loads. */
+  iconUrl?: string | undefined;
 }
 
 function ItemRowView({
@@ -37,8 +39,12 @@ function ItemRowView({
   rightContent,
   actions,
   subtitle,
+  iconUrl,
 }: ItemRowProps) {
   const Icon = ICONS[kind];
+  const [broken, setBroken] = useState(false);
+  useEffect(() => setBroken(false), [iconUrl]);
+  const showImage = iconUrl !== undefined && !broken;
   const classes = [styles.row, active ? styles.active : undefined].filter(Boolean).join(" ");
 
   const row = (
@@ -49,7 +55,20 @@ function ItemRowView({
       aria-current={active ? "true" : undefined}
     >
       <span className={styles.icon} aria-hidden="true">
-        <Icon size={16} />
+        {showImage ? (
+          <img
+            className={styles.favicon}
+            src={iconUrl}
+            alt=""
+            width={16}
+            height={16}
+            loading="lazy"
+            decoding="async"
+            onError={() => setBroken(true)}
+          />
+        ) : (
+          <Icon size={16} />
+        )}
       </span>
       <span className={styles.content}>
         <span className={styles.name}>{name}</span>
@@ -60,7 +79,9 @@ function ItemRowView({
   );
   if (!actions) return row;
   return (
-    <div className={[styles.shell, active ? styles.shellActive : undefined].filter(Boolean).join(" ")}>
+    <div
+      className={[styles.shell, active ? styles.shellActive : undefined].filter(Boolean).join(" ")}
+    >
       {row}
       <span className={styles.actions}>{actions}</span>
     </div>

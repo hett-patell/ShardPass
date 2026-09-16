@@ -1,0 +1,74 @@
+.gauge {
+  --gauge-color: var(--success, #16a34a);
+
+  position: relative;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  width: 160px;
+}
+
+.large {
+  width: 220px;
+}
+
+.ring {
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.track,
+.fill {
+  fill: none;
+  stroke-width: 10;
+  stroke-linecap: round;
+}
+
+.track {
+  stroke: var(--bg-tertiary, #e5e7eb);
+}
+
+.fill {
+  stroke: var(--gauge-color);
+  transition: stroke-dasharray 600ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.value {
+  position: absolute;
+  top: 44%;
+  font-size: 2rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  color: var(--text-primary);
+}
+
+.large .value {
+  font-size: 2.75rem;
+}
+
+.caption {
+  margin-top: var(--space-1, 4px);
+  color: var(--gauge-color);
+  font-size: var(--text-sm, 0.8125rem);
+  font-weight: 600;
+}
+
+.good {
+  --gauge-color: var(--success, #16a34a);
+}
+
+.fair {
+  --gauge-color: var(--warning, #d97706);
+}
+
+.poor {
+  --gauge-color: var(--danger, #dc2626);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fill {
+    transition: none;
+  }
+}

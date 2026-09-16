@@ -2,6 +2,7 @@ import type { ItemListItemProjection } from "@shardpass/messaging";
 import { ChevronRight } from "lucide-react";
 import type { ReactNode } from "react";
 
+import { faviconUrl } from "../../platform/favicon";
 import { KindIcon } from "./KindIcon";
 import styles from "./PopupRow.module.css";
 
@@ -19,7 +20,10 @@ export function PopupRow({ item, onOpen, actions, trailing }: PopupRowProps) {
   return (
     <div className={styles.shell}>
       <button type="button" className={styles.row} onClick={() => onOpen(item)}>
-        <KindIcon kind={item.kind} />
+        <KindIcon
+          kind={item.kind}
+          iconUrl={item.kind === "login" ? faviconUrl(item.urls?.[0]) : undefined}
+        />
         <span className={styles.text}>
           <span className={styles.name}>{item.name}</span>
           {item.subtitle ? <span className={styles.subtitle}>{item.subtitle}</span> : null}

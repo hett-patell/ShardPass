@@ -39,6 +39,13 @@
   border-radius: var(--radius-sm);
 }
 
+.favicon {
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+  object-fit: contain;
+}
+
 .content {
   display: flex;
   flex: 1;

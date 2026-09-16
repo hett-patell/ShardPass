@@ -1,6 +1,6 @@
 import type { LoginItem, VaultItem } from "@shardpass/domain";
 import { parseSecurityResponseForRequest } from "@shardpass/messaging";
-import { Button } from "@shardpass/ui";
+import { Button, HealthGauge } from "@shardpass/ui";
 import { useEffect, useMemo, useState } from "react";
 
 import type { ExtensionPlatform } from "../../platform/extension-platform";
@@ -8,6 +8,7 @@ import {
   createStrengthEstimator,
   type StrengthEstimator,
 } from "../../vault-access/strength-estimator";
+import { computeHealthScore } from "./health-score";
 import { computeHealth } from "./health-report";
 import styles from "./HealthView.module.css";
 
@@ -174,6 +175,28 @@ export function HealthView({
             ? ` ${report.skipped} ${report.skipped === 1 ? "asks" : "ask"} for the master password first and ${report.skipped === 1 ? "was" : "were"} left out.`
             : ""}
         </p>
+        <HealthGauge
+          score={
+            computeHealthScore({
+              logins: report.logins.length,
+              weak: weak.length,
+              reused: report.reused.reduce((sum, group) => sum + group.logins.length, 0),
+              breached: found.length,
+              unsecured: report.unsecured.length,
+              withoutTwoFactor: report.withoutTwoFactor.length,
+            }).score
+          }
+          caption={
+            computeHealthScore({
+              logins: report.logins.length,
+              weak: weak.length,
+              reused: report.reused.reduce((sum, group) => sum + group.logins.length, 0),
+              breached: found.length,
+              unsecured: report.unsecured.length,
+              withoutTwoFactor: report.withoutTwoFactor.length,
+            }).caption
+          }
+        />
       </header>
 
       <div className={styles.grid}>

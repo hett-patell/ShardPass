@@ -6,7 +6,17 @@ import { VAULT_ITEM_KINDS, type VaultItemKind } from "@shardpass/domain";
  * can be moved there without a reload and a fresh one boots straight into it.
  */
 export type VaultPageTarget =
-  | { view: "settings" | "ente" | "import" | "health" | "generator" | "usernames" | "aliases" }
+  | {
+      view:
+        | "overview"
+        | "settings"
+        | "ente"
+        | "import"
+        | "health"
+        | "generator"
+        | "usernames"
+        | "aliases";
+    }
   | { newItem: VaultItemKind }
   | { item: string };
 
@@ -35,6 +45,8 @@ export function parseVaultPageHash(hash: string): VaultPageTarget | null {
       return { view: "ente" };
     case "/health":
       return { view: "health" };
+    case "/overview":
+      return { view: "overview" };
     case "/tools/generator":
       return { view: "generator" };
     case "/tools/usernames":

@@ -45,6 +45,7 @@ function renderSidebar(overrides: Partial<VaultSidebarProps> = {}) {
     onOpenHealth: vi.fn(),
     onOpenGenerator: vi.fn(),
     onOpenAliases: vi.fn(),
+    onOpenOverview: vi.fn(),
     ...overrides,
   };
   return { ...render(<VaultSidebar {...props} />), props };
@@ -99,5 +100,18 @@ describe("VaultSidebar tools", () => {
     expect(screen.getByRole("button", { name: "Password generator" })).not.toHaveAttribute(
       "aria-current",
     );
+  });
+});
+
+describe("VaultSidebar overview", () => {
+  it("puts Overview above the tools and opens it", () => {
+    const { props } = renderSidebar({ view: "overview" });
+    const overview = screen.getByRole("button", { name: "Overview" });
+    expect(overview).toHaveAttribute("aria-current", "true");
+    expect(
+      overview.compareDocumentPosition(screen.getByRole("button", { name: "Password generator" })),
+    ).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    fireEvent.click(overview);
+    expect(props.onOpenOverview).toHaveBeenCalledTimes(1);
   });
 });

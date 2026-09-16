@@ -15,3 +15,8 @@
   height: 44px;
   color: var(--accent);
 }
+
+.favicon {
+  border-radius: 3px;
+  object-fit: contain;
+}

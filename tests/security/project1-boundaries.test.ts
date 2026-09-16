@@ -296,6 +296,7 @@ describe("Project 1 minimized responses and execution boundaries", () => {
       "idle",
       "activeTab",
       "contextMenus",
+      "favicon",
     ]);
     expect(productionManifest.host_permissions).toEqual([
       "https://api.ente.io/*",
