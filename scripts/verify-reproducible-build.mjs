@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { lstat, mkdtemp, readdir, readFile, rm } from "node:fs/promises";
+import { access, lstat, mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
@@ -79,6 +79,26 @@ function runBuild(outDir) {
   });
 }
 
+/** Files a later build step writes into dist on purpose, which a scratch build does not have. */
+const GENERATED_AFTER_BUILD = new Set([".ente-srp-production-graph.json"]);
+
+/**
+ * Compares the working `dist` with a clean build of the same tree. A missing `dist` is not a
+ * failure here (nothing has been built yet); a `dist` that differs is.
+ */
+async function compareAgainstDist(reference) {
+  const dist = path.resolve(projectRoot, "dist");
+  try {
+    await access(path.join(dist, "manifest.json"));
+  } catch {
+    return [];
+  }
+  const differences = await compareBuildDirectories(reference, dist);
+  return differences.filter(
+    (difference) => ![...GENERATED_AFTER_BUILD].some((name) => difference.includes(name)),
+  );
+}
+
 async function main() {
   const temporaryRoot = await mkdtemp(path.join(tmpdir(), "shardpass-reproducible-"));
   const first = path.join(temporaryRoot, "first");
@@ -93,8 +113,17 @@ async function main() {
       return;
     }
     const snapshot = await snapshotBuildDirectory(first);
+    // Two scratch builds agreeing only proves the build is deterministic. The artifact that
+    // was scanned, hashed and loaded in a browser is `dist`, so it is compared as well:
+    // anything placed there by hand, or left behind by an older build, shows up here.
+    const distDifferences = await compareAgainstDist(first);
+    if (distDifferences.length > 0) {
+      for (const difference of distDifferences) console.error(difference);
+      process.exitCode = 1;
+      return;
+    }
     console.log(
-      `Reproducible build verified: ${snapshot.length} files with identical SHA-256 bytes.`,
+      `Reproducible build verified: ${snapshot.length} files with identical SHA-256 bytes, and dist matches.`,
     );
   } catch (error) {
     console.error(error instanceof Error ? error.message : String(error));
