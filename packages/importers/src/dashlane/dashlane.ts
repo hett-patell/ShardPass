@@ -11,6 +11,7 @@ import { listZipEntries, readZipEntry, ZipFormatError } from "../onepassword/zip
 
 /** Ceiling for one inflated CSV inside the archive. */
 const MAX_DASHLANE_CSV_BYTES = 64 * 1024 * 1024;
+const MAX_DASHLANE_CSV_FILES = 16;
 
 /** The file is not a Dashlane export at all (not a ZIP or CSV, or a ZIP without any CSV). */
 export class DashlaneFormatError extends Error {
@@ -39,8 +40,16 @@ export async function importDashlane(bytes: ArrayBuffer): Promise<ImportResult> 
       throw new DashlaneFormatError(
         "The archive holds no CSV files, so it is not a Dashlane export.",
       );
+    if (csvEntries.length > MAX_DASHLANE_CSV_FILES)
+      throw new DashlaneFormatError(
+        "The archive holds more CSV files than a Dashlane export does.",
+      );
+    // One ceiling for the whole archive, not one per entry: five entries each declaring the
+    // maximum would otherwise inflate to several times it.
+    let remaining = MAX_DASHLANE_CSV_BYTES;
     for (const entry of csvEntries) {
-      const data = await readZipEntry(view, entry, MAX_DASHLANE_CSV_BYTES);
+      const data = await readZipEntry(view, entry, remaining);
+      remaining -= data.byteLength;
       texts.push(new TextDecoder("utf-8", { fatal: false }).decode(data));
     }
   } else {

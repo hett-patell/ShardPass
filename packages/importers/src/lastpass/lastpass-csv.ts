@@ -100,7 +100,14 @@ function importNote(
           number: field("Number"),
           cvv: field("Security Code"),
           ...expiry,
-          notes: field("Notes"),
+          notes: noteLines(typed, [
+            "Name on Card",
+            "Type",
+            "Number",
+            "Security Code",
+            "Expiration Date",
+            "Notes",
+          ]),
         },
         label,
         warnings,
@@ -127,7 +134,25 @@ function importNote(
           state: field("State"),
           zip: field("Zip / Postal Code"),
           country: field("Country"),
-          notes: field("Notes"),
+          notes: noteLines(typed, [
+            "First Name",
+            "Middle Name",
+            "Last Name",
+            "Company",
+            "Username",
+            "Birthday",
+            "Email Address",
+            "Phone",
+            "Mobile Phone",
+            "Evening Phone",
+            "Address 1",
+            "Address 2",
+            "City / Town",
+            "State",
+            "Zip / Postal Code",
+            "Country",
+            "Notes",
+          ]),
         },
         label,
         warnings,
@@ -229,7 +254,8 @@ function importNote(
 function noteLines(typed: TypedNote, used: readonly string[]): string {
   const skip = new Set([...used.map((key) => key.toLowerCase()), "language"]);
   const lines = typed.entries
-    .filter(([key, value]) => !skip.has(key.toLowerCase()) && value.trim() !== "")
+    // LastPass writes an empty date as "," (month,year), which says nothing worth keeping.
+    .filter(([key, value]) => !skip.has(key.toLowerCase()) && value.replace(/[\s,]/gu, "") !== "")
     .map(([key, value]) => `${key}: ${value.trim()}`);
   const notes = typed.fields.get("notes") ?? "";
   return [...lines, ...(notes === "" ? [] : [notes])].join("\n");

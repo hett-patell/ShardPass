@@ -67,7 +67,8 @@ describe("importLastPassCsv", () => {
       zip: "62701",
       country: "US",
       email: "alice@example.com",
-      notes: "Home",
+      // A field the identity has no slot for (Title) is kept as a line above the notes.
+      notes: "Title: Ms\nHome",
     });
     expect(result.items[2]).toMatchObject({
       name: "Home Wi-Fi",

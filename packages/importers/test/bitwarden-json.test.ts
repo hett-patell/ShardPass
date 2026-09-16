@@ -360,16 +360,46 @@ describe("importBitwardenJson extras", () => {
     ]);
   });
 
-  it("names the failing field instead of calling the whole item invalid", () => {
+  it("keeps a card with a bad expiry month, blanks the month and names the field", () => {
     const result = importBitwardenJson(
       JSON.stringify({
-        items: [{ type: 3, name: "Card", card: { number: "4111", expMonth: "123" } }],
+        items: [
+          { type: 3, name: "Card", card: { number: "4111", expMonth: "123", expYear: "29" } },
+        ],
       }),
     );
-    expect(result.items).toHaveLength(0);
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0]).toMatchObject({
+      kind: "card",
+      number: "4111",
+      expMonth: "",
+      expYear: "2029",
+    });
     expect(result.warnings).toEqual([
-      'Skipped "Card": invalid card item (expMonth did not pass validation).',
+      '"Card": expiry month was not a valid month and was left blank.',
     ]);
+  });
+
+  it("carries reprompt and custom fields on notes, cards, identities and SSH keys", () => {
+    const fields = [
+      { name: "Recovery", value: "abc-123", type: 1 },
+      { name: "Linked", value: null, type: 3, linkedId: 100 },
+      { name: "Flag", value: "true", type: 2 },
+    ];
+    const result = importBitwardenJson(
+      JSON.stringify({
+        items: [
+          { type: 2, name: "Note", notes: "body", reprompt: 1, fields, secureNote: { type: 0 } },
+          { type: 3, name: "Card", notes: "on card", fields, card: { number: "4111111111111111" } },
+          { type: 4, name: "Me", fields, identity: { firstName: "A", lastName: "B", title: "Dr" } },
+          { type: 1, name: "Login", reprompt: 1, login: { username: "u", password: "p" } },
+        ],
+      }),
+    );
+    expect(result.items.map((item) => item.reprompt ?? false)).toEqual([true, false, false, true]);
+    expect(result.items[0]).toMatchObject({ content: "body\n\nRecovery: abc-123\nFlag: true" });
+    expect(result.items[1]).toMatchObject({ notes: "on card\n\nRecovery: abc-123\nFlag: true" });
+    expect(result.items[2]).toMatchObject({ notes: "Title: Dr\nRecovery: abc-123\nFlag: true" });
   });
 });
 

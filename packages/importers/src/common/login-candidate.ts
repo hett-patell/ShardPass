@@ -9,6 +9,7 @@ import {
   MAX_LOGIN_URLS,
   MAX_LOGIN_URL_LENGTH,
   MAX_LOGIN_USERNAME_LENGTH,
+  MAX_SECRET_METADATA_ENTRIES,
   MAX_SECRET_METADATA_VALUE_LENGTH,
   MAX_SECRET_NOTES_LENGTH,
   MAX_SECRET_VALUE_LENGTH,
@@ -54,19 +55,36 @@ export function emitLogin(
   items: VaultItem[],
 ): boolean {
   const name = clampName(draft.name, MAX_LOGIN_NAME_LENGTH, "Imported login", label, warnings);
-  const username = clampText(draft.username, MAX_LOGIN_USERNAME_LENGTH, "username", label, warnings);
+  const username = clampText(
+    draft.username,
+    MAX_LOGIN_USERNAME_LENGTH,
+    "username",
+    label,
+    warnings,
+  );
   const notes = clampText(draft.notes, MAX_LOGIN_NOTES_LENGTH, "notes", label, warnings);
   const { urls, urlMatches } = clampUrls(draft, label, warnings);
 
-  if (Array.from(draft.password).length > MAX_LOGIN_PASSWORD_LENGTH) {
+  if (draft.password.length > MAX_LOGIN_PASSWORD_LENGTH) {
     warnings.push(
       `"${label}": the password is longer than a login can hold, so it was imported as a secret.`,
     );
     const metadata: Record<string, string> = {};
-    if (username !== "")
-      metadata["username"] = clampText(username, MAX_SECRET_METADATA_VALUE_LENGTH, "username", label, warnings);
-    if (urls[0] !== undefined)
-      metadata["url"] = clampText(urls[0], MAX_SECRET_METADATA_VALUE_LENGTH, "URL", label, warnings);
+    const remember = (key: string, value: string, what: string) => {
+      if (value.trim() === "" || Object.keys(metadata).length >= MAX_SECRET_METADATA_ENTRIES)
+        return;
+      metadata[key] = clampText(value, MAX_SECRET_METADATA_VALUE_LENGTH, what, label, warnings);
+    };
+    remember("username", username, "username");
+    urls.forEach((url, index) => remember(index === 0 ? "url" : `url ${index + 1}`, url, "URL"));
+    // Everything else the login carried stays readable beside the key, not silently dropped.
+    remember("totp", draft.totp ?? "", "one-time code");
+    for (const field of draft.customFields ?? [])
+      remember(
+        field.name.trim() === "" ? "field" : field.name.trim(),
+        field.value,
+        `field "${field.name}"`,
+      );
     const candidate = {
       ...base,
       kind: "secret" as const,
@@ -112,7 +130,9 @@ function clampUrls(
     kept.push({ url, match: draft.urlMatches?.[index] ?? "domain" });
   });
   const bounded = clampList(kept, MAX_LOGIN_URLS, "URLs", label, warnings);
-  const urls = bounded.map((entry) => clampText(entry.url, MAX_LOGIN_URL_LENGTH, "URL", label, warnings));
+  const urls = bounded.map((entry) =>
+    clampText(entry.url, MAX_LOGIN_URL_LENGTH, "URL", label, warnings),
+  );
   const urlMatches = bounded.some((entry) => entry.match !== "domain")
     ? bounded.map((entry) => entry.match)
     : undefined;
@@ -124,11 +144,19 @@ function clampCustomFields(
   label: string,
   warnings: string[],
 ): LoginCustomField[] {
-  return clampList(fields, MAX_LOGIN_CUSTOM_FIELDS, "custom fields", label, warnings).map((field) => ({
-    ...field,
-    name: clampName(field.name, MAX_LOGIN_CUSTOM_FIELD_NAME_LENGTH, "Field", label, warnings),
-    value: clampText(field.value, MAX_LOGIN_CUSTOM_FIELD_VALUE_LENGTH, `field "${field.name}"`, label, warnings),
-  }));
+  return clampList(fields, MAX_LOGIN_CUSTOM_FIELDS, "custom fields", label, warnings).map(
+    (field) => ({
+      ...field,
+      name: clampName(field.name, MAX_LOGIN_CUSTOM_FIELD_NAME_LENGTH, "Field", label, warnings),
+      value: clampText(
+        field.value,
+        MAX_LOGIN_CUSTOM_FIELD_VALUE_LENGTH,
+        `field "${field.name}"`,
+        label,
+        warnings,
+      ),
+    }),
+  );
 }
 
 /**

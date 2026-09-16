@@ -50,7 +50,13 @@ export async function importProtonPass(bytes: ArrayBuffer): Promise<ImportResult
     );
   }
   const text = decoder.decode(view);
-  return text.trimStart().startsWith("{") ? importProtonPassJson(text) : importProtonPassCsv(text);
+  if (text.trimStart().startsWith("{")) return importProtonPassJson(text);
+  const headers = parseCsv(text).headers.map((header) => header.trim().toLowerCase());
+  if (!headers.includes("type") && !headers.includes("password") && !headers.includes("name"))
+    throw new ProtonPassFormatError(
+      "This is neither a Proton Pass JSON export nor its CSV (no type, name or password column).",
+    );
+  return importProtonPassCsv(text);
 }
 
 export function importProtonPassCsv(text: string): ImportResult {
@@ -149,8 +155,13 @@ export function importProtonPassJson(text: string): ImportResult {
     const label = warningLabel(name, "unnamed");
     const folderId = vault === "" ? undefined : folders.idFor([vault]);
     const fresh = newItemBase();
+    // Proton keeps the item's own times, in seconds; they are worth more than "now".
+    const createdAt = isoFromSeconds(raw["createTime"]) ?? fresh.createdAt;
+    const updatedAt = isoFromSeconds(raw["modifyTime"]) ?? createdAt;
     const base = {
       ...fresh,
+      createdAt,
+      updatedAt,
       favorite: raw["pinned"] === true,
       ...(folderId === undefined ? {} : { folderId }),
       ...(raw["state"] === 2 ? { archivedAt: fresh.updatedAt } : {}),
@@ -319,9 +330,9 @@ export function importProtonPassJson(text: string): ImportResult {
           base,
           {
             name: name || text("fullName") || "Imported identity",
-            firstName: text("firstName") || text("fullName").split(/\s+/u)[0] || "",
+            firstName: text("firstName") || nameParts(text("fullName")).first,
             middleName: text("middleName"),
-            lastName: text("lastName"),
+            lastName: text("lastName") || nameParts(text("fullName")).rest,
             company: text("organization") || text("company"),
             birthDate: text("birthdate"),
             email: text("email"),
@@ -428,4 +439,20 @@ function fieldLines(raw: unknown): string[] {
     lines.push(`${asString(entry["fieldName"]).trim() || "Field"}: ${value}`);
   }
   return lines;
+}
+
+/** A Unix-seconds timestamp as ISO text, or null when the export has none worth keeping. */
+function isoFromSeconds(value: unknown): string | null {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) return null;
+  const date = new Date(value * 1000);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
+/** "Bilbo of Bag End" → first "Bilbo", rest "of Bag End". */
+function nameParts(fullName: string): { first: string; rest: string } {
+  const words = fullName
+    .trim()
+    .split(/\s+/u)
+    .filter((word) => word !== "");
+  return { first: words[0] ?? "", rest: words.slice(1).join(" ") };
 }

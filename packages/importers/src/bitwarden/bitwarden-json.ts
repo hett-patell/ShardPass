@@ -1,12 +1,4 @@
 import {
-  CardItemSchema,
-  IdentityItemSchema,
-  MAX_CARD_HOLDER_LENGTH,
-  MAX_CARD_NAME_LENGTH,
-  MAX_CARD_NOTES_LENGTH,
-  MAX_CARD_NUMBER_LENGTH,
-  MAX_IDENTITY_NAME_LENGTH,
-  MAX_IDENTITY_NOTES_LENGTH,
   MAX_NOTE_CONTENT_LENGTH,
   MAX_NOTE_NAME_LENGTH,
   MAX_SECRET_METADATA_VALUE_LENGTH,
@@ -15,7 +7,6 @@ import {
   MAX_SECRET_VALUE_LENGTH,
   NoteItemSchema,
   SecretItemSchema,
-  type CardBrand,
   type LoginCustomField,
   type LoginCustomFieldType,
   type LoginUrlMatchMode,
@@ -25,6 +16,7 @@ import { clampName, clampText, keepIfValid, warningLabel } from "../common/clamp
 import { newItemBase } from "../common/item-base";
 import { createFolderIndex, type ImportResult } from "../common/import-result";
 import { emitLogin } from "../common/login-candidate";
+import { emitCard, emitIdentity } from "../common/typed-items";
 import { IMPORT_LIMITS } from "../import-model";
 
 const BITWARDEN_TYPE_LOGIN = 1;
@@ -50,15 +42,6 @@ const FIELD_TYPE: Record<number, LoginCustomFieldType> = {
 };
 /** Bitwarden `fields[].linkedId` for logins: 100 username, 101 password. */
 const LINKED_ID: Record<number, "username" | "password"> = { 100: "username", 101: "password" };
-const CARD_BRAND: Record<string, CardBrand> = {
-  visa: "visa",
-  mastercard: "mastercard",
-  amex: "amex",
-  "american express": "amex",
-  discover: "discover",
-  jcb: "jcb",
-  unionpay: "unionpay",
-};
 
 /**
  * Imports a Bitwarden JSON vault export: `{ items: [{ type, name, login,
@@ -121,6 +104,11 @@ export function importBitwardenJson(text: string): ImportResult {
     const label = warningLabel(asString(raw["name"]), `unnamed entry ${index + 1}`);
     const rawName = asString(raw["name"]);
     const notes = asString(raw["notes"]);
+    // Notes, cards, identities and SSH keys have no custom fields of their own; what Bitwarden
+    // kept there (recovery codes in a hidden field, most often) goes into the notes as lines.
+    const notesWithFields = [notes, fieldLinesOf(raw["fields"])]
+      .filter((part) => part !== "")
+      .join("\n\n");
     const favorite = raw["favorite"] === true;
     const folderId =
       folderIdByBitwardenId.get(asString(raw["folderId"])) ??
@@ -133,6 +121,7 @@ export function importBitwardenJson(text: string): ImportResult {
       updatedAt: isoOf(raw["revisionDate"]) ?? createdAt,
       favorite,
       ...(folderId === undefined ? {} : { folderId }),
+      ...(raw["reprompt"] === 1 ? { reprompt: true as const } : {}),
     };
 
     switch (raw["type"]) {
@@ -184,66 +173,62 @@ export function importBitwardenJson(text: string): ImportResult {
           ...base,
           kind: "note" as const,
           name: clampName(rawName, MAX_NOTE_NAME_LENGTH, "Imported item", label, warnings),
-          content: clampText(notes, MAX_NOTE_CONTENT_LENGTH, "content", label, warnings),
+          content: clampText(notesWithFields, MAX_NOTE_CONTENT_LENGTH, "content", label, warnings),
         };
         keepIfValid(NoteItemSchema, candidate, "note", label, warnings, items);
         break;
       }
       case BITWARDEN_TYPE_CARD: {
         const card = isRecord(raw["card"]) ? raw["card"] : {};
-        const candidate = {
-          ...base,
-          kind: "card" as const,
-          name: clampName(rawName, MAX_CARD_NAME_LENGTH, "Imported item", label, warnings),
-          ...brandOf(asString(card["brand"])),
-          cardholderName: clampText(
-            asString(card["cardholderName"]),
-            MAX_CARD_HOLDER_LENGTH,
-            "cardholder name",
-            label,
-            warnings,
-          ),
-          number: clampText(
-            asString(card["number"]),
-            MAX_CARD_NUMBER_LENGTH,
-            "card number",
-            label,
-            warnings,
-          ),
-          expMonth: asString(card["expMonth"]),
-          expYear: asString(card["expYear"]),
-          cvv: asString(card["code"]),
-          pin: "",
-          notes: clampText(notes, MAX_CARD_NOTES_LENGTH, "notes", label, warnings),
-        };
-        keepIfValid(CardItemSchema, candidate, "card", label, warnings, items);
+        emitCard(
+          base,
+          {
+            name: rawName || "Imported item",
+            brand: asString(card["brand"]),
+            cardholderName: asString(card["cardholderName"]),
+            number: asString(card["number"]),
+            expMonth: asString(card["expMonth"]),
+            expYear: asString(card["expYear"]),
+            cvv: asString(card["code"]),
+            notes: notesWithFields,
+          },
+          label,
+          warnings,
+          items,
+        );
         break;
       }
       case BITWARDEN_TYPE_IDENTITY: {
         const identity = isRecord(raw["identity"]) ? raw["identity"] : {};
-        const candidate = {
-          ...base,
-          kind: "identity" as const,
-          name: clampName(rawName, MAX_IDENTITY_NAME_LENGTH, "Imported item", label, warnings),
-          firstName: asString(identity["firstName"]),
-          ...optional("middleName", asString(identity["middleName"])),
-          lastName: asString(identity["lastName"]),
-          ...optional("company", asString(identity["company"])),
-          ...optional("username", asString(identity["username"])),
-          email: asString(identity["email"]),
-          phone: asString(identity["phone"]),
-          street: asString(identity["address1"]),
-          ...optional("address2", asString(identity["address2"])),
-          city: asString(identity["city"]),
-          state: asString(identity["state"]),
-          zip: asString(identity["postalCode"]),
-          country: asString(identity["country"]),
-          ...optional("passportNumber", asString(identity["passportNumber"])),
-          ...optional("licenseNumber", asString(identity["licenseNumber"])),
-          ...optional("nationalId", asString(identity["ssn"])),
-          notes: clampText(notes, MAX_IDENTITY_NOTES_LENGTH, "notes", label, warnings),
-        };
-        keepIfValid(IdentityItemSchema, candidate, "identity", label, warnings, items);
+        const text = (key: string) => asString(identity[key]);
+        emitIdentity(
+          base,
+          {
+            name: rawName || "Imported item",
+            firstName: text("firstName"),
+            middleName: text("middleName"),
+            lastName: text("lastName"),
+            company: text("company"),
+            username: text("username"),
+            email: text("email"),
+            phone: text("phone"),
+            street: text("address1"),
+            address2: [text("address2"), text("address3")].filter((part) => part !== "").join(", "),
+            city: text("city"),
+            state: text("state"),
+            zip: text("postalCode"),
+            country: text("country"),
+            passportNumber: text("passportNumber"),
+            licenseNumber: text("licenseNumber"),
+            nationalId: text("ssn"),
+            notes: [text("title") === "" ? "" : `Title: ${text("title")}`, notesWithFields]
+              .filter((part) => part !== "")
+              .join("\n"),
+          },
+          label,
+          warnings,
+          items,
+        );
         break;
       }
       case BITWARDEN_TYPE_SSH_KEY: {
@@ -281,7 +266,7 @@ export function importBitwardenJson(text: string): ImportResult {
           secretType: "ssh_key" as const,
           value: clampText(privateKey, MAX_SECRET_VALUE_LENGTH, "private key", label, warnings),
           metadata,
-          notes: clampText(notes, MAX_SECRET_NOTES_LENGTH, "notes", label, warnings),
+          notes: clampText(notesWithFields, MAX_SECRET_NOTES_LENGTH, "notes", label, warnings),
         };
         keepIfValid(SecretItemSchema, candidate, "secret", label, warnings, items);
         break;
@@ -357,15 +342,6 @@ function asNumber(value: unknown): number {
   return typeof value === "number" && Number.isFinite(value) ? value : Number.NaN;
 }
 
-function optional<K extends string>(key: K, value: string): Partial<Record<K, string>> {
-  return value === "" ? {} : ({ [key]: value } as Record<K, string>);
-}
-
-function brandOf(raw: string): { brand?: CardBrand } {
-  const brand = CARD_BRAND[raw.trim().toLowerCase()];
-  return brand === undefined ? {} : { brand };
-}
-
 /** Bitwarden custom fields carry over one-to-one; only unknown types are dropped, and named. */
 function customFieldsOf(raw: unknown, warnings: string[], label: string): LoginCustomField[] {
   if (!Array.isArray(raw)) return [];
@@ -398,4 +374,23 @@ function customFieldsOf(raw: unknown, warnings: string[], label: string): LoginC
     });
   }
   return fields;
+}
+
+/** Bitwarden custom fields as "name: value" lines; a linked field names no value and is skipped. */
+function fieldLinesOf(raw: unknown): string {
+  if (!Array.isArray(raw)) return "";
+  const lines: string[] = [];
+  for (const entry of raw) {
+    if (!isRecord(entry)) continue;
+    const name = asString(entry["name"]).trim();
+    const type = typeof entry["type"] === "number" ? entry["type"] : 0;
+    if (type === 3) continue;
+    const value =
+      type === 2
+        ? String(entry["value"] === true || entry["value"] === "true")
+        : asString(entry["value"]);
+    if (value.trim() === "") continue;
+    lines.push(`${name === "" ? "Field" : name}: ${value}`);
+  }
+  return lines.join("\n");
 }

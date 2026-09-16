@@ -110,8 +110,20 @@ export function emitCard(
       warnings,
     ),
     number,
-    expMonth: clampText(twoDigitMonth(draft.expMonth ?? ""), 2, "expiry month", label, warnings),
-    expYear: clampText(fourDigitYear(draft.expYear ?? ""), 4, "expiry year", label, warnings),
+    expMonth: dateField(
+      twoDigitMonth(draft.expMonth ?? ""),
+      MONTH_PATTERN,
+      "expiry month",
+      label,
+      warnings,
+    ),
+    expYear: dateField(
+      fourDigitYear(draft.expYear ?? ""),
+      YEAR_PATTERN,
+      "expiry year",
+      label,
+      warnings,
+    ),
     cvv: clampText((draft.cvv ?? "").trim(), 8, "security code", label, warnings),
     pin: clampText((draft.pin ?? "").trim(), 16, "PIN", label, warnings),
     notes: clampText(draft.notes ?? "", MAX_CARD_NOTES_LENGTH, "notes", label, warnings),
@@ -174,6 +186,22 @@ const MONTHS = [
 ];
 
 /** "3", "03", "March", "mar" → "03"; anything else is passed through trimmed. */
+const MONTH_PATTERN = /^(?:0[1-9]|1[0-2])$/u;
+const YEAR_PATTERN = /^\d{4}$/u;
+
+/** A month or year that is not one is left blank and named, never shortened into another date. */
+function dateField(
+  value: string,
+  pattern: RegExp,
+  field: string,
+  label: string,
+  warnings: string[],
+): string {
+  if (value === "" || pattern.test(value)) return value;
+  warnings.push(`"${label}": ${field} was not a valid ${field.split(" ")[1]} and was left blank.`);
+  return "";
+}
+
 export function twoDigitMonth(value: string): string {
   const trimmed = value.trim();
   if (/^\d{1,2}$/u.test(trimmed)) {
@@ -217,7 +245,7 @@ export function splitExpiry(value: string): { expMonth: string; expYear: string 
   if (/^\d{4}$/u.test(only)) {
     // "0327" (MMYY) is ambiguous with a bare year; only a plausible month is split.
     const month = Number(only.slice(0, 2));
-    return month >= 1 && month <= 12 && Number(only.slice(2)) < 100
+    return month >= 1 && month <= 12
       ? { expMonth: only.slice(0, 2), expYear: `20${only.slice(2)}` }
       : { expMonth: "", expYear: only };
   }

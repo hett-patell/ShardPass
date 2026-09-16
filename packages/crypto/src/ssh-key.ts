@@ -42,7 +42,7 @@ const CURVES: Record<string, { name: "P-256" | "P-384" | "P-521"; ssh: string; s
 export function isSshPrivateKey(text: string): boolean {
   const trimmed = text.trim();
   return (
-    /^-----BEGIN (?:OPENSSH |RSA |EC |ENCRYPTED |DSA |)PRIVATE KEY-----/u.test(trimmed) ||
+    /^-----BEGIN (?:OPENSSH |RSA |EC |ENCRYPTED |)PRIVATE KEY-----/u.test(trimmed) ||
     trimmed.startsWith("PuTTY-User-Key-File-")
   );
 }

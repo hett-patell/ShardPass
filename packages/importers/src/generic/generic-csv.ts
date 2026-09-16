@@ -46,19 +46,23 @@ export function readCsvHeaders(text: string): string[] {
 export function guessCsvMapping(headers: readonly string[]): GenericCsvMapping {
   const mapping: Partial<Record<GenericCsvField, string>> = {};
   const taken = new Set<string>();
+  const key = (header: string) => header.trim().toLowerCase();
+  // Exact names for every field first, so "username" is never claimed by "name", then the
+  // looser "contains" pass for what is left.
   for (const field of GENERIC_CSV_FIELDS) {
-    const hints = HINTS[field];
-    // Exact matches first so "username" is not claimed by "name".
     const exact = headers.find(
-      (header) => !taken.has(header) && hints.includes(header.trim().toLowerCase()),
+      (header) => !taken.has(header) && HINTS[field].includes(key(header)),
     );
-    const loose =
-      exact ??
-      headers.find((header) => {
-        if (taken.has(header)) return false;
-        const key = header.trim().toLowerCase();
-        return hints.some((hint) => key.includes(hint));
-      });
+    if (exact !== undefined) {
+      mapping[field] = exact;
+      taken.add(exact);
+    }
+  }
+  for (const field of GENERIC_CSV_FIELDS) {
+    if (mapping[field] !== undefined) continue;
+    const loose = headers.find(
+      (header) => !taken.has(header) && HINTS[field].some((hint) => key(header).includes(hint)),
+    );
     if (loose !== undefined) {
       mapping[field] = loose;
       taken.add(loose);

@@ -55,13 +55,35 @@ const CARD_FIELD_HINTS = ["card number", "cardnumber", "cardholder", "cvv", "cvc
 const CARD_TITLE_HINTS = ["credit card", "debit card", "visa", "mastercard", "amex"];
 
 const IDENTITY_FIELD_HINTS = [
-  "first name", "firstname", "last name", "lastname", "date of birth",
-  "passport", "national id", "social security", "ssn", "driver licence", "driver license",
+  "first name",
+  "firstname",
+  "last name",
+  "lastname",
+  "date of birth",
+  "passport",
+  "national id",
+  "social security",
+  "ssn",
+  "driver licence",
+  "driver license",
 ];
-const IDENTITY_TITLE_HINTS = ["passport", "identity", "driving licence", "driver license", "national id"];
+const IDENTITY_TITLE_HINTS = [
+  "passport",
+  "identity",
+  "driving licence",
+  "driver license",
+  "national id",
+];
 
 const SSH_KEY_MARKER = "-----BEGIN";
-const API_FIELD_HINTS = ["api key", "api-key", "apikey", "access key", "client secret", "secret key"];
+const API_FIELD_HINTS = [
+  "api key",
+  "api-key",
+  "apikey",
+  "access key",
+  "client secret",
+  "secret key",
+];
 const TOKEN_FIELD_HINTS = ["token", "bearer"];
 
 /** KeeTrayTOTP and KeePassXC keep a TOTP as a seed plus a "period;digits" settings string. */
@@ -87,21 +109,35 @@ function hasTitleHint(entry: KeePassEntry, hints: readonly string[]): boolean {
   return hints.some((hint) => title.includes(hint));
 }
 
-/** Finds a custom field by name, returning its key too so callers can mark it consumed. */
+/**
+ * Finds a custom field by name, returning its key too so callers can mark it consumed. An
+ * exact name wins over a name that merely contains the candidate ("Card Number" before
+ * "Phone number" for "number"), and a field already placed elsewhere is never taken twice.
+ */
 function findFieldEntry(
   entry: KeePassEntry,
+  consumed: ReadonlySet<string> | null,
   ...candidates: readonly string[]
 ): readonly [key: string, value: string] | undefined {
-  for (const [key, value] of entry.custom) {
-    const name = lower(key);
-    if (candidates.some((candidate) => name === candidate || name.includes(candidate))) return [key, value];
+  const free = [...entry.custom].filter(([key]) => consumed === null || !consumed.has(key));
+  for (const candidate of candidates) {
+    const exact = free.find(([key]) => lower(key) === candidate);
+    if (exact !== undefined) return exact;
+  }
+  for (const candidate of candidates) {
+    const loose = free.find(([key]) => lower(key).includes(candidate));
+    if (loose !== undefined) return loose;
   }
   return undefined;
 }
 
 /** Reads a custom field into a typed slot and records that it has found its place. */
-function takeField(entry: KeePassEntry, consumed: Set<string>, ...candidates: readonly string[]): string {
-  const found = findFieldEntry(entry, ...candidates);
+function takeField(
+  entry: KeePassEntry,
+  consumed: Set<string>,
+  ...candidates: readonly string[]
+): string {
+  const found = findFieldEntry(entry, consumed, ...candidates);
   if (found === undefined) return "";
   consumed.add(found[0]);
   return found[1];
@@ -112,18 +148,22 @@ function hasCredentials(entry: KeePassEntry): boolean {
 }
 
 function fitsCustomField(value: string): boolean {
-  return Array.from(value).length <= MAX_LOGIN_CUSTOM_FIELD_VALUE_LENGTH;
+  return value.length <= MAX_LOGIN_CUSTOM_FIELD_VALUE_LENGTH;
 }
 
 export function classifyEntry(entry: KeePassEntry): ClassifiedKind {
-  if (hasFieldHint(entry, CARD_FIELD_HINTS) || hasTitleHint(entry, CARD_TITLE_HINTS)) return "card";
-  if (hasFieldHint(entry, IDENTITY_FIELD_HINTS) || hasTitleHint(entry, IDENTITY_TITLE_HINTS))
-    return "identity";
+  if (hasFieldHint(entry, CARD_FIELD_HINTS)) return "card";
+  if (hasFieldHint(entry, IDENTITY_FIELD_HINTS)) return "identity";
+  // A title alone is a weak hint: "Amex" with a password and a site is the site's login,
+  // and turning it into a card would file the password as a PIN.
+  const signedIn = entry.password !== "" && (entry.url !== "" || entry.username !== "");
+  if (!signedIn && hasTitleHint(entry, CARD_TITLE_HINTS)) return "card";
+  if (!signedIn && hasTitleHint(entry, IDENTITY_TITLE_HINTS)) return "identity";
 
   // A key pasted into the Password field is common in KeePass; as a login it would exceed
   // the password ceiling and be rejected outright, so it is routed to a secret instead.
   if (looksLikeKeyMaterial(entry.password)) return "secret";
-  if (Array.from(entry.password).length > MAX_LOGIN_PASSWORD_LENGTH) return "secret";
+  if (entry.password.length > MAX_LOGIN_PASSWORD_LENGTH) return "secret";
 
   // A token or key in a custom field makes a secret only when the entry is nothing else.
   // With a username, password or site alongside it, this is a login that also carries a
@@ -233,7 +273,13 @@ export function convertEntry(entry: KeePassEntry, folderId?: string): Conversion
   const fresh = newItemBase();
   const createdAt = entry.createdAt ?? fresh.createdAt;
   const updatedAt = entry.updatedAt ?? createdAt;
-  const base = { ...fresh, createdAt, updatedAt, tags, ...(folderId === undefined ? {} : { folderId }) };
+  const base = {
+    ...fresh,
+    createdAt,
+    updatedAt,
+    tags,
+    ...(folderId === undefined ? {} : { folderId }),
+  };
 
   let linkedOtpId: string | undefined;
   const otp = resolveOtp(entry, displayName, consumed, label, warnings);
@@ -251,21 +297,42 @@ export function convertEntry(entry: KeePassEntry, folderId?: string): Conversion
     let pin = takeField(entry, consumed, "pin").slice(0, MAX_CARD_PIN_LENGTH);
     if (entry.password !== "") {
       // KeePass users keep a card's PIN in the password field more often than anywhere else.
-      if (pin === "" && Array.from(entry.password).length <= MAX_CARD_PIN_LENGTH) pin = entry.password;
-      else warnings.push(`"${label}": the password field has no place on a card and was not imported.`);
+      if (pin === "" && entry.password.length <= MAX_CARD_PIN_LENGTH) pin = entry.password;
+      else
+        warnings.push(
+          `"${label}": the password field has no place on a card and was not imported.`,
+        );
     }
     const candidate = {
       ...base,
       kind: "card" as const,
       name: clampName(displayName, MAX_CARD_NAME_LENGTH, "Imported item", label, warnings),
-      cardholderName: clampText(takeField(entry, consumed, "cardholder", "name on card"), MAX_CARD_HOLDER_LENGTH, "cardholder name", label, warnings),
-      number: clampText(takeField(entry, consumed, "card number", "cardnumber", "number"), MAX_CARD_NUMBER_LENGTH, "card number", label, warnings),
+      cardholderName: clampText(
+        takeField(entry, consumed, "cardholder", "name on card"),
+        MAX_CARD_HOLDER_LENGTH,
+        "cardholder name",
+        label,
+        warnings,
+      ),
+      number: clampText(
+        takeField(entry, consumed, "card number", "cardnumber", "number"),
+        MAX_CARD_NUMBER_LENGTH,
+        "card number",
+        label,
+        warnings,
+      ),
       expMonth: takeField(entry, consumed, "expiry month", "exp month", "expmonth").slice(0, 2),
       expYear: takeField(entry, consumed, "expiry year", "exp year", "expyear").slice(0, 4),
       cvv: takeField(entry, consumed, "cvv", "cvc", "security code").slice(0, 8),
       pin,
       notes: clampText(
-        appendCustomFields(entry, joinNotes(entry.notes, credentialLines(entry, true)), consumed, label, warnings),
+        appendCustomFields(
+          entry,
+          joinNotes(entry.notes, credentialLines(entry, true)),
+          consumed,
+          label,
+          warnings,
+        ),
         MAX_CARD_NOTES_LENGTH,
         "notes",
         label,
@@ -278,7 +345,9 @@ export function convertEntry(entry: KeePassEntry, folderId?: string): Conversion
 
   if (kind === "identity") {
     if (entry.password !== "")
-      warnings.push(`"${label}": the password field has no place on an identity and was not imported.`);
+      warnings.push(
+        `"${label}": the password field has no place on an identity and was not imported.`,
+      );
     const candidate = {
       ...base,
       kind: "identity" as const,
@@ -294,7 +363,13 @@ export function convertEntry(entry: KeePassEntry, folderId?: string): Conversion
       zip: takeField(entry, consumed, "zip", "postal"),
       country: takeField(entry, consumed, "country"),
       notes: clampText(
-        appendCustomFields(entry, joinNotes(entry.notes, credentialLines(entry, false)), consumed, label, warnings),
+        appendCustomFields(
+          entry,
+          joinNotes(entry.notes, credentialLines(entry, false)),
+          consumed,
+          label,
+          warnings,
+        ),
         MAX_IDENTITY_NOTES_LENGTH,
         "notes",
         label,
@@ -308,7 +383,7 @@ export function convertEntry(entry: KeePassEntry, folderId?: string): Conversion
   if (kind === "secret") {
     const secretType = secretTypeFor(entry);
     const keyed = [...entry.custom].find(([, value]) => value.includes(SSH_KEY_MARKER));
-    const hinted = findFieldEntry(entry, ...API_FIELD_HINTS, ...TOKEN_FIELD_HINTS);
+    const hinted = findFieldEntry(entry, null, ...API_FIELD_HINTS, ...TOKEN_FIELD_HINTS);
     const source = keyed ?? (hinted !== undefined && hinted[1] !== "" ? hinted : undefined);
     if (source !== undefined) consumed.add(source[0]);
     const value = source === undefined ? entry.password : source[1];
@@ -318,18 +393,44 @@ export function convertEntry(entry: KeePassEntry, folderId?: string): Conversion
     // them has to be flattened into notes or left behind.
     const metadata: Record<string, string> = {};
     if (entry.username !== "")
-      metadata["username"] = clampText(entry.username, MAX_SECRET_METADATA_VALUE_LENGTH, "username", label, warnings);
+      metadata["username"] = clampText(
+        entry.username,
+        MAX_SECRET_METADATA_VALUE_LENGTH,
+        "username",
+        label,
+        warnings,
+      );
     if (entry.url !== "")
-      metadata["url"] = clampText(entry.url, MAX_SECRET_METADATA_VALUE_LENGTH, "URL", label, warnings);
+      metadata["url"] = clampText(
+        entry.url,
+        MAX_SECRET_METADATA_VALUE_LENGTH,
+        "URL",
+        label,
+        warnings,
+      );
     for (const [key, fieldValue] of entry.custom) {
       if (consumed.has(key)) continue;
-      const metadataKey = clampText(key.trim() === "" ? "Field" : key.trim(), MAX_SECRET_METADATA_KEY_LENGTH, "field name", label, warnings);
+      const metadataKey = clampText(
+        key.trim() === "" ? "Field" : key.trim(),
+        MAX_SECRET_METADATA_KEY_LENGTH,
+        "field name",
+        label,
+        warnings,
+      );
       if (metadataKey in metadata) continue;
       if (Object.keys(metadata).length >= MAX_SECRET_METADATA_ENTRIES) {
-        warnings.push(`"${label}": only the first ${MAX_SECRET_METADATA_ENTRIES} fields were kept.`);
+        warnings.push(
+          `"${label}": only the first ${MAX_SECRET_METADATA_ENTRIES} fields were kept.`,
+        );
         break;
       }
-      metadata[metadataKey] = clampText(fieldValue, MAX_SECRET_METADATA_VALUE_LENGTH, `field "${key}"`, label, warnings);
+      metadata[metadataKey] = clampText(
+        fieldValue,
+        MAX_SECRET_METADATA_VALUE_LENGTH,
+        `field "${key}"`,
+        label,
+        warnings,
+      );
     }
     const candidate = {
       ...base,
@@ -349,7 +450,13 @@ export function convertEntry(entry: KeePassEntry, folderId?: string): Conversion
       ...base,
       kind: "note" as const,
       name: clampName(displayName, MAX_NOTE_NAME_LENGTH, "Imported item", label, warnings),
-      content: clampText(appendCustomFields(entry, entry.notes, consumed, label, warnings), MAX_NOTE_CONTENT_LENGTH, "content", label, warnings),
+      content: clampText(
+        appendCustomFields(entry, entry.notes, consumed, label, warnings),
+        MAX_NOTE_CONTENT_LENGTH,
+        "content",
+        label,
+        warnings,
+      ),
     };
     keepIfValid(NoteItemSchema, candidate, "note", label, warnings, items);
     return { items, warnings };
@@ -431,7 +538,7 @@ function resolveOtp(
   if (reserved !== "") {
     if (/^otpauth:\/\//iu.test(reserved)) {
       try {
-        const parsed = parseOtpAuthUri(reserved);
+        const parsed = parseLenientOtpAuthUri(reserved);
         return {
           issuer: parsed.issuer === "" ? name : parsed.issuer,
           label: parsed.label === "" ? otpLabelFor(entry, name) : parsed.label,
@@ -447,25 +554,37 @@ function resolveOtp(
         return undefined;
       }
     }
-    const parts = reserved.includes("key=") ? parseKeeOtp(reserved, entry, name) : parseBareSeed(reserved, entry, name);
-    if (parts === undefined) warnings.push(`"${label}": the one-time-code secret could not be read and was skipped.`);
+    const parts = reserved.includes("key=")
+      ? parseKeeOtp(reserved, entry, name)
+      : parseBareSeed(reserved, entry, name);
+    if (parts === undefined)
+      warnings.push(`"${label}": the one-time-code secret could not be read and was skipped.`);
     return parts;
   }
 
-  const seed = findFieldEntry(entry, TOTP_SEED_KEY);
+  const seed = findFieldEntry(entry, null, TOTP_SEED_KEY);
   if (seed === undefined) return undefined;
   consumed.add(seed[0]);
-  const settings = findFieldEntry(entry, TOTP_SETTINGS_KEY);
+  const settings = findFieldEntry(entry, null, TOTP_SETTINGS_KEY);
   if (settings !== undefined) consumed.add(settings[0]);
   const parts = parseTraySettings(seed[1], settings?.[1] ?? "", entry, name);
-  if (parts === undefined) warnings.push(`"${label}": the one-time-code secret could not be read and was skipped.`);
+  if (parts === undefined)
+    warnings.push(`"${label}": the one-time-code secret could not be read and was skipped.`);
   return parts;
 }
 
 function parseBareSeed(raw: string, entry: KeePassEntry, name: string): OtpParts | undefined {
   const secret = canonicalSecret(raw);
   if (secret === undefined) return undefined;
-  return { issuer: name, label: otpLabelFor(entry, name), secret, otpType: "totp", algorithm: "SHA1", digits: 6, period: 30 };
+  return {
+    issuer: name,
+    label: otpLabelFor(entry, name),
+    secret,
+    otpType: "totp",
+    algorithm: "SHA1",
+    digits: 6,
+    period: 30,
+  };
 }
 
 /** KeeOTP: `key=SEED&type=totp&step=30&size=6&otpHashMode=Sha1`, URL-encoded. */
@@ -501,7 +620,12 @@ function parseKeeOtp(raw: string, entry: KeePassEntry, name: string): OtpParts |
 }
 
 /** KeeTrayTOTP / KeePassXC legacy: settings are "period;digits", with "S" for Steam. */
-function parseTraySettings(seed: string, settings: string, entry: KeePassEntry, name: string): OtpParts | undefined {
+function parseTraySettings(
+  seed: string,
+  settings: string,
+  entry: KeePassEntry,
+  name: string,
+): OtpParts | undefined {
   const secret = canonicalSecret(seed);
   if (secret === undefined) return undefined;
   const [periodText = "30", digitsText = "6"] = settings.split(";").map((part) => part.trim());
@@ -509,11 +633,27 @@ function parseTraySettings(seed: string, settings: string, entry: KeePassEntry, 
   if (period === undefined) return undefined;
   if (digitsText.toUpperCase() === "S") {
     if (period !== 30) return undefined;
-    return { issuer: name, label: otpLabelFor(entry, name), secret, otpType: "steam", algorithm: "SHA1", digits: 5, period: 30 };
+    return {
+      issuer: name,
+      label: otpLabelFor(entry, name),
+      secret,
+      otpType: "steam",
+      algorithm: "SHA1",
+      digits: 5,
+      period: 30,
+    };
   }
   const digits = smallInteger(digitsText === "" ? null : digitsText, 6);
   if (digits === undefined) return undefined;
-  return { issuer: name, label: otpLabelFor(entry, name), secret, otpType: "totp", algorithm: "SHA1", digits, period };
+  return {
+    issuer: name,
+    label: otpLabelFor(entry, name),
+    secret,
+    otpType: "totp",
+    algorithm: "SHA1",
+    digits,
+    period,
+  };
 }
 
 function smallInteger(value: string | null, fallback: number): number | undefined {
@@ -524,7 +664,12 @@ function smallInteger(value: string | null, fallback: number): number | undefine
 
 function buildOtpItem(
   parts: OtpParts,
-  base: Readonly<{ createdAt: string; updatedAt: string; tags: readonly string[]; folderId: string | undefined }>,
+  base: Readonly<{
+    createdAt: string;
+    updatedAt: string;
+    tags: readonly string[];
+    folderId: string | undefined;
+  }>,
   label: string,
   warnings: string[],
 ): VaultItem | undefined {
@@ -549,4 +694,22 @@ function buildOtpItem(
   if (result.success) return result.data;
   warnings.push(`"${label}": the one-time-code secret was not valid and was skipped.`);
   return undefined;
+}
+
+/**
+ * KeePassXC writes "otpauth://totp/Site:alice?issuer=Site" and some tools "Site.com:alice"
+ * with issuer "Site"; the strict parser refuses the second, so the label's own prefix is
+ * dropped and the query issuer trusted before giving up.
+ */
+function parseLenientOtpAuthUri(uri: string): ReturnType<typeof parseOtpAuthUri> {
+  try {
+    return parseOtpAuthUri(uri);
+  } catch (error) {
+    const parsed = new URL(uri);
+    const path = decodeURIComponent(parsed.pathname.slice(1));
+    const separator = path.indexOf(":");
+    if (separator < 0 || parsed.searchParams.get("issuer") === null) throw error;
+    parsed.pathname = `/${encodeURIComponent(path.slice(separator + 1).trim())}`;
+    return parseOtpAuthUri(parsed.toString());
+  }
 }

@@ -159,7 +159,8 @@ async function compositeKey(credentials: KdbxCredentials): Promise<Uint8Array> {
 
 function requireBytes(kdf: ReadonlyMap<string, VariantValue>, key: string): Uint8Array {
   const value = kdf.get(key);
-  if (!(value instanceof Uint8Array)) throw new KdbxFormatError(`KDF parameter "${key}" is missing.`);
+  if (!(value instanceof Uint8Array))
+    throw new KdbxFormatError(`KDF parameter "${key}" is missing.`);
   return value;
 }
 
@@ -184,6 +185,14 @@ function transformKey(kdf: ReadonlyMap<string, VariantValue>, key: Uint8Array): 
     // KeePass records memory in bytes; Argon2 itself is parameterised in KiB.
     const memoryKiB = Math.floor(memoryBytes / 1024);
     if (memoryKiB < 8) throw new KdbxFormatError("KDF memory parameter is implausibly small.");
+    // A database can name any work factor; one that would take gigabytes or hours is not one
+    // this importer will run, whatever the file says.
+    if (
+      memoryKiB > MAX_KDF_MEMORY_KIB ||
+      iterations > MAX_KDF_ITERATIONS ||
+      parallelism > MAX_KDF_PARALLELISM
+    )
+      throw new KdbxFormatError("KDF parameters exceed what this importer will run.");
     const argon = kdfId === KDF_ARGON2D ? argon2d : argon2id;
     return argon(key, salt, {
       t: iterations,
@@ -205,7 +214,10 @@ function transformKey(kdf: ReadonlyMap<string, VariantValue>, key: Uint8Array): 
 
 export type KdbxKeys = Readonly<{ cipherKey: Uint8Array; hmacBase: Uint8Array }>;
 
-export async function deriveKeys(header: KdbxHeader, credentials: KdbxCredentials): Promise<KdbxKeys> {
+export async function deriveKeys(
+  header: KdbxHeader,
+  credentials: KdbxCredentials,
+): Promise<KdbxKeys> {
   const transformed = transformKey(header.kdf, await compositeKey(credentials));
   return {
     cipherKey: await sha256(concatBytes(header.masterSeed, transformed)),
@@ -230,7 +242,8 @@ export async function verifyHeader(
   usedKeyFile = false,
 ): Promise<void> {
   const key = await blockHmacKey(keys.hmacBase, HEADER_HMAC_INDEX);
-  if (!bytesEqual(await hmacSha256(key, header.raw), stored)) throw new KdbxPasswordError(usedKeyFile);
+  if (!bytesEqual(await hmacSha256(key, header.raw), stored))
+    throw new KdbxPasswordError(usedKeyFile);
 }
 
 /** Reassembles the HMAC-protected block stream that follows the header. */
@@ -245,7 +258,8 @@ export async function readHmacBlocks(body: Uint8Array, keys: KdbxKeys): Promise<
     const expected = await hmacSha256(key, concatBytes(u64le(index), u32le(length), data));
     // Every block is authenticated, so truncation or splicing is rejected rather than
     // silently yielding a short vault.
-    if (!bytesEqual(expected, tag)) throw new KdbxFormatError("Database block failed its integrity check.");
+    if (!bytesEqual(expected, tag))
+      throw new KdbxFormatError("Database block failed its integrity check.");
     if (length === 0) break;
     blocks.push(data);
   }
@@ -260,9 +274,13 @@ export async function decryptPayload(
   if (header.cipherId === CIPHER_CHACHA20)
     return chacha20(keys.cipherKey, header.encryptionIv, ciphertext);
 
-  const key = await crypto.subtle.importKey("raw", toArrayBuffer(keys.cipherKey), { name: "AES-CBC" }, false, [
-    "decrypt",
-  ]);
+  const key = await crypto.subtle.importKey(
+    "raw",
+    toArrayBuffer(keys.cipherKey),
+    { name: "AES-CBC" },
+    false,
+    ["decrypt"],
+  );
   try {
     // WebCrypto strips the PKCS#7 padding KeePass applies.
     const plain = await crypto.subtle.decrypt(
@@ -276,7 +294,32 @@ export async function decryptPayload(
   }
 }
 
+/** The inflated payload's ceiling; a database past it is not one a browser can hold anyway. */
+const MAX_INFLATED_BYTES = 64 * 1024 * 1024;
+const MAX_KDF_MEMORY_KIB = 1024 * 1024;
+const MAX_KDF_ITERATIONS = 100;
+const MAX_KDF_PARALLELISM = 8;
+
 export async function gunzip(data: Uint8Array): Promise<Uint8Array> {
   const stream = new Blob([data as BlobPart]).stream().pipeThrough(new DecompressionStream("gzip"));
-  return new Uint8Array(await new Response(stream).arrayBuffer());
+  const reader = stream.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > MAX_INFLATED_BYTES) {
+      await reader.cancel();
+      throw new KdbxFormatError("Database payload is larger than this importer will read.");
+    }
+    chunks.push(value);
+  }
+  const out = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    out.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return out;
 }

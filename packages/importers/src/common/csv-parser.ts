@@ -7,8 +7,8 @@
  * after the first such note.
  */
 export function parseCsv(text: string): { headers: string[]; rows: Record<string, string>[] } {
-  const records = parseRecords(text.startsWith("﻿") ? text.slice(1) : text).filter(
-    (record) => record.some((field) => field.trim().length > 0),
+  const records = parseRecords(text.startsWith("﻿") ? text.slice(1) : text).filter((record) =>
+    record.some((field) => field.trim().length > 0),
   );
   const headers = records[0];
   if (headers === undefined) return { headers: [], rows: [] };
@@ -17,6 +17,9 @@ export function parseCsv(text: string): { headers: string[]; rows: Record<string
     for (let index = 0; index < headers.length; index++) {
       row[headers[index]!] = values[index] ?? "";
     }
+    // An unquoted comma in the last column (a hand-made file's note) must not lose its tail.
+    if (values.length > headers.length && headers.length > 0)
+      row[headers[headers.length - 1]!] = values.slice(headers.length - 1).join(",");
     return row;
   });
   return { headers, rows };

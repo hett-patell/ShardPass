@@ -14,10 +14,19 @@ export function clampText(
   label: string,
   warnings: string[],
 ): string {
-  const scalars = Array.from(value);
-  if (scalars.length <= max) return value;
+  if (value.length <= max) return value;
   warnings.push(`"${label}": ${field} was longer than ${max} characters and was truncated.`);
-  return scalars.slice(0, max).join("");
+  return cutUnits(value, max);
+}
+
+/**
+ * The schemas measure text the way JavaScript does, in UTF-16 units, so the cut is made in
+ * those units too; a pair split in the middle would leave a lone surrogate the schemas refuse.
+ */
+export function cutUnits(value: string, max: number): string {
+  if (value.length <= max) return value;
+  const cut = value.slice(0, max);
+  return /[\uD800-\uDBFF]$/u.test(cut) ? cut.slice(0, -1) : cut;
 }
 
 /**
@@ -39,10 +48,9 @@ export function clampName(
 export function warningLabel(value: string, fallback: string): string {
   const trimmed = value.trim();
   if (trimmed === "") return fallback;
-  const scalars = Array.from(trimmed);
-  return scalars.length <= MAX_WARNING_LABEL_LENGTH
+  return trimmed.length <= MAX_WARNING_LABEL_LENGTH
     ? trimmed
-    : `${scalars.slice(0, MAX_WARNING_LABEL_LENGTH).join("")}…`;
+    : `${cutUnits(trimmed, MAX_WARNING_LABEL_LENGTH)}…`;
 }
 
 /**
@@ -50,11 +58,16 @@ export function warningLabel(value: string, fallback: string): string {
  * entry would otherwise reject the entire item. Later duplicates are dropped and the list
  * is bounded to what the schema accepts.
  */
-export function normalizeTags(tags: readonly string[], label: string, warnings: string[]): string[] {
+export function normalizeTags(
+  tags: readonly string[],
+  label: string,
+  warnings: string[],
+): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
   for (const raw of tags) {
-    const tag = Array.from(raw.trim()).slice(0, MAX_ITEM_TAG_LENGTH).join("");
+    // Cut, then trimmed again: a cut that lands on a space would fail the schema's trim rule.
+    const tag = cutUnits(raw.trim(), MAX_ITEM_TAG_LENGTH).trim();
     if (tag === "") continue;
     const key = tag.normalize("NFKC").toLocaleLowerCase("en-US");
     if (seen.has(key)) continue;
@@ -114,7 +127,11 @@ export function firstInvalidField(error: SchemaFailure): string {
  * reporting which field failed. Returns whether the item was kept.
  */
 export function keepIfValid<T>(
-  schema: { safeParse(value: unknown): { success: true; data: T } | { success: false; error: SchemaFailure } },
+  schema: {
+    safeParse(
+      value: unknown,
+    ): { success: true; data: T } | { success: false; error: SchemaFailure };
+  },
   candidate: unknown,
   kind: string,
   label: string,
