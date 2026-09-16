@@ -177,16 +177,19 @@ describe("extension pages on browsers that omit MessageSender.documentId", () =>
   it.each([
     ["popup", popupUrl],
     ["vault", vaultUrl],
-  ] as const)("accepts the %s page and substitutes a document identity", (contextKind, senderUrl) => {
-    const normalized = normalizeSenderContext({ extensionId, senderUrl }, extensionId);
-    expect(normalized).toEqual({
-      extensionId,
-      contextKind,
-      senderUrl,
-      documentId: `page:${senderUrl}`,
-    });
-    expect(SenderContextSchema.safeParse(normalized).success).toBe(true);
-  });
+  ] as const)(
+    "accepts the %s page and substitutes a document identity",
+    (contextKind, senderUrl) => {
+      const normalized = normalizeSenderContext({ extensionId, senderUrl }, extensionId);
+      expect(normalized).toEqual({
+        extensionId,
+        contextKind,
+        senderUrl,
+        documentId: `page:${senderUrl}`,
+      });
+      expect(SenderContextSchema.safeParse(normalized).success).toBe(true);
+    },
+  );
 
   it("prefers a browser-supplied documentId over the substitute", () => {
     const normalized = normalizeSenderContext(
@@ -218,15 +221,27 @@ describe("extension pages on browsers that omit MessageSender.documentId", () =>
       { extensionId: id, senderUrl: `chrome-extension://${id}/vault/index.html#/settings` },
       id,
     );
-    const bare = normalizeSenderContext({ extensionId: id, senderUrl: `chrome-extension://${id}/vault/index.html` }, id);
-    expect(withHash).toMatchObject({ contextKind: "vault", senderUrl: `chrome-extension://${id}/vault/index.html` });
+    const bare = normalizeSenderContext(
+      { extensionId: id, senderUrl: `chrome-extension://${id}/vault/index.html` },
+      id,
+    );
+    expect(withHash).toMatchObject({
+      contextKind: "vault",
+      senderUrl: `chrome-extension://${id}/vault/index.html`,
+    });
     expect(withHash?.documentId).toBe(bare?.documentId);
     // A query string is still not one of our pages.
     expect(
-      normalizeSenderContext({ extensionId: id, senderUrl: `chrome-extension://${id}/vault/index.html?x=1#/ente` }, id),
+      normalizeSenderContext(
+        { extensionId: id, senderUrl: `chrome-extension://${id}/vault/index.html?x=1#/ente` },
+        id,
+      ),
     ).toBeNull();
     expect(
-      normalizeSenderContext({ extensionId: id, senderUrl: `chrome-extension://${id}/vault/other.html#/settings` }, id),
+      normalizeSenderContext(
+        { extensionId: id, senderUrl: `chrome-extension://${id}/vault/other.html#/settings` },
+        id,
+      ),
     ).toBeNull();
   });
 });

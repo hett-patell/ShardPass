@@ -99,7 +99,10 @@ describe("KDBX 4 reader: history, attachments and times", () => {
     expect(after?.password).toBe("still-readable");
     const versioned = database.entries.find((entry) => entry.title === "Versioned");
     expect(versioned?.password).toBe("current-secret-3");
-    expect(versioned?.history.map((version) => version.password)).toEqual(["old-secret-1", "old-secret-2"]);
+    expect(versioned?.history.map((version) => version.password)).toEqual([
+      "old-secret-1",
+      "old-secret-2",
+    ]);
   });
 
   it("counts attachments without reading them", async () => {
@@ -149,9 +152,9 @@ describe("KDBX 4 reader: key files", () => {
     await expect(
       readKdbx(load("keyfile-xml.kdbx"), PASSWORD, load("fixture-raw.key")),
     ).rejects.toThrow("Incorrect master password or key file, or the file is corrupt.");
-    await expect(readKdbx(load("argon2id-aes256.kdbx"), PASSWORD, load("fixture.keyx"))).rejects.toThrow(
-      KdbxPasswordError,
-    );
+    await expect(
+      readKdbx(load("argon2id-aes256.kdbx"), PASSWORD, load("fixture.keyx")),
+    ).rejects.toThrow(KdbxPasswordError);
   });
 
   it("derives the key the way KeePass does for each key file layout", async () => {
@@ -168,7 +171,9 @@ describe("KDBX 4 reader: key files", () => {
   });
 
   it("refuses an XML key file whose checksum does not match", async () => {
-    const damaged = new TextDecoder().decode(load("fixture.keyx")).replace(/Hash="([0-9A-F]{8})"/u, 'Hash="00000000"');
+    const damaged = new TextDecoder()
+      .decode(load("fixture.keyx"))
+      .replace(/Hash="([0-9A-F]{8})"/u, 'Hash="00000000"');
     await expect(keyFileKey(new TextEncoder().encode(damaged))).rejects.toThrow(KdbxFormatError);
   });
 });
@@ -239,7 +244,10 @@ describe("KeePass import: history, attachments, times and TOTP plugins", () => {
     const versioned = items.find((item) => nameOf(item) === "Versioned");
     if (versioned?.kind !== "login") throw new Error("expected login");
     expect(versioned.password).toBe("current-secret-3");
-    expect(versioned.passwordHistory?.map((entry) => entry.password)).toEqual(["old-secret-2", "old-secret-1"]);
+    expect(versioned.passwordHistory?.map((entry) => entry.password)).toEqual([
+      "old-secret-2",
+      "old-secret-1",
+    ]);
   });
 
   it("says how many attachments were left behind", async () => {
@@ -258,9 +266,20 @@ describe("KeePass import: history, attachments, times and TOTP plugins", () => {
   it("reads KeeTrayTOTP seeds and settings, including the Steam form", async () => {
     const { items, warnings } = await importKeePassKdbx(load("extras.kdbx"), PASSWORD);
     const tray = items.find((item) => item.kind === "otp" && item.issuer === "Tray TOTP");
-    expect(tray).toMatchObject({ secret: "JBSWY3DPEHPK3PXP", otpType: "totp", digits: 6, period: 30, label: "tray-user" });
+    expect(tray).toMatchObject({
+      secret: "JBSWY3DPEHPK3PXP",
+      otpType: "totp",
+      digits: 6,
+      period: 30,
+      label: "tray-user",
+    });
     const steam = items.find((item) => item.kind === "otp" && item.issuer === "Tray Steam");
-    expect(steam).toMatchObject({ secret: "GEZDGNBVGY3TQOJQ", otpType: "steam", digits: 5, period: 30 });
+    expect(steam).toMatchObject({
+      secret: "GEZDGNBVGY3TQOJQ",
+      otpType: "steam",
+      digits: 5,
+      period: 30,
+    });
     // The seed and settings found their place on the OTP item, so the login does not repeat them.
     const login = items.find((item) => item.kind === "login" && item.name === "Tray TOTP");
     if (login?.kind !== "login") throw new Error("expected login");
@@ -272,7 +291,13 @@ describe("KeePass import: history, attachments, times and TOTP plugins", () => {
   it("reads a KeeOTP otp string", async () => {
     const { items } = await importKeePassKdbx(load("extras.kdbx"), PASSWORD);
     const otp = items.find((item) => item.kind === "otp" && item.issuer === "KeeOTP Service");
-    expect(otp).toMatchObject({ secret: "JBSWY3DPEHPK3PXP", otpType: "totp", digits: 6, period: 30, label: "keeotp-user" });
+    expect(otp).toMatchObject({
+      secret: "JBSWY3DPEHPK3PXP",
+      otpType: "totp",
+      digits: 6,
+      period: 30,
+      label: "keeotp-user",
+    });
   });
 
   it("keeps a login that also carries an API token, with the token hidden", async () => {
@@ -281,7 +306,9 @@ describe("KeePass import: history, attachments, times and TOTP plugins", () => {
     if (login?.kind !== "login") throw new Error("expected login");
     expect(login.username).toBe("svc");
     expect(login.urls).toEqual(["https://svc.test"]);
-    expect(login.customFields).toEqual([{ name: "api token", type: "hidden", value: "tok-FIXTURE-1234" }]);
+    expect(login.customFields).toEqual([
+      { name: "api token", type: "hidden", value: "tok-FIXTURE-1234" },
+    ]);
   });
 
   it("keeps a card's sign-in details and never copies a protected field into notes", async () => {
@@ -322,7 +349,10 @@ describe("KeePass classifier hardening", () => {
 
   it("routes a PEM key pasted into the Password field to a secret", () => {
     const { items, warnings } = convertEntry(
-      entry({ title: "deploy key", password: "-----BEGIN OPENSSH PRIVATE KEY-----\nabc\n-----END OPENSSH PRIVATE KEY-----" }),
+      entry({
+        title: "deploy key",
+        password: "-----BEGIN OPENSSH PRIVATE KEY-----\nabc\n-----END OPENSSH PRIVATE KEY-----",
+      }),
     );
     expect(items[0]?.kind).toBe("secret");
     expect(items[0]?.kind === "secret" && items[0].secretType).toBe("ssh_key");
@@ -335,8 +365,13 @@ describe("KeePass classifier hardening", () => {
   });
 
   it("classifies a token-only entry as a secret by its type, with leftovers as metadata", () => {
-    const custom = new Map([["api-key", "sk-live-0000"], ["environment", "production"]]);
-    const { items, warnings } = convertEntry(entry({ title: "API", custom, protectedKeys: new Set(["api-key"]) }));
+    const custom = new Map([
+      ["api-key", "sk-live-0000"],
+      ["environment", "production"],
+    ]);
+    const { items, warnings } = convertEntry(
+      entry({ title: "API", custom, protectedKeys: new Set(["api-key"]) }),
+    );
     const secret = items[0];
     if (secret?.kind !== "secret") throw new Error("expected secret");
     expect(secret.secretType).toBe("api_key");
@@ -346,7 +381,9 @@ describe("KeePass classifier hardening", () => {
   });
 
   it("collapses tags that differ only by case", () => {
-    const { items } = convertEntry(entry({ password: "p", tags: ["Work", "work", "WORK", "home"] }));
+    const { items } = convertEntry(
+      entry({ password: "p", tags: ["Work", "work", "WORK", "home"] }),
+    );
     expect(items[0]?.tags).toEqual(["Work", "home"]);
   });
 
@@ -358,7 +395,9 @@ describe("KeePass classifier hardening", () => {
   });
 
   it("splits a URL field holding several addresses", () => {
-    const { items } = convertEntry(entry({ password: "p", url: "https://a.test\nhttps://b.test https://c.test" }));
+    const { items } = convertEntry(
+      entry({ password: "p", url: "https://a.test\nhttps://b.test https://c.test" }),
+    );
     expect(items[0]?.kind === "login" && items[0].urls).toEqual([
       "https://a.test",
       "https://b.test",
@@ -369,19 +408,32 @@ describe("KeePass classifier hardening", () => {
   it("warns about a one-time-code secret it cannot read instead of dropping it silently", () => {
     const { items, warnings } = convertEntry(entry({ password: "p", otp: "key=not-base32!" }));
     expect(items.map((item) => item.kind)).toEqual(["login"]);
-    expect(warnings).toEqual(['"Entry": the one-time-code secret could not be read and was skipped.']);
+    expect(warnings).toEqual([
+      '"Entry": the one-time-code secret could not be read and was skipped.',
+    ]);
   });
 
   it("keeps an identity's username and URL, and says the password had nowhere to go", () => {
-    const custom = new Map([["First Name", "Ada"], ["Last Name", "Lovelace"]]);
+    const custom = new Map([
+      ["First Name", "Ada"],
+      ["Last Name", "Lovelace"],
+    ]);
     const { items, warnings } = convertEntry(
-      entry({ title: "Passport", username: "ada", password: "pw", url: "https://gov.test", custom }),
+      entry({
+        title: "Passport",
+        username: "ada",
+        password: "pw",
+        url: "https://gov.test",
+        custom,
+      }),
     );
     const identity = items[0];
     if (identity?.kind !== "identity") throw new Error("expected identity");
     expect(identity.firstName).toBe("Ada");
     expect(identity.username).toBe("ada");
     expect(identity.notes).toBe("URL: https://gov.test");
-    expect(warnings).toEqual(['"Passport": the password field has no place on an identity and was not imported.']);
+    expect(warnings).toEqual([
+      '"Passport": the password field has no place on an identity and was not imported.',
+    ]);
   });
 });

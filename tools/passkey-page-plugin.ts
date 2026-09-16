@@ -48,7 +48,9 @@ export function passkeyPagePlugin(options: { source: string }): Plugin {
       await mkdir(path.join(outDir, "assets"), { recursive: true });
       await writeFile(path.join(outDir, PASSKEY_PAGE_FILE), code);
       const manifestPath = path.join(outDir, "manifest.json");
-      const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as { content_scripts?: unknown[] };
+      const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as {
+        content_scripts?: unknown[];
+      };
       await writeFile(manifestPath, JSON.stringify(withPasskeyPageScript(manifest), null, 2));
     },
   };

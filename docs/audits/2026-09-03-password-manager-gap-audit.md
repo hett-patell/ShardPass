@@ -6,36 +6,36 @@ Node reproduction of the import path, and web research (sources at the end).
 
 ## 1. Feature baseline vs ShardPass
 
-| Capability | 1Password | Bitwarden | Proton Pass | KeePassXC | ShardPass |
-|---|---|---|---|---|---|
-| Item types | ~20 categories | login/card/identity/note/SSH | login/alias/card/note/identity/password | free-form | 6: otp, login, note, card, identity, secret |
-| TOTP on a login | yes | yes | yes | yes | **no** — separate OTP item linked by `linkedOtpId` |
-| Custom fields | yes | yes (+ linked) | no | yes | **no** |
-| Password history | yes | yes | yes | yes | **no** |
-| Per-URL match mode | — | base/host/starts/exact/regex/never | — | — | **base-domain only** |
-| Passkeys | yes | yes | yes | yes | **no** |
-| Autofill: login | yes | yes | yes | yes | yes (password-field anchored) |
-| Autofill: multi-step / username-only page | yes | yes | yes | yes | **no** |
-| Autofill: card / identity | yes | yes | yes | — | **no** |
-| Save prompt | yes | yes | yes | yes | yes |
-| Update-on-change prompt | yes | yes | yes | yes | **no** |
-| Fill / copy from popup row | yes | yes | yes | — | **no** (row only opens vault) |
-| Health: weak / reused | Watchtower | reports | monitor | health check | **no** |
-| Health: exposed (HIBP) | yes | yes | yes | yes | **no** |
-| Inactive-2FA report | yes | yes | — | — | **no** |
-| Generator | yes | yes | yes | yes | yes (random + passphrase) |
-| Folders / collections | yes | yes | yes (2026) | groups | schema only — **no CRUD UI** |
-| Archive / trash | yes | yes | yes | recycle bin | schema only — **no UI** |
-| Attachments | yes | yes | premium | yes | **no** |
-| Import breadth | many | 50+ | many | CSV/1PUX/BW | Chrome, Firefox, Bitwarden, 1P CSV, KeePass KDBX4, otpauth, backup |
-| Export | CSV/1PUX | CSV/JSON/enc | CSV/JSON/PGP | CSV/XML/HTML | **encrypted backup only** |
-| Clipboard auto-clear | yes | yes | yes | yes | **no** |
-| Keyboard command (fill) | yes | yes | yes | yes | **no** (`commands` absent from manifest) |
-| Context menu | yes | yes | yes | — | **no** |
-| Theme toggle | yes | yes | yes | yes | **system only** — `data-theme` unwired |
-| Auto-lock | yes | yes | yes | yes | yes |
-| Biometric / PIN unlock | yes | yes | yes | Quick Unlock | **no** |
-| Sync | cloud | cloud | cloud | file | OTP-only via Ente (by design) |
+| Capability                                | 1Password      | Bitwarden                          | Proton Pass                             | KeePassXC    | ShardPass                                                          |
+| ----------------------------------------- | -------------- | ---------------------------------- | --------------------------------------- | ------------ | ------------------------------------------------------------------ |
+| Item types                                | ~20 categories | login/card/identity/note/SSH       | login/alias/card/note/identity/password | free-form    | 6: otp, login, note, card, identity, secret                        |
+| TOTP on a login                           | yes            | yes                                | yes                                     | yes          | **no** — separate OTP item linked by `linkedOtpId`                 |
+| Custom fields                             | yes            | yes (+ linked)                     | no                                      | yes          | **no**                                                             |
+| Password history                          | yes            | yes                                | yes                                     | yes          | **no**                                                             |
+| Per-URL match mode                        | —              | base/host/starts/exact/regex/never | —                                       | —            | **base-domain only**                                               |
+| Passkeys                                  | yes            | yes                                | yes                                     | yes          | **no**                                                             |
+| Autofill: login                           | yes            | yes                                | yes                                     | yes          | yes (password-field anchored)                                      |
+| Autofill: multi-step / username-only page | yes            | yes                                | yes                                     | yes          | **no**                                                             |
+| Autofill: card / identity                 | yes            | yes                                | yes                                     | —            | **no**                                                             |
+| Save prompt                               | yes            | yes                                | yes                                     | yes          | yes                                                                |
+| Update-on-change prompt                   | yes            | yes                                | yes                                     | yes          | **no**                                                             |
+| Fill / copy from popup row                | yes            | yes                                | yes                                     | —            | **no** (row only opens vault)                                      |
+| Health: weak / reused                     | Watchtower     | reports                            | monitor                                 | health check | **no**                                                             |
+| Health: exposed (HIBP)                    | yes            | yes                                | yes                                     | yes          | **no**                                                             |
+| Inactive-2FA report                       | yes            | yes                                | —                                       | —            | **no**                                                             |
+| Generator                                 | yes            | yes                                | yes                                     | yes          | yes (random + passphrase)                                          |
+| Folders / collections                     | yes            | yes                                | yes (2026)                              | groups       | schema only — **no CRUD UI**                                       |
+| Archive / trash                           | yes            | yes                                | yes                                     | recycle bin  | schema only — **no UI**                                            |
+| Attachments                               | yes            | yes                                | premium                                 | yes          | **no**                                                             |
+| Import breadth                            | many           | 50+                                | many                                    | CSV/1PUX/BW  | Chrome, Firefox, Bitwarden, 1P CSV, KeePass KDBX4, otpauth, backup |
+| Export                                    | CSV/1PUX       | CSV/JSON/enc                       | CSV/JSON/PGP                            | CSV/XML/HTML | **encrypted backup only**                                          |
+| Clipboard auto-clear                      | yes            | yes                                | yes                                     | yes          | **no**                                                             |
+| Keyboard command (fill)                   | yes            | yes                                | yes                                     | yes          | **no** (`commands` absent from manifest)                           |
+| Context menu                              | yes            | yes                                | yes                                     | —            | **no**                                                             |
+| Theme toggle                              | yes            | yes                                | yes                                     | yes          | **system only** — `data-theme` unwired                             |
+| Auto-lock                                 | yes            | yes                                | yes                                     | yes          | yes                                                                |
+| Biometric / PIN unlock                    | yes            | yes                                | yes                                     | Quick Unlock | **no**                                                             |
+| Sync                                      | cloud          | cloud                              | cloud                                   | file         | OTP-only via Ente (by design)                                      |
 
 Out of scope for a local-first extension and deliberately not counted: email aliases,
 emergency access, sharing, SSH agent, CLI.
@@ -56,14 +56,14 @@ schema rejects. Most plausible triggers, in order:
 
 - **Tags must be unique after NFKC + case-fold** (`item-metadata.ts:24`). KeePass tags
   `Work` and `work` on one entry → `ITEM_INVALID`.
-- **Password ≤ 4096 chars.** An SSH/PGP key pasted into the KeePass *Password* field is
+- **Password ≤ 4096 chars.** An SSH/PGP key pasted into the KeePass _Password_ field is
   classified as a login (the PEM check only inspects custom fields and notes) → rejected.
 - **Login notes ≤ 8192** after `appendCustomFields` folds every custom field in.
 - Worker timeout (120 s) on very high Argon2 cost, or a wrong password — both already
   surface a message, so less likely to read as a bare "import failure".
 
 **F2. Import is O(N²) and non-atomic.** `packages/storage/src/vault-repository.ts
-create()` loads, re-encrypts and rewrites the *whole* vault per item; `ImportDialog`
+create()` loads, re-encrypts and rewrites the _whole_ vault per item; `ImportDialog`
 calls it per row. 500 entries ⇒ 500 full-vault re-encryptions and 500 storage writes,
 and a partial vault if the tab closes mid-way. No batch route exists.
 
@@ -148,15 +148,15 @@ modern-web-guidance baseline recommends `<dialog>` with `closedby` for light-dis
 
 Sizes: S ≈ a day, M ≈ several days, L ≈ a week-plus.
 
-| Phase | Scope | Size |
-|---|---|---|
-| **A. Import trust** | Per-item failure reasons in the preview and summary; classifier clamps to schema limits and reports what it clamped; PEM-in-password → secret; case-fold tag dedupe; duplicate detection on (kind, name, username, first URL); `item.createMany` batch route with a single commit and per-item report; progress indicator. | M |
-| **B. Login model v3** | Custom fields (text / hidden / boolean / linked); inline TOTP secret on login while keeping linked OTP; password history (last N, timestamped); per-URL match mode; `schemaVersion` 3 migration. Extend card and identity fields. | M |
-| **C. Autofill** | Username-only and multi-step detection; `autocomplete` tokens; iframe and nested shadow-root traversal; public-suffix-aware matching; update-on-change prompt; card and identity fill; popup fill/copy/open row actions; `commands` shortcut; context menu. | L |
-| **D. Security reports** | Local weak (zxcvbn-class scoring), reused, exposed via HIBP range API (opt-in, k-anonymity), inactive-2FA against a bundled list; a Reports screen with fix-it links. | M |
-| **E. Organisation and UI** | Folder CRUD and move; archive and trash with restore; theme toggle; restyle the OTP-era screens to tokens; delete kickers and jargon; native `<dialog>`; empty, loading and error states; clipboard auto-clear. | M |
-| **F. Export and 1Password** | CSV and JSON export; 1Password-importable CSV; 1PUX import; surface encrypted backup under Export. | M |
-| **G. Passkeys** | WebAuthn interception in the content script, credential storage, conditional UI. | L |
+| Phase                       | Scope                                                                                                                                                                                                                                                                                                                      | Size |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
+| **A. Import trust**         | Per-item failure reasons in the preview and summary; classifier clamps to schema limits and reports what it clamped; PEM-in-password → secret; case-fold tag dedupe; duplicate detection on (kind, name, username, first URL); `item.createMany` batch route with a single commit and per-item report; progress indicator. | M    |
+| **B. Login model v3**       | Custom fields (text / hidden / boolean / linked); inline TOTP secret on login while keeping linked OTP; password history (last N, timestamped); per-URL match mode; `schemaVersion` 3 migration. Extend card and identity fields.                                                                                          | M    |
+| **C. Autofill**             | Username-only and multi-step detection; `autocomplete` tokens; iframe and nested shadow-root traversal; public-suffix-aware matching; update-on-change prompt; card and identity fill; popup fill/copy/open row actions; `commands` shortcut; context menu.                                                                | L    |
+| **D. Security reports**     | Local weak (zxcvbn-class scoring), reused, exposed via HIBP range API (opt-in, k-anonymity), inactive-2FA against a bundled list; a Reports screen with fix-it links.                                                                                                                                                      | M    |
+| **E. Organisation and UI**  | Folder CRUD and move; archive and trash with restore; theme toggle; restyle the OTP-era screens to tokens; delete kickers and jargon; native `<dialog>`; empty, loading and error states; clipboard auto-clear.                                                                                                            | M    |
+| **F. Export and 1Password** | CSV and JSON export; 1Password-importable CSV; 1PUX import; surface encrypted backup under Export.                                                                                                                                                                                                                         | M    |
+| **G. Passkeys**             | WebAuthn interception in the content script, credential storage, conditional UI.                                                                                                                                                                                                                                           | L    |
 
 Suggested order: **A → B → C → E → D → F → G.** A removes the trust problem found
 today; B is a prerequisite for C's TOTP and custom-field fill; E is cheap coherence that

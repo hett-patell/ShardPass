@@ -208,14 +208,18 @@ describe("legacy item schema migration (Task 12)", () => {
     const after = await repository.get(itemId, crypto);
     expect(after).toMatchObject({ schemaVersion: 2, revision: 1, issuer: "Legacy" });
 
-    const activeGenerationId = ((await storage.get([ACTIVE_ROOT_KEY]))[ACTIVE_ROOT_KEY] as {
-      activeGenerationId: string;
-    }).activeGenerationId;
+    const activeGenerationId = (
+      (await storage.get([ACTIVE_ROOT_KEY]))[ACTIVE_ROOT_KEY] as {
+        activeGenerationId: string;
+      }
+    ).activeGenerationId;
     const rerun = await repository.migrateLegacyItemSchema(crypto);
     expect(rerun).toBe(0);
-    const unchangedGenerationId = ((await storage.get([ACTIVE_ROOT_KEY]))[ACTIVE_ROOT_KEY] as {
-      activeGenerationId: string;
-    }).activeGenerationId;
+    const unchangedGenerationId = (
+      (await storage.get([ACTIVE_ROOT_KEY]))[ACTIVE_ROOT_KEY] as {
+        activeGenerationId: string;
+      }
+    ).activeGenerationId;
     expect(unchangedGenerationId).toBe(activeGenerationId);
   });
 });

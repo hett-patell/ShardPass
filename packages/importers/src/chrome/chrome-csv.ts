@@ -38,7 +38,13 @@ export function importChromeCsv(text: string): ImportResult {
 
     emitLogin(
       newItemBase(),
-      { name: name || url || "Imported login", username, password, urls: url ? [url] : [], notes: note },
+      {
+        name: name || url || "Imported login",
+        username,
+        password,
+        urls: url ? [url] : [],
+        notes: note,
+      },
       label,
       warnings,
       items,

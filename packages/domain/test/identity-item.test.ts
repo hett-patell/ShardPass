@@ -68,9 +68,7 @@ describe("IdentityItemSchema", () => {
   });
 
   it("rejects notes exceeding max length", () => {
-    expect(() =>
-      IdentityItemSchema.parse({ ...validIdentity, notes: "a".repeat(8193) }),
-    ).toThrow();
+    expect(() => IdentityItemSchema.parse({ ...validIdentity, notes: "a".repeat(8193) })).toThrow();
   });
 
   it("rejects wrong kind", () => {

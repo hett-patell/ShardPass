@@ -81,5 +81,9 @@ export function useOtpCode(
 
   if (failure !== null) return { status: failure };
   if (code === null) return { status: "loading" };
-  return { status: "ready", code, remaining: Math.max(0, Math.ceil((code.expiresAt - time) / 1_000)) };
+  return {
+    status: "ready",
+    code,
+    remaining: Math.max(0, Math.ceil((code.expiresAt - time) / 1_000)),
+  };
 }

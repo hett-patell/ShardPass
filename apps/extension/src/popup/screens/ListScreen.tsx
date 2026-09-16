@@ -15,7 +15,14 @@ export interface ListScreenProps {
 }
 
 /** A category's items. Logins copy their password from the row; codes are live in the row. */
-export function ListScreen({ items, emptyText, platform, onOpenItem, onCopyPassword, onCopyCode }: ListScreenProps) {
+export function ListScreen({
+  items,
+  emptyText,
+  platform,
+  onOpenItem,
+  onCopyPassword,
+  onCopyCode,
+}: ListScreenProps) {
   if (items.length === 0) return <p className={styles.empty}>{emptyText}</p>;
   return (
     <ul className={styles.list}>
@@ -24,7 +31,14 @@ export function ListScreen({ items, emptyText, platform, onOpenItem, onCopyPassw
           <PopupRow
             item={item}
             onOpen={onOpenItem}
-            actions={<RowActions item={item} platform={platform} onCopyPassword={onCopyPassword} onCopyCode={onCopyCode} />}
+            actions={
+              <RowActions
+                item={item}
+                platform={platform}
+                onCopyPassword={onCopyPassword}
+                onCopyCode={onCopyCode}
+              />
+            }
           />
         </li>
       ))}

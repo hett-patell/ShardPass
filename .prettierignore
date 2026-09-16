@@ -25,3 +25,8 @@ config/project1-release-tests.json
 packages/importers/src/generated/google-authenticator-migration_pb.ts
 
 config/project1-release-inputs.json
+# Assistant scratch, not project source: written by tooling between runs and reformatting it
+# only creates noise in the diff.
+.remember/
+.superpowers/
+.claude/settings.local.json

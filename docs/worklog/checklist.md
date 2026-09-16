@@ -112,13 +112,13 @@ Baseline at 2.3.0: typecheck clean, lint clean after one test fix, full suite gr
 
 Measured on a 100-item vault, in Node with in-memory storage (the browser pays more, since every read is chrome.storage IPC):
 
-| what | cost |
-| --- | --- |
-| Argon2id at the shipped parameters (64 MiB, 2 passes), libsodium | 750 ms |
+| what                                                                    | cost     |
+| ----------------------------------------------------------------------- | -------- |
+| Argon2id at the shipped parameters (64 MiB, 2 passes), libsodium        | 750 ms   |
 | the same in pure JavaScript, the fallback if the WebAssembly path fails | 1,700 ms |
-| list every item | 40 ms |
-| read one item | 25 ms |
-| update one item (a new generation, written and verified) | 180 ms |
+| list every item                                                         | 40 ms    |
+| read one item                                                           | 25 ms    |
+| update one item (a new generation, written and verified)                | 180 ms   |
 
 - [x] The background service worker statically imported libsodium, 1.8 MB of wrapper and WebAssembly, on every wake, for Ente sync alone. It now loads on the first Ente operation: the worker's start-up graph went from about 2.3 MB to 482 KB. The WebAssembly payload, its imports and its exports are byte-identical; only the wrapper's hash is re-pinned.
 - [ ] Not done: caching the decrypted generation between reads. It cuts a full read from 40 ms to 13 ms and a single item read to under 1 ms, but it breaks a property the vault tests pin: a record tampered with under an unchanged root must be caught on every read. Doing it properly means re-verifying the stored bytes by hash on each cached read, which is its own design decision.

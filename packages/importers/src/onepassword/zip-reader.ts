@@ -96,7 +96,10 @@ export async function readZipEntry(
   if (start + LOCAL_HEADER_LENGTH > bytes.length || view.getUint32(start, true) !== LOCAL_SIGNATURE)
     throw new ZipFormatError(CORRUPT);
   const dataStart =
-    start + LOCAL_HEADER_LENGTH + view.getUint16(start + 26, true) + view.getUint16(start + 28, true);
+    start +
+    LOCAL_HEADER_LENGTH +
+    view.getUint16(start + 26, true) +
+    view.getUint16(start + 28, true);
   const dataEnd = dataStart + entry.compressedSize;
   if (dataEnd > bytes.length) throw new ZipFormatError(CORRUPT);
   const data = bytes.slice(dataStart, dataEnd);

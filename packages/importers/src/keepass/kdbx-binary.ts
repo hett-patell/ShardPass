@@ -94,7 +94,12 @@ export function u64le(value: bigint): Uint8Array {
 }
 
 export function u32le(value: number): Uint8Array {
-  return new Uint8Array([value & 0xff, (value >>> 8) & 0xff, (value >>> 16) & 0xff, (value >>> 24) & 0xff]);
+  return new Uint8Array([
+    value & 0xff,
+    (value >>> 8) & 0xff,
+    (value >>> 16) & 0xff,
+    (value >>> 24) & 0xff,
+  ]);
 }
 
 export function concatBytes(...parts: readonly Uint8Array[]): Uint8Array {

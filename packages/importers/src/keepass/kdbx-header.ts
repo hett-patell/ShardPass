@@ -84,7 +84,12 @@ export function parseKdbxHeader(bytes: Uint8Array): KdbxHeader {
     }
   }
 
-  if (cipherId === undefined || masterSeed === undefined || encryptionIv === undefined || kdf === undefined)
+  if (
+    cipherId === undefined ||
+    masterSeed === undefined ||
+    encryptionIv === undefined ||
+    kdf === undefined
+  )
     throw new KdbxFormatError("KeePass header is missing required fields.");
   if (cipherId === CIPHER_TWOFISH)
     throw new KdbxFormatError("Twofish-encrypted databases are not supported.");

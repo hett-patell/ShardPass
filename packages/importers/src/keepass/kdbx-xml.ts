@@ -42,7 +42,12 @@ function decodeEntities(input: string): string {
  */
 export function parseXml(source: string): XmlNode {
   let at = 0;
-  const stack: { name: string; attributes: Map<string, string>; children: XmlNode[]; text: string }[] = [];
+  const stack: {
+    name: string;
+    attributes: Map<string, string>;
+    children: XmlNode[];
+    text: string;
+  }[] = [];
   let root: XmlNode | undefined;
 
   const fail = (why: string): never => {
@@ -52,7 +57,8 @@ export function parseXml(source: string): XmlNode {
   while (at < source.length) {
     const open = source.indexOf("<", at);
     if (open === -1) break;
-    if (open > at && stack.length > 0) stack[stack.length - 1]!.text += decodeEntities(source.slice(at, open));
+    if (open > at && stack.length > 0)
+      stack[stack.length - 1]!.text += decodeEntities(source.slice(at, open));
 
     if (source.startsWith("<!--", open)) {
       const end = source.indexOf("-->", open);

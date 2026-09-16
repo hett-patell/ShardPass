@@ -23,7 +23,9 @@ describe("formatWhen", () => {
   it("falls back to the local date and time after a day, in local time not UTC", () => {
     const when = now - 3 * 24 * 60 * minute;
     const shown = formatWhen(when, now);
-    expect(shown.text).toBe(new Date(when).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" }));
+    expect(shown.text).toBe(
+      new Date(when).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" }),
+    );
     expect(shown.title).toBe(new Date(when).toLocaleString());
   });
 });

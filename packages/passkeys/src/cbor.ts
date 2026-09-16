@@ -18,7 +18,13 @@ function header(major: number, length: number): number[] {
   if (length < 0x100) return [(major << 5) | 24, length];
   if (length < 0x10000) return [(major << 5) | 25, length >> 8, length & 0xff];
   if (length < 0x1_0000_0000)
-    return [(major << 5) | 26, (length >>> 24) & 0xff, (length >>> 16) & 0xff, (length >>> 8) & 0xff, length & 0xff];
+    return [
+      (major << 5) | 26,
+      (length >>> 24) & 0xff,
+      (length >>> 16) & 0xff,
+      (length >>> 8) & 0xff,
+      length & 0xff,
+    ];
   throw new RangeError("CBOR length too large");
 }
 
@@ -62,7 +68,8 @@ function encodeInto(value: CborValue, out: number[]): void {
     return { keyBytes, entry };
   });
   encodedKeys.sort((left, right) => {
-    if (left.keyBytes.length !== right.keyBytes.length) return left.keyBytes.length - right.keyBytes.length;
+    if (left.keyBytes.length !== right.keyBytes.length)
+      return left.keyBytes.length - right.keyBytes.length;
     for (let index = 0; index < left.keyBytes.length; index += 1) {
       const difference = left.keyBytes[index]! - right.keyBytes[index]!;
       if (difference !== 0) return difference;

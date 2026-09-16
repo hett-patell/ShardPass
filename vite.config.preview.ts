@@ -8,6 +8,11 @@ export default defineConfig({
     target: "chrome110",
     outDir: "/tmp/shardpass-preview",
     emptyOutDir: true,
-    rollupOptions: { input: { popup: "apps/extension/test/preview/popup.html", vault: "apps/extension/test/preview/vault.html" } },
+    rollupOptions: {
+      input: {
+        popup: "apps/extension/test/preview/popup.html",
+        vault: "apps/extension/test/preview/vault.html",
+      },
+    },
   },
 });

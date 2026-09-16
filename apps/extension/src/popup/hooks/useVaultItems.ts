@@ -91,10 +91,13 @@ export function projectionMatches(item: ItemListItemProjection, query: string): 
   const parsed = parseQuery(query);
   if (parsed.tags.length > 0) {
     const tags = item.tags.map(normalize);
-    if (!parsed.tags.every((tag) => tags.some((candidate) => candidate.startsWith(tag)))) return false;
+    if (!parsed.tags.every((tag) => tags.some((candidate) => candidate.startsWith(tag))))
+      return false;
   }
   if (parsed.terms.length === 0) return true;
-  const haystacks = [item.name, item.subtitle ?? "", ...item.tags, ...(item.urls ?? [])].map(normalize);
+  const haystacks = [item.name, item.subtitle ?? "", ...item.tags, ...(item.urls ?? [])].map(
+    normalize,
+  );
   return parsed.terms.every((term) => haystacks.some((value) => value.includes(term)));
 }
 

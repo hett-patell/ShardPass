@@ -22,13 +22,27 @@ export interface RowActionsProps {
  * for logins, and Fill when the login belongs to the open tab. Shared by every list in the
  * popup so search results are as useful as the category lists.
  */
-export function RowActions({ item, platform, onCopyPassword, onCopyCode, onFill, filling = false }: RowActionsProps) {
-  if (item.kind === "otp") return <LiveCode platform={platform} itemId={item.id} onCopy={(code) => onCopyCode(item, code)} />;
+export function RowActions({
+  item,
+  platform,
+  onCopyPassword,
+  onCopyCode,
+  onFill,
+  filling = false,
+}: RowActionsProps) {
+  if (item.kind === "otp")
+    return (
+      <LiveCode platform={platform} itemId={item.id} onCopy={(code) => onCopyCode(item, code)} />
+    );
   if (item.kind !== "login") return null;
   return (
     <>
       {item.signInWith === undefined ? (
-        <QuickAction aria-label={`Copy password for ${item.name}`} title="Copy password" onClick={() => onCopyPassword(item)}>
+        <QuickAction
+          aria-label={`Copy password for ${item.name}`}
+          title="Copy password"
+          onClick={() => onCopyPassword(item)}
+        >
           <KeyRound size={15} />
         </QuickAction>
       ) : null}

@@ -33,74 +33,74 @@ All vault items share `ItemMetadataSchema`:
 
 **`kind: "otp"` — OTP item (existing, unchanged)**
 
-| Field | Type | Notes |
-|---|---|---|
-| issuer | string (0–256) | Service name |
-| label | string (1–256) | Account identifier |
-| secret | string (1–1024) | Canonical unpadded Base32 |
-| otpType | `"totp" \| "hotp" \| "steam"` | |
-| algorithm | `"SHA1" \| "SHA256" \| "SHA512"` | |
-| digits | int (5–10) | |
-| period | int (0–300) | 0 for HOTP |
-| counter | int (optional) | Required for HOTP |
-| note | string (0–4096) | |
+| Field     | Type                             | Notes                     |
+| --------- | -------------------------------- | ------------------------- |
+| issuer    | string (0–256)                   | Service name              |
+| label     | string (1–256)                   | Account identifier        |
+| secret    | string (1–1024)                  | Canonical unpadded Base32 |
+| otpType   | `"totp" \| "hotp" \| "steam"`    |                           |
+| algorithm | `"SHA1" \| "SHA256" \| "SHA512"` |                           |
+| digits    | int (5–10)                       |                           |
+| period    | int (0–300)                      | 0 for HOTP                |
+| counter   | int (optional)                   | Required for HOTP         |
+| note      | string (0–4096)                  |                           |
 
 **`kind: "login"` — Login item (new)**
 
-| Field | Type | Notes |
-|---|---|---|
-| name | string (1–256) | Display name (e.g. "GitHub") |
-| username | string (0–256) | Email, username, or phone |
-| password | string (0–4096) | |
-| urls | string[] (max 16) | Domains for autofill matching |
+| Field       | Type              | Notes                                    |
+| ----------- | ----------------- | ---------------------------------------- |
+| name        | string (1–256)    | Display name (e.g. "GitHub")             |
+| username    | string (0–256)    | Email, username, or phone                |
+| password    | string (0–4096)   |                                          |
+| urls        | string[] (max 16) | Domains for autofill matching            |
 | linkedOtpId | string (optional) | UUID of linked OTP item for 2FA chaining |
-| notes | string (0–8192) | |
+| notes       | string (0–8192)   |                                          |
 
 **`kind: "note"` — Secure note (new)**
 
-| Field | Type | Notes |
-|---|---|---|
-| name | string (1–256) | Title |
+| Field   | Type             | Notes         |
+| ------- | ---------------- | ------------- |
+| name    | string (1–256)   | Title         |
 | content | string (0–65536) | Freeform text |
 
 **`kind: "card"` — Credit card (new)**
 
-| Field | Type | Notes |
-|---|---|---|
-| name | string (1–256) | Card label (e.g. "Chase Visa") |
-| cardholderName | string (0–256) | |
-| number | string (0–32) | Card number |
-| expMonth | string (0–2) | "01"–"12" |
-| expYear | string (0–4) | "2026" |
-| cvv | string (0–8) | |
-| pin | string (0–16) | |
-| notes | string (0–8192) | |
+| Field          | Type            | Notes                          |
+| -------------- | --------------- | ------------------------------ |
+| name           | string (1–256)  | Card label (e.g. "Chase Visa") |
+| cardholderName | string (0–256)  |                                |
+| number         | string (0–32)   | Card number                    |
+| expMonth       | string (0–2)    | "01"–"12"                      |
+| expYear        | string (0–4)    | "2026"                         |
+| cvv            | string (0–8)    |                                |
+| pin            | string (0–16)   |                                |
+| notes          | string (0–8192) |                                |
 
 **`kind: "identity"` — Identity/address (new)**
 
-| Field | Type | Notes |
-|---|---|---|
-| name | string (1–256) | Label (e.g. "Home address") |
-| firstName | string (0–256) | |
-| lastName | string (0–256) | |
-| email | string (0–256) | |
-| phone | string (0–64) | |
-| street | string (0–512) | |
-| city | string (0–256) | |
-| state | string (0–256) | |
-| zip | string (0–32) | |
-| country | string (0–256) | |
-| notes | string (0–8192) | |
+| Field     | Type            | Notes                       |
+| --------- | --------------- | --------------------------- |
+| name      | string (1–256)  | Label (e.g. "Home address") |
+| firstName | string (0–256)  |                             |
+| lastName  | string (0–256)  |                             |
+| email     | string (0–256)  |                             |
+| phone     | string (0–64)   |                             |
+| street    | string (0–512)  |                             |
+| city      | string (0–256)  |                             |
+| state     | string (0–256)  |                             |
+| zip       | string (0–32)   |                             |
+| country   | string (0–256)  |                             |
+| notes     | string (0–8192) |                             |
 
 **`kind: "secret"` — API key / SSH key / token (new)**
 
-| Field | Type | Notes |
-|---|---|---|
-| name | string (1–256) | Display name |
-| secretType | `"api_key" \| "ssh_key" \| "token" \| "env" \| "other"` | |
-| value | string (0–65536) | The secret value |
-| metadata | `Record<string, string>` (max 32 entries) | Flexible key-value pairs (e.g. "host", "port") |
-| notes | string (0–8192) | |
+| Field      | Type                                                    | Notes                                          |
+| ---------- | ------------------------------------------------------- | ---------------------------------------------- |
+| name       | string (1–256)                                          | Display name                                   |
+| secretType | `"api_key" \| "ssh_key" \| "token" \| "env" \| "other"` |                                                |
+| value      | string (0–65536)                                        | The secret value                               |
+| metadata   | `Record<string, string>` (max 32 entries)               | Flexible key-value pairs (e.g. "host", "port") |
+| notes      | string (0–8192)                                         |                                                |
 
 ### Discriminated union
 
@@ -121,7 +121,7 @@ VaultItemSchema = z.discriminatedUnion("kind", [
 FolderSchema = z.strictObject({
   id: z.uuid(),
   name: z.string().check(z.minLength(1), z.maxLength(128)),
-  parentId: z.optional(z.uuid()),  // for nested folders
+  parentId: z.optional(z.uuid()), // for nested folders
 });
 ```
 
@@ -135,7 +135,7 @@ The entire vault is encrypted as one AES-256-GCM blob in `chrome.storage.local`.
 interface Vault {
   schemaVersion: 2;
   items: VaultItem[];
-  folders: Folder[];       // { id, name, parentId? }
+  folders: Folder[]; // { id, name, parentId? }
   integrations: {
     ente?: EnteIntegration;
     duckDuckGo?: DuckDuckGoIntegration;
@@ -147,6 +147,7 @@ interface Vault {
 ### Migration (v1 → v2)
 
 On unlock, if `schemaVersion < 2`:
+
 1. Existing OTP items are already valid `kind: "otp"` — no field transformation needed
 2. Add empty `folders: []`
 3. Set `schemaVersion: 2`
@@ -158,24 +159,24 @@ On unlock, if `schemaVersion < 2`:
 
 ### Existing packages (changes noted)
 
-| Package | Changes |
-|---|---|
-| `@shardpass/domain` | Add `LoginItemSchema`, `NoteItemSchema`, `CardItemSchema`, `IdentityItemSchema`, `SecretItemSchema`. Add `FolderSchema`. Bump `ITEM_SCHEMA_VERSION` to 2. |
-| `@shardpass/crypto` | No change — encrypts the vault blob, item-type-agnostic. |
-| `@shardpass/otp` | No change — TOTP/HOTP/Steam code generation. |
-| `@shardpass/otp-storage` | Rename to `@shardpass/vault-items`. Generalized CRUD for all item types. |
-| `@shardpass/storage` | Vault blob shape changes to include all item types + folders. Add v1→v2 migration logic. |
-| `@shardpass/messaging` | New message types: `queryLogins`, `fillLogin`, `offerSaveLogin`, `generatePassword`, CRUD for all item types. |
-| `@shardpass/ui` | Full redesign — minimal neutral palette, light/dark tokens, compact components. |
-| `@shardpass/importers` | Add importers for 1Password (.1pux/CSV), Bitwarden (JSON), Chrome (CSV), Firefox (CSV). |
-| `@shardpass/security` | No change. |
-| `@shardpass/testing` | Update fakes for new item types. |
-| `apps/extension` | New vault views, autofill content script, popup redesign. |
+| Package                  | Changes                                                                                                                                                   |
+| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@shardpass/domain`      | Add `LoginItemSchema`, `NoteItemSchema`, `CardItemSchema`, `IdentityItemSchema`, `SecretItemSchema`. Add `FolderSchema`. Bump `ITEM_SCHEMA_VERSION` to 2. |
+| `@shardpass/crypto`      | No change — encrypts the vault blob, item-type-agnostic.                                                                                                  |
+| `@shardpass/otp`         | No change — TOTP/HOTP/Steam code generation.                                                                                                              |
+| `@shardpass/otp-storage` | Rename to `@shardpass/vault-items`. Generalized CRUD for all item types.                                                                                  |
+| `@shardpass/storage`     | Vault blob shape changes to include all item types + folders. Add v1→v2 migration logic.                                                                  |
+| `@shardpass/messaging`   | New message types: `queryLogins`, `fillLogin`, `offerSaveLogin`, `generatePassword`, CRUD for all item types.                                             |
+| `@shardpass/ui`          | Full redesign — minimal neutral palette, light/dark tokens, compact components.                                                                           |
+| `@shardpass/importers`   | Add importers for 1Password (.1pux/CSV), Bitwarden (JSON), Chrome (CSV), Firefox (CSV).                                                                   |
+| `@shardpass/security`    | No change.                                                                                                                                                |
+| `@shardpass/testing`     | Update fakes for new item types.                                                                                                                          |
+| `apps/extension`         | New vault views, autofill content script, popup redesign.                                                                                                 |
 
 ### New package
 
-| Package | Purpose |
-|---|---|
+| Package               | Purpose                                                                                                           |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------- |
 | `@shardpass/autofill` | Login form detection heuristics + credential fill logic. Pure functions, no Chrome API dependency. Unit-testable. |
 
 ### Dependency graph
@@ -207,19 +208,19 @@ apps/extension           ← all above
 
 ### Palette — Minimal Neutral
 
-| Token | Light | Dark |
-|---|---|---|
-| `--bg-primary` | `#ffffff` | `#111113` |
-| `--bg-secondary` | `#f7f7f8` | `#1a1a1e` |
-| `--bg-tertiary` | `#ebebef` | `#232328` |
-| `--text-primary` | `#111113` | `#ededef` |
+| Token              | Light     | Dark      |
+| ------------------ | --------- | --------- |
+| `--bg-primary`     | `#ffffff` | `#111113` |
+| `--bg-secondary`   | `#f7f7f8` | `#1a1a1e` |
+| `--bg-tertiary`    | `#ebebef` | `#232328` |
+| `--text-primary`   | `#111113` | `#ededef` |
 | `--text-secondary` | `#6e6e76` | `#8e8e96` |
-| `--text-tertiary` | `#9e9ea6` | `#5e5e66` |
-| `--accent` | `#2563eb` | `#3b82f6` |
-| `--accent-hover` | `#1d4ed8` | `#60a5fa` |
-| `--border` | `#e4e4e7` | `#27272a` |
-| `--danger` | `#dc2626` | `#ef4444` |
-| `--success` | `#16a34a` | `#22c55e` |
+| `--text-tertiary`  | `#9e9ea6` | `#5e5e66` |
+| `--accent`         | `#2563eb` | `#3b82f6` |
+| `--accent-hover`   | `#1d4ed8` | `#60a5fa` |
+| `--border`         | `#e4e4e7` | `#27272a` |
+| `--danger`         | `#dc2626` | `#ef4444` |
+| `--success`        | `#16a34a` | `#22c55e` |
 
 Blue accent used sparingly — primary CTAs and active states only.
 
@@ -255,14 +256,14 @@ Blue accent used sparingly — primary CTAs and active states only.
 
 ### Item type icons (Lucide)
 
-| Type | Icon |
-|---|---|
-| Login | `globe` |
-| OTP | `key-round` |
-| Note | `sticky-note` |
-| Card | `credit-card` |
-| Identity | `user` |
-| Secret | `lock` |
+| Type     | Icon          |
+| -------- | ------------- |
+| Login    | `globe`       |
+| OTP      | `key-round`   |
+| Note     | `sticky-note` |
+| Card     | `credit-card` |
+| Identity | `user`        |
+| Secret   | `lock`        |
 
 ---
 
@@ -352,13 +353,13 @@ form submit detected → capture username + password
 
 ### Third-party importers
 
-| Source | Format | Items imported |
-|---|---|---|
-| 1Password | `.1pux` or CSV | Logins, notes, cards, identity |
-| Bitwarden | JSON export | Logins, notes, cards, identity |
-| Chrome/Edge | CSV | Logins only |
-| Firefox | CSV | Logins only |
-| QR / otpauth:// / Ente | Existing, unchanged | OTP only |
+| Source                 | Format              | Items imported                 |
+| ---------------------- | ------------------- | ------------------------------ |
+| 1Password              | `.1pux` or CSV      | Logins, notes, cards, identity |
+| Bitwarden              | JSON export         | Logins, notes, cards, identity |
+| Chrome/Edge            | CSV                 | Logins only                    |
+| Firefox                | CSV                 | Logins only                    |
+| QR / otpauth:// / Ente | Existing, unchanged | OTP only                       |
 
 Each importer maps source fields to `VaultItem` schemas and validates through Zod before adding.
 

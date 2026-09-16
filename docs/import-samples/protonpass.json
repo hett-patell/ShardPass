@@ -9,48 +9,154 @@
       "display": { "color": 0, "icon": 0 },
       "items": [
         {
-          "itemId": "item-1", "shareId": "share-1", "state": 1, "pinned": true, "aliasEmail": null,
-          "createTime": 1700000000, "modifyTime": 1700000000, "contentFormatVersion": 1,
+          "itemId": "item-1",
+          "shareId": "share-1",
+          "state": 1,
+          "pinned": true,
+          "aliasEmail": null,
+          "createTime": 1700000000,
+          "modifyTime": 1700000000,
+          "contentFormatVersion": 1,
           "data": {
             "metadata": { "name": "Example", "note": "Main login", "itemUuid": "a1" },
             "extraFields": [
               { "fieldName": "Member ID", "type": "text", "data": { "content": "42" } },
-              { "fieldName": "Recovery", "type": "hidden", "data": { "content": "Pr0ton-recovery" } }
+              {
+                "fieldName": "Recovery",
+                "type": "hidden",
+                "data": { "content": "Pr0ton-recovery" }
+              }
             ],
             "type": "login",
-            "content": { "itemEmail": "alice@example.com", "itemUsername": "alice", "password": "Pr0ton-Sample-1", "urls": ["https://example.com/"], "totpUri": "otpauth://totp/Example:alice?secret=JBSWY3DPEHPK3PXP&issuer=Example", "passkeys": [] }
+            "content": {
+              "itemEmail": "alice@example.com",
+              "itemUsername": "alice",
+              "password": "Pr0ton-Sample-1",
+              "urls": ["https://example.com/"],
+              "totpUri": "otpauth://totp/Example:alice?secret=JBSWY3DPEHPK3PXP&issuer=Example",
+              "passkeys": []
+            }
           }
         },
         {
-          "itemId": "item-2", "shareId": "share-1", "state": 1, "pinned": false, "aliasEmail": null,
-          "createTime": 1700000000, "modifyTime": 1700000000, "contentFormatVersion": 1,
-          "data": { "metadata": { "name": "Router", "note": "Admin password on the box", "itemUuid": "a2" }, "extraFields": [], "type": "note", "content": {} }
-        },
-        {
-          "itemId": "item-3", "shareId": "share-1", "state": 1, "pinned": false, "aliasEmail": null,
-          "createTime": 1700000000, "modifyTime": 1700000000, "contentFormatVersion": 1,
+          "itemId": "item-2",
+          "shareId": "share-1",
+          "state": 1,
+          "pinned": false,
+          "aliasEmail": null,
+          "createTime": 1700000000,
+          "modifyTime": 1700000000,
+          "contentFormatVersion": 1,
           "data": {
-            "metadata": { "name": "My Visa", "note": "", "itemUuid": "a3" }, "extraFields": [], "type": "creditCard",
-            "content": { "cardholderName": "Alice Example", "cardType": 0, "number": "4111111111111111", "verificationNumber": "123", "expirationDate": "2029-03", "pin": "" }
+            "metadata": { "name": "Router", "note": "Admin password on the box", "itemUuid": "a2" },
+            "extraFields": [],
+            "type": "note",
+            "content": {}
           }
         },
         {
-          "itemId": "item-4", "shareId": "share-1", "state": 1, "pinned": false, "aliasEmail": null,
-          "createTime": 1700000000, "modifyTime": 1700000000, "contentFormatVersion": 6,
+          "itemId": "item-3",
+          "shareId": "share-1",
+          "state": 1,
+          "pinned": false,
+          "aliasEmail": null,
+          "createTime": 1700000000,
+          "modifyTime": 1700000000,
+          "contentFormatVersion": 1,
           "data": {
-            "metadata": { "name": "Alice", "note": "", "itemUuid": "a4" }, "extraFields": [], "type": "identity",
-            "content": { "fullName": "Alice Example", "firstName": "Alice", "middleName": "", "lastName": "Example", "email": "alice@example.com", "phoneNumber": "555-0100", "birthdate": "1990-01-02", "gender": "", "organization": "ACME", "streetAddress": "1 Main St", "zipOrPostalCode": "62701", "city": "Springfield", "stateOrProvince": "IL", "countryOrRegion": "US", "floor": "", "county": "", "socialSecurityNumber": "", "passportNumber": "", "licenseNumber": "", "website": "", "xHandle": "", "secondPhoneNumber": "", "company": "ACME", "jobTitle": "Engineer", "personalWebsite": "", "workPhoneNumber": "", "workEmail": "", "extraPersonalDetails": [], "extraAddressDetails": [], "extraContactDetails": [], "extraWorkDetails": [], "extraSections": [] }
+            "metadata": { "name": "My Visa", "note": "", "itemUuid": "a3" },
+            "extraFields": [],
+            "type": "creditCard",
+            "content": {
+              "cardholderName": "Alice Example",
+              "cardType": 0,
+              "number": "4111111111111111",
+              "verificationNumber": "123",
+              "expirationDate": "2029-03",
+              "pin": ""
+            }
           }
         },
         {
-          "itemId": "item-5", "shareId": "share-1", "state": 1, "pinned": false, "aliasEmail": "shop.alias@passmail.net",
-          "createTime": 1700000000, "modifyTime": 1700000000, "contentFormatVersion": 1,
-          "data": { "metadata": { "name": "Shop alias", "note": "", "itemUuid": "a5" }, "extraFields": [], "type": "alias", "content": {} }
+          "itemId": "item-4",
+          "shareId": "share-1",
+          "state": 1,
+          "pinned": false,
+          "aliasEmail": null,
+          "createTime": 1700000000,
+          "modifyTime": 1700000000,
+          "contentFormatVersion": 6,
+          "data": {
+            "metadata": { "name": "Alice", "note": "", "itemUuid": "a4" },
+            "extraFields": [],
+            "type": "identity",
+            "content": {
+              "fullName": "Alice Example",
+              "firstName": "Alice",
+              "middleName": "",
+              "lastName": "Example",
+              "email": "alice@example.com",
+              "phoneNumber": "555-0100",
+              "birthdate": "1990-01-02",
+              "gender": "",
+              "organization": "ACME",
+              "streetAddress": "1 Main St",
+              "zipOrPostalCode": "62701",
+              "city": "Springfield",
+              "stateOrProvince": "IL",
+              "countryOrRegion": "US",
+              "floor": "",
+              "county": "",
+              "socialSecurityNumber": "",
+              "passportNumber": "",
+              "licenseNumber": "",
+              "website": "",
+              "xHandle": "",
+              "secondPhoneNumber": "",
+              "company": "ACME",
+              "jobTitle": "Engineer",
+              "personalWebsite": "",
+              "workPhoneNumber": "",
+              "workEmail": "",
+              "extraPersonalDetails": [],
+              "extraAddressDetails": [],
+              "extraContactDetails": [],
+              "extraWorkDetails": [],
+              "extraSections": []
+            }
+          }
         },
         {
-          "itemId": "item-6", "shareId": "share-1", "state": 2, "pinned": false, "aliasEmail": null,
-          "createTime": 1700000000, "modifyTime": 1700000000, "contentFormatVersion": 1,
-          "data": { "metadata": { "name": "Old note", "note": "In the trash", "itemUuid": "a6" }, "extraFields": [], "type": "note", "content": {} }
+          "itemId": "item-5",
+          "shareId": "share-1",
+          "state": 1,
+          "pinned": false,
+          "aliasEmail": "shop.alias@passmail.net",
+          "createTime": 1700000000,
+          "modifyTime": 1700000000,
+          "contentFormatVersion": 1,
+          "data": {
+            "metadata": { "name": "Shop alias", "note": "", "itemUuid": "a5" },
+            "extraFields": [],
+            "type": "alias",
+            "content": {}
+          }
+        },
+        {
+          "itemId": "item-6",
+          "shareId": "share-1",
+          "state": 2,
+          "pinned": false,
+          "aliasEmail": null,
+          "createTime": 1700000000,
+          "modifyTime": 1700000000,
+          "contentFormatVersion": 1,
+          "data": {
+            "metadata": { "name": "Old note", "note": "In the trash", "itemUuid": "a6" },
+            "extraFields": [],
+            "type": "note",
+            "content": {}
+          }
         }
       ]
     }

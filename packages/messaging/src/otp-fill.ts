@@ -51,7 +51,12 @@ export const OtpFillSuggestionSchema = z.strictObject({
    * The current code, only for a time-based account bound to this page's site: the page
    * would receive it on a pick anyway, and the dropdown can show it the way the popup does.
    */
-  preview: z.optional(z.strictObject({ code: z.string().check(z.minLength(5), z.maxLength(10)), expiresAt: timestamp })),
+  preview: z.optional(
+    z.strictObject({
+      code: z.string().check(z.minLength(5), z.maxLength(10)),
+      expiresAt: timestamp,
+    }),
+  ),
 });
 
 export const OtpFillSuggestionsRequestSchema = z.strictObject({

@@ -100,7 +100,9 @@ describe("UI CSS contracts", () => {
 
     for (const status of ["success", "warning", "danger", "info"]) {
       expect(tokens).toMatch(new RegExp(`--${status}:\\s*#[0-9a-f]{6};`, "i"));
-      expect(tokens).toMatch(new RegExp(`--${status}-subtle:\\s*(#[0-9a-f]{6}|rgba\\([^)]+\\));`, "i"));
+      expect(tokens).toMatch(
+        new RegExp(`--${status}-subtle:\\s*(#[0-9a-f]{6}|rgba\\([^)]+\\));`, "i"),
+      );
     }
     expect(primitives).toContain("color: var(--status-color)");
     expect(primitives).toContain("background: var(--status-bg)");

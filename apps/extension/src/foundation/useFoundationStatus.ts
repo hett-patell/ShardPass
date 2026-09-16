@@ -12,7 +12,9 @@ export type FoundationStatusState =
 function reasonOf(error: unknown): string | undefined {
   const candidate = error as { code?: unknown; detail?: unknown } | null;
   if (typeof candidate?.code !== "string") return undefined;
-  return typeof candidate.detail === "string" && candidate.detail !== "" ? `${candidate.code} — ${candidate.detail}` : candidate.code;
+  return typeof candidate.detail === "string" && candidate.detail !== ""
+    ? `${candidate.code} — ${candidate.detail}`
+    : candidate.code;
 }
 
 const foundationRequest = {
@@ -39,7 +41,10 @@ export function useFoundationStatus(platform: ExtensionPlatform): FoundationStat
         }
         // The background answered with its error envelope: its code and detail are the
         // diagnosis (a failed startup names its step there).
-        const envelope = response as { kind?: unknown; error?: { code?: unknown; detail?: unknown } } | null;
+        const envelope = response as {
+          kind?: unknown;
+          error?: { code?: unknown; detail?: unknown };
+        } | null;
         const reason =
           envelope?.kind === "error" && typeof envelope.error?.code === "string"
             ? reasonOf(envelope.error)

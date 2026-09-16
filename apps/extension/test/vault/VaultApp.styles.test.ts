@@ -99,7 +99,9 @@ describe("emitted vault CSS contracts", () => {
   it("avoids unsupported Chrome 110-only CSS syntax in every stylesheet this task owns", async () => {
     const extensionRoot = path.resolve(process.cwd(), "apps/extension");
     const sources = await Promise.all(
-      OWNED_STYLESHEETS.map((relativePath) => readFile(path.join(extensionRoot, relativePath), "utf8")),
+      OWNED_STYLESHEETS.map((relativePath) =>
+        readFile(path.join(extensionRoot, relativePath), "utf8"),
+      ),
     );
 
     for (const [index, css] of sources.entries()) {

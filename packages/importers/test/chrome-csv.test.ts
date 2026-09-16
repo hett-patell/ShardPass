@@ -76,7 +76,10 @@ AWS Console,https://aws.amazon.com,admin,s3cret,production account`;
   });
 
   it("imports a password longer than a login can hold as a secret, keeping the site", () => {
-    const key = "-----BEGIN OPENSSH PRIVATE KEY-----\n" + "k".repeat(5000) + "\n-----END OPENSSH PRIVATE KEY-----";
+    const key =
+      "-----BEGIN OPENSSH PRIVATE KEY-----\n" +
+      "k".repeat(5000) +
+      "\n-----END OPENSSH PRIVATE KEY-----";
     const csv = `name,url,username,password,note\nDeploy key,https://git.example,deploy,"${key}",`;
     const result = importChromeCsv(csv);
     expect(result.items).toHaveLength(1);

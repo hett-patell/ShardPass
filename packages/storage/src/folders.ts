@@ -12,12 +12,19 @@ export const FoldersDocumentSchema = z
     folders: z.array(FolderSchema).check(z.maxLength(MAX_FOLDERS)),
   })
   .check(
-    z.refine((document) => new Set(document.folders.map((f) => f.id)).size === document.folders.length, {
-      error: "Folder ids must be unique",
-    }),
-    z.refine((document) => document.folders.every((f) => folderDepth(document.folders, f.id) <= MAX_FOLDER_DEPTH), {
-      error: "Folder nesting is too deep or cyclic",
-    }),
+    z.refine(
+      (document) => new Set(document.folders.map((f) => f.id)).size === document.folders.length,
+      {
+        error: "Folder ids must be unique",
+      },
+    ),
+    z.refine(
+      (document) =>
+        document.folders.every((f) => folderDepth(document.folders, f.id) <= MAX_FOLDER_DEPTH),
+      {
+        error: "Folder nesting is too deep or cyclic",
+      },
+    ),
   );
 
 export type FoldersDocument = z.infer<typeof FoldersDocumentSchema>;
@@ -46,7 +53,11 @@ export function folderSubtree(folders: readonly Folder[], id: string): ReadonlyS
   while (grew) {
     grew = false;
     for (const folder of folders) {
-      if (folder.parentId !== undefined && removed.has(folder.parentId) && !removed.has(folder.id)) {
+      if (
+        folder.parentId !== undefined &&
+        removed.has(folder.parentId) &&
+        !removed.has(folder.id)
+      ) {
         removed.add(folder.id);
         grew = true;
       }

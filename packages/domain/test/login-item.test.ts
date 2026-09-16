@@ -69,9 +69,7 @@ describe("LoginItemSchema", () => {
   });
 
   it("rejects a malformed linkedOtpId", () => {
-    expect(() =>
-      LoginItemSchema.parse({ ...validLogin, linkedOtpId: "not-a-uuid" }),
-    ).toThrow();
+    expect(() => LoginItemSchema.parse({ ...validLogin, linkedOtpId: "not-a-uuid" })).toThrow();
   });
 
   it("accepts optional folderId", () => {
@@ -88,9 +86,7 @@ describe("LoginItemSchema", () => {
   });
 
   it("rejects unknown properties", () => {
-    expect(() =>
-      LoginItemSchema.parse({ ...validLogin, unexpected: "nope" }),
-    ).toThrow();
+    expect(() => LoginItemSchema.parse({ ...validLogin, unexpected: "nope" })).toThrow();
   });
 });
 

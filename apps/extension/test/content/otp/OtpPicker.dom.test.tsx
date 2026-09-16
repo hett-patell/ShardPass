@@ -54,18 +54,46 @@ describe("metadata-only OTP picker shell", () => {
   });
 
   it("shows the page's own accounts and keeps the rest behind Show more", () => {
-    const here = { ...suggestions[0]!, itemId: "10000000-0000-4000-8000-00000000aaaa", issuer: "Here", siteMatch: true };
+    const here = {
+      ...suggestions[0]!,
+      itemId: "10000000-0000-4000-8000-00000000aaaa",
+      issuer: "Here",
+      siteMatch: true,
+    };
     render(
-      <OtpPicker suggestions={[...suggestions, here]} state="ready" onClose={vi.fn()} onSelect={vi.fn()} />,
+      <OtpPicker
+        suggestions={[...suggestions, here]}
+        state="ready"
+        onClose={vi.fn()}
+        onSelect={vi.fn()}
+      />,
     );
     expect(screen.getAllByRole("button", { name: /Use OTP account/ })).toHaveLength(1);
-    fireEvent.click(screen.getByRole("button", { name: `Show ${suggestions.length} more accounts` }));
-    expect(screen.getAllByRole("button", { name: /Use OTP account/ })).toHaveLength(suggestions.length + 1);
+    fireEvent.click(
+      screen.getByRole("button", { name: `Show ${suggestions.length} more accounts` }),
+    );
+    expect(screen.getAllByRole("button", { name: /Use OTP account/ })).toHaveLength(
+      suggestions.length + 1,
+    );
   });
 
   it("shows the current code and its countdown for an account bound to the page", () => {
-    const here = { ...suggestions[0]!, itemId: "10000000-0000-4000-8000-00000000bbbb", issuer: "Here", siteMatch: true, preview: { code: "482913", expiresAt: 30_000 } };
-    render(<OtpPicker suggestions={[here]} state="ready" now={10_000} onClose={vi.fn()} onSelect={vi.fn()} />);
+    const here = {
+      ...suggestions[0]!,
+      itemId: "10000000-0000-4000-8000-00000000bbbb",
+      issuer: "Here",
+      siteMatch: true,
+      preview: { code: "482913", expiresAt: 30_000 },
+    };
+    render(
+      <OtpPicker
+        suggestions={[here]}
+        state="ready"
+        now={10_000}
+        onClose={vi.fn()}
+        onSelect={vi.fn()}
+      />,
+    );
     expect(screen.getByText("482 913")).toBeInTheDocument();
     expect(screen.getByText("20s")).toBeInTheDocument();
   });

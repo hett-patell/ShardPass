@@ -41,24 +41,24 @@ Width 400 px, height 560 px. Screens form a stack; back returns to the previous 
 1. **Locked** — unlock form. Same theme; the vault mark, a heading, one field, one button.
 2. **Home** — title bar (mark, "ShardPass", lock and settings icons); a search field; then
    - **SUGGESTIONS** — logins whose URLs match the active tab (needs `activeTab`), each with
-     *Fill* as the primary action and copy username/password as secondary. Empty: one quiet line
+     _Fill_ as the primary action and copy username/password as secondary. Empty: one quiet line
      naming the host. Hidden when the tab has no http(s) URL.
    - **CATEGORIES** — Favorites, All items, Logins, One-time codes, Notes, Cards, Identities,
      Secrets: icon, label, count, chevron.
-   - Footer: *New item* (opens the vault's create form), *Open vault*.
+   - Footer: _New item_ (opens the vault's create form), _Open vault_.
 3. **List** — back + category title; rows with kind icon, name, subtitle; right side is the
    quick action (copy password / live one-time code); the row opens the detail screen. Typing in
    the home search shows a **Search** list of every kind.
 4. **Detail** — back + kind icon + name + subtitle; fields with mono-caps labels, values and a copy
    button each: username, password (reveal), one-time code (live with countdown), websites (open),
-   notes; card and identity fields likewise; *Fill in this tab* when the tab matches; *Edit in
-   vault* always.
+   notes; card and identity fields likewise; _Fill in this tab_ when the tab matches; _Edit in
+   vault_ always.
 
 Trust boundary change: the popup may now send `item.get` (the detail screen needs the whole item).
 The popup and the vault page are the same extension origin; the earlier "projections only" rule
 was defence in depth that a detail screen cannot honour. Content scripts remain restricted.
 
-*Fill* from the popup: the popup asks the active tab's content script (a new `login.fillFromPopup`
+_Fill_ from the popup: the popup asks the active tab's content script (a new `login.fillFromPopup`
 runtime message, accepted only from the extension itself) to run its existing fill path — the
 content script performs `login.fillSelect` under its own content-only policy, fills the focused or
 first detected login form, and answers `filled` / `no-form`. The popup then closes.

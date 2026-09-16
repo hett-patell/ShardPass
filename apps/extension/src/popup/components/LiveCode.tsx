@@ -13,7 +13,13 @@ export interface LiveCodeProps {
 }
 
 /** The current one-time code with its countdown; the row size fits a list, display fits detail. */
-export function LiveCode({ platform, itemId, size = "row", now = Date.now, onCopy }: LiveCodeProps) {
+export function LiveCode({
+  platform,
+  itemId,
+  size = "row",
+  now = Date.now,
+  onCopy,
+}: LiveCodeProps) {
   const state = useOtpCode(platform, itemId, now);
   const large = size === "display";
   if (state.status === "hotp")
@@ -21,13 +27,17 @@ export function LiveCode({ platform, itemId, size = "row", now = Date.now, onCop
   if (state.status === "unavailable") return <span className={styles.hint}>Unavailable</span>;
   if (state.status === "loading")
     return (
-      <span className={`${styles.code} ${large ? styles.large : ""} ${styles.placeholder}`} aria-hidden="true">
+      <span
+        className={`${styles.code} ${large ? styles.large : ""} ${styles.placeholder}`}
+        aria-hidden="true"
+      >
         {large ? "··· ···" : "······"}
       </span>
     );
   const code = state.code;
   const remaining = state.remaining;
-  const grouped = code.code.length === 6 ? `${code.code.slice(0, 3)} ${code.code.slice(3)}` : code.code;
+  const grouped =
+    code.code.length === 6 ? `${code.code.slice(0, 3)} ${code.code.slice(3)}` : code.code;
   const body = (
     <>
       <span className={`${styles.code} ${large ? styles.large : ""}`}>{grouped}</span>

@@ -11,7 +11,10 @@ function stubMatchMedia(initialLight: boolean) {
     addEventListener: vi.fn((_type: string, listener: Listener) => listeners.add(listener)),
     removeEventListener: vi.fn((_type: string, listener: Listener) => listeners.delete(listener)),
   };
-  vi.stubGlobal("matchMedia", vi.fn(() => query));
+  vi.stubGlobal(
+    "matchMedia",
+    vi.fn(() => query),
+  );
   return {
     query,
     flip(light: boolean) {

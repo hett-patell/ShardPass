@@ -13,7 +13,10 @@ export interface IdentityScreenProps {
 
 function initials(name: string): string {
   const parts = name.trim().split(/\s+/u).filter(Boolean);
-  const letters = parts.length >= 2 ? `${parts[0]![0] ?? ""}${parts[parts.length - 1]![0] ?? ""}` : (parts[0] ?? "").slice(0, 2);
+  const letters =
+    parts.length >= 2
+      ? `${parts[0]![0] ?? ""}${parts[parts.length - 1]![0] ?? ""}`
+      : (parts[0] ?? "").slice(0, 2);
   return letters.toUpperCase();
 }
 
@@ -21,7 +24,9 @@ function initials(name: string): string {
 export function IdentityScreen({ identities, pinnedId, onPick, onCreate }: IdentityScreenProps) {
   return (
     <div className={styles.screen}>
-      <p className={styles.help}>The identity pinned at the top of the popup, with its details a tap away.</p>
+      <p className={styles.help}>
+        The identity pinned at the top of the popup, with its details a tap away.
+      </p>
       {identities.length === 0 ? (
         <p className={styles.quiet}>No identities yet.</p>
       ) : (
@@ -30,13 +35,20 @@ export function IdentityScreen({ identities, pinnedId, onPick, onCreate }: Ident
             const pinned = item.id === pinnedId;
             return (
               <li key={item.id}>
-                <button type="button" className={styles.row} aria-pressed={pinned} onClick={() => onPick(item.id)}>
+                <button
+                  type="button"
+                  className={styles.row}
+                  aria-pressed={pinned}
+                  onClick={() => onPick(item.id)}
+                >
                   <span className={styles.avatar} aria-hidden="true">
                     {initials(item.name)}
                   </span>
                   <span className={styles.text}>
                     <span className={styles.name}>{item.name}</span>
-                    {item.subtitle ? <span className={styles.subtitle}>{item.subtitle}</span> : null}
+                    {item.subtitle ? (
+                      <span className={styles.subtitle}>{item.subtitle}</span>
+                    ) : null}
                   </span>
                   {pinned ? <Check size={16} className={styles.check} aria-label="Pinned" /> : null}
                 </button>

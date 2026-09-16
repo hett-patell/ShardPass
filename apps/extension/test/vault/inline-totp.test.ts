@@ -28,7 +28,9 @@ describe("inlineTotpItem", () => {
 
   it("accepts a full otpauth URI", () => {
     const item = inlineTotpItem(
-      login("otpauth://totp/Example:alice?secret=JBSWY3DPEHPK3PXP&issuer=Example&digits=8&period=60"),
+      login(
+        "otpauth://totp/Example:alice?secret=JBSWY3DPEHPK3PXP&issuer=Example&digits=8&period=60",
+      ),
     );
     expect(item).toMatchObject({ kind: "otp", secret: "JBSWY3DPEHPK3PXP", digits: 8, period: 60 });
   });

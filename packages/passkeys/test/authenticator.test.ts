@@ -15,7 +15,8 @@ import {
   toBase64Url,
 } from "../src";
 
-const hex = (bytes: Uint8Array) => [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+const hex = (bytes: Uint8Array) =>
+  [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 
 describe("CBOR", () => {
   it("matches RFC 8949 examples and orders map keys canonically", () => {
@@ -32,7 +33,15 @@ describe("CBOR", () => {
       "a3" + "63666d74" + "646e6f6e65" + "6761747453746d74" + "a0" + "686175746844617461" + "40",
     );
     // COSE key order: 1, 3, -1, -2, -3.
-    const cose = encodeCbor(new Map<number, number>([[-3, 0], [1, 2], [-2, 0], [3, -7], [-1, 1]]));
+    const cose = encodeCbor(
+      new Map<number, number>([
+        [-3, 0],
+        [1, 2],
+        [-2, 0],
+        [3, -7],
+        [-1, 1],
+      ]),
+    );
     expect(hex(cose)).toBe("a5" + "0102" + "0326" + "2001" + "2100" + "2200");
   });
 });
@@ -68,7 +77,9 @@ describe("registration and assertion", () => {
       counter: 0,
       attestedCredential: { credentialId, publicKeyCose: pair.publicKeyCose },
     });
-    expect(authData.subarray(0, 32)).toEqual(await sha256(new TextEncoder().encode("example.test")));
+    expect(authData.subarray(0, 32)).toEqual(
+      await sha256(new TextEncoder().encode("example.test")),
+    );
     expect(authData[32]).toBe(0x5d); // UP | UV | BE | BS | AT
     expect(authData.subarray(33, 37)).toEqual(Uint8Array.of(0, 0, 0, 0));
     expect(authData.subarray(37, 53)).toEqual(new Uint8Array(16)); // aaguid
@@ -79,7 +90,11 @@ describe("registration and assertion", () => {
     expect(hex(attestation.subarray(0, 1))).toBe("a3");
 
     const client = clientDataJson("webauthn.get", "Y2hhbGxlbmdl", "https://example.test");
-    const assertionData = await buildAuthenticatorData({ rpId: "example.test", flags: PASSKEY_FLAGS, counter: 0 });
+    const assertionData = await buildAuthenticatorData({
+      rpId: "example.test",
+      flags: PASSKEY_FLAGS,
+      counter: 0,
+    });
     expect(assertionData.byteLength).toBe(37);
     const signature = await signAssertion(pair.privateKey, assertionData, client);
     expect(signature[0]).toBe(0x30);
@@ -94,7 +109,14 @@ describe("registration and assertion", () => {
     );
     const raw = derToRaw(signature);
     const message = Uint8Array.from([...assertionData, ...(await sha256(client))]).buffer;
-    expect(await crypto.subtle.verify({ name: "ECDSA", hash: "SHA-256" }, publicKey, Uint8Array.from(raw).buffer, message)).toBe(true);
+    expect(
+      await crypto.subtle.verify(
+        { name: "ECDSA", hash: "SHA-256" },
+        publicKey,
+        Uint8Array.from(raw).buffer,
+        message,
+      ),
+    ).toBe(true);
   });
 
   it("DER-encodes signatures with a leading zero when the high bit is set and strips leading zeros otherwise", () => {

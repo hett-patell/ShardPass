@@ -79,7 +79,9 @@ export async function readKdbx(
   if (storedHash.length !== 32 || storedHmac.length !== 32)
     throw new KdbxFormatError("File is truncated: the header digests are missing.");
 
-  const actualHash = new Uint8Array(await crypto.subtle.digest("SHA-256", toArrayBuffer(header.raw)));
+  const actualHash = new Uint8Array(
+    await crypto.subtle.digest("SHA-256", toArrayBuffer(header.raw)),
+  );
   if (!actualHash.every((byte, index) => byte === storedHash[index]))
     throw new KdbxFormatError("Header checksum mismatch: the file is corrupt.");
 
@@ -90,7 +92,8 @@ export async function readKdbx(
   } catch (error) {
     // An empty master password next to a key file is ambiguous: KeePass may or may not have
     // counted it. Key-file-only was tried first; the other reading costs one more derivation.
-    if (!(error instanceof KdbxPasswordError) || password !== "" || keyFile === undefined) throw error;
+    if (!(error instanceof KdbxPasswordError) || password !== "" || keyFile === undefined)
+      throw error;
     keys = await deriveKeys(header, { password, keyFile, hashEmptyPassword: true });
     await verifyHeader(header, keys, storedHmac, usedKeyFile);
   }
@@ -132,7 +135,8 @@ function collectEntries(document: XmlNode, cipher: InnerStreamCipher): KeePassDa
    * KeePass container rather than a folder the user created.
    */
   const walk = (group: XmlNode, path: readonly string[], recycled: boolean): void => {
-    const isRecycled = recycled || (recycleBinUuid !== "" && childText(group, "UUID") === recycleBinUuid);
+    const isRecycled =
+      recycled || (recycleBinUuid !== "" && childText(group, "UUID") === recycleBinUuid);
     for (const child of group.children) {
       if (child.name === "Entry") {
         // Recycled entries are still parsed, never skipped: their protected values must be
@@ -216,7 +220,11 @@ function readHistoryEntry(entry: XmlNode, cipher: InnerStreamCipher): KeePassHis
  * Children are read in document order for the same reason groups are: Strings, Binaries and
  * History all sit on the one keystream.
  */
-function readEntry(entry: XmlNode, path: readonly string[], cipher: InnerStreamCipher): KeePassEntry {
+function readEntry(
+  entry: XmlNode,
+  path: readonly string[],
+  cipher: InnerStreamCipher,
+): KeePassEntry {
   const fields = new Map<string, string>();
   const protectedKeys = new Set<string>();
   const history: KeePassHistoryEntry[] = [];

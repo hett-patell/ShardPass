@@ -27,6 +27,7 @@
 ### Task 1: Extend `@shardpass/domain` with new item type schemas
 
 **Files:**
+
 - Create: `packages/domain/src/login-item.ts`
 - Create: `packages/domain/src/note-item.ts`
 - Create: `packages/domain/src/card-item.ts`
@@ -44,6 +45,7 @@
 - Create: `packages/domain/test/folder.test.ts`
 
 **Interfaces:**
+
 - Consumes: `ItemMetadataSchema` from `item-metadata.ts`, `UnicodeScalarTextCheck` from `unicode-scalar-text.ts`
 - Produces: `LoginItemSchema`, `NoteItemSchema`, `CardItemSchema`, `IdentityItemSchema`, `SecretItemSchema`, `FolderSchema`, `VaultItemSchema` (expanded union). Types: `LoginItem`, `NoteItem`, `CardItem`, `IdentityItem`, `SecretItem`, `Folder`, `VaultItem`.
 
@@ -116,19 +118,18 @@ const trimmedBoundedString = (minimum: number, maximum: number) =>
     z.refine((v) => v === v.trim(), { error: "Value must already be trimmed" }),
   );
 
-export const LoginItemSchema = z
-  .extend(ItemMetadataSchema, {
-    kind: z.literal("login"),
-    schemaVersion: z.literal(ITEM_SCHEMA_VERSION),
-    name: trimmedBoundedString(1, MAX_LOGIN_NAME_LENGTH),
-    username: boundedString(MAX_LOGIN_USERNAME_LENGTH),
-    password: boundedString(MAX_LOGIN_PASSWORD_LENGTH),
-    urls: z
-      .array(z.string().check(z.minLength(1), z.maxLength(MAX_LOGIN_URL_LENGTH)))
-      .check(z.maxLength(MAX_LOGIN_URLS)),
-    linkedOtpId: z.optional(ItemIdSchema),
-    notes: boundedString(MAX_LOGIN_NOTES_LENGTH),
-  });
+export const LoginItemSchema = z.extend(ItemMetadataSchema, {
+  kind: z.literal("login"),
+  schemaVersion: z.literal(ITEM_SCHEMA_VERSION),
+  name: trimmedBoundedString(1, MAX_LOGIN_NAME_LENGTH),
+  username: boundedString(MAX_LOGIN_USERNAME_LENGTH),
+  password: boundedString(MAX_LOGIN_PASSWORD_LENGTH),
+  urls: z
+    .array(z.string().check(z.minLength(1), z.maxLength(MAX_LOGIN_URL_LENGTH)))
+    .check(z.maxLength(MAX_LOGIN_URLS)),
+  linkedOtpId: z.optional(ItemIdSchema),
+  notes: boundedString(MAX_LOGIN_NOTES_LENGTH),
+});
 
 export type LoginItem = z.infer<typeof LoginItemSchema>;
 ```
@@ -266,10 +267,9 @@ const secretMetadataSchema = z
     z.string().check(z.maxLength(MAX_SECRET_METADATA_VALUE_LENGTH)),
   )
   .check(
-    z.refine(
-      (rec) => Object.keys(rec).length <= MAX_SECRET_METADATA_ENTRIES,
-      { error: `Metadata must have at most ${MAX_SECRET_METADATA_ENTRIES} entries` },
-    ),
+    z.refine((rec) => Object.keys(rec).length <= MAX_SECRET_METADATA_ENTRIES, {
+      error: `Metadata must have at most ${MAX_SECRET_METADATA_ENTRIES} entries`,
+    }),
   );
 
 export const SecretItemSchema = z.extend(ItemMetadataSchema, {
@@ -321,27 +321,46 @@ Note: since `ITEM_SCHEMA_VERSION` changed from `1 as const` to `2 as const`, `Ot
 In `packages/domain/src/index.ts`, add:
 
 ```typescript
-export {
-  FolderSchema,
-  MAX_FOLDER_DEPTH,
-  MAX_FOLDER_NAME_LENGTH,
-  MAX_FOLDERS,
-} from "./folder";
+export { FolderSchema, MAX_FOLDER_DEPTH, MAX_FOLDER_NAME_LENGTH, MAX_FOLDERS } from "./folder";
 export type { Folder } from "./folder";
 
-export { LoginItemSchema, MAX_LOGIN_NAME_LENGTH, MAX_LOGIN_PASSWORD_LENGTH, MAX_LOGIN_URL_LENGTH, MAX_LOGIN_URLS, MAX_LOGIN_USERNAME_LENGTH, MAX_LOGIN_NOTES_LENGTH } from "./login-item";
+export {
+  LoginItemSchema,
+  MAX_LOGIN_NAME_LENGTH,
+  MAX_LOGIN_PASSWORD_LENGTH,
+  MAX_LOGIN_URL_LENGTH,
+  MAX_LOGIN_URLS,
+  MAX_LOGIN_USERNAME_LENGTH,
+  MAX_LOGIN_NOTES_LENGTH,
+} from "./login-item";
 export type { LoginItem } from "./login-item";
 
 export { NoteItemSchema, MAX_NOTE_NAME_LENGTH, MAX_NOTE_CONTENT_LENGTH } from "./note-item";
 export type { NoteItem } from "./note-item";
 
-export { CardItemSchema, MAX_CARD_NAME_LENGTH, MAX_CARD_HOLDER_LENGTH, MAX_CARD_NUMBER_LENGTH, MAX_CARD_NOTES_LENGTH } from "./card-item";
+export {
+  CardItemSchema,
+  MAX_CARD_NAME_LENGTH,
+  MAX_CARD_HOLDER_LENGTH,
+  MAX_CARD_NUMBER_LENGTH,
+  MAX_CARD_NOTES_LENGTH,
+} from "./card-item";
 export type { CardItem } from "./card-item";
 
-export { IdentityItemSchema, MAX_IDENTITY_NAME_LENGTH, MAX_IDENTITY_NOTES_LENGTH } from "./identity-item";
+export {
+  IdentityItemSchema,
+  MAX_IDENTITY_NAME_LENGTH,
+  MAX_IDENTITY_NOTES_LENGTH,
+} from "./identity-item";
 export type { IdentityItem } from "./identity-item";
 
-export { SecretItemSchema, MAX_SECRET_NAME_LENGTH, MAX_SECRET_VALUE_LENGTH, MAX_SECRET_METADATA_ENTRIES, MAX_SECRET_NOTES_LENGTH } from "./secret-item";
+export {
+  SecretItemSchema,
+  MAX_SECRET_NAME_LENGTH,
+  MAX_SECRET_VALUE_LENGTH,
+  MAX_SECRET_METADATA_ENTRIES,
+  MAX_SECRET_NOTES_LENGTH,
+} from "./secret-item";
 export type { SecretItem } from "./secret-item";
 ```
 
@@ -419,19 +438,19 @@ import { VaultItemSchema } from "../src/otp-item";
 
 describe("VaultItemSchema discriminated union", () => {
   it("parses a login item by kind", () => {
-    const login = { /* valid login with kind: "login" */ };
+    const login = {/* valid login with kind: "login" */};
     const result = VaultItemSchema.parse(login);
     expect(result.kind).toBe("login");
   });
 
   it("parses an otp item by kind", () => {
-    const otp = { /* valid otp with kind: "otp" */ };
+    const otp = {/* valid otp with kind: "otp" */};
     const result = VaultItemSchema.parse(otp);
     expect(result.kind).toBe("otp");
   });
 
   it("rejects unknown kind", () => {
-    const unknown = { kind: "unknown", /* ... */ };
+    const unknown = { kind: "unknown" /* ... */ };
     expect(() => VaultItemSchema.parse(unknown)).toThrow();
   });
 });
@@ -459,6 +478,7 @@ ItemMetadataSchema."
 ### Task 2: Widen `@shardpass/storage` for all item kinds
 
 **Files:**
+
 - Modify: `packages/storage/src/vault-format.ts:123-129` — widen `EncryptedRecordSchema.kind` from `z.literal("otp")` to accept all kinds
 - Modify: `packages/storage/src/vault-format.ts` — update `schemaVersion` literal
 - Modify: `packages/storage/src/vault-repository.ts:43-51` — widen `VaultItemMetadata.kind` type
@@ -466,6 +486,7 @@ ItemMetadataSchema."
 - Modify: existing storage tests to use `schemaVersion: 2`
 
 **Interfaces:**
+
 - Consumes: `VaultItemSchema`, `VaultItemKind`, `VAULT_ITEM_KINDS` from `@shardpass/domain`
 - Produces: `VaultRepository.listItemsByKind(kind: VaultItemKind)`, `VaultRepository.importItems(items: VaultItem[])`. Widened `VaultItemMetadata` with `kind: VaultItemKind`.
 
@@ -596,6 +617,7 @@ and importItems() to VaultRepository."
 ### Task 3: Extend `@shardpass/messaging` with new message types
 
 **Files:**
+
 - Create: `packages/messaging/src/login.ts`
 - Create: `packages/messaging/src/login-fill.ts`
 - Create: `packages/messaging/src/item-crud.ts`
@@ -604,6 +626,7 @@ and importItems() to VaultRepository."
 - Create: `packages/messaging/test/login-fill.test.ts`
 
 **Interfaces:**
+
 - Consumes: `MessageEnvelopeSchema` from `envelope.ts`, `VaultItemKind` from `@shardpass/domain`
 - Produces: `LoginFillRequestSchema`, `LoginFillResponseSchema`, `ItemCrudRequestSchema`, `ItemCrudResponseSchema`, `PasswordGenRequestSchema`, `PasswordGenResponseSchema`
 
@@ -792,6 +815,7 @@ git commit -m "feat(messaging): add login fill, item CRUD, and password generati
 ### Task 4: Redesign `@shardpass/ui` — minimal neutral palette
 
 **Files:**
+
 - Rewrite: `packages/ui/src/styles/tokens.css` — new color tokens, light/dark theming
 - Rewrite: `packages/ui/src/styles/base.css` — remove brutalist kickers, add system font
 - Modify: `packages/ui/src/styles/primitives.module.css` — update Button, Field, etc.
@@ -805,6 +829,7 @@ git commit -m "feat(messaging): add login fill, item CRUD, and password generati
 - Create: `packages/ui/test/ItemRow.dom.test.tsx`
 
 **Interfaces:**
+
 - Consumes: `VaultItemKind` from `@shardpass/domain`, `lucide-react` icons
 - Produces: `ItemRow` component (props: `{ kind, name, subtitle, rightContent?, onClick?, active? }`), `CategoryNav` component, `SearchBar` component. CSS custom properties for theming.
 
@@ -970,7 +995,9 @@ Rewrite Button variants to use the new tokens:
   border-radius: var(--radius-md);
   border: 1px solid transparent;
   cursor: pointer;
-  transition: background 120ms, border-color 120ms;
+  transition:
+    background 120ms,
+    border-color 120ms;
 }
 
 .primary {
@@ -978,20 +1005,27 @@ Rewrite Button variants to use the new tokens:
   color: white;
   border-color: var(--accent);
 }
-.primary:hover { background: var(--accent-hover); }
+.primary:hover {
+  background: var(--accent-hover);
+}
 
 .secondary {
   background: var(--bg-secondary);
   color: var(--text-primary);
   border-color: var(--border);
 }
-.secondary:hover { border-color: var(--border-hover); }
+.secondary:hover {
+  border-color: var(--border-hover);
+}
 
 .ghost {
   background: transparent;
   color: var(--text-secondary);
 }
-.ghost:hover { background: var(--bg-secondary); color: var(--text-primary); }
+.ghost:hover {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
 
 .danger {
   background: var(--danger-subtle);
@@ -1069,9 +1103,15 @@ export function ItemRow({ kind, name, subtitle, rightContent, active, onClick }:
   color: var(--text-primary);
   transition: background 80ms;
 }
-.row:hover { background: var(--bg-secondary); }
-.active { background: var(--accent-subtle); }
-.active:hover { background: var(--accent-subtle); }
+.row:hover {
+  background: var(--bg-secondary);
+}
+.active {
+  background: var(--accent-subtle);
+}
+.active:hover {
+  background: var(--accent-subtle);
+}
 
 .icon {
   flex-shrink: 0;
@@ -1145,6 +1185,7 @@ uppercase kickers. Add ItemRow, CategoryNav, SearchBar components."
 ### Task 5: Password generator
 
 **Files:**
+
 - Create: `packages/crypto/src/password-generator.ts`
 - Create: `packages/crypto/src/wordlist.ts`
 - Create: `packages/crypto/test/password-generator.test.ts`
@@ -1152,6 +1193,7 @@ uppercase kickers. Add ItemRow, CategoryNav, SearchBar components."
 - Modify: `packages/crypto/package.json` — add `"./password-generator"` export
 
 **Interfaces:**
+
 - Consumes: `crypto.getRandomValues()` (global)
 - Produces: `generateRandomPassword(opts): { password: string; entropyBits: number }`, `generatePassphrase(opts): { password: string; entropyBits: number }`
 
@@ -1211,7 +1253,11 @@ describe("generatePassphrase", () => {
   });
 
   it("capitalizes first letter when requested", () => {
-    const { password } = generatePassphrase({ wordCount: 4, separator: "hyphen", capitalize: true });
+    const { password } = generatePassphrase({
+      wordCount: 4,
+      separator: "hyphen",
+      capitalize: true,
+    });
     for (const word of password.split("-")) {
       expect(word[0]).toBe(word[0].toUpperCase());
     }
@@ -1328,7 +1374,9 @@ Create `packages/crypto/src/wordlist.ts` containing the EFF large wordlist (~7,7
 
 ```typescript
 export const EFF_WORDLIST: readonly string[] = [
-  "abacus", "abdomen", "abdominal", /* ... full list ... */
+  "abacus",
+  "abdomen",
+  "abdominal" /* ... full list ... */,
 ];
 ```
 
@@ -1350,6 +1398,7 @@ git commit -m "feat(crypto): add password generator with random and passphrase m
 ### Task 6: Create `@shardpass/autofill` package
 
 **Files:**
+
 - Create: `packages/autofill/package.json`
 - Create: `packages/autofill/src/index.ts`
 - Create: `packages/autofill/src/detect-login-fields.ts`
@@ -1360,6 +1409,7 @@ git commit -m "feat(crypto): add password generator with random and passphrase m
 - Create: `packages/autofill/test/fill-login-fields.test.ts`
 
 **Interfaces:**
+
 - Consumes: nothing (pure functions, no Chrome API dependency)
 - Produces: `detectLoginFields(root: Document | ShadowRoot): LoginFieldSet[]`, `matchDomain(domain: string, urls: string[]): boolean`, `fillLoginFields(fieldSet: LoginFieldSet, username: string, password: string): void`
 
@@ -1509,13 +1559,18 @@ export interface LoginFieldSet {
   form: HTMLFormElement | null;
 }
 
-const USERNAME_PATTERN =
-  /user|email|login|account|phone|identifier|uid|uname/i;
+const USERNAME_PATTERN = /user|email|login|account|phone|identifier|uid|uname/i;
 
 function isUsernameCandidate(input: HTMLInputElement): boolean {
   if (input.type === "email") return true;
   if (input.type !== "text") return false;
-  const haystack = [input.name, input.id, input.placeholder, input.autocomplete, input.getAttribute("aria-label") ?? ""].join(" ");
+  const haystack = [
+    input.name,
+    input.id,
+    input.placeholder,
+    input.autocomplete,
+    input.getAttribute("aria-label") ?? "",
+  ].join(" ");
   return USERNAME_PATTERN.test(haystack);
 }
 
@@ -1568,11 +1623,7 @@ function setNativeValue(el: HTMLInputElement, value: string): void {
   el.dispatchEvent(new Event("change", { bubbles: true }));
 }
 
-export function fillLoginFields(
-  fieldSet: LoginFieldSet,
-  username: string,
-  password: string,
-): void {
+export function fillLoginFields(fieldSet: LoginFieldSet, username: string, password: string): void {
   if (fieldSet.usernameField && username) {
     setNativeValue(fieldSet.usernameField, username);
   }
@@ -1601,6 +1652,7 @@ git commit -m "feat(autofill): add login field detection, domain matching, and f
 ### Task 7: Background services — item CRUD, login fill, password gen
 
 **Files:**
+
 - Create: `apps/extension/src/background/item/item-service.ts`
 - Create: `apps/extension/src/background/login/login-fill-service.ts`
 - Create: `apps/extension/src/background/password/password-gen-service.ts`
@@ -1612,6 +1664,7 @@ git commit -m "feat(autofill): add login field detection, domain matching, and f
 - Create: `apps/extension/test/background/password-gen-service.test.ts`
 
 **Interfaces:**
+
 - Consumes: `VaultRepository` from `@shardpass/storage`, `VaultItemSchema`/`VaultItemKind` from `@shardpass/domain`, message schemas from `@shardpass/messaging`, `generateRandomPassword`/`generatePassphrase` from `@shardpass/crypto/password-generator`, `matchDomain` from `@shardpass/autofill`
 - Produces: `ItemService` (handles `item.query`, `item.get`, `item.create`, `item.update`, `item.delete`), `LoginFillService` (handles `login.fillSuggestions`, `login.fillSelect`, `login.fillConfirm`, `login.fillCancel`, `login.saveOffer`), `PasswordGenService` (handles `password.generate`)
 
@@ -1654,7 +1707,12 @@ import type { VaultItem, VaultItemKind } from "@shardpass/domain";
 export class ItemService {
   constructor(private readonly repo: VaultRepository) {}
 
-  async query(opts: { itemKind?: VaultItemKind; folderId?: string; search?: string; favoritesOnly?: boolean }): Promise<VaultItem[]> {
+  async query(opts: {
+    itemKind?: VaultItemKind;
+    folderId?: string;
+    search?: string;
+    favoritesOnly?: boolean;
+  }): Promise<VaultItem[]> {
     let items = await this.repo.listItems();
     if (opts.itemKind) items = items.filter((i) => i.kind === opts.itemKind);
     if (opts.folderId) items = items.filter((i) => i.folderId === opts.folderId);
@@ -1662,7 +1720,13 @@ export class ItemService {
     if (opts.search) {
       const q = opts.search.toLowerCase();
       items = items.filter((i) => {
-        const searchable = [i.kind === "otp" ? i.issuer : "", "name" in i ? (i as { name: string }).name : "", ...i.tags].join(" ").toLowerCase();
+        const searchable = [
+          i.kind === "otp" ? i.issuer : "",
+          "name" in i ? (i as { name: string }).name : "",
+          ...i.tags,
+        ]
+          .join(" ")
+          .toLowerCase();
         return searchable.includes(q);
       });
     }
@@ -1719,6 +1783,7 @@ git commit -m "feat(extension): add item CRUD, login fill, and password gen serv
 ### Task 8: Popup redesign — multi-type item list
 
 **Files:**
+
 - Rewrite: `apps/extension/src/popup/PopupApp.tsx`
 - Rewrite: `apps/extension/src/popup/PopupApp.module.css`
 - Create: `apps/extension/src/popup/components/PopupHeader.tsx`
@@ -1731,6 +1796,7 @@ git commit -m "feat(extension): add item CRUD, login fill, and password gen serv
 - Modify: `apps/extension/popup/index.html` — update title
 
 **Interfaces:**
+
 - Consumes: `ItemRow`, `SearchBar` from `@shardpass/ui`, platform message senders, `VaultItemKind` from `@shardpass/domain`
 - Produces: `PopupApp` (redesigned root component)
 
@@ -1755,7 +1821,9 @@ export function useVaultItems(platform: OtpUiExtensionPlatform) {
     setItems(result.items);
   }, [platform, filter, search]);
 
-  useEffect(() => { refresh(); }, [refresh]);
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
 
   return { items, filter, setFilter, search, setSearch, refresh };
 }
@@ -1797,6 +1865,7 @@ Dropdown button at the bottom. Options: "Login", "OTP", "Note", "Card", "Identit
 - [ ] **Step 6: Style the popup at 400×540px**
 
 CSS module with:
+
 ```css
 .popup {
   width: 400px;
@@ -1820,6 +1889,7 @@ git commit -m "redesign(popup): multi-type item list with search, filter tabs, c
 ### Task 9: Vault tab redesign — two-panel layout with item details
 
 **Files:**
+
 - Rewrite: `apps/extension/src/vault/VaultApp.tsx`
 - Rewrite: `apps/extension/src/vault/VaultApp.module.css`
 - Create: `apps/extension/src/vault/components/VaultSidebar.tsx` (rewrite existing)
@@ -1841,6 +1911,7 @@ git commit -m "redesign(popup): multi-type item list with search, filter tabs, c
 - Create: `apps/extension/src/vault/components/PasswordGeneratorDialog.tsx`
 
 **Interfaces:**
+
 - Consumes: `ItemRow`, `CategoryNav`, `SearchBar`, `Button`, `Field` from `@shardpass/ui`, `VaultItem`, `VaultItemKind`, `Folder` from `@shardpass/domain`, platform message senders
 - Produces: `VaultApp` (redesigned root), detail views for each item type, edit forms for each item type
 
@@ -1848,22 +1919,29 @@ git commit -m "redesign(popup): multi-type item list with search, filter tabs, c
 
 ```tsx
 export function VaultApp({ platform }: { platform: ExtensionPlatform }) {
-  const { items, selectedId, setSelectedId, category, setCategory, search, setSearch, refresh } = useVaultState(platform);
+  const { items, selectedId, setSelectedId, category, setCategory, search, setSearch, refresh } =
+    useVaultState(platform);
   const selectedItem = items.find((i) => i.id === selectedId);
 
   return (
     <div className={styles.vault}>
       <div className={styles.sidebar}>
-        <VaultSidebar category={category} onCategoryChange={setCategory} itemCounts={countByKind(items)} />
+        <VaultSidebar
+          category={category}
+          onCategoryChange={setCategory}
+          itemCounts={countByKind(items)}
+        />
       </div>
       <div className={styles.list}>
         <SearchBar value={search} onChange={setSearch} />
         <ItemListPanel items={items} selectedId={selectedId} onSelect={setSelectedId} />
       </div>
       <div className={styles.detail}>
-        {selectedItem
-          ? <ItemDetailPanel item={selectedItem} platform={platform} onUpdate={refresh} />
-          : <EmptyState />}
+        {selectedItem ? (
+          <ItemDetailPanel item={selectedItem} platform={platform} onUpdate={refresh} />
+        ) : (
+          <EmptyState />
+        )}
       </div>
     </div>
   );
@@ -1871,6 +1949,7 @@ export function VaultApp({ platform }: { platform: ExtensionPlatform }) {
 ```
 
 Layout CSS:
+
 ```css
 .vault {
   display: grid;
@@ -1878,9 +1957,18 @@ Layout CSS:
   height: 100vh;
   background: var(--bg-primary);
 }
-.sidebar { border-right: 1px solid var(--border); background: var(--bg-secondary); }
-.list { border-right: 1px solid var(--border); overflow-y: auto; }
-.detail { overflow-y: auto; padding: 24px; }
+.sidebar {
+  border-right: 1px solid var(--border);
+  background: var(--bg-secondary);
+}
+.list {
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+}
+.detail {
+  overflow-y: auto;
+  padding: 24px;
+}
 ```
 
 - [ ] **Step 2: Build `VaultSidebar` with category nav**
@@ -1896,12 +1984,18 @@ Maps items to `ItemRow` components with kind-appropriate subtitles. Selected ite
 ```tsx
 function ItemDetailPanel({ item, platform, onUpdate }: Props) {
   switch (item.kind) {
-    case "login": return <LoginDetail item={item} platform={platform} onUpdate={onUpdate} />;
-    case "otp": return <OtpDetail item={item} platform={platform} onUpdate={onUpdate} />;
-    case "note": return <NoteDetail item={item} platform={platform} onUpdate={onUpdate} />;
-    case "card": return <CardDetail item={item} platform={platform} onUpdate={onUpdate} />;
-    case "identity": return <IdentityDetail item={item} platform={platform} onUpdate={onUpdate} />;
-    case "secret": return <SecretDetail item={item} platform={platform} onUpdate={onUpdate} />;
+    case "login":
+      return <LoginDetail item={item} platform={platform} onUpdate={onUpdate} />;
+    case "otp":
+      return <OtpDetail item={item} platform={platform} onUpdate={onUpdate} />;
+    case "note":
+      return <NoteDetail item={item} platform={platform} onUpdate={onUpdate} />;
+    case "card":
+      return <CardDetail item={item} platform={platform} onUpdate={onUpdate} />;
+    case "identity":
+      return <IdentityDetail item={item} platform={platform} onUpdate={onUpdate} />;
+    case "secret":
+      return <SecretDetail item={item} platform={platform} onUpdate={onUpdate} />;
   }
 }
 ```
@@ -1915,8 +2009,17 @@ Shows fields: name, username (copy button), password (reveal/copy), URLs (clicka
 Each detail component receives its typed item + platform + onUpdate callback.
 
 `NoteDetail.tsx`:
+
 ```tsx
-export function NoteDetail({ item, platform, onUpdate }: { item: NoteItem; platform: ExtensionPlatform; onUpdate: () => void }) {
+export function NoteDetail({
+  item,
+  platform,
+  onUpdate,
+}: {
+  item: NoteItem;
+  platform: ExtensionPlatform;
+  onUpdate: () => void;
+}) {
   return (
     <div className={styles.detail}>
       <h2 className={styles.title}>{item.name}</h2>
@@ -1960,6 +2063,7 @@ git commit -m "redesign(vault): two-panel layout with category sidebar, item det
 ### Task 10: Content script — login autofill and save prompt
 
 **Files:**
+
 - Create: `apps/extension/src/content/login/login-fill-controller.tsx`
 - Create: `apps/extension/src/content/login/LoginPicker.tsx`
 - Create: `apps/extension/src/content/login/login-picker.css`
@@ -1970,6 +2074,7 @@ git commit -m "redesign(vault): two-panel layout with category sidebar, item det
 - Create: `apps/extension/test/content/login-fill-controller.test.ts`
 
 **Interfaces:**
+
 - Consumes: `detectLoginFields`, `matchDomain`, `fillLoginFields` from `@shardpass/autofill`, `LoginFillContentPlatform` from platform interfaces, `LoginFillSuggestion` from `@shardpass/messaging`
 - Produces: `LoginFillController` (lifecycle: `start()` → detect fields → show chip → fill on select → monitor for save)
 
@@ -2006,7 +2111,11 @@ export class LoginFillController {
     // Request suggestions from background via platform.sendMessage
   }
 
-  private async handleSelect(itemId: string, revision: number, fieldSet: LoginFieldSet): Promise<void> {
+  private async handleSelect(
+    itemId: string,
+    revision: number,
+    fieldSet: LoginFieldSet,
+  ): Promise<void> {
     const { username, password } = await this.platform.sendMessage({
       version: 1,
       kind: "login.fillSelect",
@@ -2066,6 +2175,7 @@ git commit -m "feat(content): add login autofill with field detection, fill, and
 ### Task 11: Third-party password importers
 
 **Files:**
+
 - Create: `packages/importers/src/bitwarden/index.ts`
 - Create: `packages/importers/src/bitwarden/bitwarden-json.ts`
 - Create: `packages/importers/src/onepassword/index.ts`
@@ -2083,6 +2193,7 @@ git commit -m "feat(content): add login autofill with field detection, fill, and
 - Create: `packages/importers/test/onepassword-csv.test.ts`
 
 **Interfaces:**
+
 - Consumes: `LoginItemSchema`, `NoteItemSchema`, `CardItemSchema`, `IdentityItemSchema` from `@shardpass/domain`
 - Produces: `importBitwardenJson(json: string): ImportResult`, `importOnePasswordCsv(csv: string): ImportResult`, `importChromeCsv(csv: string): ImportResult`, `importFirefoxCsv(csv: string): ImportResult`
 
@@ -2145,13 +2256,23 @@ function parseCsvLine(line: string): string[] {
   for (let i = 0; i < line.length; i++) {
     const char = line[i];
     if (inQuotes) {
-      if (char === '"' && line[i + 1] === '"') { current += '"'; i++; }
-      else if (char === '"') { inQuotes = false; }
-      else { current += char; }
+      if (char === '"' && line[i + 1] === '"') {
+        current += '"';
+        i++;
+      } else if (char === '"') {
+        inQuotes = false;
+      } else {
+        current += char;
+      }
     } else {
-      if (char === '"') { inQuotes = true; }
-      else if (char === ",") { result.push(current); current = ""; }
-      else { current += char; }
+      if (char === '"') {
+        inQuotes = true;
+      } else if (char === ",") {
+        result.push(current);
+        current = "";
+      } else {
+        current += char;
+      }
     }
   }
   result.push(current);
@@ -2231,6 +2352,7 @@ git commit -m "feat(importers): add Chrome, Firefox, Bitwarden, and 1Password im
 ### Task 12: Vault migration, import UI, and final integration
 
 **Files:**
+
 - Modify: `apps/extension/src/vault-access/VaultAccess.tsx` — update styling to new tokens
 - Create: `apps/extension/src/vault/import/ImportDialog.tsx` — extended import UI supporting new formats
 - Modify: `apps/extension/src/vault/settings/BackupView.tsx` — update export format to v2
@@ -2239,6 +2361,7 @@ git commit -m "feat(importers): add Chrome, Firefox, Bitwarden, and 1Password im
 - Modify: `apps/extension/src/background/main.ts` — ensure all services initialized
 
 **Interfaces:**
+
 - Consumes: all prior tasks
 - Produces: working end-to-end flow: unlock vault → migrate → browse all item types → add/edit/delete → autofill logins → import from third parties → export encrypted backup
 
@@ -2269,6 +2392,7 @@ Add `version: 2` to the export envelope. The encrypted blob already contains the
 - [ ] **Step 3: Build extended `ImportDialog`**
 
 New import dialog with source selector:
+
 - Existing: QR Code, otpauth:// URI, ShardPass Backup
 - New: Chrome CSV, Firefox CSV, Bitwarden JSON, 1Password CSV
 
@@ -2283,6 +2407,7 @@ Replace vermillion accent references with new `--accent` tokens. Update font to 
 Build the extension: `pnpm build`
 
 Manual verification checklist:
+
 1. Load extension in Chrome → setup screen shows with new styling
 2. Create vault → unlock → empty state shows categories
 3. Add a login item → appears in Logins category and popup

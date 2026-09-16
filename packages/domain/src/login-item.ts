@@ -57,7 +57,8 @@ const customFieldSchema = z
   })
   .check(
     z.refine(
-      (field) => (field.type === "linked" ? field.linkedTo !== undefined : field.linkedTo === undefined),
+      (field) =>
+        field.type === "linked" ? field.linkedTo !== undefined : field.linkedTo === undefined,
       { error: "linkedTo is required for linked fields and not allowed otherwise" },
     ),
   );
