@@ -12,11 +12,17 @@ import {
 
 const temporaryDirectories: string[] = [];
 
-async function temporaryArtifact(name: string, content: string): Promise<string> {
+async function temporaryArtifact(
+  name: string,
+  content: string,
+  extra: Readonly<Record<string, string>> = {},
+): Promise<string> {
   const directory = await mkdtemp(join(tmpdir(), "shardpass-csp-"));
   temporaryDirectories.push(directory);
-  await mkdir(dirname(join(directory, name)), { recursive: true });
-  await writeFile(join(directory, name), content);
+  for (const [file, body] of [[name, content] as const, ...Object.entries(extra)]) {
+    await mkdir(dirname(join(directory, file)), { recursive: true });
+    await writeFile(join(directory, file), body);
+  }
   return directory;
 }
 
@@ -95,23 +101,41 @@ describe("production executable policy scanner", () => {
   it("allows the exact pinned protobuf registry shape only in the build-identified Google worker", async () => {
     const source =
       'const key = Symbol.for("@bufbuild/protobuf/text-encoding"); if (globalThis[key] == null) globalThis[key] = Object.freeze({ encodeUtf8() {} }); const value = globalThis[key];';
-    const allowed = await temporaryArtifact("assets/google-worker.js", source);
-    await writeFile(
-      join(allowed, ".shardpass-executable-audit.json"),
-      JSON.stringify({ version: 1, googleMigrationWorker: "assets/google-worker.js" }),
+    // The allowance is derived from the artifact: the one chunk carrying that module must be
+    // the Google-migration worker entry, named as the build names it.
+    const allowed = await temporaryArtifact(
+      "assets/google-migration-worker-entry-Ab3dEf.js",
+      source,
     );
     expect(await findExecutablePolicyViolations(allowed)).toEqual([]);
 
     const unrelated = await temporaryArtifact("assets/vault.js", source);
-    await writeFile(
-      join(unrelated, ".shardpass-executable-audit.json"),
-      JSON.stringify({ version: 1, googleMigrationWorker: "assets/google-worker.js" }),
-    );
     expect(await findExecutablePolicyViolations(unrelated)).toContainEqual(
       expect.objectContaining({
         file: "assets/vault.js",
         rule: "computed-global-dynamic-code-access",
       }),
+    );
+
+    // A second chunk carrying the module withdraws the allowance from both.
+    const twoCarriers = await temporaryArtifact(
+      "assets/google-migration-worker-entry-Ab3dEf.js",
+      source,
+      { "assets/second.js": source },
+    );
+    expect(
+      (await findExecutablePolicyViolations(twoCarriers)).map((violation) => violation.file).sort(),
+    ).toEqual(["assets/google-migration-worker-entry-Ab3dEf.js", "assets/second.js"]);
+
+    // A waiver file dropped beside the artifact grants nothing.
+    const forged = await temporaryArtifact("assets/vault.js", source, {
+      ".shardpass-executable-audit.json": JSON.stringify({
+        version: 1,
+        googleMigrationWorker: "assets/vault.js",
+      }),
+    });
+    expect(await findExecutablePolicyViolations(forged)).toContainEqual(
+      expect.objectContaining({ rule: "computed-global-dynamic-code-access" }),
     );
   });
 
@@ -126,10 +150,9 @@ describe("production executable policy scanner", () => {
       'const key = Symbol.for("@bufbuild/protobuf/text-encoding"); const { [key]: value } = globalThis;',
     ];
     for (const source of cases) {
-      const directory = await temporaryArtifact("assets/google-worker.js", source);
-      await writeFile(
-        join(directory, ".shardpass-executable-audit.json"),
-        JSON.stringify({ version: 1, googleMigrationWorker: "assets/google-worker.js" }),
+      const directory = await temporaryArtifact(
+        "assets/google-migration-worker-entry-Ab3dEf.js",
+        source,
       );
       expect(await findExecutablePolicyViolations(directory)).toContainEqual(
         expect.objectContaining({ rule: "computed-global-dynamic-code-access" }),

@@ -1,5 +1,16 @@
 import { lstat, readdir, readFile } from "node:fs/promises";
-import { dirname, extname, join, normalize, posix, relative, resolve, sep, win32 } from "node:path";
+import {
+  basename,
+  dirname,
+  extname,
+  join,
+  normalize,
+  posix,
+  relative,
+  resolve,
+  sep,
+  win32,
+} from "node:path";
 
 import { parse } from "acorn";
 import { analyze, type Reference, type Variable } from "eslint-scope";
@@ -1061,6 +1072,25 @@ function htmlAnalysis(
   return { rules: [...violations], references };
 }
 
+/**
+ * The one chunk allowed to reach the protobuf text-encoding registry through a computed
+ * `globalThis[...]`, found in the artifact itself rather than taken on trust from a file
+ * beside it: exactly one chunk may carry that module, and it must be the Google-migration
+ * worker entry. Two such chunks, or the marker in anything else, leaves the allowance unused
+ * and the access is reported like any other.
+ */
+async function auditedProtobufWorker(files: readonly string[]): Promise<string | null> {
+  const carriers: string[] = [];
+  for (const file of files) {
+    if (extname(file).toLowerCase() !== ".js") continue;
+    const source = await readFile(file, "utf8").catch(() => "");
+    if (source.includes(AUDITED_PROTOBUF_REGISTRY)) carriers.push(file);
+  }
+  const only = carriers.length === 1 ? carriers[0] : undefined;
+  if (only === undefined) return null;
+  return /^google-migration-worker-entry-[A-Za-z\d_-]+\.js$/u.test(basename(only)) ? only : null;
+}
+
 export async function findExecutablePolicyViolations(
   directory: string,
   executableReferences: readonly ExecutableReference[] = [],
@@ -1070,25 +1100,7 @@ export async function findExecutablePolicyViolations(
     throw new Error(`Executable policy root must be a real non-symlink directory: ${directory}`);
   }
   const discovered = await executableEntries(directory);
-  let auditedWorker: string | null = null;
-  try {
-    const audit = JSON.parse(
-      await readFile(join(directory, ".shardpass-executable-audit.json"), "utf8"),
-    ) as unknown;
-    if (
-      typeof audit === "object" &&
-      audit !== null &&
-      "version" in audit &&
-      audit.version === 1 &&
-      "googleMigrationWorker" in audit &&
-      typeof audit.googleMigrationWorker === "string"
-    ) {
-      const candidate = resolve(directory, normalize(audit.googleMigrationWorker));
-      if (pathIsWithin(directory, candidate)) auditedWorker = candidate;
-    }
-  } catch {
-    auditedWorker = null;
-  }
+  const auditedWorker = await auditedProtobufWorker(discovered.files);
   const queue: ExecutableReference[] = [
     ...discovered.files.map((file) => ({
       file,

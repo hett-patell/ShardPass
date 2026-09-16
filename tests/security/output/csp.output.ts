@@ -1,4 +1,4 @@
-import { readdir, readFile, writeFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 
 import { describe, expect, it } from "vitest";
@@ -52,10 +52,6 @@ describe("built extension executable security", () => {
     expect(vaultFiles).toHaveLength(1);
     const vaultSource = await readFile(path.join(dist, "assets", vaultFiles[0]!), "utf8");
     expect(vaultSource).toContain(`/${workers[0]}`);
-    await writeFile(
-      path.join(dist, ".shardpass-executable-audit.json"),
-      JSON.stringify({ version: 1, googleMigrationWorker: workers[0] }),
-    );
     const violations = await findExecutablePolicyViolations(dist);
     const approved = JSON.parse(
       await readFile(new URL("tests/fixtures/ente/sodium-wasm-approved.json", root), "utf8"),
