@@ -47,9 +47,12 @@
   contain: content;
 }
 
-/* Everything drawn inside the host is interactive again. */
+/* Everything drawn inside the host is interactive again. Every surface a person clicks has to
+   be named here: the host itself takes no pointer events, so a class left off this list renders
+   perfectly and ignores every click. */
 .picker,
 .otpTrigger,
+.otpPicker,
 .loginTrigger,
 .loginPicker,
 .saveBanner,

@@ -101,6 +101,15 @@ Baseline at 2.3.0: typecheck clean, lint clean after one test fix, full suite gr
 - [ ] E9 low (still open, narrow) · `login.fillFromPopup` first-answer race across frames (narrow).
 - [x] E10 low · dead `useOtpList.ts`; stale scan-build/manifest-test comments; GeneratorScreen's deferred settings fetch overwrites what was typed and requests a username per keystroke.
 
+## 2026-09-16 · Clicking a one-time code: the actual cause, found by reproducing it (2.6.3)
+
+Loaded the built extension into a real Chromium, created a vault, added a code, and drove the flow.
+
+- [x] **The picker was click-through.** The shadow host sets `pointer-events: none` so a chip beside a field never swallows the page's own buttons, and a rule in `picker.css` names the surfaces that take clicks again. `.otpPicker` was never in that list. The list rendered, the live code ticked down, and every click passed straight through to the page. No amount of controller logic could have fixed it, which is why three attempts did not.
+- [x] A gate now derives each content component's own root class and fails if it is missing from that rule. It fails on the old stylesheet.
+- [x] Second, separate bug found in the same session: on a page that rewrites its own path, the chip would not open the list at all, because opening also checked the claim. It reclaims the field now, as the row click does.
+- [x] Both verified in the browser: the field fills and the picker closes, on a stable page and on one that rewrites its path.
+
 ## 2026-09-16 · Clicking a one-time code, the real cause (2.6.2)
 
 - [x] The click died at the ownership guard, before any of 2.6.1's retry could run. The picker's claim on the field records the page it opened on, and a two-factor step that rewrites its own path (which is what these pages do between steps) invalidates that claim while the picker stays on screen. Every click then hit the guard and returned in silence.

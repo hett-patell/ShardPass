@@ -382,6 +382,49 @@ describe("OTP fill controller", () => {
     expect(document.querySelector("shardpass-picker-host")).toBeNull();
   });
 
+  it("still opens the list after the page rewrote its own path", async () => {
+    const roots = captureClosedRoots();
+    const input = eligibleField();
+    const candidate = platform((request) =>
+      request.kind === "otp.fillSuggestions"
+        ? {
+            version: 1,
+            kind: "otp.fillSuggestionsResult",
+            capability: "capability_0123456789abcdef",
+            expiresAt: Date.now() + 300_000,
+            suggestions: [
+              {
+                itemId: "018f47a6-7d11-7c2f-8bd9-a1d37f147a20",
+                expectedRevision: 1,
+                issuer: "Primary",
+                label: "Owner",
+                otpType: "totp",
+                favorite: true,
+                tags: [],
+              },
+            ],
+          }
+        : { version: 1, kind: "otp.fillCancelled", cancelled: true },
+    );
+    start(candidate);
+    focusField(input);
+    await flush();
+
+    // The step moves on between the chip appearing and the person reaching for it.
+    window.history.pushState({}, "", "/challenge/totp");
+    await flush();
+    await clickAndFlush(
+      within(roots[0] as unknown as HTMLElement).getByRole("button", {
+        name: "Fill one-time code with ShardPass",
+      }),
+    );
+
+    const list = [...roots]
+      .reverse()
+      .find((root) => root.querySelector(".otpRow") !== null) as unknown as HTMLElement;
+    expect(within(list).getByRole("button", { name: /Use OTP account/u })).toBeVisible();
+  });
+
   it("fills even when the picker has outlived its claim on the field", async () => {
     const roots = captureClosedRoots();
     const input = eligibleField();

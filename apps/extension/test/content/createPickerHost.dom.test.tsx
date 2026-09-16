@@ -468,6 +468,43 @@ describe("content entry and style packaging contracts", () => {
     );
   });
 
+  it("gives every surface the host renders its pointer events back", async () => {
+    const [picker, otp, login] = await Promise.all([
+      readFile(path.join(extensionRoot, "src/content/picker.css"), "utf8"),
+      readFile(path.join(extensionRoot, "src/content/otp/otp-picker.css"), "utf8"),
+      readFile(path.join(extensionRoot, "src/content/login/login-picker.css"), "utf8"),
+    ]);
+    const group =
+      /((?:\.[A-Za-z][\w-]*,\s*)+\.[A-Za-z][\w-]*)\s*\{[^}]*pointer-events:\s*auto/u.exec(picker);
+    expect(group, "picker.css must keep one pointer-events group").not.toBeNull();
+    const interactive = new Set((group?.[1] ?? "").match(/\.[A-Za-z][\w-]*/gu) ?? []);
+
+    // The host takes no pointer events, so a surface left out of that group renders perfectly
+    // and ignores every click: exactly what happened to the one-time-code picker. Each
+    // component's own root element is what has to be in the group.
+    const roots = new Set<string>();
+    const { glob } = await import("node:fs/promises");
+    for await (const entry of glob("src/content/**/*.tsx", { cwd: extensionRoot })) {
+      const source = await readFile(path.join(extensionRoot, entry), "utf8");
+      for (const match of source.matchAll(
+        /return\s*\(\s*<[A-Za-z][\w.]*[^>]*?className=(?:"([^"]+)"|\{`([^`]*)`\})/gu,
+      )) {
+        const classes = `${match[1] ?? ""} ${match[2] ?? ""}`
+          .split(/[\s${}`]+/u)
+          .filter((name) => /^[A-Za-z][\w-]*$/u.test(name));
+        if (classes.length > 0) roots.add(classes.map((name) => `.${name}`).join(" "));
+      }
+    }
+    expect(roots.size).toBeGreaterThan(3);
+    for (const root of roots)
+      expect(
+        root.split(" ").some((name) => interactive.has(name)),
+        `${root} must take clicks`,
+      ).toBe(true);
+    // Both stylesheets style those surfaces; neither may turn pointer events off again.
+    for (const sheet of [otp, login]) expect(sheet).not.toMatch(/pointer-events:\s*none/u);
+  });
+
   it("packages picker CSS as an isolated local string without imports or page-global selectors", async () => {
     const [hostSource, css] = await Promise.all([
       readFile(path.join(extensionRoot, "src/content/createPickerHost.tsx"), "utf8"),

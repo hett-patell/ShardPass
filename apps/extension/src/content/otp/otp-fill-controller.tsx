@@ -223,24 +223,28 @@ export function createOtpFillController(
   };
 
   const openPicker = async (candidate: Owner): Promise<void> => {
-    if (!owns(candidate) || options.document.activeElement !== candidate.input) return;
-    renderPicker(candidate, "busy", []);
+    // The chip is on the field, so the field is what matters: a page that rewrote its own path
+    // since the chip appeared (a two-factor step moving on) invalidated the claim, and this
+    // used to return, leaving the chip looking dead.
+    const active = owns(candidate) ? candidate : reclaim(candidate);
+    if (active === null || options.document.activeElement !== active.input) return;
+    renderPicker(active, "busy", []);
     try {
       const response = await options.platform.sendOtpFillMessage({
         version: 1,
         kind: "otp.fillSuggestions",
         requestId: randomOpaqueId(),
-        fieldHandle: candidate.fieldHandle,
+        fieldHandle: active.fieldHandle,
       });
-      if (!owns(candidate) || response.kind !== "otp.fillSuggestionsResult") return;
+      if (!owns(active) || response.kind !== "otp.fillSuggestionsResult") return;
       capability = response.capability;
       renderPicker(
-        candidate,
+        active,
         response.suggestions.length === 0 ? "empty" : "ready",
         response.suggestions,
       );
     } catch {
-      if (owns(candidate)) renderPicker(candidate, "error", []);
+      if (owns(active)) renderPicker(active, "error", []);
     }
   };
 
