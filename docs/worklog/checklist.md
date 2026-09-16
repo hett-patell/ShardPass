@@ -12,7 +12,7 @@ Baseline at 2.3.0: typecheck clean, lint clean after one test fix, full suite gr
 - [ ] 4 Importers, samples, crypto helpers — not run
 - [ ] 5 Popup, platform, manifest, CSP, build scanner — not run
 - [ ] 6 Tests and tooling — not run
-- [x] Fix batch A (background, security first), with tests — verified: typecheck clean, background/messaging/vault/popup/content suites green, lint clean. Left from A: A6 (no rate limit on username suggestions), A9 (contract-drift comments), an OTP-service re-prompt test.
+- [x] Fix batch A (background, security first), with tests — verified: typecheck clean, background/messaging/vault/popup/content suites green, lint clean. A6 (username suggestion budget), A9 (comments) and the OTP-service re-prompt unit test followed in later commits.
 - [x] Fix batch B (vault UI), with tests — done except B20 (handleCreated edge cases), B22 (navigating away from a create form), B24 (deleting the filtered folder from another view), B26 (unverified dialog desync); B13 was already NBSP.
 - [x] Re-run gates, commit, bump — batch A shipped as 2.3.1, batch B and the passkey change as 2.4.0
 - [x] Google sign-in: answer conditional (page-load) passkey requests with ShardPass's own prompt; a locked vault stays quiet there

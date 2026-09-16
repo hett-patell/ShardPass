@@ -262,6 +262,36 @@ async function list(service: OtpService, query = "") {
   return result.items;
 }
 
+describe("OtpService re-prompted items", () => {
+  it("withholds the code and the editor until the master password was given again", async () => {
+    let granted = false;
+    const guarded = item({ reprompt: true });
+    const service = new OtpService({
+      repository: new FakeRepository([guarded]),
+      clock: { now: () => 15_000, isoNow: () => nowIso },
+      ids: { next: () => ids.created },
+      reservations: new HotpReservationService({
+        clock: { now: () => 15_000 },
+        random: { uuid: () => "018f47a6-7d11-7c2f-8bd9-a1d37f147aff" },
+        committer: { commit: () => Promise.reject(new Error("not called")) },
+      }),
+      notePrivilegedActivity: () => Promise.resolve(),
+      repromptGranted: () => granted,
+    });
+    await expect(
+      service.handle(request("otp.getCode", { itemId: guarded.id }), popupSender),
+    ).rejects.toMatchObject({ code: "REPROMPT_REQUIRED" });
+    await expect(
+      service.handle(request("otp.getEditor", { itemId: guarded.id }), vaultSender),
+    ).rejects.toMatchObject({ code: "REPROMPT_REQUIRED" });
+    // The list still names it; only its secret waits.
+    expect(await list(service)).toHaveLength(1);
+    granted = true;
+    const code = await service.handle(request("otp.getCode", { itemId: guarded.id }), popupSender);
+    expect(code.kind).toBe("otp.codeResult");
+  });
+});
+
 describe("OtpService search and CRUD", () => {
   it("normalizes search with trimmed NFKC and en-US locale folding", () => {
     expect(normalizeOtpSearch("  Ａİ  ")).toBe("ai̇");
