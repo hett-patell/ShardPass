@@ -517,9 +517,16 @@ export function installBackground(
           [
             "vault.setup",
             "vault.unlock",
+            // A PIN unlock opens the vault exactly as the master password does. Leaving it
+            // out here left every surface showing the lock screen over an open vault: the
+            // pages read this published state, not the session itself.
+            "vault.unlockWithPin",
             "vault.lock",
             "vault.changePassword",
             "vault.updateLockSettings",
+            // These two change whether a PIN is offered at all, which the lock screen reads.
+            "vault.setPin",
+            "vault.removePin",
           ].includes(parsedVault.data.kind)) ||
         (parsedMigration.success &&
           ["migration.activate", "migration.retry"].includes(parsedMigration.data.kind)) ||

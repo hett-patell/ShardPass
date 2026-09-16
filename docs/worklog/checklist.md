@@ -101,6 +101,14 @@ Baseline at 2.3.0: typecheck clean, lint clean after one test fix, full suite gr
 - [ ] E9 low (still open, narrow) · `login.fillFromPopup` first-answer race across frames (narrow).
 - [x] E10 low · dead `useOtpList.ts`; stale scan-build/manifest-test comments; GeneratorScreen's deferred settings fetch overwrites what was typed and requests a username per keystroke.
 
+## 2026-09-16 · Full pass through a real browser (2.6.4)
+
+Loaded the built extension into Chromium and drove every feature: vault CRUD for each item kind, categories, search, folders, archive, restore, delete, the login chip and picker, the sign-up generator, the save prompt, the sign-in banner, the code picker, passkey creation and sign-in, the popup, Health, Overview, the generators, About, Settings, locking and unlocking.
+
+- [x] **Unlocking with a PIN did nothing, silently.** The correct PIN opened the vault in the background, but the state every surface reads was never republished, so the lock screen stayed up over an open vault. A wrong PIN reported "That is not the PIN"; the right one reported nothing at all. `vault.unlockWithPin`, `vault.setPin` and `vault.removePin` now publish, and an integration test drives the whole path and fails without the fix.
+- [x] Found while testing: the new one-time-code form has no field to type the secret into until "Reveal secret" is clicked. For a code that does not exist yet there is nothing to conceal.
+- [x] Everything else passed: item creation for every kind, category filters, search, folder create/rename/delete and filing, archive/restore/delete, login fill from the chip and the picker, a generated password filling both sign-up fields, the save prompt storing a login, the sign-in banner filling the form, the code picker filling the field, passkey create and assert on a real page, the popup's list, search and live code, and the Health, Overview, generator, About and Settings views.
+
 ## 2026-09-16 · Clicking a one-time code: the actual cause, found by reproducing it (2.6.3)
 
 Loaded the built extension into a real Chromium, created a vault, added a code, and drove the flow.
