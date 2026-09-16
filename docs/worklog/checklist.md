@@ -101,6 +101,17 @@ Baseline at 2.3.0: typecheck clean, lint clean after one test fix, full suite gr
 - [ ] E9 low (still open, narrow) · `login.fillFromPopup` first-answer race across frames (narrow).
 - [x] E10 low · dead `useOtpList.ts`; stale scan-build/manifest-test comments; GeneratorScreen's deferred settings fetch overwrites what was typed and requests a username per keystroke.
 
+## 2026-09-16 · The dashboard, health and the generator, redesigned (2.7.0)
+
+- [x] The dashboard reported counts where it should have said what to do. Seven identical tiles, six of them reading 0; the same five findings printed twice, once as a run-on line under the gauge and once as a list beside it; "passkeys available" filed as a defect; and every row opening the same undifferentiated health page.
+- [x] It is a triage queue now: findings ordered by what they cost to ignore, each naming the accounts it covers ("Cricbuzz, Docker Hub and 9 others"), each landing on that finding in the health page. Severity reads from the dot and the order, with danger, warning and success tokens kept apart from the vermilion that means "interactive".
+- [x] "No second factor" left the queue for a footnote: it matched all 24 logins, so as a row it said nothing about where to start.
+- [x] The seven kind tiles became one composition bar in the sidebar's own category colours, with a legend of what is actually there and one sentence for what is not. An empty vault is now an invitation with two actions instead of a grid of zeros.
+- [x] Health was six tinted metric tiles with 40px watermark icons, equal weight whatever they said. It is a summary strip over a worklist of bands now, in the same severity order as the dashboard, with the accounts hanging in a text column under each title.
+- [x] The health page can be opened at a finding: the dashboard passes it, the card is scrolled to and focused.
+- [x] The generated password is the point of the generator page and was set at the size of a form label. It is 28px on the vault page and 18px in the popup, with digits and symbols picked out of the letters; the buttons and options use the width they have. Checked at both widths.
+- [x] All gates green; every page checked in Chromium at 1440x900 with 24 real logins in the vault.
+
 ## 2026-09-16 · Two scrollbars, three unequal cards, an empty About page (2.6.8)
 
 - [x] The settings page scrolled twice: the panel's own scrollbar beside the page's. The import card's visually-hidden file input is `position: absolute` with no offsets, and with no positioned ancestor it kept the place it would have had in the flow -- measured from the page, 1288px down -- so the document itself grew past the viewport. The four hidden controls are pinned to their corner now, and every settings card is a containing block, so nothing inside one can stretch the page again.

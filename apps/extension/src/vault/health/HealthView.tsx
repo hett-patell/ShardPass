@@ -1,15 +1,6 @@
 import type { LoginItem, VaultItem } from "@shardpass/domain";
 import { parseSecurityResponseForRequest } from "@shardpass/messaging";
 import { Button, HealthGauge } from "@shardpass/ui";
-import {
-  ArrowRight,
-  Copy,
-  Fingerprint,
-  KeyRound,
-  LockOpen,
-  ShieldAlert,
-  ShieldCheck,
-} from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 
 import type { ExtensionPlatform } from "../../platform/extension-platform";
@@ -28,8 +19,13 @@ export interface HealthViewProps {
   /** The view is on screen; the slow parts (estimates, checks) run only then. */
   active: boolean;
   onOpenItem: (itemId: string) => void;
+  /** A finding to open at, sent from the dashboard: its card is scrolled to and named. */
+  focus?: HealthFocus | undefined;
   estimator?: StrengthEstimator;
 }
+
+/** The findings a dashboard row can open, each the id of the card that answers it. */
+export type HealthFocus = "breached" | "weak" | "reused" | "passkeys" | "unsecured" | "2fa";
 
 /** At most this many logins get a full strength estimate per pass; the rest wait for the next. */
 const ESTIMATE_BATCH = 400;
@@ -54,9 +50,21 @@ export function HealthView({
   redactedIds,
   active,
   onOpenItem,
+  focus,
   estimator,
 }: HealthViewProps) {
   const report = useMemo(() => computeHealth(items, redactedIds), [items, redactedIds]);
+
+  // Opened at a finding from the dashboard: the card it names is brought into view once, and
+  // given focus, so a keyboard reader lands where the click promised rather than at the top.
+  useEffect(() => {
+    if (!active || focus === undefined) return;
+    const card = document.getElementById(`health-${focus}`)?.closest("section");
+    if (!(card instanceof HTMLElement)) return;
+    card.scrollIntoView({ block: "center", behavior: "auto" });
+    card.setAttribute("tabindex", "-1");
+    card.focus({ preventScroll: true });
+  }, [active, focus]);
   const [weakness, setWeakness] = useState<ReadonlyMap<string, number>>(new Map());
   const [breach, setBreach] = useState<BreachRun>({ state: "idle" });
   // Verdicts the background remembers, read once per visit, then updated as checks run.
@@ -191,6 +199,42 @@ export function HealthView({
   }
   const reusedLogins = report.reused.flatMap((group) => group.logins);
 
+  // The findings in the order they cost you something, which is the order they are listed in
+  // below and on the dashboard: a breach outranks a weak password however many there are.
+  const summary = [
+    {
+      id: "health-breached",
+      tone: "danger" as const,
+      count: checkedCount > 0 ? found.length : null,
+      label: "Breached",
+    },
+    {
+      id: "health-weak",
+      tone: "warning" as const,
+      count: judged < report.logins.length ? null : weak.length,
+      label: "Weak",
+    },
+    { id: "health-reused", tone: "warning" as const, count: reusedLogins.length, label: "Reused" },
+    {
+      id: "health-unsecured",
+      tone: "neutral" as const,
+      count: report.unsecured.length,
+      label: "Unencrypted",
+    },
+    {
+      id: "health-passkeys",
+      tone: "accent" as const,
+      count: report.passkeyReady.length,
+      label: "Passkeys to add",
+    },
+    {
+      id: "health-2fa",
+      tone: "neutral" as const,
+      count: report.withoutTwoFactor.length,
+      label: "No second factor",
+    },
+  ];
+
   return (
     <section className={styles.view} aria-labelledby="health-heading">
       <header className={styles.hero}>
@@ -254,11 +298,28 @@ export function HealthView({
         )}
       </section>
 
-      <div className={styles.grid}>
-        <StatCard
+      <nav className={styles.summary} aria-label="Findings">
+        {summary.map((entry) => (
+          <button
+            key={entry.id}
+            type="button"
+            className={styles.summaryItem}
+            data-tone={entry.tone}
+            onClick={() => jumpTo(entry.id)}
+          >
+            <span className={styles.dot} aria-hidden="true" />
+            <span className={styles.summaryCount}>
+              {entry.count === null ? "–" : entry.count.toLocaleString("en-US")}
+            </span>
+            <span className={styles.summaryLabel}>{entry.label}</span>
+          </button>
+        ))}
+      </nav>
+
+      <div className={styles.findings}>
+        <Finding
           id="health-breached"
           tone="danger"
-          icon={<ShieldAlert size={40} />}
           count={checkedCount > 0 ? found.length : null}
           title="Breached passwords"
           description={
@@ -299,10 +360,9 @@ export function HealthView({
             </>
           }
         />
-        <StatCard
+        <Finding
           id="health-weak"
           tone="warning"
-          icon={<KeyRound size={40} />}
           count={judged < report.logins.length ? null : weak.length}
           title="Weak passwords"
           description={
@@ -314,10 +374,9 @@ export function HealthView({
           }
           rows={weak.map((login) => row(login))}
         />
-        <StatCard
+        <Finding
           id="health-reused"
           tone="warning"
-          icon={<Copy size={40} />}
           count={reusedLogins.length}
           title="Reused passwords"
           description={
@@ -329,23 +388,9 @@ export function HealthView({
             group.logins.map((login) => row(login, `shared by ${group.logins.length}`)),
           )}
         />
-        <StatCard
-          id="health-passkeys"
-          tone="accent"
-          icon={<Fingerprint size={40} />}
-          count={report.passkeyReady.length}
-          title="Passkeys available"
-          description={
-            report.passkeyReady.length === 0
-              ? "No saved site on the list of known passkey sites is still without one."
-              : "These sites accept passkeys, a stronger sign-in than a password. Add one from the site's security settings."
-          }
-          rows={report.passkeyReady.map((login) => row(login))}
-        />
-        <StatCard
+        <Finding
           id="health-unsecured"
           tone="neutral"
-          icon={<LockOpen size={40} />}
           count={report.unsecured.length}
           title="Unencrypted sites"
           description={
@@ -355,10 +400,21 @@ export function HealthView({
           }
           rows={report.unsecured.map((login) => row(login, "http://"))}
         />
-        <StatCard
+        <Finding
+          id="health-passkeys"
+          tone="accent"
+          count={report.passkeyReady.length}
+          title="Passkeys available"
+          description={
+            report.passkeyReady.length === 0
+              ? "No saved site on the list of known passkey sites is still without one."
+              : "These sites accept passkeys, a stronger sign-in than a password. Add one from the site's security settings."
+          }
+          rows={report.passkeyReady.map((login) => row(login))}
+        />
+        <Finding
           id="health-2fa"
           tone="neutral"
-          icon={<ShieldCheck size={40} />}
           count={report.withoutTwoFactor.length}
           title="No second factor here"
           description="Logins with no one-time code stored or linked. The site may still offer one."
@@ -371,10 +427,14 @@ export function HealthView({
 
 const PREVIEW_ROWS = 5;
 
-type StatCardProps = Readonly<{
+/** Brings a finding to the top of the scrolling panel, from the summary above it. */
+function jumpTo(id: string): void {
+  document.getElementById(id)?.closest("section")?.scrollIntoView({ block: "start" });
+}
+
+type FindingProps = Readonly<{
   id: string;
   tone: "danger" | "warning" | "accent" | "neutral";
-  icon: ReactNode;
   /** null while the number is not known yet. */
   count: number | null;
   title: string;
@@ -383,30 +443,38 @@ type StatCardProps = Readonly<{
   actions?: ReactNode;
 }>;
 
-/** One finding: the number first, what it means, a few rows, and the rest on request. */
-function StatCard({ id, tone, icon, count, title, description, rows, actions }: StatCardProps) {
+/**
+ * One finding as a band of the page: how many, what it means, which accounts, what to do. As
+ * six tinted tiles these carried equal weight whatever they said, and a finding that names no
+ * account at all took as much of the page as one naming eleven.
+ */
+function Finding({ id, tone, count, title, description, rows, actions }: FindingProps) {
   const [open, setOpen] = useState(false);
   const shown = open ? rows : rows.slice(0, PREVIEW_ROWS);
   return (
-    <section className={styles.statCard} data-tone={tone} aria-labelledby={id}>
-      <div className={styles.statHead}>
-        <span className={styles.bigNumber}>
+    <section
+      className={styles.finding}
+      data-tone={tone}
+      data-clear={count === 0 ? "true" : "false"}
+      aria-labelledby={id}
+    >
+      <div className={styles.findingHead}>
+        <span className={styles.dot} aria-hidden="true" />
+        <span className={styles.findingCount}>
           {count === null ? "–" : count.toLocaleString("en-US")}
         </span>
-        <span className={styles.cardIcon} aria-hidden="true">
-          {icon}
-        </span>
+        <div className={styles.findingText}>
+          <h4 id={id} className={styles.cardTitle}>
+            {title}
+          </h4>
+          <p className={styles.quiet}>{description}</p>
+        </div>
+        {actions !== undefined ? <div className={styles.actions}>{actions}</div> : null}
       </div>
-      <h4 id={id} className={styles.cardTitle}>
-        {title}
-      </h4>
-      <p className={styles.quiet}>{description}</p>
       {shown.length > 0 ? <ul className={styles.list}>{shown}</ul> : null}
-      {actions !== undefined ? <div className={styles.actions}>{actions}</div> : null}
       {rows.length > PREVIEW_ROWS ? (
         <button type="button" className={styles.showItems} onClick={() => setOpen(!open)}>
-          {open ? "Show fewer" : `Show all ${rows.length} items`}
-          <ArrowRight size={14} aria-hidden="true" />
+          {open ? "Show fewer" : `Show all ${rows.length}`}
         </button>
       ) : null}
     </section>

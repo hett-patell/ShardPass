@@ -29,10 +29,8 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
-  padding: var(--space-4) var(--space-5);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  background: var(--bg-secondary);
+  padding-bottom: var(--space-5);
+  border-bottom: 1px solid var(--border);
 }
 
 .strengthBar {
@@ -103,56 +101,9 @@
   background: var(--danger, #dc2626);
 }
 
-/* A finding card: a tint at the top that says how much it matters, the number first. */
-.statCard {
-  --tone: var(--text-tertiary);
-
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  overflow: hidden;
-  padding: var(--space-4) var(--space-4) var(--space-3);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  background:
-    linear-gradient(180deg, color-mix(in oklab, var(--tone) 14%, transparent), transparent 55%),
-    var(--bg-secondary);
-}
-
-.statCard[data-tone="danger"] {
-  --tone: var(--danger, #dc2626);
-}
-
-.statCard[data-tone="warning"] {
-  --tone: var(--warning, #d97706);
-}
-
-.statCard[data-tone="accent"] {
-  --tone: var(--accent);
-}
-
-.statHead {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-}
-
-.bigNumber {
-  font-size: 2.5rem;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  line-height: 1;
-  letter-spacing: -0.02em;
-}
-
-.cardIcon {
-  color: var(--tone);
-  opacity: 0.35;
-}
-
 .showItems {
   display: inline-flex;
+  margin-left: 3.5rem;
   align-items: center;
   gap: var(--space-1);
   align-self: flex-start;
@@ -184,23 +135,6 @@
   font-size: var(--text-sm);
 }
 
-.grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 19rem), 1fr));
-  gap: var(--space-4);
-  align-items: stretch;
-}
-
-.card {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  padding: var(--space-4);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  background: var(--bg-secondary);
-}
-
 .cardTitle {
   display: flex;
   align-items: center;
@@ -210,21 +144,145 @@
   font-weight: 600;
 }
 
-.count {
-  padding: 0 var(--space-2);
-  color: var(--text-secondary);
-  background: var(--bg-tertiary);
+/* Findings as bands of one page, in the order they cost you something. Six tinted tiles in a
+   grid gave a finding naming no account the same weight as one naming eleven, and made the
+   page a quilt to read rather than a list to work down. */
+.summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.summaryItem {
+  --tone: var(--text-tertiary);
+
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  background: transparent;
+  border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.summaryItem:hover {
+  border-color: var(--border-hover);
+  color: var(--text-primary);
+}
+
+.summaryItem[data-tone="danger"] {
+  --tone: var(--danger);
+}
+
+.summaryItem[data-tone="warning"] {
+  --tone: var(--warning);
+}
+
+.summaryItem[data-tone="accent"] {
+  --tone: var(--success);
+}
+
+.summaryCount {
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
   font-weight: 600;
 }
 
-.list {
+.summaryLabel {
+  white-space: nowrap;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--tone);
+}
+
+.findings {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+}
+
+.findings > .finding:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.finding {
+  --tone: var(--text-tertiary);
+
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-5) 0;
+  border-top: 1px solid var(--border);
+}
+
+.finding[data-tone="danger"] {
+  --tone: var(--danger);
+}
+
+.finding[data-tone="warning"] {
+  --tone: var(--warning);
+}
+
+.finding[data-tone="accent"] {
+  --tone: var(--success);
+}
+
+/* A finding with nothing in it is still worth a line -- it says the vault was checked for it --
+   but not the weight of one that names accounts. */
+.finding[data-clear="true"] .findingCount {
+  color: var(--text-tertiary);
+}
+
+.finding[data-clear="true"] .dot {
+  background: var(--text-tertiary);
+}
+
+.findingHead {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--space-3);
+}
+
+.findingHead .dot {
+  margin-top: 0.6rem;
+}
+
+.findingCount {
+  min-width: 3ch;
+  color: var(--tone);
+  font-family: var(--font-mono);
+  font-size: var(--text-2xl);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+  text-align: right;
+}
+
+.findingText {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+/* The accounts hang under the finding's title rather than its dot, so one text column runs
+   down the page whatever a band's count happens to be. */
+.list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr));
+  gap: 2px var(--space-4);
   margin: 0;
-  padding: 0;
+  padding: 0 0 0 3.5rem;
   list-style: none;
 }
 

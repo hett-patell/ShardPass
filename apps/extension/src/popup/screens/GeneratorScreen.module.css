@@ -32,20 +32,37 @@
   box-shadow: var(--shadow-sm);
 }
 
-/* The password itself: mono, wrapping anywhere, selectable in one click. */
+/* The password itself: mono, wrapping anywhere, selectable in one click. It is the whole
+   point of the page, so it takes the size the page can spare -- 18px in the popup's 400px,
+   28px on the vault page, where it was previously set at the same 14px as a form label. */
 .preview {
   display: block;
   min-height: 3.25rem;
-  padding: var(--space-3);
+  padding: var(--space-4);
   color: var(--text-primary);
   background: var(--bg-secondary);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   font-family: var(--font-mono);
-  font-size: var(--text-md);
-  line-height: 1.55;
+  font-size: clamp(1.125rem, 2.1vw, 1.75rem);
+  letter-spacing: 0.02em;
+  line-height: 1.45;
   overflow-wrap: anywhere;
   user-select: all;
+}
+
+/* Digits and symbols picked out of the letters: the difference between reading a password
+   off the screen once and reading it three times. */
+.digit {
+  color: #38bdf8;
+}
+
+.symbol {
+  color: var(--warning);
+}
+
+.letter {
+  color: var(--text-primary);
 }
 
 .meta {
@@ -140,4 +157,20 @@
   font-size: var(--text-xs, 0.75rem);
   color: var(--text-muted, inherit);
   line-height: 1.4;
+}
+
+/* Wider than a popup: the two buttons take the room they need instead of half the page each,
+   and the options stand in two columns rather than one long strip. */
+@media (min-width: 560px) {
+  .actions > * {
+    flex: 0 0 auto;
+    min-width: 11rem;
+  }
+
+  .options {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
+    gap: var(--space-4) var(--space-6);
+    align-items: start;
+  }
 }

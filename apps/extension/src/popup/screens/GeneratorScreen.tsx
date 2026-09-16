@@ -222,7 +222,26 @@ export function GeneratorScreen({
         aria-label={mode === "username" ? "Generated username" : "Generated password"}
         aria-live="polite"
       >
-        {password || (usernameNeeds !== "" ? "" : "\u2026")}
+        {password === ""
+          ? usernameNeeds !== ""
+            ? ""
+            : "\u2026"
+          : Array.from(password).map((character, index) => (
+              <span
+                // The character is the text, as before; only its class is in the markup, so
+                // nothing about the value lands in an attribute.
+                key={`${String(index)}:${character}`}
+                className={
+                  /[0-9]/u.test(character)
+                    ? styles.digit
+                    : /[\p{L}]/u.test(character)
+                      ? styles.letter
+                      : styles.symbol
+                }
+              >
+                {character}
+              </span>
+            ))}
       </output>
 
       <div className={styles.meta}>

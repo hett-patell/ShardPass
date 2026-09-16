@@ -1,204 +1,42 @@
+/*
+ * The dashboard is one card already: the settings panel frames it. Inside, the bays are
+ * separated by the same hairlines the vault's own three panes use, rather than by cards
+ * within a card, which would flatten the hierarchy instead of grading it.
+ */
 .view {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
+  gap: var(--space-6);
+  min-width: 0;
 }
 
 .header {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: var(--space-4);
+  padding-bottom: var(--space-5);
+  border-bottom: 1px solid var(--border);
 }
 
 .heading {
-  margin: 0;
-  font-size: var(--text-lg, 1.125rem);
+  margin: 0 0 var(--space-1);
+  font-size: var(--text-xl);
   font-weight: 600;
+  letter-spacing: -0.015em;
 }
 
-.copy,
-.quiet {
+.state {
   margin: 0;
   color: var(--text-secondary);
   font-size: var(--text-sm);
 }
 
-/* The gauge and the counts: small tiles, the gauge two of them wide and tall. */
-.stats {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr));
-  grid-auto-flow: dense;
-  gap: var(--space-3);
-  align-items: stretch;
-}
-
-/* The lists and actions: wide panels on their own row, never squeezed into a tile's column. */
-.panels {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
-  gap: var(--space-4);
-  align-items: stretch;
-}
-
-.panel {
-  min-height: 16rem;
-  padding: var(--space-5);
-  gap: var(--space-3);
-}
-
-.card {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  min-width: 0;
-  padding: var(--space-4);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  background: var(--bg-secondary);
-}
-
-.gaugeCard {
-  grid-column: span 2;
-  grid-row: span 2;
-  align-items: center;
-  text-align: center;
-}
-
-.cardTitle {
-  align-self: stretch;
-  margin: 0;
-  font-size: var(--text-md);
-  font-weight: 600;
-}
-
-.stat {
-  justify-content: space-between;
-  gap: var(--space-1);
-}
-
-.statIcon {
-  display: inline-flex;
-  width: 32px;
-  height: 32px;
-  align-items: center;
-  justify-content: center;
-  color: var(--accent);
-  background: var(--accent-subtle);
-  border-radius: var(--radius-md);
-}
-
-.statValue {
-  font-size: 1.75rem;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  line-height: 1.1;
-}
-
-.statLabel {
-  color: var(--text-secondary);
-  font-size: var(--text-sm);
-}
-
-.list {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.row {
-  display: flex;
-}
-
-.rowIcon {
-  display: inline-flex;
-  flex-shrink: 0;
-  width: 28px;
-  height: 28px;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-secondary);
-  background: var(--bg-tertiary);
-  border-radius: var(--radius-sm);
-}
-
-.rowText {
-  display: flex;
-  flex: 1;
-  min-width: 0;
-  flex-direction: column;
-  gap: 1px;
-}
-
-.rowWhen {
-  flex-shrink: 0;
-  color: var(--text-tertiary);
-  font-size: var(--text-xs);
-  white-space: nowrap;
-}
-
-.quickActions {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-
-.quickActions > * {
-  justify-content: flex-start;
-  width: 100%;
-}
-
-.open {
-  display: flex;
-  flex: 1;
-  min-width: 0;
-  align-items: center;
-  gap: var(--space-3);
-  min-height: 44px;
-  padding: var(--space-2) var(--space-2);
+/* Counts are data: mono and tabular, so a vault of 9 and one of 1,284 sit on the same rhythm. */
+.figure {
   color: var(--text-primary);
-  background: transparent;
-  border: 0;
-  border-radius: var(--radius-sm);
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-
-.open:hover {
-  background: var(--bg-tertiary);
-}
-
-.rowLabel {
-  flex: 1;
-  overflow: hidden;
-  min-width: 0;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.rowCount {
-  padding: 0 var(--space-2);
-  color: var(--text-secondary);
-  background: var(--bg-tertiary);
-  border-radius: var(--radius-sm);
-  font-size: var(--text-xs);
-  font-weight: 600;
-}
-
-.rowSub {
-  overflow: hidden;
-  color: var(--text-secondary);
-  font-size: var(--text-xs);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.favicon {
-  flex-shrink: 0;
-  border-radius: 3px;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
 }
 
 .actions {
@@ -207,8 +45,347 @@
   gap: var(--space-2);
 }
 
-@media (max-width: 560px) {
-  .gaugeCard {
-    grid-column: span 1;
+.board {
+  display: grid;
+  grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr);
+  gap: var(--space-6);
+  align-items: start;
+}
+
+.queue {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.queueHead {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+/* The score and the makeup share the narrow column: the queue is the tall thing, and a gauge
+   set beside its title left a hand's width of empty frame above the first finding. */
+.side {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--space-5);
+  padding-left: var(--space-6);
+  border-left: 1px solid var(--border);
+}
+
+.score {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  align-items: flex-start;
+}
+
+.cardTitle {
+  margin: 0 0 var(--space-1);
+  font-size: var(--text-md);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.quiet {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: var(--line-body);
+}
+
+.list,
+.recentList {
+  display: flex;
+  margin: 0;
+  padding: 0;
+  flex-direction: column;
+  list-style: none;
+}
+
+/* A whole row is the target: the count, the names and the verb all mean the same click. */
+.row {
+  display: grid;
+  width: 100%;
+  grid-template-columns: auto auto minmax(0, 1fr) 7rem;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-2);
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.row:hover {
+  background: var(--bg-tertiary);
+}
+
+.row:hover .rowAction {
+  text-decoration: underline;
+}
+
+.list > li:last-child .row,
+.recentList > li:last-child .row {
+  border-bottom: 0;
+}
+
+/* Severity in form, not only in number: colour and order both say what to open first. */
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-tertiary);
+}
+
+.dot[data-severity="critical"] {
+  background: var(--danger);
+}
+
+.dot[data-severity="warning"] {
+  background: var(--warning);
+}
+
+.dot[data-severity="opportunity"],
+.dot[data-severity="clear"] {
+  background: var(--success);
+}
+
+.count {
+  min-width: 2.5ch;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--text-lg);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.rowText {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.rowTitle {
+  font-size: var(--text-md);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.rowDetail {
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rowAction {
+  color: var(--accent);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* Three parts, not four: without its own template the timestamp inherited the queue's wide
+   column and sat in the middle of the row. */
+.recentRow {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+}
+
+.rowIcon {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  color: var(--text-tertiary);
+}
+
+.favicon {
+  width: 16px;
+  height: 16px;
+  border-radius: 2px;
+}
+
+.rowWhen {
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+}
+
+.allClear {
+  display: flex;
+  margin: 0;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-2);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+}
+
+.footnotes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+/* True of nearly every login in a vault, so it is stated once here rather than taking a
+   place in the queue, where it would push the findings that name a fix down the list. */
+.footnote {
+  margin: 0;
+  color: var(--text-tertiary);
+  font-size: var(--text-sm);
+  line-height: var(--line-body);
+}
+
+.link {
+  padding: 0;
+  background: none;
+  border: 0;
+  color: var(--accent);
+  font: inherit;
+  font-size: var(--text-sm);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.composition {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding-top: var(--space-5);
+  border-top: 1px solid var(--border);
+}
+
+/* One bar instead of a tile per kind: the shape of the vault in a glance, and no wall of
+   zeros for the kinds nobody has saved yet. */
+.bar {
+  display: flex;
+  height: 10px;
+  gap: 2px;
+  overflow: hidden;
+}
+
+.segment {
+  flex-basis: 0;
+  min-width: 3px;
+  border-radius: 1px;
+}
+
+.legend {
+  display: flex;
+  margin: 0;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.legendRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.legendLabel {
+  display: flex;
+  margin: 0;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+}
+
+.swatch {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 auto;
+  border-radius: 1px;
+}
+
+.legendCount {
+  margin: 0;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.recent {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding-top: var(--space-5);
+  border-top: 1px solid var(--border);
+}
+
+/* Six rows down one column made a tall thin list under a wide board; two columns fill it. */
+.recentList {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
+  column-gap: var(--space-5);
+}
+
+.welcome {
+  display: flex;
+  max-width: 52ch;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-6) 0;
+}
+
+.welcomeHeading {
+  margin: 0;
+  font-size: var(--text-2xl);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.welcomeCopy {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--text-md);
+  line-height: var(--line-body);
+}
+
+@media (max-width: 1080px) {
+  .board {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-5);
+  }
+
+  .side {
+    padding-left: 0;
+    padding-top: var(--space-5);
+    border-left: 0;
+    border-top: 1px solid var(--border);
+  }
+}
+
+@media (max-width: 720px) {
+  .header {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .queueHead {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .rowAction {
+    display: none;
   }
 }

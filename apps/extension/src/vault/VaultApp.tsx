@@ -20,7 +20,7 @@ import type {
 } from "../platform/extension-platform";
 import { RepromptPrompt } from "../vault-access/RepromptPrompt";
 import { computeHealth } from "./health/health-report";
-import { HealthView } from "./health/HealthView";
+import { HealthView, type HealthFocus } from "./health/HealthView";
 import { VaultAccess } from "../vault-access/VaultAccess";
 import { BreachCheckSettings } from "./settings/BreachCheckSettings";
 import { EmptyDetailState } from "./components/EmptyDetailState";
@@ -85,6 +85,8 @@ export function VaultApp({ platform }: VaultAppProps) {
   const presentation = statusPresentation(foundation.state);
   const [vaultUnlocked, setVaultUnlocked] = useState(false);
   const [view, setView] = useState<VaultSidebarView>("vault");
+  // Which finding the health page should open at, when the dashboard sent the reader there.
+  const [healthFocus, setHealthFocus] = useState<HealthFocus | undefined>(undefined);
   const [generatorTool, setGeneratorTool] = useState<GeneratorTool>("random");
   const [creatingKind, setCreatingKind] = useState<VaultItemKind | null>(null);
   const [otpCreating, setOtpCreating] = useState(false);
@@ -414,7 +416,12 @@ export function VaultApp({ platform }: VaultAppProps) {
                 view={view}
                 onOpenSettings={() => leavingCreate(() => setView("settings"))}
                 onOpenEnte={() => leavingCreate(() => setView("ente"))}
-                onOpenHealth={() => leavingCreate(() => setView("health"))}
+                onOpenHealth={() =>
+                  leavingCreate(() => {
+                    setHealthFocus(undefined);
+                    setView("health");
+                  })
+                }
                 healthCount={healthCount}
                 onOpenGenerator={(tool) =>
                   leavingCreate(() => {
@@ -589,6 +596,7 @@ export function VaultApp({ platform }: VaultAppProps) {
                   redactedIds={vaultState.redactedIds}
                   active={view === "health"}
                   onOpenItem={openItemFromElsewhere}
+                  focus={healthFocus}
                 />
               </div>
             ) : null}
@@ -601,7 +609,10 @@ export function VaultApp({ platform }: VaultAppProps) {
                   redactedIds={vaultState.redactedIds}
                   active={view === "overview"}
                   onOpenItem={openItemFromElsewhere}
-                  onOpenHealth={() => setView("health")}
+                  onOpenHealth={(focus) => {
+                    setHealthFocus(focus);
+                    setView("health");
+                  }}
                   onOpenGenerator={() => {
                     setGeneratorTool("random");
                     setView("generator");
