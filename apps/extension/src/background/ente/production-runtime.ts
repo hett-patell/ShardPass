@@ -29,10 +29,15 @@ const digest = async (value: Uint8Array) => {
 
 export function createProductionEnteRuntimeDependencies(): EnteRuntimeDependencies {
   let sodium: Awaited<ReturnType<typeof createEnteSodiumAdapter>> | undefined;
-  const sodiumReady = createEnteSodiumAdapter().then((adapter) => {
-    sodium = adapter;
-    return adapter;
-  });
+  let sodiumLoading: Promise<Awaited<ReturnType<typeof createEnteSodiumAdapter>>> | null = null;
+  // Started by the first Ente operation, not by the service worker waking up.
+  const sodiumReady = (): Promise<Awaited<ReturnType<typeof createEnteSodiumAdapter>>> => {
+    sodiumLoading ??= createEnteSodiumAdapter().then((adapter) => {
+      sodium = adapter;
+      return adapter;
+    });
+    return sodiumLoading;
+  };
   const client = createEnteClient({ fetch: (url, init) => fetch(url, init) });
   const cryptoAdapter: EnteCycleCrypto = {
     openCredential(envelope) {
@@ -97,7 +102,7 @@ export function createProductionEnteRuntimeDependencies(): EnteRuntimeDependenci
     nextId: () => crypto.randomUUID(),
     rootDigest: async (sessionEpoch: number) =>
       digest(encoder.encode(`shardpass:ente:root:${sessionEpoch}`)),
-    sodiumReady,
+    sodium: sodiumReady,
     randomCapability: () => {
       const bytes = crypto.getRandomValues(new Uint8Array(32));
       try {

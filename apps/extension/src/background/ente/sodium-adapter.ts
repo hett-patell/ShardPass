@@ -1,4 +1,19 @@
-import sodium from "libsodium-wrappers-sumo";
+import type * as sodiumModule from "libsodium-wrappers-sumo";
+
+/**
+ * Loaded on first use, never at start-up. The wrapper and its WebAssembly are about 1.8 MB,
+ * the background service worker is restarted constantly, and a vault that never connects Ente
+ * must not pay for this on every wake. One module for the whole extension, as before.
+ */
+type Sodium = (typeof sodiumModule)["default"];
+let loading: Promise<Sodium> | null = null;
+async function loadSodium(): Promise<Sodium> {
+  loading ??= import("libsodium-wrappers-sumo").then(async (module) => {
+    await module.default.ready;
+    return module.default;
+  });
+  return loading;
+}
 
 const MAX_INPUT = 1024 * 1024;
 const owned = (value: Uint8Array): Uint8Array => Uint8Array.from(value);
@@ -40,7 +55,7 @@ export interface EnteSodiumAdapter {
 }
 
 export async function createEnteSodiumAdapter(): Promise<EnteSodiumAdapter> {
-  await sodium.ready;
+  const sodium = await loadSodium();
   let disposed = false;
   const active = () => {
     if (disposed) throw new Error("Ente crypto adapter disposed");

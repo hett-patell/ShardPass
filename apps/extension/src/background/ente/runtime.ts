@@ -20,7 +20,8 @@ export type EnteRuntimeDependencies = Omit<OperationalDependencies, "repository"
     rootDigest(sessionEpoch: number): Promise<string>;
     now(): number;
     randomCapability(): string;
-    sodiumReady: Promise<EnteSodiumAdapter>;
+    /** Loads the Ente crypto adapter, starting it on the first call and not before. */
+    sodium: () => Promise<EnteSodiumAdapter>;
   }>;
 
 /** What the panel shows about the persisted sync state; never a credential or a code. */
@@ -61,15 +62,21 @@ export function createEnteRuntimeOwner(
   const repository = createEnteSessionCycleRepository(session);
   const operational = { ...dependencies, repository };
   let handoffs: EnteSessionHandoffStore | undefined;
-  const handoffsReady = dependencies.sodiumReady.then((sodium) => {
-    handoffs = new EnteSessionHandoffStore(session, {
-      sodium,
-      now: dependencies.now,
-      randomCapability: dependencies.randomCapability,
-      rootDigest: dependencies.rootDigest,
+  let handoffsLoading: Promise<EnteSessionHandoffStore> | null = null;
+  // Built when something first needs it: constructing it loads Ente's crypto, which a vault
+  // that never connects Ente should never pay for.
+  const handoffsReady = (): Promise<EnteSessionHandoffStore> => {
+    handoffsLoading ??= dependencies.sodium().then((sodium) => {
+      handoffs = new EnteSessionHandoffStore(session, {
+        sodium,
+        now: dependencies.now,
+        randomCapability: dependencies.randomCapability,
+        rootDigest: dependencies.rootDigest,
+      });
+      return handoffs;
     });
-    return handoffs;
-  });
+    return handoffsLoading;
+  };
   const conflictCapabilities = new EnteConflictCapabilities(
     dependencies.now,
     dependencies.randomCapability,
@@ -81,10 +88,10 @@ export function createEnteRuntimeOwner(
   });
   return Object.freeze({
     async issueSessionHandoff(sender) {
-      return (await handoffsReady).issue(sender);
+      return (await handoffsReady()).issue(sender);
     },
     async activateSession(capability, ciphertext, sender) {
-      const sessionPayload = await (await handoffsReady).consume(capability, ciphertext, sender);
+      const sessionPayload = await (await handoffsReady()).consume(capability, ciphertext, sender);
       try {
         const rawSnapshot = await session.readOtpItemsAndMetadata("ente-otp-state");
         // A state already exists when this is a re-sign-in (a reconnect after "Disconnected"
@@ -167,7 +174,7 @@ export function createEnteRuntimeOwner(
     cycle: (() => {
       const run = createEnteOperationalCycle(operational);
       return async (trigger: EnteSyncTrigger, signal: AbortSignal) => {
-        await dependencies.sodiumReady;
+        await dependencies.sodium();
         return run(trigger, signal);
       };
     })(),
@@ -189,7 +196,7 @@ export function createEnteRuntimeOwner(
         throw new EnteProtocolError("ENTE_STORAGE_CHANGED");
     },
     async disconnect() {
-      (await handoffsReady).clear();
+      (await handoffsReady()).clear();
       conflictCapabilities.clear();
       for (let attempt = 0; attempt < 2; attempt += 1) {
         const snapshot = await session.readOtpItemsAndMetadata("ente-otp-state");

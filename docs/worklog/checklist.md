@@ -101,6 +101,22 @@ Baseline at 2.3.0: typecheck clean, lint clean after one test fix, full suite gr
 - [ ] E9 low (still open, narrow) · `login.fillFromPopup` first-answer race across frames (narrow).
 - [x] E10 low · dead `useOtpList.ts`; stale scan-build/manifest-test comments; GeneratorScreen's deferred settings fetch overwrites what was typed and requests a username per keystroke.
 
+## 2026-09-16 · Speed (2.5.3)
+
+Measured on a 100-item vault, in Node with in-memory storage (the browser pays more, since every read is chrome.storage IPC):
+
+| what | cost |
+| --- | --- |
+| Argon2id at the shipped parameters (64 MiB, 2 passes), libsodium | 750 ms |
+| the same in pure JavaScript, the fallback if the WebAssembly path fails | 1,700 ms |
+| list every item | 40 ms |
+| read one item | 25 ms |
+| update one item (a new generation, written and verified) | 180 ms |
+
+- [x] The background service worker statically imported libsodium, 1.8 MB of wrapper and WebAssembly, on every wake, for Ente sync alone. It now loads on the first Ente operation: the worker's start-up graph went from about 2.3 MB to 482 KB. The WebAssembly payload, its imports and its exports are byte-identical; only the wrapper's hash is re-pinned.
+- [ ] Not done: caching the decrypted generation between reads. It cuts a full read from 40 ms to 13 ms and a single item read to under 1 ms, but it breaks a property the vault tests pin: a record tampered with under an unchanged root must be caught on every read. Doing it properly means re-verifying the stored bytes by hash on each cached read, which is its own design decision.
+- [ ] Unlock is dominated by the key derivation and will stay near a second at these parameters. Lighter parameters (19 MiB, 2 passes is the OWASP floor) would cut it to roughly a third, and would apply to an existing vault only when the master password is set again.
+
 ## 2026-09-16 · One-time codes (2.5.2)
 
 - [x] Clicking a code in the picker did nothing on pages that rewrite their URL while you choose. The fill refused unless `location.href` was byte-identical to the URL captured when the picker opened, so a sign-in step adding a query parameter (common on two-factor pages) turned every click into a silent refusal. Origin and path must still match; a query or fragment rewrite does not.
