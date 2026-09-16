@@ -93,6 +93,8 @@ export function createPickerHost(
   const mount = ownerDocument.createElement("div");
   shadow.append(createStyle(ownerDocument), mount);
   if (options.fit === "content") host.style.width = "max-content";
+  // A prompt asks for a decision, so it gets room to read: wider than a chip's picker.
+  if (slot === "prompt") host.style.width = "min(392px, calc(100vw - 24px))";
   if (!options.positionToAnchor && options.placement === "top-center") {
     host.style.left = "50%";
     host.style.right = "auto";

@@ -32,7 +32,11 @@ export function PasskeyPrompt(props: PasskeyPromptProps) {
     primary.current?.focus();
   }, []);
   return (
-    <section className="loginPicker" role="region" aria-label="ShardPass passkey prompt">
+    <section
+      className="loginPicker passkeyPrompt"
+      role="region"
+      aria-label="ShardPass passkey prompt"
+    >
       <header className="loginHeading">
         <div>
           <p className="eyebrow">SHARDPASS / PASSKEY</p>
