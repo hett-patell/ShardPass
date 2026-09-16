@@ -8,14 +8,20 @@ Baseline at 2.3.0: typecheck clean, lint clean after one test fix, full suite gr
 
 - [x] 1 Background services, messaging, router — 10 findings (1 high, 4 medium, 5 low), listed below
 - [x] 2 Vault page UI — 27 findings (2 high, 10 medium, 15 low), listed below
-- [ ] 3 Content scripts, autofill, passkeys — not run (agent launches were blocked in that session)
-- [ ] 4 Importers, samples, crypto helpers — not run
-- [ ] 5 Popup, platform, manifest, CSP, build scanner — not run
+- [x] 3 Content scripts, autofill, passkeys — 15 findings (2 high, 9 medium, lows), listed under batch D
+- [x] 4 Importers, samples, crypto helpers — fixed as batch C (2.4.2)
+- [x] 5 Popup, platform, manifest, CSP, build scanner — 10 findings (1 high, 5 medium, lows), listed under batch E
 - [ ] 6 Tests and tooling — not run
 - [x] Fix batch A (background, security first), with tests — verified: typecheck clean, background/messaging/vault/popup/content suites green, lint clean. A6 (username suggestion budget), A9 (comments) and the OTP-service re-prompt unit test followed in later commits.
 - [x] Fix batch B (vault UI), with tests — done except B20 (handleCreated edge cases), B22 (navigating away from a create form), B24 (deleting the filtered folder from another view), B26 (unverified dialog desync); B13 was already NBSP.
 - [x] Re-run gates, commit, bump — batch A shipped as 2.3.1, batch B and the passkey change as 2.4.0
 - [x] Google sign-in: answer conditional (page-load) passkey requests with ShardPass's own prompt; a locked vault stays quiet there
+- [x] Batch C (importers): Bitwarden fields/reprompt/clamps, KeePass lookup order, KDBX bounds, Dashlane caps, LastPass leftovers, Proton timestamps, generic mapping, ragged CSV, UTF-16 clamps, per-field sample checks — 2.4.2
+- [x] Passkey prompt given room to breathe (wider host, larger title, taller rows and buttons) — 2.4.2
+- [x] Batch D (content scripts, autofill, passkeys) — shipped in 2.4.3; D5's frame check is verified by reading (jsdom cannot frame a document)
+- [x] Batch E (popup, platform, gates) — shipped in 2.4.3 except E1 (clipboard auto-clear) and E9 (narrow popup fill race)
+- [ ] Audit 6 (tests and tooling) — not run yet
+- [x] Google "Create a passkey": the page script answers isUserVerifyingPlatformAuthenticatorAvailable / isConditionalMediationAvailable / getClientCapabilities as a platform authenticator, so Google calls create() on desktops without one (2.4.1)
 
 ### Batch A · background (verified by the audit)
 
@@ -45,6 +51,36 @@ Baseline at 2.3.0: typecheck clean, lint clean after one test fix, full suite gr
 - [ ] B11 medium · Backup card: Escape anywhere clears the typed passwords and discards a decrypted preview (`BackupView.tsx` → `useBackup.ts`).
 - [ ] B12 medium · empty master password runs a full Argon2 derivation and counts against the throttle (`VaultAccess.tsx` locked path).
 - [ ] B13 low · Move select indentation uses plain spaces (collapsed in `<option>`); B14 `.value`/`.rowValue` need `white-space: pre-wrap`; B15 empty state offers "Add a login" in every category; B16 two `aria-current` entries in the Archive view; B17 folder tree misuses role="tree"; B18 stale `linkedOtpId` re-saved; B19 OTP edits reset on any refresh; B20 `handleCreated` edge cases; B21 CopyButton has no live region; B22 sidebar navigation discards an in-progress create form; B23 BreachCheckRow shows "Not checked yet." on a failed listing; B24 deleting the filtered folder from another view jumps to the vault; B25 weak count shown while judging; B26 (unverified) locked dialog can desync from React on a second Escape; B27 dead CSS (`.folderItemActive`, `.empty`, `.fieldFull`, `.labelRow`, `.labelActions`, `.listAdd`).
+
+### Batch D · content scripts, autofill, passkeys (verified by the audit)
+
+- [x] D1 high · `packages/autofill/src/domain-match.ts` + `equivalent-domains.ts`: hosting-tenant hosts (myshopify.com, digitaloceanspaces.com, force.com, azurewebsites.net) and missing multi-label suffixes (co.il, com.pl, co.th, com.pt, co.at …) hand logins to attacker-registrable hosts; the autofill and passkey suffix lists disagree.
+- [x] D2 high · `detect-login-fields.ts isVisible`: only the input's own style is read; an input in a `display:none` wrapper counts as visible (zero rect escape hatch), so honeypots become the username field.
+- [x] D3 medium · `login-fill-controller.tsx onPickerKeyDown`: synthetic (untrusted) key events drive the open picker and complete a fill.
+- [x] D4 medium · `save-login-prompt.tsx`: untrusted submit/click events with page-chosen values reach the save/update offer.
+- [x] D5 medium · passkey ceremonies answered inside cross-origin iframes with `crossOrigin:false`; the bridge never checks it is the top frame.
+- [x] D6 medium · https logins offered and auto-submitted on http pages; http captures saved as https.
+- [x] D7 medium · un-hinted change-password forms (three password fields) get the generated password in the current-password field too.
+- [x] D8 medium · any visible `type=email` input in a form with a submit is a "username-only step": newsletter/search forms get the sign-in banner and a submit.
+- [x] D9 medium · passkey bridge: malformed request wedges `activeId`; a modal request during a pending conditional one always falls back; the page-side timeout never cancels the bridge.
+- [x] D10 medium · rescans: shadow roots observed for the page lifetime, class/style mutations trigger full scans, `body.textContent` read on every rescan of a page without fields.
+- [x] D11 medium · data fill takes the first matching field in DOM order without a visibility check; `user_name` matches fullName before username.
+- [x] D12 low-medium · `isRendered` accepts opacity:0 / clipped forms for the popup fill and the banner.
+- [x] D13 low · a VAULT_LOCKED prompt can appear for a dead ceremony id and cannot be dismissed.
+- [x] D14 low · `owns()` needs `location.href` equality; Escape from a synthetic keydown dismisses the prompt; `startsWith` matches `/app` against `/application`; `expYear` ignores `maxLength`; `offered` keeps plaintext passwords for the page lifetime; bridge acks before validation; dead code (`field-discovery.ts` never started, FoundationPicker default content, `.passkeyPrompt` was unused — now used).
+
+### Batch E · popup, platform, gates (verified by the audit)
+
+- [ ] E1 high (still open) · popup clipboard auto-clear never fires: the timer dies with the popup and `document.hasFocus()` is false. Needs an alarm-driven clear through the active tab's content script.
+- [x] E2 medium · `PopupApp.tsx`: `grantedRef` and the reprompt overlay survive a lock; after unlock a granted item shows "Password unavailable".
+- [x] E3 medium · DetailScreen's own reprompt does not tell PopupApp, so "Fill in host" asks for the master password again.
+- [x] E4 medium · "Reopen where you were" is dead: the reset effect runs before the restore effect; `readLastScreen` accepts any category string.
+- [x] E5 medium · scanner "no console transport" covers only log/info/debug; `diagnostics.ts` comment claims more than the gate enforces.
+- [x] E6 medium · the whole background chunk is exempt from the network-destination rule in `scan-build.mjs`.
+- [x] E7 low · context-menu fill drops `frameId`; `chrome.action.openPopup` needs Chrome 127 (min is 111) and its failure is swallowed.
+- [x] E8 low · `LiveCode.tsx` puts the live TOTP code in an `aria-label`.
+- [ ] E9 low (still open, narrow) · `login.fillFromPopup` first-answer race across frames (narrow).
+- [x] E10 low · dead `useOtpList.ts`; stale scan-build/manifest-test comments; GeneratorScreen's deferred settings fetch overwrites what was typed and requests a username per keystroke.
 
 ## 2026-09-16 · 1Password-inspired pass (target 2.3.0)
 
