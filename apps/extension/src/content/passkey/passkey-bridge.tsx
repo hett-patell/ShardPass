@@ -29,6 +29,39 @@ type GetRequest = Readonly<{
   conditional?: boolean;
 }>;
 
+const isStringList = (value: unknown): value is string[] =>
+  Array.isArray(value) && value.every((entry) => typeof entry === "string");
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null;
+
+/** The page script's request, checked field by field: anything else is not a ceremony. */
+function isCreateRequest(value: unknown): value is CreateRequest {
+  if (!isRecord(value) || !isRecord(value["rp"]) || !isRecord(value["user"])) return false;
+  const rp = value["rp"];
+  const user = value["user"];
+  return (
+    typeof value["challenge"] === "string" &&
+    (rp["id"] === null || typeof rp["id"] === "string") &&
+    typeof rp["name"] === "string" &&
+    typeof user["id"] === "string" &&
+    typeof user["name"] === "string" &&
+    typeof user["displayName"] === "string" &&
+    Array.isArray(value["algorithms"]) &&
+    value["algorithms"].every((entry) => typeof entry === "number") &&
+    isStringList(value["excludeCredentialIds"])
+  );
+}
+
+function isGetRequest(value: unknown): value is GetRequest {
+  return (
+    isRecord(value) &&
+    typeof value["challenge"] === "string" &&
+    (value["rpId"] === null || typeof value["rpId"] === "string") &&
+    isStringList(value["allowCredentialIds"]) &&
+    (value["conditional"] === undefined || typeof value["conditional"] === "boolean")
+  );
+}
+
 function errorCode(error: unknown): string | undefined {
   const code = (error as { code?: unknown } | null)?.code;
   return typeof code === "string" ? code : undefined;
@@ -47,6 +80,35 @@ export function createPasskeyBridge(
   let disposed = false;
   let host: PickerHandle | null = null;
   let activeId: string | null = null;
+  /** The ceremony in progress was offered at page load, with nobody waiting on it. */
+  let activeConditional = false;
+
+  /**
+   * WebAuthn belongs to the top document and to frames of its own origin. A cross-origin
+   * frame gets it only through permissions policy, and then its clientDataJSON must say the
+   * ceremony was not top-level; that case is the browser's own, so it is never answered here.
+   */
+  const frameMayRunCeremony = (): boolean => {
+    const win = options.window;
+    try {
+      if (win.top === win) return true;
+    } catch {
+      return false;
+    }
+    const origin = win.location.origin;
+    const ancestors: DOMStringList | undefined = win.location.ancestorOrigins;
+    if (ancestors !== undefined)
+      return Array.from({ length: ancestors.length }, (_, index) => ancestors.item(index)).every(
+        (ancestor) => ancestor === origin,
+      );
+    try {
+      for (let frame: Window = win; frame !== frame.parent; frame = frame.parent)
+        if (frame.parent.location.origin !== origin) return false;
+      return true;
+    } catch {
+      return false;
+    }
+  };
 
   const post = (message: Record<string, unknown>) =>
     options.window.postMessage({ tag: TAG, ...message }, "/");
@@ -58,6 +120,7 @@ export function createPasskeyBridge(
   const reply = (id: string, body: Record<string, unknown>) => {
     if (activeId !== id) return;
     activeId = null;
+    activeConditional = false;
     closeHost();
     post({ direction: "reply", id, ...body });
   };
@@ -103,7 +166,8 @@ export function createPasskeyBridge(
         attachTo = preview.login.itemId;
       }
     } catch (error) {
-      if (errorCode(error) === "VAULT_LOCKED") {
+      // A prompt is only worth drawing while this ceremony is still the live one.
+      if (errorCode(error) === "VAULT_LOCKED" && activeId === id) {
         show(id, () => <PasskeyPrompt mode="locked" rpId={rpId} onFallback={() => fallback(id)} />);
         return;
       }
@@ -180,7 +244,7 @@ export function createPasskeyBridge(
     } catch (error) {
       // A page asking at load has not been asked by anyone: a locked vault stays quiet then,
       // rather than putting a prompt on every sign-in page.
-      if (errorCode(error) === "VAULT_LOCKED" && request.conditional !== true) {
+      if (errorCode(error) === "VAULT_LOCKED" && request.conditional !== true && activeId === id) {
         show(id, () => <PasskeyPrompt mode="locked" rpId={rpId} onFallback={() => fallback(id)} />);
         return;
       }
@@ -248,6 +312,7 @@ export function createPasskeyBridge(
     if (data.direction === "cancel") {
       if (activeId === data.id) {
         activeId = null;
+        activeConditional = false;
         closeHost();
       }
       return;
@@ -257,15 +322,31 @@ export function createPasskeyBridge(
     // A patient request is posted again until it is acknowledged; the repeats are the same
     // ceremony, not a second one.
     if (activeId === data.id) return;
-    if (activeId !== null) {
-      // One ceremony at a time; a second request while a prompt is open goes to the browser.
+    const request =
+      data.type === "create" && isCreateRequest(data.request)
+        ? ({ type: "create", body: data.request } as const)
+        : data.type === "get" && isGetRequest(data.request)
+          ? ({ type: "get", body: data.request } as const)
+          : null;
+    // Anything but a well-formed ceremony this frame may run goes straight to the browser,
+    // and leaves a ceremony already in progress alone.
+    if (request === null || !frameMayRunCeremony()) {
       post({ direction: "reply", id: data.id, fallback: true });
       return;
     }
+    if (activeId !== null) {
+      // One ceremony at a time. An offer made at page load yields to a request the person
+      // just made; a second request while somebody is being asked goes to the browser.
+      if (!activeConditional) {
+        post({ direction: "reply", id: data.id, fallback: true });
+        return;
+      }
+      fallback(activeId);
+    }
     activeId = data.id;
-    if (data.type === "create") void handleCreate(data.id, data.request as CreateRequest);
-    else if (data.type === "get") void handleGet(data.id, data.request as GetRequest);
-    else fallback(data.id);
+    activeConditional = request.type === "get" && request.body.conditional === true;
+    if (request.type === "create") void handleCreate(data.id, request.body);
+    else void handleGet(data.id, request.body);
   };
 
   return {
@@ -279,6 +360,7 @@ export function createPasskeyBridge(
       disposed = true;
       options.window.removeEventListener("message", onMessage);
       activeId = null;
+      activeConditional = false;
       closeHost();
     },
   };

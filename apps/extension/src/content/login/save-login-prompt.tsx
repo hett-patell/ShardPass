@@ -118,6 +118,23 @@ function autocompleteOf(input: HTMLInputElement): string {
  * The offer outlives the page: the landing page asks the background for it and shows the
  * banner there.
  */
+/**
+ * A short digest of a credential, so the prompt remembers what it already offered on this
+ * page without keeping the password itself in memory for the page's lifetime. A collision
+ * only means one credential goes unoffered.
+ */
+function fingerprint(username: string, password: string): string {
+  const text = `${username}\u0000${password}`;
+  let low = 0x811c9dc5;
+  let high = 0x01000193;
+  for (let index = 0; index < text.length; index += 1) {
+    const unit = text.charCodeAt(index);
+    low = Math.imul(low ^ unit, 0x01000193);
+    high = Math.imul(high ^ unit, 0x2f2f2f2f) ^ (high >>> 13);
+  }
+  return `${(low >>> 0).toString(16)}-${(high >>> 0).toString(16)}`;
+}
+
 export function createSaveLoginPrompt(
   options: Readonly<{
     document: Document;
@@ -279,7 +296,7 @@ export function createSaveLoginPrompt(
   };
 
   const offer = (username: string, password: string): void => {
-    const key = JSON.stringify([username, password]);
+    const key = fingerprint(username, password);
     if (offered.has(key)) return;
     offered.add(key);
     const domain = options.window.location.hostname;

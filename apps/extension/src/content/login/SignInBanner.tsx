@@ -16,7 +16,16 @@ export interface SignInBannerProps {
  * a Sign in button that fills and submits. Other logins are a click away; the close is final
  * for this page load.
  */
-export function SignInBanner({ name, username, otherCount, busy, action, onSignIn, onOtherOptions, onClose }: SignInBannerProps) {
+export function SignInBanner({
+  name,
+  username,
+  otherCount,
+  busy,
+  action,
+  onSignIn,
+  onOtherOptions,
+  onClose,
+}: SignInBannerProps) {
   return (
     <div className="signIn" role="region" aria-label="ShardPass sign-in">
       <div className="signInRow">
@@ -30,7 +39,12 @@ export function SignInBanner({ name, username, otherCount, busy, action, onSignI
         <button className="signInButton" type="button" disabled={busy} onClick={onSignIn}>
           {busy ? "Working" : action}
         </button>
-        <button className="signInClose" type="button" aria-label="Dismiss ShardPass sign-in" onClick={onClose}>
+        <button
+          className="signInClose"
+          type="button"
+          aria-label="Dismiss ShardPass sign-in"
+          onClick={onClose}
+        >
           <span aria-hidden="true">×</span>
         </button>
       </div>

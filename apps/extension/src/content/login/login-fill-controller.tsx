@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { detectLoginFields, fillLoginFields } from "@shardpass/autofill";
+import { detectLoginFields, fillLoginFields, isDrawn } from "@shardpass/autofill";
 import type { LoginFieldSet } from "@shardpass/autofill";
 
 import type { LoginFillContentPlatform } from "../../platform/extension-platform";
@@ -40,6 +40,34 @@ type SuggestionsResult = Readonly<{
  * moment, so a frame that is filling a shown form gets to answer first.
  */
 const NO_FORM_ANSWER_DELAY_MS = 1_000;
+/** Open shadow roots watched for changes over the page's lifetime. */
+const MAX_WATCHED_SHADOW_ROOTS = 200;
+
+/** The first `limit` characters of a node's text, without serialising the whole page. */
+function textPrefixOf(root: Node, limit: number): string {
+  const ownerDocument = root.ownerDocument;
+  if (ownerDocument === null) return "";
+  const walker = ownerDocument.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  let text = "";
+  for (let node = walker.nextNode(); node !== null && text.length < limit; node = walker.nextNode())
+    text += node.nodeValue ?? "";
+  return text.slice(0, limit);
+}
+
+/**
+ * Whether two URLs name the same page. A single-page app rewriting its query or fragment is
+ * not a navigation, and must not silently strand the picker the person is using.
+ */
+function samePage(left: string, right: string): boolean {
+  if (left === right) return true;
+  try {
+    const a = new URL(left);
+    const b = new URL(right);
+    return a.origin === b.origin && a.pathname === b.pathname;
+  } catch {
+    return false;
+  }
+}
 
 function originOf(ownerWindow: Window): string | null {
   try {
@@ -69,10 +97,13 @@ function fieldsReady(fieldSet: LoginFieldSet): boolean {
   );
 }
 
-/** Whether the field a fill would land in is laid out at all (not a collapsed or hidden form). */
+/**
+ * Whether the field a fill would land in is shown: laid out, and not hidden by a wrapper or
+ * by transparency. A decoy form a script added invisibly is never the one that gets filled.
+ */
 function isRendered(fieldSet: LoginFieldSet): boolean {
   const field = fieldSet.passwordField ?? fieldSet.usernameField;
-  return field !== null && field.getClientRects().length > 0;
+  return field !== null && field.getClientRects().length > 0 && isDrawn(field);
 }
 
 function errorCode(error: unknown): unknown {
@@ -135,7 +166,13 @@ function signupFieldsOf(fieldSet: LoginFieldSet): HTMLInputElement[] | null {
   );
   const hinted = isNew(password);
   // New + confirm beside each other, with the current password (if any) left out.
-  const chosen = passwords.filter((field) => !isCurrent(field));
+  let chosen = passwords.filter((field) => !isCurrent(field));
+  // Three password fields and no hints are a change-password form: current, new, confirm.
+  // The first is entered, never chosen, so nothing is suggested for it and it is never written.
+  if (!hinted && chosen.length >= 3) {
+    if (chosen[0] === password) return null;
+    chosen = chosen.slice(1);
+  }
   const confirmBeside = chosen.length >= 2 && chosen.includes(password);
   // Only what names the form: its heading, legend or submit label. The whole text would
   // match every sign-in form's "Don't have an account? Sign up" line.
@@ -192,23 +229,21 @@ export function createLoginFillController(
   // Mutations inside a shadow root are invisible to an observer on the document: every open
   // root the scan enters is watched on its own, once.
   const watchedShadowRoots = new WeakSet<ShadowRoot>();
+  // The observer keeps every root it watches alive, so the count is capped: a page that
+  // creates and drops components all day watches the first roots it showed, not all of them.
+  // Attributes are watched as on the document; class and style churn (a hover on a web
+  // component) would otherwise rescan the whole page every time.
+  let watchedShadowRootCount = 0;
   const watchShadowRoot = (root: ShadowRoot): void => {
     if (observer === null || watchedShadowRoots.has(root)) return;
+    if (watchedShadowRootCount >= MAX_WATCHED_SHADOW_ROOTS) return;
+    watchedShadowRootCount += 1;
     watchedShadowRoots.add(root);
     observer.observe(root, {
       childList: true,
       subtree: true,
       attributes: true,
-      attributeFilter: [
-        "type",
-        "autocomplete",
-        "name",
-        "id",
-        "hidden",
-        "disabled",
-        "style",
-        "class",
-      ],
+      attributeFilter: ["type", "autocomplete"],
     });
   };
   let rescanScheduled = false;
@@ -239,7 +274,7 @@ export function createLoginFillController(
     !disposed &&
     owner?.token === candidate.token &&
     candidate.input.isConnected &&
-    options.window.location.href === candidate.url &&
+    samePage(options.window.location.href, candidate.url) &&
     originOf(options.window) === candidate.origin;
 
   const detachPickerKeys = (): void => {
@@ -468,7 +503,9 @@ export function createLoginFillController(
       refreshPicker();
     } else if (event.key === "Enter" && view.activeIndex >= 0) {
       const chosen = rows[view.activeIndex];
-      if (chosen === undefined) return;
+      // Taking a row hands out a credential, so it takes a real key press: a script on the
+      // page can dispatch keys at the field it owns, but it cannot press one.
+      if (chosen === undefined || !event.isTrusted) return;
       event.preventDefault();
       void selectSuggestion(view.candidate, chosen);
     } else if (event.key === "Tab") {
@@ -868,7 +905,7 @@ export function createLoginFillController(
    */
   /** A page with provider buttons and no login fields at all ("Continue with Google" only). */
   const providerOnlyPage = (): boolean =>
-    PROVIDER_PAGE_HINT.test(options.document.body.textContent?.slice(0, 20_000) ?? "") ||
+    PROVIDER_PAGE_HINT.test(textPrefixOf(options.document.body, 20_000)) ||
     options.document.querySelector(
       'a[href*="accounts.google.com"], a[href*="appleid.apple.com"], a[href*="/auth/"], a[href*="/oauth"]',
     ) !== null;

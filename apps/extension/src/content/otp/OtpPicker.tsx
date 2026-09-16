@@ -33,7 +33,13 @@ function grouped(code: string): string {
 }
 
 /** The on-page one-time-code list: favourites first, a slim bar, no search box to take focus. */
-export function OtpPicker({ suggestions, state, now = Date.now(), onClose, onSelect }: OtpPickerProps) {
+export function OtpPicker({
+  suggestions,
+  state,
+  now = Date.now(),
+  onClose,
+  onSelect,
+}: OtpPickerProps) {
   const [showAll, setShowAll] = useState(false);
   const sorted = suggestions
     .slice()
@@ -62,7 +68,12 @@ export function OtpPicker({ suggestions, state, now = Date.now(), onClose, onSel
     >
       <div className="pickerBar">
         <span className="pickerBrand">ShardPass</span>
-        <button className="pickerClose" type="button" aria-label="Close ShardPass picker" onClick={onClose}>
+        <button
+          className="pickerClose"
+          type="button"
+          aria-label="Close ShardPass picker"
+          onClick={onClose}
+        >
           <span aria-hidden="true">×</span>
         </button>
       </div>
@@ -82,7 +93,9 @@ export function OtpPicker({ suggestions, state, now = Date.now(), onClose, onSel
               {item.preview ? (
                 <span className="otpCode" aria-hidden="true">
                   {grouped(item.preview.code)}
-                  <span className="otpLeft">{Math.max(0, Math.ceil((item.preview.expiresAt - now) / 1_000))}s</span>
+                  <span className="otpLeft">
+                    {Math.max(0, Math.ceil((item.preview.expiresAt - now) / 1_000))}s
+                  </span>
                 </span>
               ) : (
                 <span className="otpType">{item.otpType.toUpperCase()}</span>

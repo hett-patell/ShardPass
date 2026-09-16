@@ -339,4 +339,119 @@ describe("passkey bridge", () => {
     ]);
     answers.dispose();
   });
+
+  it("sends a malformed request to the browser and stays ready for the next ceremony", async () => {
+    const candidate = platform((request) => {
+      if (request.kind === "passkey.candidates")
+        return {
+          version: 1,
+          kind: "passkey.candidatesResult",
+          candidates: [
+            {
+              itemId: "11111111-1111-4111-8111-111111111111",
+              credentialId: "Y3JlZA",
+              loginName: "Example",
+              userName: "me",
+            },
+          ],
+        };
+      throw new Error("unexpected");
+    });
+    const roots = captureClosedRoots();
+    const bridge = createPasskeyBridge({ document, window, platform: candidate });
+    bridges.push(bridge);
+    bridge.start();
+    const answers = replies();
+
+    await act(async () => {
+      // No request body at all: not a ceremony, and it must not wedge the bridge.
+      window.postMessage(
+        { tag: "shardpass-passkey", direction: "request", id: "bad-1", type: "create" },
+        "/",
+      );
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    await flush();
+    expect(answers.seen.at(-1)).toMatchObject({ id: "bad-1", fallback: true });
+    expect(document.querySelector("shardpass-picker-host")).toBeNull();
+
+    await act(async () => {
+      window.postMessage(
+        {
+          tag: "shardpass-passkey",
+          direction: "request",
+          id: "good-1",
+          type: "get",
+          request: { challenge: "AQ", rpId: null, allowCredentialIds: [] },
+        },
+        "/",
+      );
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    await flush();
+    const prompt = roots.at(-1) as unknown as HTMLElement;
+    expect(within(prompt).getByRole("heading", { name: "Sign in with a passkey" })).toBeVisible();
+    answers.dispose();
+  });
+
+  it("lets a request the person just made take over from an offer made at page load", async () => {
+    const candidate = platform((request) => {
+      if (request.kind === "passkey.candidates")
+        return {
+          version: 1,
+          kind: "passkey.candidatesResult",
+          candidates: [
+            {
+              itemId: "11111111-1111-4111-8111-111111111111",
+              credentialId: "Y3JlZA",
+              loginName: "Example",
+              userName: "me",
+            },
+          ],
+        };
+      throw new Error("unexpected");
+    });
+    const roots = captureClosedRoots();
+    const bridge = createPasskeyBridge({ document, window, platform: candidate });
+    bridges.push(bridge);
+    bridge.start();
+    const answers = replies();
+
+    const ask = async (id: string, conditional: boolean) => {
+      await act(async () => {
+        window.postMessage(
+          {
+            tag: "shardpass-passkey",
+            direction: "request",
+            id,
+            type: "get",
+            request: { challenge: "AQ", rpId: null, allowCredentialIds: [], conditional },
+          },
+          "/",
+        );
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+      await flush();
+    };
+
+    await ask("page-load", true);
+    expect(
+      within(roots.at(-1) as unknown as HTMLElement).getByRole("heading", {
+        name: /Sign in to .* with your passkey\?/u,
+      }),
+    ).toBeVisible();
+
+    await ask("pressed", false);
+    // The page-load offer is handed back to the browser; the pressed request gets the prompt.
+    expect(answers.seen.map((reply) => reply["id"])).toContain("page-load");
+    expect(answers.seen.find((reply) => reply["id"] === "page-load")).toMatchObject({
+      fallback: true,
+    });
+    expect(
+      within(roots.at(-1) as unknown as HTMLElement).getByRole("heading", {
+        name: "Sign in with a passkey",
+      }),
+    ).toBeVisible();
+    answers.dispose();
+  });
 });

@@ -525,7 +525,7 @@ describe("Login fill controller", () => {
     expect(roots.filter((root) => root.querySelector(".signIn"))).toHaveLength(0);
   });
 
-  it("narrows the picker as the person types in the field and picks a row with the arrow keys", async () => {
+  it("narrows the picker as the person types, walks it with the arrow keys, and takes a row only on a real press", async () => {
     const roots = captureClosedRoots();
     const { username } = loginForm();
     const other: LoginFillSuggestion = {
@@ -569,8 +569,21 @@ describe("Login fill controller", () => {
       "data-active",
       "true",
     );
+    // A page script can dispatch keys at the field it owns; fireEvent's are untrusted in the
+    // same way, and must not hand out a credential.
     await act(async () => {
       fireEvent.keyDown(username, { key: "Enter" });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(
+      vi
+        .mocked(candidate.sendLoginFillMessage)
+        .mock.calls.find(([request]) => request.kind === "login.fillSelect"),
+    ).toBeUndefined();
+
+    await act(async () => {
+      picker.getByRole("button", { name: /Use login/u }).click();
       await Promise.resolve();
       await Promise.resolve();
     });

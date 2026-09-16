@@ -134,13 +134,14 @@ export function installPasskeyInterceptor(win: Window & typeof globalThis): void
         }, ACK_TIMEOUT_MS);
       };
       if (!patient)
-        replyTimer = win.setTimeout(
-          () =>
-            finish({
-              error: { name: "NotAllowedError", message: "The passkey request timed out." },
-            }),
-          REPLY_TIMEOUT_MS,
-        );
+        replyTimer = win.setTimeout(() => {
+          // Tell the content script too: a prompt still open is for a ceremony nobody is
+          // waiting on any more, and it must not block the next one.
+          win.postMessage({ tag: TAG, direction: "cancel", id }, "/");
+          finish({
+            error: { name: "NotAllowedError", message: "The passkey request timed out." },
+          });
+        }, REPLY_TIMEOUT_MS);
       pending.set(id, {
         ack: () => {
           acknowledged = true;

@@ -28,6 +28,21 @@ function randomOpaqueId(): string {
   return [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
+/**
+ * Whether two URLs name the same page. A single-page app rewriting its query or fragment is
+ * not a navigation, and must not silently strand the chip the person is using.
+ */
+function samePage(left: string, right: string): boolean {
+  if (left === right) return true;
+  try {
+    const a = new URL(left);
+    const b = new URL(right);
+    return a.origin === b.origin && a.pathname === b.pathname;
+  } catch {
+    return false;
+  }
+}
+
 function originOf(ownerWindow: Window): string | null {
   try {
     const origin = new URL(ownerWindow.location.href).origin;
@@ -77,7 +92,7 @@ export function createOtpFillController(
     owner?.token === candidate.token &&
     registry.resolveActive(candidate.fieldHandle) === candidate.input &&
     candidate.input.isConnected &&
-    options.window.location.href === candidate.url &&
+    samePage(options.window.location.href, candidate.url) &&
     originOf(options.window) === candidate.origin;
 
   const clearRelease = (): Readonly<{
