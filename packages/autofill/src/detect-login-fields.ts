@@ -1,3 +1,5 @@
+import { isDrawn } from "./visibility";
+
 import { labelTextFor } from "./field-context";
 
 export interface LoginFieldSet {
@@ -45,6 +47,9 @@ export function collectInputs(
 }
 
 const USERNAME_PATTERN = /user|email|login|account|phone|identifier|uid|uname/i;
+/** Forms that take an email address for something other than signing in. */
+const NOT_A_SIGN_IN =
+  /\b(?:subscribe|subscription|newsletter|search|waitlist|notify|coupon|promo|unsubscribe|feedback|survey)\b/iu;
 const TEXT_LIKE_TYPES: ReadonlySet<string> = new Set(["text", "email", "tel"]);
 
 function autocompleteOf(input: HTMLInputElement): string {
@@ -82,36 +87,17 @@ function isPasswordField(
 }
 
 // jsdom does not implement layout, so `offsetParent`/`offsetWidth` always
-// report as hidden. Fall back to computed style (which jsdom *does* resolve
-// from inline styles / stylesheets) so this stays testable under jsdom while
-// still filtering out honeypot/decoy fields in a real browser.
-/** Clip shapes that leave nothing of the element visible. */
-const HIDING_CLIPS = new Set([
-  "inset(50%)",
-  "inset(100%)",
-  "circle(0)",
-  "circle(0px)",
-  "circle(0%)",
-  "polygon(0 0,0 0,0 0)",
-  "polygon(0px 0px,0px 0px,0px 0px)",
-]);
 
 /**
- * A field a person could see. Besides display/visibility this refuses the honeypot
- * tricks: opacity 0, a clip-path that hides everything, and a box parked far off-screen.
- * Sizes are judged only when the engine reports them (jsdom reports zeros for everything).
+ * A field a person could see: drawn (itself and its wrappers, not only its own style), big
+ * enough to be a field, and somewhere on the page. Sizes are judged only when the engine
+ * reports them (jsdom reports zeros for everything).
  */
 function isVisible(input: HTMLInputElement): boolean {
   if (input.type === "hidden") return false;
   const view = input.ownerDocument.defaultView;
   if (!view) return true;
-  const style = view.getComputedStyle(input);
-  if (style.display === "none" || style.visibility === "hidden" || style.visibility === "collapse")
-    return false;
-  const opacity = Number.parseFloat(style.opacity);
-  if (Number.isFinite(opacity) && opacity <= 0) return false;
-  const clip = (style.clipPath ?? "").replace(/\s+/gu, "").toLowerCase();
-  if (clip !== "" && HIDING_CLIPS.has(clip)) return false;
+  if (!isDrawn(input)) return false;
   const rect = input.getBoundingClientRect();
   if (rect.width === 0 && rect.height === 0 && rect.left === 0 && rect.top === 0) return true;
   if (rect.width < 10 || rect.height < 10) return false;
@@ -164,6 +150,33 @@ function findUsernameField(
   return preceding.find((input) => isTextLike(input) && isVisible(input)) ?? null;
 }
 
+/**
+ * A newsletter box or a site search also has one email field and a button; what the form,
+ * its button and the field call themselves tells them apart from a sign-in's first step.
+ */
+function takesEmailForSomethingElse(form: HTMLFormElement, input: HTMLInputElement): boolean {
+  const submit = form.querySelector<HTMLElement>(
+    'button:not([type="button"]):not([type="reset"]), input[type="submit"], input[type="image"]',
+  );
+  const naming = [
+    form.id,
+    form.getAttribute("name"),
+    form.getAttribute("class"),
+    form.getAttribute("action"),
+    form.getAttribute("aria-label"),
+    submit?.textContent,
+    submit?.getAttribute("value"),
+    submit?.getAttribute("aria-label"),
+    input.id,
+    input.getAttribute("placeholder"),
+    input.getAttribute("aria-label"),
+  ]
+    .filter((part): part is string => typeof part === "string")
+    .join(" ")
+    .slice(0, 1_000);
+  return NOT_A_SIGN_IN.test(naming);
+}
+
 function hasSubmitControl(form: HTMLFormElement): boolean {
   return (
     form.querySelector(
@@ -203,6 +216,7 @@ export function detectLoginFields(
     const form = input.form;
     if (form === null || claimedForms.has(form) || !isVisible(input)) continue;
     if (!hasSubmitControl(form) || form.querySelector("textarea") !== null) continue;
+    if (takesEmailForSomethingElse(form, input)) continue;
     claimedForms.add(form);
     fieldSets.push({ usernameField: input, passwordField: null, form });
   }

@@ -88,6 +88,13 @@ function yearForms(year: string): string[] {
 }
 
 /** Writes `value` into the field the way typing (or picking) would; false when nothing fit. */
+/** The year form a field has room for: a two-character field gets "27", others "2027". */
+function preferredYear(element: FillableElement, year: string): string {
+  const forms = yearForms(year);
+  const maxLength = element instanceof HTMLInputElement ? element.maxLength : -1;
+  return (maxLength > 0 && maxLength < 4 ? forms[1] : forms[0]) ?? year;
+}
+
 export function fillField(
   element: FillableElement,
   value: string,
@@ -123,11 +130,7 @@ export function fillCardFields(
           : kind === "expMonth"
             ? fillField(element, card.expMonth.padStart(2, "0"), monthForms(card.expMonth))
             : kind === "expYear"
-              ? fillField(
-                  element,
-                  yearForms(card.expYear)[0] ?? card.expYear,
-                  yearForms(card.expYear),
-                )
+              ? fillField(element, preferredYear(element, card.expYear), yearForms(card.expYear))
               : kind === "exp"
                 ? card.expMonth !== "" &&
                   card.expYear !== "" &&

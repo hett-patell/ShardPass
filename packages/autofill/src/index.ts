@@ -5,6 +5,7 @@ export type { UrlMatchMode } from "./domain-match";
 export { fillLoginFields } from "./fill-login-fields";
 export { equivalentDomainsOf } from "./equivalent-domains";
 export { labelTextFor } from "./field-context";
+export { isDrawn } from "./visibility";
 export { detectCardFields, detectIdentityFields } from "./detect-data-fields";
 export type {
   CardFieldKind,

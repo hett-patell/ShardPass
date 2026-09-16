@@ -93,3 +93,30 @@ describe("card and identity fields", () => {
     expect((document.getElementById("apt") as HTMLInputElement).value).toBe("Apt 2");
   });
 });
+
+describe("data fields a person cannot see", () => {
+  it("skips a hidden template ahead of the shown form, and reads user_name as a username", () => {
+    document.body.innerHTML = `
+      <div style="display: none"><input id="ghost" autocomplete="cc-number" /></div>
+      <form><input id="num" autocomplete="cc-number" /><input id="user" name="user_name" /></form>
+    `;
+    expect(detectCardFields(document).map((field) => field.element.id)).toEqual(["num"]);
+    expect(
+      detectIdentityFields(document).find((field) => field.kind === "username")?.element.id,
+    ).toBe("user");
+  });
+
+  it("writes a two-digit year into a field with room for two characters", () => {
+    document.body.innerHTML = `
+      <form><input id="num" autocomplete="cc-number" /><input id="yy" autocomplete="cc-exp-year" maxlength="2" /></form>
+    `;
+    fillCardFields(detectCardFields(document), {
+      number: "4111111111111111",
+      cardholderName: "",
+      expMonth: "3",
+      expYear: "2029",
+      cvv: "",
+    });
+    expect((document.getElementById("yy") as HTMLInputElement).value).toBe("29");
+  });
+});

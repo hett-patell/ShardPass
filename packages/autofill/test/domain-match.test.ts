@@ -45,6 +45,14 @@ describe("matchDomain", () => {
     expect(matchDomain("shop.example.co.uk", ["https://example.co.uk"])).toBe(true);
     expect(matchDomain("a.github.io", ["b.github.io"])).toBe(false);
     expect(matchDomain("docs.a.github.io", ["a.github.io"])).toBe(true);
+    // A vendor's own login is never offered on a customer's tenant or storefront.
+    expect(matchDomain("evil.myshopify.com", ["https://shopify.com"])).toBe(false);
+    expect(matchDomain("evil.okta.com", ["https://acme.okta.com"])).toBe(false);
+    expect(matchDomain("login.acme.okta.com", ["https://acme.okta.com"])).toBe(true);
+    expect(matchDomain("evil.force.com", ["https://login.salesforce.com"])).toBe(false);
+    expect(matchDomain("evil.co.il", ["https://bank.co.il"])).toBe(false);
+    expect(matchDomain("evil.azurewebsites.net", ["https://myapp.azurewebsites.net"])).toBe(false);
+    expect(matchDomain("bucket.digitaloceanspaces.com", ["https://digitalocean.com"])).toBe(false);
   });
 });
 

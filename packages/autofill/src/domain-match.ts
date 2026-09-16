@@ -1,3 +1,5 @@
+import { MULTI_LABEL_PUBLIC_SUFFIXES } from "@shardpass/domain";
+
 import { equivalentDomainsOf } from "./equivalent-domains";
 
 function extractDomain(urlOrDomain: string): string {
@@ -23,57 +25,6 @@ function extractDomain(urlOrDomain: string): string {
 }
 
 /**
- * Public suffixes of more than one label, plus hosting suffixes under which every subdomain is
- * a different site. A short built-in list rather than the full public suffix list: it covers
- * the common country second-level domains and the hosting services on which two unrelated apps
- * must never see each other's logins.
- */
-const MULTI_LABEL_SUFFIXES: ReadonlySet<string> = new Set([
-  "co.uk",
-  "org.uk",
-  "ac.uk",
-  "gov.uk",
-  "com.au",
-  "net.au",
-  "org.au",
-  "co.nz",
-  "co.in",
-  "co.jp",
-  "ne.jp",
-  "or.jp",
-  "com.br",
-  "com.mx",
-  "com.ar",
-  "co.za",
-  "com.sg",
-  "com.hk",
-  "com.tw",
-  "com.cn",
-  "com.tr",
-  "co.kr",
-  "com.ua",
-  "com.my",
-  "com.ph",
-  "co.id",
-  "com.vn",
-  "com.pk",
-  "com.bd",
-  "com.eg",
-  "com.ng",
-  "co.ke",
-  "com.sa",
-  "co.ae",
-  "github.io",
-  "gitlab.io",
-  "netlify.app",
-  "vercel.app",
-  "pages.dev",
-  "herokuapp.com",
-  "web.app",
-  "firebaseapp.com",
-]);
-
-/**
  * The registrable domain (eTLD+1) of a host: "accounts.google.com" and "mail.google.com" both
  * give "google.com", "shop.example.co.uk" gives "example.co.uk", and "a.github.io" stays
  * "a.github.io". Single-label hosts and IP addresses are returned as they are.
@@ -83,7 +34,7 @@ export function registrableDomain(host: string): string {
   const last = labels[labels.length - 1] ?? "";
   if (labels.length <= 2 || /^\d+$/u.test(last)) return host;
   const lastTwo = labels.slice(-2).join(".");
-  return MULTI_LABEL_SUFFIXES.has(lastTwo) ? labels.slice(-3).join(".") : lastTwo;
+  return MULTI_LABEL_PUBLIC_SUFFIXES.has(lastTwo) ? labels.slice(-3).join(".") : lastTwo;
 }
 
 export function matchDomain(pageDomain: string, urls: readonly string[]): boolean {
@@ -99,17 +50,48 @@ export function matchDomain(pageDomain: string, urls: readonly string[]): boolea
 
 export type UrlMatchMode = "domain" | "host" | "startsWith" | "exact" | "never";
 
+function isLoopback(hostname: string): boolean {
+  return (
+    hostname === "localhost" ||
+    hostname.endsWith(".localhost") ||
+    hostname === "127.0.0.1" ||
+    hostname === "[::1]" ||
+    hostname === "::1"
+  );
+}
+
+/** Whether `page` is `saved` itself or continues it at a path, query or fragment boundary. */
+function startsAtBoundary(page: string, saved: string): boolean {
+  if (page === saved) return true;
+  if (!page.startsWith(saved)) return false;
+  const next = page.charAt(saved.length);
+  return next === "/" || next === "?" || next === "#" || (saved.includes("?") && next === "&");
+}
+
 /** Splits a page or saved URL into the parts each match mode compares. */
-function parts(value: string): { host: string; href: string; bare: boolean } {
+function parts(value: string): {
+  host: string;
+  hostname: string;
+  href: string;
+  bare: boolean;
+  protocol: string;
+} {
   const trimmed = value.trim();
   const bare = !/^[a-z][a-z0-9+.-]*:\/\//iu.test(trimmed);
   try {
     const url = new URL(bare ? `https://${trimmed}` : trimmed);
     const host = url.host.toLowerCase();
     const path = url.pathname.replace(/\/+$/u, "");
-    return { host, href: `${url.protocol}//${host}${path}${url.search}`, bare };
+    return {
+      host,
+      hostname: url.hostname.toLowerCase(),
+      href: `${url.protocol}//${host}${path}${url.search}`,
+      bare,
+      protocol: url.protocol,
+    };
   } catch {
-    return { host: extractDomain(trimmed), href: trimmed.toLowerCase(), bare };
+    const host = extractDomain(trimmed);
+    return { host, hostname: host, href: trimmed.toLowerCase(), bare, protocol: "https:" };
   }
 }
 
@@ -122,14 +104,25 @@ function parts(value: string): { host: string; href: string; bare: boolean } {
  */
 export function matchLoginUrl(page: string, url: string, mode: UrlMatchMode = "domain"): boolean {
   if (mode === "never") return false;
-  if (mode === "domain") return matchDomain(page, [url]);
   const pageParts = parts(page);
   const target = parts(url);
+  // A login saved for an https site is not offered on a plain-http page of the same name:
+  // on a hostile network that page is anyone's. A site saved as http (an intranet, a router)
+  // still matches, and a loopback host is the developer's own.
+  if (
+    !pageParts.bare &&
+    pageParts.protocol === "http:" &&
+    !isLoopback(pageParts.hostname) &&
+    (target.bare || target.protocol !== "http:")
+  )
+    return false;
+  if (mode === "domain") return matchDomain(page, [url]);
   if (mode === "host" || pageParts.bare) return pageParts.host === target.host;
   if (mode === "exact") return pageParts.href === target.href;
   // The host must be the saved one: a prefix test alone lets "example.com.evil.net" pass
-  // for a login saved as "https://example.com".
-  return pageParts.host === target.host && pageParts.href.startsWith(target.href);
+  // for a login saved as "https://example.com". The path must end at a boundary too, so
+  // "/app" does not claim "/application".
+  return pageParts.host === target.host && startsAtBoundary(pageParts.href, target.href);
 }
 
 /** `modes` is positional and optional: a missing entry means "domain". */

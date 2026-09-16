@@ -70,3 +70,33 @@ describe("matchLoginUrl", () => {
     ).toBe(false);
   });
 });
+
+describe("matchLoginUrl and the page's scheme", () => {
+  it("keeps a login saved for https off a plain-http page of the same name", () => {
+    const saved = "https://bank.example.test";
+    expect(matchLoginUrl("http://bank.example.test/login", saved, "domain")).toBe(false);
+    expect(matchLoginUrl("http://bank.example.test/login", saved, "host")).toBe(false);
+    expect(matchLoginUrl("http://bank.example.test/login", "bank.example.test", "domain")).toBe(
+      false,
+    );
+  });
+
+  it("still matches a site saved as http, a loopback host, and an https page", () => {
+    expect(matchLoginUrl("http://intranet.test/login", "http://intranet.test", "domain")).toBe(
+      true,
+    );
+    expect(matchLoginUrl("http://localhost:3000/login", "https://localhost:3000", "host")).toBe(
+      true,
+    );
+    expect(
+      matchLoginUrl("https://bank.example.test/login", "http://bank.example.test", "domain"),
+    ).toBe(true);
+  });
+
+  it("startsWith stops at a path boundary", () => {
+    const saved = "https://example.test/app";
+    expect(matchLoginUrl("https://example.test/app/home", saved, "startsWith")).toBe(true);
+    expect(matchLoginUrl("https://example.test/app?x=1", saved, "startsWith")).toBe(true);
+    expect(matchLoginUrl("https://example.test/application", saved, "startsWith")).toBe(false);
+  });
+});

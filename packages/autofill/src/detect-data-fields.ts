@@ -1,3 +1,5 @@
+import { isDrawn } from "./visibility";
+
 import { labelTextFor } from "./field-context";
 
 export type CardFieldKind = "number" | "name" | "expMonth" | "expYear" | "exp" | "cvv";
@@ -83,8 +85,10 @@ const IDENTITY_KEYWORDS: readonly (readonly [IdentityFieldKind, RegExp])[] = [
   ["firstName", /\b(?:first\s*name|given\s*name|fname|forename)\b/iu],
   ["lastName", /\b(?:last\s*name|surname|family\s*name|lname)\b/iu],
   ["middleName", /\b(?:middle\s*(?:name|initial))\b/iu],
-  ["fullName", /\b(?:full\s*name|your\s*name|name)\b/iu],
+  // The specific names go before the bare "name": user_name is a username, company_name a company.
+  ["username", /\b(?:user\s*name|username|login)\b/iu],
   ["company", /\b(?:company|organi[sz]ation|employer|business)\b/iu],
+  ["fullName", /\b(?:full\s*name|your\s*name|name)\b/iu],
   ["address2", /\b(?:address\s*(?:line\s*)?2|addr2|apt|apartment|suite|unit|floor)\b/iu],
   ["street", /\b(?:street|address\s*(?:line\s*)?1|addr1|address)\b/iu],
   ["city", /\b(?:city|town|locality|suburb)\b/iu],
@@ -92,7 +96,6 @@ const IDENTITY_KEYWORDS: readonly (readonly [IdentityFieldKind, RegExp])[] = [
   ["state", /\b(?:state|province|region|county|territory)\b/iu],
   ["country", /\b(?:country|nation)\b/iu],
   ["birthDate", /\b(?:birth|dob|birthday|born)\b/iu],
-  ["username", /\b(?:user\s*name|username|login)\b/iu],
 ];
 
 function describe(element: FillableElement): string {
@@ -120,7 +123,11 @@ function isFillable(element: Element): element is FillableElement {
 }
 
 function candidates(root: Document | ShadowRoot): FillableElement[] {
-  return Array.from(root.querySelectorAll<Element>("input, select")).filter(isFillable);
+  // Only fields a person can see: a hidden "saved card" template ahead of the form is not
+  // where the number goes.
+  return Array.from(root.querySelectorAll<Element>("input, select")).filter(
+    (element): element is FillableElement => isFillable(element) && isDrawn(element),
+  );
 }
 
 function classify<K extends string>(

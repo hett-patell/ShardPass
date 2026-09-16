@@ -19,6 +19,7 @@ export {
 } from "./otp-item";
 export type { OtpItem, VaultItem } from "./otp-item";
 export { isCanonicalUnpaddedBase32 } from "./canonical-base32";
+export { MULTI_LABEL_PUBLIC_SUFFIXES, isMultiLabelPublicSuffix } from "./public-suffixes";
 export { isUnicodeScalarText, UnicodeScalarTextCheck } from "./unicode-scalar-text";
 
 export { FolderSchema, MAX_FOLDER_DEPTH, MAX_FOLDER_NAME_LENGTH, MAX_FOLDERS } from "./folder";

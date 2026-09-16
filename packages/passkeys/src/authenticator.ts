@@ -1,3 +1,5 @@
+import { MULTI_LABEL_PUBLIC_SUFFIXES } from "@shardpass/domain";
+
 import { fromBase64Url, toBase64Url } from "./base64url";
 import { encodeCbor } from "./cbor";
 
@@ -51,103 +53,9 @@ export function isRegistrableRpId(origin: string, rpId: string): boolean {
   if (!/^[a-z0-9.-]+$/u.test(candidate) || candidate.startsWith(".") || candidate.endsWith("."))
     return false;
   // Two unrelated sites under one hosting or country suffix must never share a credential.
-  if (PUBLIC_SUFFIXES.has(candidate)) return false;
+  if (MULTI_LABEL_PUBLIC_SUFFIXES.has(candidate)) return false;
   return host === candidate || host.endsWith(`.${candidate}`);
 }
-
-/**
- * Multi-label public suffixes and hosting suffixes under which every subdomain is a
- * different site. Single-label suffixes are already refused (an rpId needs a dot).
- */
-const PUBLIC_SUFFIXES: ReadonlySet<string> = new Set([
-  "co.uk",
-  "org.uk",
-  "ac.uk",
-  "gov.uk",
-  "me.uk",
-  "ltd.uk",
-  "plc.uk",
-  "com.au",
-  "net.au",
-  "org.au",
-  "edu.au",
-  "gov.au",
-  "co.nz",
-  "org.nz",
-  "net.nz",
-  "co.jp",
-  "ne.jp",
-  "or.jp",
-  "ac.jp",
-  "co.kr",
-  "or.kr",
-  "com.br",
-  "org.br",
-  "net.br",
-  "gov.br",
-  "com.mx",
-  "org.mx",
-  "co.in",
-  "net.in",
-  "org.in",
-  "firm.in",
-  "gen.in",
-  "co.za",
-  "org.za",
-  "web.za",
-  "com.cn",
-  "net.cn",
-  "org.cn",
-  "com.tw",
-  "com.hk",
-  "com.sg",
-  "com.tr",
-  "com.ar",
-  "com.co",
-  "com.pe",
-  "com.ve",
-  "github.io",
-  "gitlab.io",
-  "bitbucket.io",
-  "vercel.app",
-  "netlify.app",
-  "pages.dev",
-  "workers.dev",
-  "herokuapp.com",
-  "azurewebsites.net",
-  "cloudfront.net",
-  "amazonaws.com",
-  "s3.amazonaws.com",
-  "web.app",
-  "firebaseapp.com",
-  "blogspot.com",
-  "wordpress.com",
-  "glitch.me",
-  "repl.co",
-  "replit.app",
-  "onrender.com",
-  "fly.dev",
-  "surge.sh",
-  "neocities.org",
-  "000webhostapp.com",
-  "appspot.com",
-  "cloudfunctions.net",
-  "webflow.io",
-  "squarespace.com",
-  "myshopify.com",
-  "wixsite.com",
-  "weebly.com",
-  "godaddysites.com",
-  "ngrok.io",
-  "ngrok.app",
-  "ngrok-free.app",
-  "trycloudflare.com",
-  "githubusercontent.com",
-  "cloudflare-ipfs.com",
-  "ipfs.io",
-  "vercel.sh",
-  "now.sh",
-]);
 
 export function clientDataJson(
   type: "webauthn.create" | "webauthn.get",

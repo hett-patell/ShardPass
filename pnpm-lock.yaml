@@ -244,7 +244,11 @@ importers:
         specifier: 'catalog:'
         version: 4.12.1
 
-  packages/autofill: {}
+  packages/autofill:
+    dependencies:
+      '@shardpass/domain':
+        specifier: workspace:*
+        version: link:../domain
 
   packages/crypto:
     dependencies:
@@ -342,7 +346,11 @@ importers:
         specifier: workspace:*
         version: link:../domain
 
-  packages/passkeys: {}
+  packages/passkeys:
+    dependencies:
+      '@shardpass/domain':
+        specifier: workspace:*
+        version: link:../domain
 
   packages/security: {}
 

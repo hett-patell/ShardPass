@@ -225,3 +225,26 @@ describe("detectLoginFields", () => {
     expect(results).toHaveLength(2);
   });
 });
+
+describe("detectLoginFields and what a person cannot see", () => {
+  it("skips a honeypot inside a hidden wrapper when picking the username field", () => {
+    document.body.innerHTML = `
+      <form>
+        <input type="text" name="username" id="real" />
+        <div style="display: none"><input type="text" name="email" /></div>
+        <input type="password" name="password" />
+      </form>
+    `;
+    const [fieldSet] = detectLoginFields(document);
+    expect(fieldSet?.usernameField?.id).toBe("real");
+  });
+
+  it("does not take a newsletter or search form for a username-only sign-in step", () => {
+    document.body.innerHTML = `
+      <form id="newsletter"><input type="email" name="email" placeholder="Subscribe to our newsletter" /><button>Subscribe</button></form>
+      <form id="find" action="/search"><input type="email" name="email" /><button>Go</button></form>
+      <form id="login"><input type="email" name="email" /><button>Next</button></form>
+    `;
+    expect(detectLoginFields(document).map((fieldSet) => fieldSet.form?.id)).toEqual(["login"]);
+  });
+});

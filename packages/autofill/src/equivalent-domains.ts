@@ -2,7 +2,9 @@
  * Registrable domains that share one sign-in, so a login saved for one is offered on the
  * others: Google's accounts serve YouTube, a bank's brand domain and its banking domain, a
  * shop's country storefronts. Conservative on purpose: every group is one owner's set of
- * sites behind one account. A group never bridges to a site that merely embeds another.
+ * sites behind one account. A group never bridges to a site that merely embeds another, nor
+ * to a domain that hands out subdomains to its customers (a shop's myshopify.com storefront,
+ * an Okta tenant): a login for the vendor must never be offered on a customer's page.
  */
 const GROUPS: readonly (readonly string[])[] = [
   [
@@ -61,7 +63,6 @@ const GROUPS: readonly (readonly string[])[] = [
   ["zoom.us", "zoom.com"],
   ["atlassian.com", "atlassian.net", "bitbucket.org", "trello.com", "jira.com"],
   ["notion.so", "notion.com"],
-  ["wordpress.com", "wordpress.org"],
   ["mozilla.org", "firefox.com", "mozilla.com"],
   ["proton.me", "protonmail.com", "protonvpn.com"],
   ["intuit.com", "turbotax.com", "quickbooks.com", "mint.com", "creditkarma.com"],
@@ -88,11 +89,8 @@ const GROUPS: readonly (readonly string[])[] = [
   ["ubisoft.com", "ubi.com"],
   ["blizzard.com", "battle.net"],
   ["nintendo.com", "nintendo.net"],
-  ["salesforce.com", "force.com", "salesforce-sites.com"],
   ["vmware.com", "broadcom.com"],
-  ["dropbox.com", "dropboxusercontent.com"],
   ["yahoo.com", "aol.com", "yahoo.co.uk", "yahoo.co.jp"],
-  ["okta.com", "oktapreview.com", "okta-emea.com"],
   ["1password.com", "1password.eu", "1password.ca"],
   ["bitwarden.com", "bitwarden.eu"],
   ["fidelity.com", "netbenefits.com"],
@@ -107,16 +105,7 @@ const GROUPS: readonly (readonly string[])[] = [
   ["lowes.com", "lowes.ca"],
   ["expedia.com", "hotels.com", "vrbo.com", "orbitz.com", "travelocity.com"],
   ["booking.com", "priceline.com", "agoda.com", "kayak.com"],
-  ["shopify.com", "myshopify.com"],
-  ["godaddy.com", "secureserver.net"],
-  ["cloudflare.com", "cloudflareaccess.com"],
-  ["digitalocean.com", "digitaloceanspaces.com"],
-  ["heroku.com", "herokuapp.com"],
   ["stackoverflow.com", "stackexchange.com", "superuser.com", "serverfault.com", "askubuntu.com"],
-  ["reddit.com", "redd.it"],
-  ["twitch.tv", "twitchcdn.net"],
-  ["tiktok.com", "tiktokv.com"],
-  ["linkedin.com", "lnkd.in"],
 ];
 
 const groupByDomain = new Map<string, ReadonlySet<string>>();
