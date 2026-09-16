@@ -31,7 +31,7 @@ const safeManifest = JSON.stringify({
   manifest_version: 3,
   name: "ShardPass",
   short_name: "ShardPass",
-  version: "2.2.0",
+  version: "2.3.0",
   minimum_chrome_version: "111",
   description: "Local-first password manager foundation.",
   permissions: [

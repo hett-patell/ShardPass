@@ -9,8 +9,8 @@ Kept current by the assistant while working; one line per item, newest run first
 - [x] Coloured category tiles; API credentials and SSH keys as their own entries
 - [x] Coloured initial tiles for logins without a site icon; logo header on login detail
 - [x] About page: developer, networkshard.com, GitHub hett-patell, built with Claude
-- [ ] Fix the ItemRow test that expects a kind icon on a login row
-- [ ] Lint, tests, security build, commit, bump to 2.3.0
+- [x] Fix the ItemRow test that expects a kind icon on a login row
+- [x] Lint, tests, security build, commit, bump to 2.3.0
 
 ## Open after this run
 
