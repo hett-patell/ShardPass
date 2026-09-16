@@ -607,6 +607,19 @@ export async function scanBuild(directory, options = {}) {
       for (const entry of wars) checkNestedKeys(entry, nestedManifestKeys.web_accessible_resource);
     }
 
+    // `import()` is disallowed in a ServiceWorkerGlobalScope by the HTML specification, so a
+    // lazily loaded module in the background never loads at all: the feature behind it simply
+    // reports itself unavailable. Everything the worker reaches must be statically imported.
+    const workerEntry = manifest.background?.service_worker;
+    if (typeof workerEntry === "string") {
+      const graph = new Set([workerEntry, ...(await contentDependencyClosure(dist, workerEntry))]);
+      for (const relative of graph) {
+        const source = await readFile(path.join(dist, relative), "utf8").catch(() => "");
+        if (/(?:^|[^.\w$])import\s*\(/u.test(source))
+          add(violations, dist, path.join(dist, relative), "service-worker-dynamic-import");
+      }
+    }
+
     const executableReferences = [];
     const addExecutable = (value, type = "javascript") => {
       if (typeof value !== "string" || executableRemoteUrl.test(value.trim())) return;

@@ -1,18 +1,15 @@
-import type * as sodiumModule from "libsodium-wrappers-sumo";
+import sodium from "libsodium-wrappers-sumo";
 
 /**
- * Loaded on first use, never at start-up. The wrapper and its WebAssembly are about 1.8 MB,
- * the background service worker is restarted constantly, and a vault that never connects Ente
- * must not pay for this on every wake. One module for the whole extension, as before.
+ * Imported statically on purpose. Loading it on first use would keep the wrapper and its
+ * WebAssembly (about 1.8 MB) out of the service worker's start-up, but `import()` is
+ * disallowed in a ServiceWorkerGlobalScope by the HTML specification, so every Ente cycle
+ * failed with ENTE_UNAVAILABLE. Moving this work into a worker of its own is the way to win
+ * that back; a dynamic import here is not.
  */
-type Sodium = (typeof sodiumModule)["default"];
-let loading: Promise<Sodium> | null = null;
-async function loadSodium(): Promise<Sodium> {
-  loading ??= import("libsodium-wrappers-sumo").then(async (module) => {
-    await module.default.ready;
-    return module.default;
-  });
-  return loading;
+async function loadSodium(): Promise<typeof sodium> {
+  await sodium.ready;
+  return sodium;
 }
 
 const MAX_INPUT = 1024 * 1024;

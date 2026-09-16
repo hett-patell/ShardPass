@@ -101,6 +101,12 @@ Baseline at 2.3.0: typecheck clean, lint clean after one test fix, full suite gr
 - [ ] E9 low (still open, narrow) · `login.fillFromPopup` first-answer race across frames (narrow).
 - [x] E10 low · dead `useOtpList.ts`; stale scan-build/manifest-test comments; GeneratorScreen's deferred settings fetch overwrites what was typed and requests a username per keystroke.
 
+## 2026-09-16 · Ente sync, broken by my own change (2.6.6)
+
+- [x] Ente reported ENTE_UNAVAILABLE on every sync since 2.5.3. That release made libsodium load on first use to keep it out of the service worker's start-up; `import()` is disallowed in a ServiceWorkerGlobalScope by the HTML specification, so the module never loaded and the crypto adapter never existed. Proved by calling `import()` inside the running worker: "import() is disallowed on ServiceWorkerGlobalScope by the HTML specification."
+- [x] The import is static again. The worker is back to loading about 1.8 MB on every wake; winning that back means moving Ente's crypto into a worker of its own, not a dynamic import.
+- [x] The build scanner now reports any `import(` reachable from the service worker, with a test. That is the gate that would have caught this the day I wrote it.
+
 ## 2026-09-16 · Full pass through a real browser (2.6.4)
 
 Loaded the built extension into Chromium and drove every feature: vault CRUD for each item kind, categories, search, folders, archive, restore, delete, the login chip and picker, the sign-up generator, the save prompt, the sign-in banner, the code picker, passkey creation and sign-in, the popup, Health, Overview, the generators, About, Settings, locking and unlocking.

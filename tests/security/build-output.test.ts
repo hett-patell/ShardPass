@@ -31,7 +31,7 @@ const safeManifest = JSON.stringify({
   manifest_version: 3,
   name: "ShardPass",
   short_name: "ShardPass",
-  version: "2.6.5",
+  version: "2.6.6",
   minimum_chrome_version: "111",
   description: "Local-first password manager foundation.",
   permissions: [
@@ -294,6 +294,23 @@ describe("production build output scanner", () => {
     await expect(scanBuild(dist, { projectRoot: project })).resolves.toContainEqual({
       file: "extensionless-script",
       rule: "function-reference",
+    });
+  });
+
+  it("reports a module the service worker would load on demand", async () => {
+    // import() is disallowed in a ServiceWorkerGlobalScope, so a lazily loaded module never
+    // loads: the feature behind it just reports itself unavailable, which is how Ente sync
+    // broke. Everything the worker reaches has to be imported statically.
+    const { dist, project } = await temporaryProject({
+      ...safeArtifact,
+      "dist/assets/worker.js":
+        'export const ready = true; export const crypto = () => import("./heavy.js");',
+      "dist/assets/heavy.js": "export const heavy = true;",
+    });
+
+    await expect(scanBuild(dist, { projectRoot: project })).resolves.toContainEqual({
+      file: "assets/worker.js",
+      rule: "service-worker-dynamic-import",
     });
   });
 
