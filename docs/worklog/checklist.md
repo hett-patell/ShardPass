@@ -101,6 +101,13 @@ Baseline at 2.3.0: typecheck clean, lint clean after one test fix, full suite gr
 - [ ] E9 low (still open, narrow) · `login.fillFromPopup` first-answer race across frames (narrow).
 - [x] E10 low · dead `useOtpList.ts`; stale scan-build/manifest-test comments; GeneratorScreen's deferred settings fetch overwrites what was typed and requests a username per keystroke.
 
+## 2026-09-16 · Google and passkeys, again (2.5.4)
+
+- [x] Every passkey ShardPass created told the site it was reachable over "hybrid" as well as "internal". Hybrid means "this credential can be used from a phone", so Google offered the phone, which is the same prompt that asks to turn Bluetooth on. Bitwarden advertises hybrid deliberately, because it has a phone app to reach; ShardPass has none, so it now says "internal" only.
+- [x] Checked `chrome.webAuthenticationProxy` (Chrome 115+, permission `webAuthenticationProxy`) as the deterministic route. Rejected: attachment is exclusive and global, so while attached ShardPass would answer every passkey request in the browser, including ones meant for Chrome's own profile passkeys, Windows Hello or a co-installed 1Password, with no way to hand a request back. It suits remote-desktop software, which attaches only for the length of a session.
+- [x] Probed Google's own sign-in page: the identifier step makes no WebAuthn call at all, so nothing there can be intercepted. The ceremony starts only after an account is named.
+- [x] Fixed the Ente regression from 2.5.3: conflict preview and resolution read the crypto adapter without waiting for it, which is what reported ENTE_UNAVAILABLE. Both now wait, and a connected account starts loading it as soon as it connects.
+
 ## 2026-09-16 · Speed (2.5.3)
 
 Measured on a 100-item vault, in Node with in-memory storage (the browser pays more, since every read is chrome.storage IPC):

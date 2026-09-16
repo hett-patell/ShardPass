@@ -197,7 +197,11 @@ export function installPasskeyInterceptor(win: Window & typeof globalThis): void
             getAuthenticatorData: () => fromBase64Url(result.authenticatorData ?? ""),
             getPublicKey: () => fromBase64Url(result.publicKey ?? ""),
             getPublicKeyAlgorithm: () => -7,
-            getTransports: () => ["internal", "hybrid"],
+            // "internal" alone: this passkey lives in the vault on this browser. Saying
+            // "hybrid" as well tells the site it can also be reached from a phone, which is
+            // how a desktop with no phone paired ends up showing "turn on Bluetooth" instead
+            // of offering ShardPass. A manager with its own phone app says hybrid; this has none.
+            getTransports: () => ["internal"],
           }
         : {
             clientDataJSON,
@@ -219,7 +223,7 @@ export function installPasskeyInterceptor(win: Window & typeof globalThis): void
               authenticatorData: result.authenticatorData,
               publicKey: result.publicKey,
               publicKeyAlgorithm: -7,
-              transports: ["internal", "hybrid"],
+              transports: ["internal"],
             },
           }
         : {

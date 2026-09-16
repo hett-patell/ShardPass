@@ -53,3 +53,15 @@ describe("ente.authChallenge with the production runtime", () => {
     dispose();
   }, 60_000);
 });
+
+describe("the production runtime's crypto is lazy but never missing", () => {
+  it("has the adapter ready before anything that decrypts an entity runs", async () => {
+    const dependencies = createProductionEnteRuntimeDependencies();
+    // Nothing has asked for it yet: reading it now is exactly what used to report
+    // ENTE_UNAVAILABLE, and every path that needs it awaits `sodium()` first.
+    const adapter = await dependencies.sodium();
+    expect(typeof adapter.argon2id).toBe("function");
+    // The same adapter comes back; loading happens once for the life of the worker.
+    expect(await dependencies.sodium()).toBe(adapter);
+  });
+});

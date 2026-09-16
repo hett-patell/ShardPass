@@ -134,8 +134,11 @@ describe("passkey page script", () => {
     expect(response.getPublicKeyAlgorithm()).toBe(-7);
     expect(credential.toJSON()).toMatchObject({
       id: "Y3JlZA",
-      response: { attestationObject: "AQI", publicKeyAlgorithm: -7 },
+      response: { attestationObject: "AQI", publicKeyAlgorithm: -7, transports: ["internal"] },
     });
+    // The site is told this passkey is on this device, and not reachable from a phone: a site
+    // told otherwise offers the cross-device flow instead of the vault's own prompt.
+    expect(response.getTransports()).toEqual(["internal"]);
   });
 
   it("falls back to the browser when the content script says so, when nothing answers, and for security-key requests", async () => {

@@ -178,11 +178,20 @@ export function createEnteRuntimeOwner(
         return run(trigger, signal);
       };
     })(),
-    preview: (sender: SenderContext) => resolver.preview(sender),
+    // Conflict work decrypts entities too, so it waits for the crypto exactly as a cycle does:
+    // reading the adapter before it has loaded is what "ENTE_UNAVAILABLE" used to mean here.
+    preview: async (sender: SenderContext) => {
+      await dependencies.sodium();
+      return resolver.preview(sender);
+    },
     resolve: async (capability, choice, sender) => {
+      await dependencies.sodium();
       await resolver.resolve(capability, choice, sender);
     },
     async setConnected(connected) {
+      // A connected account will need the crypto shortly; start loading it now rather than
+      // making the first sync wait for it.
+      if (connected) void dependencies.sodium();
       const snapshot = await repository.read();
       if (
         (await repository.commit(snapshot.sessionEpoch, {

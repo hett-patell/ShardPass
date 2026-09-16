@@ -82,6 +82,9 @@ export function createProductionEnteRuntimeDependencies(): EnteRuntimeDependenci
         bytes.fill(0);
       }
     },
+    // These two are synchronous by contract, so they read the adapter rather than awaiting it.
+    // Every caller (a sync cycle, a conflict preview or resolution) waits for `sodium()`
+    // first; that is what keeps this branch unreachable.
     decryptEntity(entity, authKey) {
       if (entity.isDeleted || sodium === undefined) throw new EnteProtocolError("ENTE_UNAVAILABLE");
       return parseEnteOtpEntity(
