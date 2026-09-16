@@ -151,14 +151,18 @@
 
 .closeButton {
   display: inline-grid;
+  box-sizing: border-box;
   width: var(--control-height-sm);
+  min-width: var(--control-height-sm);
   height: var(--control-height-sm);
   flex: 0 0 auto;
   place-items: center;
+  overflow: hidden;
   padding: 0;
   color: var(--color-text-muted);
   font: inherit;
-  font-size: 20px;
+  /* The glyph is drawn inside the 32px box: a larger one overflowed the rounded corner. */
+  font-size: 18px;
   line-height: 1;
   background: transparent;
   border: 1px solid var(--color-border);

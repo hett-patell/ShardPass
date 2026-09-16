@@ -37,7 +37,7 @@ export function PasskeyPrompt(props: PasskeyPromptProps) {
       role="region"
       aria-label="ShardPass passkey prompt"
     >
-      <header className="loginHeading">
+      <header className="headingRow">
         <div>
           <p className="eyebrow">SHARDPASS / PASSKEY</p>
           <h2 className="title">
