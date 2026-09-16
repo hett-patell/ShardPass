@@ -328,7 +328,9 @@ export function createChromePlatform(): BackgroundExtensionPlatform &
     },
 
     onContextMenuClicked(handler) {
-      type ClickInfo = { menuItemId: string | number };
+      // frameUrl is the page the click happened on: a login inside an iframe is that frame's,
+      // not the top document's, and the suggestions must be looked up for it.
+      type ClickInfo = { menuItemId: string | number; frameUrl?: string };
       type ClickTab = { id?: number; url?: string } | undefined;
       type ClickEvent = {
         addListener(callback: (info: ClickInfo, tab: ClickTab) => void): void;
@@ -341,7 +343,7 @@ export function createChromePlatform(): BackgroundExtensionPlatform &
           String(info.menuItemId),
           tab?.id === undefined || typeof tab.url !== "string"
             ? null
-            : { id: tab.id, url: tab.url },
+            : { id: tab.id, url: typeof info.frameUrl === "string" ? info.frameUrl : tab.url },
         );
       menus.onClicked.addListener(listener);
       return () => menus.onClicked?.removeListener(listener);
@@ -349,8 +351,11 @@ export function createChromePlatform(): BackgroundExtensionPlatform &
 
     async openPopup() {
       const action = (chrome as { action?: { openPopup?: () => Promise<void> } }).action;
+      // chrome.action.openPopup arrived in Chrome 127; this extension runs from 111, where
+      // the caller's fallback (a notice, or nothing) is all there is.
+      if (typeof action?.openPopup !== "function") return;
       try {
-        await action?.openPopup?.();
+        await action.openPopup();
       } catch {
         // Not allowed outside a user gesture, or already open: nothing more to do.
       }

@@ -1,4 +1,10 @@
-import type { CardItem, IdentityItem, LoginItem, VaultItemKind } from "@shardpass/domain";
+import {
+  VAULT_ITEM_KINDS,
+  type CardItem,
+  type IdentityItem,
+  type LoginItem,
+  type VaultItemKind,
+} from "@shardpass/domain";
 import { matchLoginUrls, type UrlMatchMode } from "@shardpass/autofill";
 import {
   parseLoginFillResponseForRequest,
@@ -37,6 +43,10 @@ type RememberedScreen = Readonly<{
   at: number;
   screen: { kind: "list"; category: CategoryId } | { kind: "generator" } | { kind: "identity" };
 }>;
+const CATEGORY_IDS: ReadonlySet<string> = new Set([...VAULT_ITEM_KINDS, "all", "favorites"]);
+function isCategoryId(value: unknown): value is CategoryId {
+  return typeof value === "string" && CATEGORY_IDS.has(value);
+}
 
 /** The screen a popup closed on moments ago: reopening lands back there, like a window would. */
 function readLastScreen(): RememberedScreen["screen"] | null {
@@ -46,7 +56,8 @@ function readLastScreen(): RememberedScreen["screen"] | null {
     const parsed = JSON.parse(raw) as RememberedScreen;
     if (typeof parsed.at !== "number" || Date.now() - parsed.at > LAST_SCREEN_TTL_MS) return null;
     const screen = parsed.screen;
-    if (screen.kind === "list" && typeof screen.category === "string") return screen;
+    if (screen.kind === "list" && isCategoryId(screen.category))
+      return { kind: "list", category: screen.category };
     if (screen.kind === "generator" || screen.kind === "identity") return { kind: screen.kind };
     return null;
   } catch {
@@ -203,9 +214,11 @@ export function PopupApp({ platform }: PopupAppProps) {
 
   const screen = stack[stack.length - 1] ?? { kind: "home" };
   // Lists, the generator and the identity chooser are remembered for a few minutes; a detail
-  // screen is not (its item may be gone, and it may show a secret).
+  // screen is not (its item may be gone, and it may show a secret). Nothing is written before
+  // the restore below has read: on the unlock render the stack is still just home.
+  const restored = useRef(false);
   useEffect(() => {
-    if (!vaultUnlocked) return;
+    if (!vaultUnlocked || !restored.current) return;
     writeLastScreen(
       screen.kind === "list"
         ? { kind: "list", category: screen.category }
@@ -232,12 +245,21 @@ export function PopupApp({ platform }: PopupAppProps) {
     return () => clearTimeout(timer);
   }, [feedback, feedbackTick]);
 
-  const restored = useRef(false);
   useEffect(() => {
     if (!vaultUnlocked) {
       setStack([{ kind: "home" }]);
       setSearch("");
       setFeedback("");
+      // The background drops its reprompt grants on lock; so do we, and any prompt still open.
+      grantedRef.current.clear();
+      setReprompt(null);
+      // Where the person was browsing is part of the unlocked session: a lock ends it, and
+      // the next popup opens at home. A popup that opens locked has nothing to end, and must
+      // leave what an earlier popup remembered alone.
+      if (restored.current) {
+        writeLastScreen(null);
+        restored.current = false;
+      }
       return;
     }
     if (restored.current) return;
@@ -440,6 +462,7 @@ export function PopupApp({ platform }: PopupAppProps) {
                 onCopy={(value, label) => void copy(value, label)}
                 onFillData={(item) => withReprompt(item, "fill", () => void fillDataItem(item))}
                 fillingData={fillingData === screen.itemId}
+                onRepromptGranted={() => grantedRef.current.add(screen.itemId)}
                 onOpenVault={() => void openVault({ item: screen.itemId })}
               />
             )}

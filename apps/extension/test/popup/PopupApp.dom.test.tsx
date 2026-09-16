@@ -178,7 +178,11 @@ async function renderUnlocked(options: Parameters<typeof createTestPlatform>[0] 
   return { ...fixture, ...view };
 }
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  // A popup that closed on a list reopens there; each test starts from a fresh one.
+  localStorage.removeItem("shardpass:popup:lastScreen");
+});
 
 describe("PopupApp lock screen", () => {
   it("shows the lock screen and never queries items while locked", async () => {
@@ -281,7 +285,10 @@ describe("PopupApp screens", () => {
   it("shows a live code in the one-time codes list and copies it", async () => {
     const { writeAuthoritativeClipboardText } = await renderUnlocked();
     fireEvent.click(await screen.findByRole("button", { name: /One-time codes/ }));
-    const code = await screen.findByRole("button", { name: "Copy code 123456" });
+    const code = await screen.findByRole("button", { name: "Copy code" });
+    // The code is the button's text, never its label: secrets do not belong in attributes.
+    expect(code).toHaveTextContent("123 456");
+    expect(code.getAttribute("aria-label")).toBe("Copy code");
     fireEvent.click(code);
     await waitFor(() => expect(writeAuthoritativeClipboardText).toHaveBeenCalledTimes(1));
     expect(await screen.findByText("Code copied")).toBeVisible();
@@ -366,7 +373,7 @@ describe("PopupApp screens", () => {
     fireEvent.change(screen.getByRole("searchbox", { name: "Search ShardPass" }), {
       target: { value: "north" },
     });
-    fireEvent.click(await screen.findByRole("button", { name: "Copy code 123456" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Copy code" }));
     await waitFor(() => expect(writeAuthoritativeClipboardText).toHaveBeenCalledTimes(1));
     fireEvent.change(screen.getByRole("searchbox", { name: "Search ShardPass" }), {
       target: { value: "portal" },
@@ -497,6 +504,33 @@ describe("PopupApp screens", () => {
       "The vault could not be opened. Try again.",
     );
     expect(screen.queryByText(rawFailureText)).not.toBeInTheDocument();
+  });
+});
+
+describe("PopupApp remembered screen", () => {
+  /** Renders a popup and unlocks it, without waiting for any particular screen. */
+  function openPopup() {
+    const fixture = createTestPlatform();
+    render(<PopupApp platform={fixture.platform} />);
+    act(() => fixture.publishVaultState(vaultState("unlocked", 1)));
+    return fixture;
+  }
+
+  it("reopens the list the popup closed on, and forgets it once the vault locks", async () => {
+    await renderUnlocked();
+    fireEvent.click(await screen.findByRole("button", { name: /Logins/ }));
+    expect(await screen.findByRole("heading", { name: "Logins" })).toBeVisible();
+    cleanup();
+
+    const reopened = openPopup();
+    expect(await screen.findByRole("heading", { name: "Logins" })).toBeVisible();
+    // Locking clears what was remembered, so the next popup starts at home.
+    act(() => reopened.publishVaultState(vaultState("locked", 2)));
+    cleanup();
+
+    openPopup();
+    expect(await screen.findByRole("searchbox", { name: "Search ShardPass" })).toBeVisible();
+    expect(screen.queryByRole("heading", { name: "Logins" })).not.toBeInTheDocument();
   });
 });
 

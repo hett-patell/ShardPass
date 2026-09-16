@@ -68,6 +68,8 @@ export function GeneratorScreen({
   const [error, setError] = useState("");
   const generation = useRef(0);
   const settingsLoaded = useRef(false);
+  // Fields already typed into: a saved value that arrives later must not replace what was written.
+  const edited = useRef({ email: false, domain: false });
 
   // The saved address and domain are fetched once, the first time the username tab opens.
   useEffect(() => {
@@ -78,8 +80,8 @@ export function GeneratorScreen({
       .then((candidate) => {
         const parsed = PasswordGenResponseSchema.safeParse(candidate);
         if (parsed.success && parsed.data.kind === "password.generatorSettings") {
-          setEmail(parsed.data.email);
-          setDomain(parsed.data.domain);
+          if (!edited.current.email) setEmail(parsed.data.email);
+          if (!edited.current.domain) setDomain(parsed.data.domain);
         }
       })
       .catch(() => undefined);
@@ -278,7 +280,10 @@ export function GeneratorScreen({
                   autoComplete="off"
                   placeholder="me@example.com"
                   value={email}
-                  onChange={(event) => setEmail(event.target.value)}
+                  onChange={(event) => {
+                    edited.current.email = true;
+                    setEmail(event.target.value);
+                  }}
                   onBlur={() => saveSettings({ email: email.trim(), domain: domain.trim() })}
                 />
               </label>
@@ -292,7 +297,10 @@ export function GeneratorScreen({
                   autoComplete="off"
                   placeholder="example.com"
                   value={domain}
-                  onChange={(event) => setDomain(event.target.value)}
+                  onChange={(event) => {
+                    edited.current.domain = true;
+                    setDomain(event.target.value);
+                  }}
                   onBlur={() => saveSettings({ email: email.trim(), domain: domain.trim() })}
                 />
               </label>

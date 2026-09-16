@@ -26,6 +26,8 @@ export interface DetailScreenProps {
   fillingData: boolean;
   onCopy: (value: string, label: string) => void;
   onOpenVault: () => void;
+  /** The item's own master-password prompt succeeded: the background now holds a grant. */
+  onRepromptGranted: () => void;
 }
 
 type Loaded =
@@ -46,6 +48,7 @@ export function DetailScreen({
   fillingData,
   onCopy,
   onOpenVault,
+  onRepromptGranted,
 }: DetailScreenProps) {
   const [loaded, setLoaded] = useState<Loaded>({ status: "loading" });
   const [attempt, setAttempt] = useState(0);
@@ -81,7 +84,10 @@ export function DetailScreen({
           platform={platform}
           itemId={itemId}
           action="view"
-          onGranted={() => setAttempt((count) => count + 1)}
+          onGranted={() => {
+            onRepromptGranted();
+            setAttempt((count) => count + 1);
+          }}
         />
       </div>
     );

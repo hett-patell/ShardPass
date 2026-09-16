@@ -104,6 +104,7 @@ export interface BackgroundExtensionPlatform extends RuntimeExtensionPlatform {
   installContextMenu?(
     items: readonly Readonly<{ id: string; title: string; contexts: readonly string[] }>[],
   ): Promise<void>;
+  /** `url` is the frame the click happened in, which for a login iframe is not the tab's. */
   onContextMenuClicked?(
     handler: (menuId: string, tab: Readonly<{ id: number; url: string }> | null) => void,
   ): () => void;

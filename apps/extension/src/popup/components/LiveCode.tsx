@@ -38,7 +38,7 @@ export function LiveCode({ platform, itemId, size = "row", now = Date.now, onCop
     <button
       type="button"
       className={`${styles.copy} ${large ? styles.copyLarge : ""}`}
-      aria-label={`Copy code ${code.code}`}
+      aria-label="Copy code"
       title="Copy code"
       onClick={() => onCopy(code.code)}
     >

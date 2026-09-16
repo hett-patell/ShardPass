@@ -13,7 +13,9 @@ export interface ContextWatchOptions {
  */
 export function reloadWhenContextInvalidated(options: ContextWatchOptions = {}): () => void {
   const runtime =
-    "runtime" in options ? options.runtime : (globalThis as { chrome?: { runtime?: { id?: string } } }).chrome?.runtime;
+    "runtime" in options
+      ? options.runtime
+      : (globalThis as { chrome?: { runtime?: { id?: string } } }).chrome?.runtime;
   if (runtime === undefined) return () => undefined;
   const reload = options.reload ?? (() => globalThis.location.reload());
   const timer = setInterval(() => {
