@@ -111,6 +111,7 @@ Baseline at 2.3.0: typecheck clean, lint clean after one test fix, full suite gr
 - [x] The health page can be opened at a finding: the dashboard passes it, the card is scrolled to and focused.
 - [x] The generated password is the point of the generator page and was set at the size of a form label. It is 28px on the vault page and 18px in the popup, with digits and symbols picked out of the letters; the buttons and options use the width they have. Checked at both widths.
 - [x] All gates green; every page checked in Chromium at 1440x900 with 24 real logins in the vault.
+- [x] The detail panel told a reader to select an item while the list beside it was empty, which on the archive page is an instruction nobody can follow. It says what the list is instead (2.7.1).
 
 ## 2026-09-16 · Two scrollbars, three unequal cards, an empty About page (2.6.8)
 

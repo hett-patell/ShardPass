@@ -549,7 +549,7 @@ export function VaultApp({ platform }: VaultAppProps) {
                       onDeleted={handleDeleted}
                     />
                   ) : pendingId !== null && pendingId === vaultState.selectedId ? null : (
-                    <EmptyDetailState />
+                    <EmptyDetailState hasItems={vaultState.items.length > 0} />
                   )}
                 </div>
               </>
