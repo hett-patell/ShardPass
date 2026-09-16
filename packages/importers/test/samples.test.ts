@@ -78,7 +78,7 @@ const SAMPLES: readonly Sample[] = [
 ];
 
 function encode(text: string): ArrayBuffer {
-  return new TextEncoder().encode(text).buffer as ArrayBuffer;
+  return new TextEncoder().encode(text).buffer;
 }
 
 describe("docs/import-samples", () => {
@@ -103,7 +103,7 @@ describe("docs/import-samples", () => {
   it("the Dashlane samples import together too", async () => {
     const results = await Promise.all(
       ["credentials", "securenotes", "payments", "personalinfo", "ids"].map((name) =>
-        bytes(`dashlane-${name}.csv`).then((buffer) => importDashlane(buffer as ArrayBuffer)),
+        bytes(`dashlane-${name}.csv`).then((buffer) => importDashlane(buffer)),
       ),
     );
     expect(results.flatMap((result) => result.items).length).toBe(9);
