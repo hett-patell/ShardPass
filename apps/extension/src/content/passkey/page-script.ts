@@ -50,6 +50,30 @@ export function installPasskeyInterceptor(win: Window & typeof globalThis): void
   const originalCreate = credentials.create.bind(credentials);
   const originalGet = credentials.get.bind(credentials);
 
+  // Sites ask the browser what it can do before they ask for a passkey at all. A desktop
+  // without a fingerprint reader or Windows Hello answers "no platform authenticator", and
+  // Google then says the device cannot be used, never calling create(). ShardPass is that
+  // authenticator now, and answers conditional requests too, so it says so here; whatever
+  // it declines still reaches the browser's own implementation through the fallbacks.
+  const publicKeyCredential = win.PublicKeyCredential as
+    | (typeof PublicKeyCredential & {
+        getClientCapabilities?: () => Promise<Record<string, boolean>>;
+      })
+    | undefined;
+  if (publicKeyCredential !== undefined) {
+    publicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable = () => Promise.resolve(true);
+    publicKeyCredential.isConditionalMediationAvailable = () => Promise.resolve(true);
+    const originalCapabilities =
+      publicKeyCredential.getClientCapabilities?.bind(publicKeyCredential);
+    if (originalCapabilities !== undefined)
+      publicKeyCredential.getClientCapabilities = async () => ({
+        ...(await originalCapabilities().catch(() => ({}))),
+        conditionalGet: true,
+        userVerifyingPlatformAuthenticator: true,
+        passkeyPlatformAuthenticator: true,
+      });
+  }
+
   const pending = new Map<string, { ack: () => void; settle: (reply: Reply) => void }>();
   win.addEventListener("message", (event: MessageEvent) => {
     if (event.source !== win) return;

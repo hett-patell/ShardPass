@@ -210,6 +210,34 @@ describe("passkey page script", () => {
     });
   });
 
+  it("tells the site a platform authenticator and conditional mediation are available", async () => {
+    const original = (window as { PublicKeyCredential?: unknown }).PublicKeyCredential;
+    class FakePublicKeyCredential {
+      static isUserVerifyingPlatformAuthenticatorAvailable = () => Promise.resolve(false);
+      static isConditionalMediationAvailable = () => Promise.resolve(false);
+      static getClientCapabilities = () => Promise.resolve({ hybridTransport: true });
+    }
+    Object.defineProperty(window, "PublicKeyCredential", {
+      configurable: true,
+      value: FakePublicKeyCredential,
+    });
+    try {
+      installWithFakeCredentials();
+      await expect(
+        FakePublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable(),
+      ).resolves.toBe(true);
+      await expect(FakePublicKeyCredential.isConditionalMediationAvailable()).resolves.toBe(true);
+      await expect(FakePublicKeyCredential.getClientCapabilities()).resolves.toEqual({
+        hybridTransport: true,
+        conditionalGet: true,
+        userVerifyingPlatformAuthenticator: true,
+        passkeyPlatformAuthenticator: true,
+      });
+    } finally {
+      Object.defineProperty(window, "PublicKeyCredential", { configurable: true, value: original });
+    }
+  });
+
   it("turns an error reply into a DOMException with the given name", async () => {
     installWithFakeCredentials();
     const relay = answerRequests(() => ({
