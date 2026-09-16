@@ -53,7 +53,8 @@ function assertManifestPolicy(candidate: Record<string, unknown>): void {
     default_title: "ShardPass",
   });
   expect(candidate.options_page).toBe("vault/index.html");
-  // Two commands: opening the popup, and locking the vault. Nothing else runs from a keystroke.
+  // Three shortcuts: opening the popup, locking the vault, and filling the focused login.
+  // Each runs a named, fixed action in the background; a keystroke never runs page code.
   expect(Object.keys(candidate.commands as object)).toEqual([
     "_execute_action",
     "lock-vault",

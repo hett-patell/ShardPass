@@ -32,7 +32,7 @@ const environmentFilenameText = /(?:^|["'`/\\])\.env(?:\.[A-Za-z\d_.-]+)?(?:$|["
 const allowedManifestKeys = new Set([
   "action",
   "background",
-  // The popup shortcut (_execute_action) only; no command runs extension code itself.
+  // Shortcut names only; the manifest test pins which commands exist and what each does.
   "commands",
   "content_scripts",
   "content_security_policy",
@@ -102,6 +102,31 @@ const legacyHashes = new Map([
   ["icons/icon-16.png", "7b2586fad0850426f6fbfd6ecb8a4c3c7f37140b0d7cd7576b90307117acb170"],
   ["icons/icon-32.png", "1167f7d8ca3516116a199daa7d91c5ccd4e611dda320e4643964df16d65908af"],
   ["icons/icon-48.png", "f904fad73e4c8bdd14dbf540fa65dd0a8ea560cdb99c39a0e09da047b83fb233"],
+]);
+
+/** Chunks whose network destinations are checked by host instead (see the loop below). */
+function approvedNetworkSinkFile(relative) {
+  return (
+    /^assets\/ente-auth-worker-entry(?:-[\w-]+)?\.js$/u.test(relative) ||
+    /^assets\/main\.ts-[\w-]+\.js$/u.test(relative)
+  );
+}
+
+/** The hosts of every absolute http(s)/ws(s) URL in a bundle. */
+function networkHosts(source) {
+  const hosts = new Set();
+  for (const match of source.matchAll(/(?:https?|wss?):\/\/([A-Za-z\d._-]+)/giu)) {
+    const host = match[1]?.toLowerCase();
+    if (host !== undefined && host !== "") hosts.add(host);
+  }
+  return hosts;
+}
+
+/** Where a shipped bundle may talk to: the hosts the extension pages' CSP connect-src names. */
+const allowedConnectHosts = new Set([
+  "api.ente.io",
+  "api.pwnedpasswords.com",
+  "quack.duckduckgo.com",
 ]);
 
 function localJavaScriptDependencies(source, importer) {
@@ -480,7 +505,9 @@ export async function scanBuild(directory, options = {}) {
 
     // Two entries are expected: the isolated-world content script and the passkey page
     // script, which runs in the page's main world and is held to an exact shape below.
-    const allContentScripts = Array.isArray(manifest.content_scripts) ? manifest.content_scripts : [];
+    const allContentScripts = Array.isArray(manifest.content_scripts)
+      ? manifest.content_scripts
+      : [];
     const isPasskeyPageEntry = (entry) =>
       entry !== null &&
       typeof entry === "object" &&
@@ -496,7 +523,10 @@ export async function scanBuild(directory, options = {}) {
       entry.all_frames === true &&
       entry.world === "MAIN";
     const passkeyEntries = allContentScripts.filter(isPasskeyPageEntry);
-    if (passkeyEntries.length > 1 || allContentScripts.some((entry) => entry?.world !== undefined && !isPasskeyPageEntry(entry)))
+    if (
+      passkeyEntries.length > 1 ||
+      allContentScripts.some((entry) => entry?.world !== undefined && !isPasskeyPageEntry(entry))
+    )
       add(violations, dist, manifestFile, "generated-content-contract");
     const contentScripts = allContentScripts.filter((entry) => !isPasskeyPageEntry(entry));
     const contentEntry =
@@ -584,11 +614,20 @@ export async function scanBuild(directory, options = {}) {
     }
     addExecutable(manifest.action?.default_popup, "html");
     addExecutable(manifest.options_page, "html");
+    // The background and the Ente worker build their request URLs at run time, so the
+    // policy rule cannot read a destination out of them. Every absolute URL they do carry is
+    // checked against the hosts the CSP allows instead, so a new destination is reported.
+    for (const file of await filesRecursively(dist)) {
+      const relative = path.relative(dist, file).split(path.sep).join("/");
+      if (!approvedNetworkSinkFile(relative)) continue;
+      const source = await readFile(file, "utf8");
+      for (const host of networkHosts(source))
+        if (!allowedConnectHosts.has(host))
+          add(violations, dist, file, `network-destination-host:${host}`);
+    }
     for (const violation of await findExecutablePolicyViolations(dist, executableReferences)) {
       const approvedNetworkSink =
-        violation.rule === "network-destination" &&
-        (/^assets\/ente-auth-worker-entry(?:-[\w-]+)?\.js$/u.test(violation.file) ||
-          /^assets\/main\.ts-[\w-]+\.js$/u.test(violation.file));
+        violation.rule === "network-destination" && approvedNetworkSinkFile(violation.file);
       if (
         approvedNetworkSink ||
         (approvedSodiumContainingFile &&
@@ -602,7 +641,15 @@ export async function scanBuild(directory, options = {}) {
     const sourceContract = {
       manifest_version: 3,
       minimum_chrome_version: "111",
-      permissions: ["storage", "unlimitedStorage", "alarms", "idle", "activeTab", "contextMenus", "favicon"],
+      permissions: [
+        "storage",
+        "unlimitedStorage",
+        "alarms",
+        "idle",
+        "activeTab",
+        "contextMenus",
+        "favicon",
+      ],
       host_permissions: ["https://api.ente.io/*", "https://quack.duckduckgo.com/*"],
       content_security_policy: {
         extension_pages:

@@ -31,7 +31,7 @@ const safeManifest = JSON.stringify({
   manifest_version: 3,
   name: "ShardPass",
   short_name: "ShardPass",
-  version: "2.4.2",
+  version: "2.4.3",
   minimum_chrome_version: "111",
   description: "Local-first password manager foundation.",
   permissions: [
@@ -295,6 +295,29 @@ describe("production build output scanner", () => {
       file: "extensionless-script",
       rule: "function-reference",
     });
+  });
+
+  it("reports a network destination in the background chunk that the CSP does not allow", async () => {
+    const { dist, project } = await temporaryProject({
+      ...safeArtifact,
+      "dist/assets/main.ts-CEK8Ya7J.js":
+        'export const sync = () => fetch(`https://api.ente.io/x`); export const leak = () => fetch("https://telemetry.example.com/collect");',
+    });
+
+    await expect(scanBuild(dist, { projectRoot: project })).resolves.toContainEqual({
+      file: "assets/main.ts-CEK8Ya7J.js",
+      rule: "network-destination-host:telemetry.example.com",
+    });
+  });
+
+  it("accepts the background chunk when every absolute URL is one the CSP allows", async () => {
+    const { dist, project } = await temporaryProject({
+      ...safeArtifact,
+      "dist/assets/main.ts-CEK8Ya7J.js":
+        'export const hosts = ["https://api.ente.io", "https://api.pwnedpasswords.com/range/", "https://quack.duckduckgo.com/api/email/addresses"];',
+    });
+
+    await expect(scanBuild(dist, { projectRoot: project })).resolves.toEqual([]);
   });
 
   it("accepts local extensionless packaged worker and script references when files exist", async () => {
