@@ -162,7 +162,7 @@ export function useVaultState(
     () =>
       allItems
         .filter((item) => {
-          if (category !== "all" && item.kind !== category) return false;
+          if (!matchesCategory(item, category)) return false;
           if (folderId !== null && (item.folderId === undefined || !folderScope.has(item.folderId)))
             return false;
           return matchesQuery(item, query);
@@ -225,6 +225,19 @@ export function useVaultState(
 /** Item counts per category (plus "all"), used to annotate the sidebar's CategoryNav. */
 export function countByKind(items: readonly VaultItem[]): Partial<Record<CategoryKey, number>> {
   const counts: Partial<Record<CategoryKey, number>> = { all: items.length };
+  for (const item of items) {
+    if (item.kind !== "secret") continue;
+    if (item.secretType === "api_key") counts.api_key = (counts.api_key ?? 0) + 1;
+    if (item.secretType === "ssh_key") counts.ssh_key = (counts.ssh_key ?? 0) + 1;
+  }
   for (const item of items) counts[item.kind] = (counts[item.kind] ?? 0) + 1;
   return counts;
+}
+
+/** "all" takes everything; a kind takes its items; a secret type takes that slice of secrets. */
+export function matchesCategory(item: VaultItem, category: CategoryKey): boolean {
+  if (category === "all") return true;
+  if (category === "api_key" || category === "ssh_key")
+    return item.kind === "secret" && item.secretType === category;
+  return item.kind === category;
 }

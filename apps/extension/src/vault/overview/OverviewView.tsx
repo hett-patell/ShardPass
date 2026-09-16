@@ -140,6 +140,7 @@ export function OverviewView({
     { label: "Reused passwords", count: reusedCount },
     { label: "Unencrypted sites", count: report.unsecured.length },
     { label: "No second factor", count: report.withoutTwoFactor.length },
+    { label: "Passkeys available", count: report.passkeyReady.length },
   ];
   const findings = attention.filter((entry) => entry.count > 0);
 

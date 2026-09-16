@@ -4,10 +4,171 @@
   gap: var(--space-4);
 }
 
-.header {
+.header,
+.heroText {
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
+}
+
+/* Title and copy on the left, the gauge on the right, like a scoreboard. */
+.hero {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.heroText {
+  flex: 1 1 22rem;
+  max-width: 60ch;
+}
+
+.strengthCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-secondary);
+}
+
+.strengthBar {
+  display: flex;
+  gap: 3px;
+  height: 14px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--bg-tertiary);
+}
+
+.strengthSegment {
+  display: block;
+  min-width: 6px;
+  border-radius: 999px;
+  transition: flex-grow 400ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.strengthSegment[data-level="3"] {
+  background: var(--success, #16a34a);
+}
+
+.strengthSegment[data-level="2"] {
+  background: #84cc16;
+}
+
+.strengthSegment[data-level="1"] {
+  background: var(--warning, #d97706);
+}
+
+.strengthSegment[data-level="0"] {
+  background: var(--danger, #dc2626);
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+}
+
+.legend > span::before {
+  content: "";
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: var(--bg-tertiary);
+  vertical-align: middle;
+}
+
+.legend > span[data-level="3"]::before {
+  background: var(--success, #16a34a);
+}
+
+.legend > span[data-level="2"]::before {
+  background: #84cc16;
+}
+
+.legend > span[data-level="1"]::before {
+  background: var(--warning, #d97706);
+}
+
+.legend > span[data-level="0"]::before {
+  background: var(--danger, #dc2626);
+}
+
+/* A finding card: a tint at the top that says how much it matters, the number first. */
+.statCard {
+  --tone: var(--text-tertiary);
+
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  overflow: hidden;
+  padding: var(--space-4) var(--space-4) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background:
+    linear-gradient(180deg, color-mix(in oklab, var(--tone) 14%, transparent), transparent 55%),
+    var(--bg-secondary);
+}
+
+.statCard[data-tone="danger"] {
+  --tone: var(--danger, #dc2626);
+}
+
+.statCard[data-tone="warning"] {
+  --tone: var(--warning, #d97706);
+}
+
+.statCard[data-tone="accent"] {
+  --tone: var(--accent);
+}
+
+.statHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.bigNumber {
+  font-size: 2.5rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+
+.cardIcon {
+  color: var(--tone);
+  opacity: 0.35;
+}
+
+.showItems {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  align-self: flex-start;
+  margin-top: auto;
+  padding: var(--space-1) 0;
+  color: var(--accent);
+  background: transparent;
+  border: 0;
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.showItems:hover {
+  text-decoration: underline;
 }
 
 .heading {
@@ -25,9 +186,9 @@
 
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 19rem), 1fr));
   gap: var(--space-4);
-  align-items: start;
+  align-items: stretch;
 }
 
 .card {

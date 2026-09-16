@@ -48,6 +48,9 @@ function ItemRowView({
   const [broken, setBroken] = useState(false);
   useEffect(() => setBroken(false), [iconUrl]);
   const showImage = iconUrl !== undefined && !broken;
+  // A login the browser has no icon for gets its initials in a colour of its own instead.
+  const initials = kind === "login" && !showImage ? initialsOf(name) : null;
+  const hue = initials === null ? 0 : hueOf(name);
   const classes = [styles.row, active ? styles.active : undefined].filter(Boolean).join(" ");
 
   const row = (
@@ -60,6 +63,10 @@ function ItemRowView({
       <span className={styles.icon} aria-hidden="true">
         {icon !== undefined ? (
           icon
+        ) : initials !== null ? (
+          <span className={styles.initialsTile} style={{ ["--tile-hue" as string]: hue }}>
+            {initials}
+          </span>
         ) : showImage ? (
           <img
             className={styles.favicon}
@@ -95,3 +102,21 @@ function ItemRowView({
 
 /** Memoised: a list of a thousand rows must not redraw every row on each keystroke. */
 export const ItemRow = memo(ItemRowView);
+
+/** A hue from the name, so the same login always gets the same colour. */
+function hueOf(name: string): number {
+  let hash = 0;
+  for (const char of name) hash = (hash * 31 + (char.codePointAt(0) ?? 0)) >>> 0;
+  return hash % 360;
+}
+
+/** The first letters of the first two words ("Google Workspace" → "GW"). */
+function initialsOf(name: string): string {
+  const words = name
+    .trim()
+    .split(/\s+/u)
+    .filter((word) => word !== "");
+  const first = words[0]?.charAt(0) ?? "";
+  const second = words[1]?.charAt(0) ?? words[0]?.charAt(1) ?? "";
+  return (first + second).toUpperCase() || "?";
+}

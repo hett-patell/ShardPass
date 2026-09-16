@@ -1,7 +1,16 @@
 import type { LoginItem, VaultItem } from "@shardpass/domain";
 import { parseSecurityResponseForRequest } from "@shardpass/messaging";
 import { Button, HealthGauge } from "@shardpass/ui";
-import { useEffect, useMemo, useState } from "react";
+import {
+  ArrowRight,
+  Copy,
+  Fingerprint,
+  KeyRound,
+  LockOpen,
+  ShieldAlert,
+  ShieldCheck,
+} from "lucide-react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 
 import type { ExtensionPlatform } from "../../platform/extension-platform";
 import {
@@ -163,152 +172,243 @@ export function HealthView({
     </li>
   );
 
+  const score = computeHealthScore({
+    logins: report.logins.length,
+    weak: weak.length,
+    reused: report.reused.reduce((sum, group) => sum + group.logins.length, 0),
+    breached: found.length,
+    unsecured: report.unsecured.length,
+    withoutTwoFactor: report.withoutTwoFactor.length,
+  });
+  // How the judged passwords spread across the four strength levels, for the bar.
+  const spread = [0, 0, 0, 0];
+  for (const login of report.logins) {
+    const level = weakness.get(login.password);
+    if (level !== undefined) {
+      const slot = Math.max(0, Math.min(3, level));
+      spread[slot] = (spread[slot] ?? 0) + 1;
+    }
+  }
+  const reusedLogins = report.reused.flatMap((group) => group.logins);
+
   return (
     <section className={styles.view} aria-labelledby="health-heading">
-      <header className={styles.header}>
-        <h3 id="health-heading" className={styles.heading}>
-          Vault health
-        </h3>
-        <p className={styles.copy}>
-          {report.logins.length} {report.logins.length === 1 ? "login" : "logins"} with a password.
-          {report.skipped > 0
-            ? ` ${report.skipped} ${report.skipped === 1 ? "asks" : "ask"} for the master password first and ${report.skipped === 1 ? "was" : "were"} left out.`
-            : ""}
-        </p>
-        <HealthGauge
-          score={
-            computeHealthScore({
-              logins: report.logins.length,
-              weak: weak.length,
-              reused: report.reused.reduce((sum, group) => sum + group.logins.length, 0),
-              breached: found.length,
-              unsecured: report.unsecured.length,
-              withoutTwoFactor: report.withoutTwoFactor.length,
-            }).score
-          }
-          caption={
-            computeHealthScore({
-              logins: report.logins.length,
-              weak: weak.length,
-              reused: report.reused.reduce((sum, group) => sum + group.logins.length, 0),
-              breached: found.length,
-              unsecured: report.unsecured.length,
-              withoutTwoFactor: report.withoutTwoFactor.length,
-            }).caption
-          }
-        />
+      <header className={styles.hero}>
+        <div className={styles.heroText}>
+          <h3 id="health-heading" className={styles.heading}>
+            Vault health
+          </h3>
+          <p className={styles.copy}>
+            One score for how safe your logins are, from what the vault can see on its own and what
+            you let it check. Fix the flagged items to raise it.
+          </p>
+          <p className={styles.quiet}>
+            {report.logins.length} {report.logins.length === 1 ? "login" : "logins"} with a
+            password.
+            {report.skipped > 0
+              ? ` ${report.skipped} ${report.skipped === 1 ? "asks" : "ask"} for the master password first and ${report.skipped === 1 ? "was" : "were"} left out.`
+              : ""}
+          </p>
+        </div>
+        <HealthGauge score={score.score} caption={score.caption} size="lg" />
       </header>
 
-      <div className={styles.grid}>
-        <section className={styles.card} aria-labelledby="health-weak">
-          <h4 id="health-weak" className={styles.cardTitle}>
-            Weak passwords <span className={styles.count}>{weak.length}</span>
-          </h4>
-          {judged < report.logins.length ? (
-            <p className={styles.quiet} role="status">
-              Checking… {judged} of {report.logins.length}
-            </p>
-          ) : null}
-          {weak.length === 0 && judged === report.logins.length ? (
-            <p className={styles.quiet}>None found.</p>
-          ) : null}
-          <ul className={styles.list}>{weak.map((login) => row(login))}</ul>
-        </section>
-
-        <section className={styles.card} aria-labelledby="health-reused">
-          <h4 id="health-reused" className={styles.cardTitle}>
-            Reused passwords <span className={styles.count}>{report.reused.length}</span>
-          </h4>
-          {report.reused.length === 0 ? (
-            <p className={styles.quiet}>Every password is used once.</p>
-          ) : null}
-          {report.reused.map((group, index) => (
-            <ul
-              key={index}
-              className={styles.list}
-              aria-label={`Shared by ${group.logins.length} logins`}
-            >
-              {group.logins.map((login) => row(login, `shared by ${group.logins.length}`))}
-            </ul>
-          ))}
-        </section>
-
-        <section className={styles.card} aria-labelledby="health-breached">
-          <h4 id="health-breached" className={styles.cardTitle}>
-            Breached passwords
-            {checkedCount > 0 ? <span className={styles.count}>{found.length}</span> : null}
-          </h4>
-          {breach.state === "running" ? (
-            <p className={styles.quiet} role="status">
-              Checking… {breach.done} of {breach.total}
-            </p>
-          ) : breach.state === "disabled" ? (
-            <p className={styles.quiet}>Turn on breach checks in Settings first.</p>
-          ) : breach.state === "failed" ? (
-            <p className={styles.quiet}>The check could not finish. Try again later.</p>
-          ) : checkedCount === 0 ? (
-            <p className={styles.quiet}>
-              Checks each password against Have I Been Pwned, one hash prefix at a time. A password
-              is checked once and remembered until it changes.
-            </p>
-          ) : (
-            <p className={styles.quiet} role="status">
-              {checkedCount} of {report.logins.length} checked
-              {unchecked.length > 0 ? `, ${unchecked.length} not yet` : ""}.
-              {found.length === 0 ? " None appear in known breaches." : ""}
-            </p>
-          )}
-          {found.length > 0 ? (
-            <ul className={styles.list}>
-              {found.map(({ login, count }) =>
-                row(login, `seen ${count.toLocaleString("en-US")} times`),
-              )}
-            </ul>
-          ) : null}
-          <div className={styles.actions}>
-            {unchecked.length > 0 || checkedCount === 0 ? (
-              <Button
-                variant="secondary"
-                onClick={() => void runBreachCheck("unchecked")}
-                loading={breach.state === "running"}
-                disabled={!verdictsLoaded}
-              >
-                {checkedCount === 0 ? "Check now" : `Check ${unchecked.length} unchecked`}
-              </Button>
-            ) : null}
-            {checkedCount > 0 ? (
-              <Button
-                variant="ghost"
-                onClick={() => void runBreachCheck("all")}
-                disabled={breach.state === "running"}
-              >
-                Check all again
-              </Button>
-            ) : null}
-          </div>
-        </section>
-
-        <section className={styles.card} aria-labelledby="health-unsecured">
-          <h4 id="health-unsecured" className={styles.cardTitle}>
-            Unencrypted sites <span className={styles.count}>{report.unsecured.length}</span>
-          </h4>
-          {report.unsecured.length === 0 ? (
-            <p className={styles.quiet}>Every saved site uses https.</p>
-          ) : null}
-          <ul className={styles.list}>{report.unsecured.map((login) => row(login, "http://"))}</ul>
-        </section>
-
-        <section className={styles.card} aria-labelledby="health-2fa">
-          <h4 id="health-2fa" className={styles.cardTitle}>
-            No second factor here{" "}
-            <span className={styles.count}>{report.withoutTwoFactor.length}</span>
-          </h4>
-          <p className={styles.quiet}>
-            Logins with no one-time code stored or linked. The site may still offer one.
+      <section className={styles.strengthCard} aria-labelledby="health-strength">
+        <h4 id="health-strength" className={styles.cardTitle}>
+          Overall password strength
+        </h4>
+        {judged === 0 ? (
+          <p className={styles.quiet} role="status">
+            {report.logins.length === 0 ? "No passwords to judge." : "Judging…"}
           </p>
-          <ul className={styles.list}>{report.withoutTwoFactor.map((login) => row(login))}</ul>
-        </section>
+        ) : (
+          <>
+            <div
+              className={styles.strengthBar}
+              role="img"
+              aria-label={`${spread[3]} strong, ${spread[2]} fair, ${spread[1]} weak, ${spread[0]} very weak`}
+            >
+              {([3, 2, 1, 0] as const).map((level) =>
+                (spread[level] ?? 0) > 0 ? (
+                  <span
+                    key={level}
+                    className={styles.strengthSegment}
+                    data-level={level}
+                    style={{ flexGrow: spread[level] ?? 0 }}
+                  />
+                ) : null,
+              )}
+            </div>
+            <p className={styles.legend}>
+              <span data-level="3">{spread[3]} strong</span>
+              <span data-level="2">{spread[2]} fair</span>
+              <span data-level="1">{spread[1]} weak</span>
+              <span data-level="0">{spread[0]} very weak</span>
+              {judged < report.logins.length ? (
+                <span role="status">
+                  Judging… {judged} of {report.logins.length}
+                </span>
+              ) : null}
+            </p>
+          </>
+        )}
+      </section>
+
+      <div className={styles.grid}>
+        <StatCard
+          id="health-breached"
+          tone="danger"
+          icon={<ShieldAlert size={40} />}
+          count={checkedCount > 0 ? found.length : null}
+          title="Breached passwords"
+          description={
+            breach.state === "disabled"
+              ? "Turn on breach checks in Settings first."
+              : breach.state === "failed"
+                ? "The check could not finish. Try again later."
+                : breach.state === "running"
+                  ? `Checking… ${breach.done} of ${breach.total}`
+                  : checkedCount === 0
+                    ? "Each password is checked against Have I Been Pwned by hash prefix, once, and remembered until it changes."
+                    : `${checkedCount} of ${report.logins.length} checked${unchecked.length > 0 ? `, ${unchecked.length} not yet` : ""}.${found.length === 0 ? " None appear in known breaches." : " Change these passwords."}`
+          }
+          rows={found.map(({ login, count }) =>
+            row(login, `seen ${count.toLocaleString("en-US")} times`),
+          )}
+          actions={
+            <>
+              {unchecked.length > 0 || checkedCount === 0 ? (
+                <Button
+                  variant="secondary"
+                  onClick={() => void runBreachCheck("unchecked")}
+                  loading={breach.state === "running"}
+                  disabled={!verdictsLoaded}
+                >
+                  {checkedCount === 0 ? "Check now" : `Check ${unchecked.length} unchecked`}
+                </Button>
+              ) : null}
+              {checkedCount > 0 ? (
+                <Button
+                  variant="ghost"
+                  onClick={() => void runBreachCheck("all")}
+                  disabled={breach.state === "running"}
+                >
+                  Check all again
+                </Button>
+              ) : null}
+            </>
+          }
+        />
+        <StatCard
+          id="health-weak"
+          tone="warning"
+          icon={<KeyRound size={40} />}
+          count={weak.length}
+          title="Weak passwords"
+          description={
+            judged < report.logins.length
+              ? `Judging… ${judged} of ${report.logins.length}`
+              : weak.length === 0
+                ? "Every password would take a long time to guess."
+                : "Short or guessable. Replace them with generated passwords."
+          }
+          rows={weak.map((login) => row(login))}
+        />
+        <StatCard
+          id="health-reused"
+          tone="warning"
+          icon={<Copy size={40} />}
+          count={reusedLogins.length}
+          title="Reused passwords"
+          description={
+            reusedLogins.length === 0
+              ? "Every password is used once."
+              : `${report.reused.length} ${report.reused.length === 1 ? "password is" : "passwords are"} shared between sites. One leak opens them all.`
+          }
+          rows={report.reused.flatMap((group) =>
+            group.logins.map((login) => row(login, `shared by ${group.logins.length}`)),
+          )}
+        />
+        <StatCard
+          id="health-passkeys"
+          tone="accent"
+          icon={<Fingerprint size={40} />}
+          count={report.passkeyReady.length}
+          title="Passkeys available"
+          description={
+            report.passkeyReady.length === 0
+              ? "No saved site on the list of known passkey sites is still without one."
+              : "These sites accept passkeys, a stronger sign-in than a password. Add one from the site's security settings."
+          }
+          rows={report.passkeyReady.map((login) => row(login))}
+        />
+        <StatCard
+          id="health-unsecured"
+          tone="neutral"
+          icon={<LockOpen size={40} />}
+          count={report.unsecured.length}
+          title="Unencrypted sites"
+          description={
+            report.unsecured.length === 0
+              ? "Every saved site uses https."
+              : "Saved as plain http://. The password travels unencrypted when you sign in there."
+          }
+          rows={report.unsecured.map((login) => row(login, "http://"))}
+        />
+        <StatCard
+          id="health-2fa"
+          tone="neutral"
+          icon={<ShieldCheck size={40} />}
+          count={report.withoutTwoFactor.length}
+          title="No second factor here"
+          description="Logins with no one-time code stored or linked. The site may still offer one."
+          rows={report.withoutTwoFactor.map((login) => row(login))}
+        />
       </div>
+    </section>
+  );
+}
+
+const PREVIEW_ROWS = 5;
+
+type StatCardProps = Readonly<{
+  id: string;
+  tone: "danger" | "warning" | "accent" | "neutral";
+  icon: ReactNode;
+  /** null while the number is not known yet. */
+  count: number | null;
+  title: string;
+  description: string;
+  rows: readonly ReactNode[];
+  actions?: ReactNode;
+}>;
+
+/** One finding: the number first, what it means, a few rows, and the rest on request. */
+function StatCard({ id, tone, icon, count, title, description, rows, actions }: StatCardProps) {
+  const [open, setOpen] = useState(false);
+  const shown = open ? rows : rows.slice(0, PREVIEW_ROWS);
+  return (
+    <section className={styles.statCard} data-tone={tone} aria-labelledby={id}>
+      <div className={styles.statHead}>
+        <span className={styles.bigNumber}>
+          {count === null ? "–" : count.toLocaleString("en-US")}
+        </span>
+        <span className={styles.cardIcon} aria-hidden="true">
+          {icon}
+        </span>
+      </div>
+      <h4 id={id} className={styles.cardTitle}>
+        {title}
+      </h4>
+      <p className={styles.quiet}>{description}</p>
+      {shown.length > 0 ? <ul className={styles.list}>{shown}</ul> : null}
+      {actions !== undefined ? <div className={styles.actions}>{actions}</div> : null}
+      {rows.length > PREVIEW_ROWS ? (
+        <button type="button" className={styles.showItems} onClick={() => setOpen(!open)}>
+          {open ? "Show fewer" : `Show all ${rows.length} items`}
+          <ArrowRight size={14} aria-hidden="true" />
+        </button>
+      ) : null}
     </section>
   );
 }

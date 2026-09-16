@@ -1,5 +1,7 @@
 import type { LoginItem, VaultItem } from "@shardpass/domain";
 
+import { acceptsPasskeys } from "./passkey-sites";
+
 export type ReusedGroup = Readonly<{ logins: readonly LoginItem[] }>;
 
 export interface HealthReport {
@@ -11,6 +13,8 @@ export interface HealthReport {
   readonly unsecured: readonly LoginItem[];
   /** Password logins with no one-time code of their own or linked to them. */
   readonly withoutTwoFactor: readonly LoginItem[];
+  /** Logins for sites known to accept passkeys that have none saved yet. */
+  readonly passkeyReady: readonly LoginItem[];
   /** Logins left out because their secrets are withheld until the master password is given again. */
   readonly skipped: number;
 }
@@ -55,5 +59,8 @@ export function computeHealth(
       (login.totp ?? "").trim() === "" &&
       login.linkedOtpId === undefined,
   );
-  return { logins, reused, unsecured, withoutTwoFactor, skipped };
+  const passkeyReady = logins.filter(
+    (login) => (login.passkeys ?? []).length === 0 && acceptsPasskeys(login.urls),
+  );
+  return { logins, reused, unsecured, withoutTwoFactor, passkeyReady, skipped };
 }

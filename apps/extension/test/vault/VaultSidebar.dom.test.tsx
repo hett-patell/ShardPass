@@ -46,6 +46,7 @@ function renderSidebar(overrides: Partial<VaultSidebarProps> = {}) {
     onOpenGenerator: vi.fn(),
     onOpenAliases: vi.fn(),
     onOpenOverview: vi.fn(),
+    onOpenAbout: vi.fn(),
     ...overrides,
   };
   return { ...render(<VaultSidebar {...props} />), props };

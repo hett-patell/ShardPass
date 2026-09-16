@@ -41,13 +41,68 @@
   background: var(--accent-subtle);
 }
 
+/* A coloured tile per category, white glyph on it: the colour names the kind at a glance. */
 .icon {
   display: flex;
   flex-shrink: 0;
   align-items: center;
   justify-content: center;
-  width: 18px;
-  height: 18px;
+  width: 22px;
+  height: 22px;
+  color: #ffffff;
+  background: var(--category-tint, var(--text-tertiary));
+  border-radius: 6px;
+}
+
+.icon[data-key="all"] {
+  --category-tint: #3b82f6;
+}
+
+.icon[data-key="login"] {
+  --category-tint: #0ea5e9;
+}
+
+.icon[data-key="otp"] {
+  --category-tint: #8b5cf6;
+}
+
+.icon[data-key="note"] {
+  --category-tint: #eab308;
+}
+
+.icon[data-key="card"] {
+  --category-tint: #2563eb;
+}
+
+.icon[data-key="identity"] {
+  --category-tint: #22c55e;
+}
+
+.icon[data-key="secret"] {
+  --category-tint: #64748b;
+}
+
+.icon[data-key="api_key"] {
+  --category-tint: #10b981;
+}
+
+.icon[data-key="ssh_key"] {
+  --category-tint: #f59e0b;
+}
+
+.afterDivider {
+  position: relative;
+  margin-top: 10px;
+}
+
+.afterDivider::before {
+  content: "";
+  position: absolute;
+  top: -6px;
+  right: 10px;
+  left: 10px;
+  height: 1px;
+  background: var(--border);
 }
 
 .label {

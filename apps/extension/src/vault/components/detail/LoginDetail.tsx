@@ -7,6 +7,7 @@ import { DeleteItemDialog } from "../DeleteItemDialog";
 import { LoginForm, MATCH_MODE_LABELS } from "../forms/LoginForm";
 import { updateItem } from "../forms/submit-item";
 import { CopyButton } from "./CopyButton";
+import { SiteTile } from "../SiteTile";
 import { BreachCheckRow } from "./BreachCheckRow";
 import styles from "./Detail.module.css";
 import { useFocusAfterEdit } from "./useFocusAfterEdit";
@@ -29,6 +30,14 @@ function normalizeUrl(url: string): string {
 }
 
 type Passkey = NonNullable<LoginItem["passkeys"]>[number];
+
+function hostOf(url: string): string {
+  try {
+    return new URL(/^[a-z][a-z0-9+.-]*:\/\//iu.test(url) ? url : `https://${url}`).hostname;
+  } catch {
+    return url;
+  }
+}
 
 function formatChangedAt(iso: string): string {
   const date = new Date(iso);
@@ -104,10 +113,16 @@ export function LoginDetail({
 
   return (
     <div className={styles.detail}>
-      <header className={styles.header}>
-        <h2 ref={titleRef} tabIndex={-1} className={styles.title}>
-          {item.name}
-        </h2>
+      <header className={`${styles.header} ${styles.headerWithLogo}`}>
+        <SiteTile name={item.name} url={item.urls[0]} size={48} />
+        <div className={styles.headerText}>
+          <h2 ref={titleRef} tabIndex={-1} className={styles.title}>
+            {item.name}
+          </h2>
+          {item.urls[0] !== undefined ? (
+            <span className={styles.headerSub}>{hostOf(item.urls[0])}</span>
+          ) : null}
+        </div>
       </header>
 
       {item.tags.length > 0 ? (

@@ -23,8 +23,27 @@ describe("ItemRow", () => {
 
     expect(screen.getByRole("button", { name: /Acme Corp/ })).toBeVisible();
     expect(screen.getByText("jane@example.com")).toBeVisible();
-    expect(container.querySelector("svg")).toHaveAttribute("aria-hidden", "true");
+    // A login the browser has no icon for shows its initials, out of the accessible name.
+    expect(screen.getByText("AC")).toBeVisible();
+    expect(screen.getByRole("button", { name: /Acme Corp/ })).not.toHaveAccessibleName(/AC /);
     await expectNoAxeViolations(container);
+
+    const { container: note } = render(<ItemRow kind="note" name="Memo" />);
+    expect(note.querySelector("svg")).toHaveAttribute("aria-hidden", "true");
+  });
+
+  it("shows the site icon for a login when one is given, and the initials when it fails", () => {
+    const { container } = render(
+      <ItemRow
+        kind="login"
+        name="Example Site"
+        iconUrl="chrome-extension://x/_favicon/?pageUrl=a"
+      />,
+    );
+    const image = container.querySelector("img");
+    expect(image).toHaveAttribute("src", "chrome-extension://x/_favicon/?pageUrl=a");
+    fireEvent.error(image!);
+    expect(screen.getByText("ES")).toBeVisible();
   });
 
   it("renders without a subtitle when none is given", () => {

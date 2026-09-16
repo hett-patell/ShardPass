@@ -7,6 +7,7 @@ import {
   Folder as FolderIcon,
   FolderPlus,
   HeartPulse,
+  Info,
   KeyRound,
   LayoutDashboard,
   Mail,
@@ -22,7 +23,7 @@ import { FolderDeleteDialog } from "./FolderDeleteDialog";
 import styles from "./VaultSidebar.module.css";
 
 export type VaultSidebarView =
-  "vault" | "overview" | "settings" | "ente" | "health" | "generator" | "aliases";
+  "vault" | "overview" | "settings" | "ente" | "health" | "generator" | "aliases" | "about";
 export type GeneratorTool = "random" | "username";
 
 export interface VaultSidebarProps {
@@ -53,6 +54,7 @@ export interface VaultSidebarProps {
   onOpenGenerator: (tool: GeneratorTool) => void;
   onOpenAliases: () => void;
   onOpenOverview: () => void;
+  onOpenAbout: () => void;
   /** Which generator tab is open, so the matching tool row reads as current. */
   generatorTool?: GeneratorTool | undefined;
 }
@@ -87,6 +89,7 @@ export function VaultSidebar({
   onOpenGenerator,
   onOpenAliases,
   onOpenOverview,
+  onOpenAbout,
   generatorTool = "random",
 }: VaultSidebarProps) {
   const [edit, setEdit] = useState<FolderEdit | null>(null);
@@ -362,6 +365,15 @@ export function VaultSidebar({
         >
           <Settings size={16} aria-hidden="true" />
           <span>Settings</span>
+        </button>
+        <button
+          type="button"
+          className={`${styles.footerButton} ${view === "about" ? styles.footerButtonActive : ""}`}
+          aria-current={view === "about" ? "true" : undefined}
+          onClick={onOpenAbout}
+        >
+          <Info size={16} aria-hidden="true" />
+          <span>About</span>
         </button>
       </div>
 

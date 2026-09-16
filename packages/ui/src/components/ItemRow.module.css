@@ -39,6 +39,25 @@
   border-radius: var(--radius-sm);
 }
 
+.initialsTile {
+  color: oklch(0.9 0.06 var(--tile-hue));
+  background: oklch(0.32 0.07 var(--tile-hue));
+  display: inline-flex;
+  width: 100%;
+  height: 100%;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+:global(:root[data-theme="light"]) .initialsTile {
+  color: oklch(0.32 0.08 var(--tile-hue));
+  background: oklch(0.9 0.06 var(--tile-hue));
+}
+
 .favicon {
   width: 16px;
   height: 16px;

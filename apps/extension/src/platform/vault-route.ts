@@ -9,6 +9,7 @@ export type VaultPageTarget =
   | {
       view:
         | "overview"
+        | "about"
         | "settings"
         | "ente"
         | "import"
@@ -47,6 +48,8 @@ export function parseVaultPageHash(hash: string): VaultPageTarget | null {
       return { view: "health" };
     case "/overview":
       return { view: "overview" };
+    case "/about":
+      return { view: "about" };
     case "/tools/generator":
       return { view: "generator" };
     case "/tools/usernames":

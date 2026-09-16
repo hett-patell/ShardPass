@@ -34,6 +34,7 @@ import { ItemDetailPanel } from "./components/ItemDetailPanel";
 import { ItemListPanel } from "./components/ItemListPanel";
 import { NewItemMenu } from "./components/NewItemMenu";
 import { VaultSidebar, type GeneratorTool, type VaultSidebarView } from "./components/VaultSidebar";
+import { AboutView } from "./about/AboutView";
 import { OverviewView } from "./overview/OverviewView";
 import { EmailAliasView } from "./tools/EmailAliasView";
 import { GeneratorView } from "./tools/GeneratorView";
@@ -318,6 +319,7 @@ export function VaultApp({ platform }: VaultAppProps) {
                 }}
                 onOpenAliases={() => setView("aliases")}
                 onOpenOverview={() => setView("overview")}
+                onOpenAbout={() => setView("about")}
                 generatorTool={generatorTool}
               />
             </div>
@@ -508,6 +510,11 @@ export function VaultApp({ platform }: VaultAppProps) {
             {view === "generator" ? (
               <div className={`${styles.settingsPanel} ${styles.settingsPanelSingle}`}>
                 <GeneratorView platform={platform} mode={generatorTool} />
+              </div>
+            ) : null}
+            {view === "about" ? (
+              <div className={`${styles.settingsPanel} ${styles.settingsPanelSingle}`}>
+                <AboutView />
               </div>
             ) : null}
             <div

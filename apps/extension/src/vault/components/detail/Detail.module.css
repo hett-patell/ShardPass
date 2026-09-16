@@ -325,3 +325,24 @@
   color: var(--text-tertiary);
   font-size: var(--text-xs);
 }
+
+.headerWithLogo {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.headerText {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.headerSub {
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
