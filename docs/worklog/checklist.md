@@ -69,7 +69,7 @@ Baseline at 2.3.0: typecheck clean, lint clean after one test fix, full suite gr
 - [x] F9 · release steps pinned only their ids, so a step could keep its name while its command was swapped; both are pinned now.
 - [x] F10 · the 14-scan secret-scanner test is split per case with honest timeouts, and resolves its config paths from the module rather than the working directory.
 - [x] F11 · two workspace tests wrapped their whole bodies in a Node 24 check and asserted nothing on the supported runtime; both now assert the behaviour they actually get.
-- [ ] Not fixed: `pnpm format:check` fails on 102 files that predate this work (prettier 3.9.6 against a tree formatted by an older version). Reformatting would rewrite evidence-pinned files, so it wants its own pass.
+- [x] Fixed in 2.6.0: the tree was reformatted and the assistant's scratch directories ignored, so `pnpm format:check` passes again.
 
 ### Batch D · content scripts, autofill, passkeys (verified by the audit)
 
@@ -201,7 +201,7 @@ Reported on HackerOne's sign-in: 1Password's island appears, ShardPass shows not
 
 ## Open after this run
 
-- [ ] Google passkeys: the page script leaves conditional mediation to the browser (needs a document_start entry)
+- [x] Google passkeys: answered in 2.4.0-2.5.4 (document_start page script, conditional mediation, platform-authenticator answers, internal-only transports)
 - [ ] Popup: no overview or alias UI yet
 - [ ] Other alias providers (SimpleLogin, addy.io, Firefox Relay)
 - [ ] Real export files for the importers (samples in docs/import-samples are synthetic)
