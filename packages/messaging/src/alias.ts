@@ -19,7 +19,19 @@ export const AliasRequestSchema = z.discriminatedUnion("kind", [
     token: z.string().check(z.minLength(1), z.maxLength(4096)),
   }),
   z.strictObject({ version, kind: z.literal("alias.clearDuckToken") }),
-  z.strictObject({ version, kind: z.literal("alias.generateDuck") }),
+  z.strictObject({
+    version,
+    kind: z.literal("alias.generateDuck"),
+    /** The site the address is for, remembered beside it. */
+    site: z.optional(z.string().check(z.maxLength(253))),
+  }),
+  /** Every address minted so far, newest first; kept sealed like the token. */
+  z.strictObject({ version, kind: z.literal("alias.listDuck") }),
+  z.strictObject({
+    version,
+    kind: z.literal("alias.forgetDuck"),
+    address: z.string().check(z.minLength(3), z.maxLength(320)),
+  }),
 ]);
 
 export const AliasStatusResponseSchema = z.strictObject({
@@ -36,9 +48,22 @@ export const AliasGeneratedResponseSchema = z.strictObject({
   address: z.string().check(z.minLength(3), z.maxLength(320)),
 });
 
+export const AliasDuckListResponseSchema = z.strictObject({
+  version,
+  kind: z.literal("alias.duckList"),
+  addresses: z.array(
+    z.strictObject({
+      address: z.string().check(z.minLength(3), z.maxLength(320)),
+      createdAt: z.int().check(z.nonnegative()),
+      site: z.optional(z.string().check(z.maxLength(253))),
+    }),
+  ),
+});
+
 export const AliasResponseSchema = z.discriminatedUnion("kind", [
   AliasStatusResponseSchema,
   AliasGeneratedResponseSchema,
+  AliasDuckListResponseSchema,
 ]);
 
 export type AliasRequest = z.infer<typeof AliasRequestSchema>;
@@ -53,6 +78,8 @@ export const aliasSenderPolicy = {
   "alias.setDuckToken": vaultOnly,
   "alias.clearDuckToken": vaultOnly,
   "alias.generateDuck": popupAndVault,
+  "alias.listDuck": popupAndVault,
+  "alias.forgetDuck": vaultOnly,
 } satisfies Record<AliasCommandKind, CommandSenderPolicy>;
 
 const responseKindByRequest = {
@@ -60,6 +87,8 @@ const responseKindByRequest = {
   "alias.setDuckToken": "alias.status",
   "alias.clearDuckToken": "alias.status",
   "alias.generateDuck": "alias.generated",
+  "alias.listDuck": "alias.duckList",
+  "alias.forgetDuck": "alias.duckList",
 } as const satisfies Record<AliasCommandKind, AliasResponse["kind"]>;
 
 export function parseAliasResponseForRequest(

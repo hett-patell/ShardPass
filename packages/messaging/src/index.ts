@@ -337,6 +337,7 @@ export {
 } from "./data-fill";
 export type { DataFillCommandKind, DataFillRequest, DataFillResponse } from "./data-fill";
 export {
+  AliasDuckListResponseSchema,
   AliasGeneratedResponseSchema,
   AliasRequestSchema,
   AliasResponseSchema,

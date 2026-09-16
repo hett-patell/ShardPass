@@ -84,3 +84,45 @@ describe("AliasService", () => {
     });
   });
 });
+
+describe("AliasService remembered addresses", () => {
+  it("keeps every minted address, with its site, sealed beside the token, and forgets one on request", async () => {
+    const local = new FakeStoragePort();
+    const state = { locked: false };
+    let minted = 0;
+    let now = 1_000;
+    const service = new AliasService({
+      local,
+      secrets: fakeSecrets(state),
+      requestDuckAddress: () => Promise.resolve(`addr${(minted += 1)}`),
+      now: () => (now += 1),
+    });
+    await service.handle({ version: 1, kind: "alias.setDuckToken", token: "tok" });
+    await service.handle({ version: 1, kind: "alias.generateDuck", site: "shop.example" });
+    expect(await service.generateDuckAddress("forum.example")).toBe("addr2@duck.com");
+    await service.handle({ version: 1, kind: "alias.generateDuck" });
+    expect(await service.handle({ version: 1, kind: "alias.listDuck" })).toEqual({
+      version: 1,
+      kind: "alias.duckList",
+      addresses: [
+        { address: "addr3@duck.com", createdAt: 1_003 },
+        { address: "addr2@duck.com", createdAt: 1_002, site: "forum.example" },
+        { address: "addr1@duck.com", createdAt: 1_001, site: "shop.example" },
+      ],
+    });
+    expect(JSON.stringify(await local.get(["shardpass:v1:integrations"]))).not.toContain("addr1");
+
+    expect(
+      await service.handle({ version: 1, kind: "alias.forgetDuck", address: "addr2@duck.com" }),
+    ).toMatchObject({ addresses: [{ address: "addr3@duck.com" }, { address: "addr1@duck.com" }] });
+
+    // The token can go while the addresses stay; a locked vault shows none.
+    await service.handle({ version: 1, kind: "alias.clearDuckToken" });
+    expect((await service.handle({ version: 1, kind: "alias.listDuck" })).kind).toBe(
+      "alias.duckList",
+    );
+    expect(await service.readAddresses()).toHaveLength(2);
+    state.locked = true;
+    expect(await service.readAddresses()).toEqual([]);
+  });
+});

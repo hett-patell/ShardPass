@@ -24,6 +24,16 @@ describe("EmailAliasView", () => {
             provider: "duckduckgo",
             address: "quiet_falcon42@duck.com",
           });
+        case "alias.listDuck":
+          return Promise.resolve({
+            version: 1,
+            kind: "alias.duckList",
+            addresses: [
+              { address: "old_one12@duck.com", createdAt: 1_700_000_000_000, site: "shop.example" },
+            ],
+          });
+        case "alias.forgetDuck":
+          return Promise.resolve({ version: 1, kind: "alias.duckList", addresses: [] });
         default:
           return Promise.resolve({ version: 1, kind: "alias.status", duckduckgo: false });
       }
@@ -38,8 +48,13 @@ describe("EmailAliasView", () => {
     expect(sendMessage).toHaveBeenCalledWith(
       expect.objectContaining({ kind: "alias.setDuckToken", token: "tok3n" }),
     );
+    // What was minted before is listed from the start, with the site it was for.
+    expect(await screen.findByText("old_one12@duck.com")).toBeVisible();
+    expect(screen.getByText("shop.example")).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "New @duck.com address" }));
     expect(await screen.findByText("quiet_falcon42@duck.com")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Forget old_one12@duck.com" }));
+    await waitFor(() => expect(screen.queryByText("old_one12@duck.com")).not.toBeInTheDocument());
     fireEvent.click(screen.getByRole("button", { name: "Disconnect" }));
     await waitFor(() => expect(screen.getByLabelText("Token")).toBeVisible());
   });

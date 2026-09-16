@@ -195,6 +195,7 @@ export function installBackground(
         throw new AliasError("ALIAS_UNAVAILABLE");
       return body.address;
     },
+    now: () => Date.now(),
   });
   const passwordGen = new PasswordGenService({ local: platform.localStorage });
   const loginFill = new LoginFillService({
@@ -204,7 +205,7 @@ export function installBackground(
     offerStore: platform.sessionStorage,
     repromptGranted: (itemId) => repromptGrants.granted(itemId),
     suggestUsername: (host, source) =>
-      source === "duck" ? aliases.generateDuckAddress() : passwordGen.suggestForSite(host),
+      source === "duck" ? aliases.generateDuckAddress(host) : passwordGen.suggestForSite(host),
     duckAvailable: () => aliases.configured(),
   });
   const dataFill = new DataFillService({

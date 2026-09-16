@@ -27,7 +27,43 @@ export function EmailAliasView({ platform, active }: EmailAliasViewProps) {
   const [token, setToken] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [addresses, setAddresses] = useState<string[]>([]);
+  type Address = Readonly<{ address: string; createdAt: number; site?: string | undefined }>;
+  const [addresses, setAddresses] = useState<readonly Address[]>([]);
+  const [addressesLoaded, setAddressesLoaded] = useState(false);
+
+  // The addresses minted so far, kept by the background beside the token.
+  useEffect(() => {
+    if (!active || addressesLoaded) return;
+    let mounted = true;
+    const request = { version: 1 as const, kind: "alias.listDuck" as const };
+    platform.sendMessage(request).then(
+      (candidate) => {
+        if (!mounted) return;
+        const parsed = parseAliasResponseForRequest(request, candidate);
+        if (parsed.success && parsed.data.kind === "alias.duckList")
+          setAddresses(parsed.data.addresses);
+        setAddressesLoaded(true);
+      },
+      () => {
+        if (mounted) setAddressesLoaded(true);
+      },
+    );
+    return () => {
+      mounted = false;
+    };
+  }, [active, addressesLoaded, platform]);
+
+  const forget = async (address: string) => {
+    const request = { version: 1 as const, kind: "alias.forgetDuck" as const, address };
+    try {
+      const candidate = await platform.sendMessage(request);
+      const parsed = parseAliasResponseForRequest(request, candidate);
+      if (parsed.success && parsed.data.kind === "alias.duckList")
+        setAddresses(parsed.data.addresses);
+    } catch {
+      setError("Could not remove the address from the list. Try again.");
+    }
+  };
 
   useEffect(() => {
     if (!active || connected !== null) return;
@@ -80,10 +116,8 @@ export function EmailAliasView({ platform, active }: EmailAliasViewProps) {
     try {
       const candidate = await platform.sendMessage(request);
       const parsed = parseAliasResponseForRequest(request, candidate);
-      if (parsed.success) {
-        setConnected(false);
-        setAddresses([]);
-      } else setError(errorText(candidate, "Could not remove the token. Try again."));
+      if (parsed.success) setConnected(false);
+      else setError(errorText(candidate, "Could not remove the token. Try again."));
     } catch {
       setError("Could not remove the token. Try again.");
     } finally {
@@ -100,7 +134,7 @@ export function EmailAliasView({ platform, active }: EmailAliasViewProps) {
       const parsed = parseAliasResponseForRequest(request, candidate);
       if (parsed.success && parsed.data.kind === "alias.generated") {
         const address = parsed.data.address;
-        setAddresses((current) => [address, ...current].slice(0, 20));
+        setAddresses((current) => [{ address, createdAt: Date.now() }, ...current]);
       } else setError(errorText(candidate, "DuckDuckGo did not answer. Try again."));
     } catch {
       setError("DuckDuckGo did not answer. Try again.");
@@ -134,19 +168,6 @@ export function EmailAliasView({ platform, active }: EmailAliasViewProps) {
               Disconnect
             </Button>
           </div>
-          {addresses.length > 0 ? (
-            <ul className={detailStyles.table} aria-label="Addresses made this session">
-              {addresses.map((address) => (
-                <li key={address} className={detailStyles.tableRow}>
-                  <span className={detailStyles.tableValue}>{address}</span>
-                  <CopyButton label={`Copy ${address}`} value={address} />
-                </li>
-              ))}
-            </ul>
-          ) : null}
-          <p className={styles.settingsCardCopy}>
-            ShardPass keeps none of these: save an address on the login you use it for.
-          </p>
         </>
       ) : (
         <form
@@ -186,6 +207,34 @@ export function EmailAliasView({ platform, active }: EmailAliasViewProps) {
         <p className={styles.settingsError} role="alert">
           {error}
         </p>
+      ) : null}
+      {addresses.length > 0 ? (
+        <>
+          <h3 className={styles.settingsCardTitle}>Your addresses</h3>
+          <ul className={detailStyles.table} aria-label="Addresses made so far">
+            {addresses.map((entry) => (
+              <li key={entry.address} className={detailStyles.tableRow}>
+                <span className={detailStyles.tableLabel}>
+                  {entry.site ?? new Date(entry.createdAt).toLocaleDateString("en-US")}
+                </span>
+                <span className={detailStyles.tableValue}>{entry.address}</span>
+                <CopyButton label={`Copy ${entry.address}`} value={entry.address} />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  aria-label={`Forget ${entry.address}`}
+                  onClick={() => void forget(entry.address)}
+                >
+                  Forget
+                </Button>
+              </li>
+            ))}
+          </ul>
+          <p className={styles.settingsCardCopy}>
+            Forgetting an address here only shortens this list; switch it off at duckduckgo.com to
+            stop its mail.
+          </p>
+        </>
       ) : null}
     </section>
   );
