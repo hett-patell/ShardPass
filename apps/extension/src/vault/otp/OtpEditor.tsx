@@ -50,7 +50,9 @@ export function OtpEditor({
   onDelete,
 }: OtpEditorProps) {
   const [form, setForm] = useState<FormValue>(value);
-  const [secretVisible, setSecretVisible] = useState(false);
+  // A code being created has no secret to conceal yet, and hiding the field behind "Reveal
+  // secret" left nowhere to type it. Editing an existing one still starts concealed.
+  const [secretVisible, setSecretVisible] = useState(mode === "create");
   const [secretBuffer, setSecretBuffer] = useState("");
   const [secretChanged, setSecretChanged] = useState(false);
   const [errors, setErrors] = useState<Errors>({});
@@ -66,7 +68,7 @@ export function OtpEditor({
     const current = latestValue.current;
     setForm(current);
     setTagText(current.tags.join(", "));
-    setSecretVisible(false);
+    setSecretVisible(mode === "create");
     setSecretBuffer("");
     setSecretChanged(false);
     setErrors({});
