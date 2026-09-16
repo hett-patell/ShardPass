@@ -74,7 +74,9 @@
   display: grid;
   min-height: 0;
   flex: 1;
-  grid-template-columns: 200px 280px minmax(0, 1fr);
+  /* The left pane holds the longest labels in the app ("One-time codes", "API credentials")
+     beside their counts, so it gets room to show them without truncating. */
+  grid-template-columns: 248px 320px minmax(0, 1fr);
   overflow: hidden;
 }
 
@@ -93,9 +95,12 @@
   border-right: 1px solid var(--border);
 }
 
+/* Search on its own line, then sorting and the add button beneath it. One row could not hold
+   all three in this column without squeezing the search box to a few characters. */
 .listHeader {
-  display: flex;
+  display: grid;
   flex: 0 0 auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: var(--space-2);
   padding: var(--space-3);
@@ -103,7 +108,7 @@
 }
 
 .listHeader > :first-child {
-  flex: 1;
+  grid-column: 1 / -1;
   min-width: 0;
 }
 
@@ -192,7 +197,7 @@
 
 @media (max-width: 980px) {
   .vault {
-    grid-template-columns: 176px 240px minmax(0, 1fr);
+    grid-template-columns: 208px 280px minmax(0, 1fr);
   }
 }
 
@@ -270,8 +275,8 @@
 }
 
 .sort {
-  flex: 0 0 auto;
-  max-width: 11rem;
+  min-width: 0;
+  max-width: none;
   min-height: var(--control-height-md);
   padding: 0 var(--space-2);
   color: var(--text-secondary);

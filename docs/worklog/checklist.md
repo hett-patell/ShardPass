@@ -101,6 +101,13 @@ Baseline at 2.3.0: typecheck clean, lint clean after one test fix, full suite gr
 - [ ] E9 low (still open, narrow) · `login.fillFromPopup` first-answer race across frames (narrow).
 - [x] E10 low · dead `useOtpList.ts`; stale scan-build/manifest-test comments; GeneratorScreen's deferred settings fetch overwrites what was typed and requests a username per keystroke.
 
+## 2026-09-16 · The interface was rendering at 87.5% (2.6.7)
+
+- [x] Every size in the design system is a rem fraction written against a 16px root, and each token's comment names the pixel size that assumes. The root was 14px, so the whole interface rendered at 87.5% of its own design: body text at 12.25px, section labels at 9px. That is why it needed browser zoom to read comfortably. The root is 16px now, and a test pins it.
+- [x] The left pane went from 200px to 248px, and the item list from 280px to 320px, so the longest category names sit beside their counts without truncating.
+- [x] The list toolbar could not hold search, sorting and "New item" on one line at the larger size: search now has its line and the other two sit beneath it.
+- [x] Checked in a real browser at 100% zoom: the vault reads well and the popup, fixed at 400px, gained no horizontal overflow.
+
 ## 2026-09-16 · Ente sync, broken by my own change (2.6.6)
 
 - [x] Ente reported ENTE_UNAVAILABLE on every sync since 2.5.3. That release made libsodium load on first use to keep it out of the service worker's start-up; `import()` is disallowed in a ServiceWorkerGlobalScope by the HTML specification, so the module never loaded and the crypto adapter never existed. Proved by calling `import()` inside the running worker: "import() is disallowed on ServiceWorkerGlobalScope by the HTML specification."

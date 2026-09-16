@@ -7,7 +7,11 @@
 html,
 :host {
   font-family: var(--font-sans);
-  font-size: 14px;
+  /* Every size token is written in rem against a 16px root, and each one's comment states the
+     pixel size that assumes. A 14px root rendered the whole interface at 87.5% of that: body
+     text at 12.25px and labels at 9px, which is why it read as small until the browser was
+     zoomed. */
+  font-size: 16px;
   letter-spacing: var(--tracking);
   color: var(--text-primary);
   background: var(--bg-primary);

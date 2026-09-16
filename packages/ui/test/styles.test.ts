@@ -120,6 +120,17 @@ describe("UI CSS contracts", () => {
     }
   });
 
+  it("keeps the root at the 16px the size tokens are written against", async () => {
+    const base = await readFile(new URL("../src/styles/base.css", import.meta.url), "utf8");
+    const { tokens } = await readStyles();
+
+    // Every size is a rem fraction whose comment names the pixel size it assumes: --text-md
+    // is 0.875rem "14px". A smaller root renders the whole interface below its own design,
+    // which is what a 14px root did (body text at 12.25px, labels at 9px).
+    expect(base).toMatch(/html,\s*:host\s*\{[^}]*font-size:\s*16px/s);
+    expect(tokens).toMatch(/--text-md:\s*0\.875rem/);
+  });
+
   it("colors the AppHeader mark with the shared accent token", async () => {
     const { primitives } = await readStyles();
 
