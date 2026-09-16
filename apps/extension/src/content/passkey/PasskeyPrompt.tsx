@@ -18,6 +18,8 @@ export type PasskeyPromptProps =
       rpId: string;
       candidates: readonly PasskeyCandidate[];
       busy: boolean;
+      /** Offered unasked, at page load; declining just leaves the page's own sign-in as it is. */
+      conditional?: boolean;
       onSelect: (candidate: PasskeyCandidate) => void;
       onFallback: () => void;
     }>
@@ -30,11 +32,7 @@ export function PasskeyPrompt(props: PasskeyPromptProps) {
     primary.current?.focus();
   }, []);
   return (
-    <section
-      className="loginPicker"
-      role="region"
-      aria-label="ShardPass passkey prompt"
-    >
+    <section className="loginPicker" role="region" aria-label="ShardPass passkey prompt">
       <header className="loginHeading">
         <div>
           <p className="eyebrow">SHARDPASS / PASSKEY</p>
@@ -42,11 +40,18 @@ export function PasskeyPrompt(props: PasskeyPromptProps) {
             {props.mode === "create"
               ? `Create a passkey for ${props.rpId}?`
               : props.mode === "choose"
-                ? "Sign in with a passkey"
+                ? props.conditional
+                  ? `Sign in to ${props.rpId} with your passkey?`
+                  : "Sign in with a passkey"
                 : "ShardPass is locked"}
           </h2>
         </div>
-        <button className="closeButton" type="button" aria-label="Use the browser instead" onClick={props.onFallback}>
+        <button
+          className="closeButton"
+          type="button"
+          aria-label="Use the browser instead"
+          onClick={props.onFallback}
+        >
           <span aria-hidden="true">×</span>
         </button>
       </header>
@@ -56,11 +61,19 @@ export function PasskeyPrompt(props: PasskeyPromptProps) {
           <p className="saveDetail">
             <span className="saveUsername">{props.userName || "(no username)"}</span>
             <span className="saveDomain">
-              {props.attachToName === null ? "A new login will be saved" : `Saved with “${props.attachToName}”`}
+              {props.attachToName === null
+                ? "A new login will be saved"
+                : `Saved with “${props.attachToName}”`}
             </span>
           </p>
           <div className="saveActions">
-            <button ref={primary} type="button" className="saveButton" disabled={props.busy} onClick={props.onCreate}>
+            <button
+              ref={primary}
+              type="button"
+              className="saveButton"
+              disabled={props.busy}
+              onClick={props.onCreate}
+            >
               Create passkey
             </button>
             <button type="button" className="dismissButton" onClick={props.onFallback}>
@@ -88,17 +101,24 @@ export function PasskeyPrompt(props: PasskeyPromptProps) {
           </div>
           <div className="saveActions">
             <button type="button" className="dismissButton" onClick={props.onFallback}>
-              Use browser instead
+              {props.conditional ? "Not now" : "Use browser instead"}
             </button>
           </div>
         </>
       ) : (
         <>
           <p className="saveDetail">
-            <span className="saveDomain">Unlock ShardPass from the toolbar to use a passkey for {props.rpId}.</span>
+            <span className="saveDomain">
+              Unlock ShardPass from the toolbar to use a passkey for {props.rpId}.
+            </span>
           </p>
           <div className="saveActions">
-            <button ref={primary} type="button" className="dismissButton" onClick={props.onFallback}>
+            <button
+              ref={primary}
+              type="button"
+              className="dismissButton"
+              onClick={props.onFallback}
+            >
               Use browser instead
             </button>
           </div>

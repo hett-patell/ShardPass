@@ -13,17 +13,23 @@ type CredentialLike = Credential & Record<string, unknown>;
 const TAG = "shardpass-passkey";
 const ACK_TIMEOUT_MS = 700;
 const REPLY_TIMEOUT_MS = 180_000;
+/** How many acknowledgement windows a conditional request waits for the content script. */
+const PATIENT_ATTEMPTS = 20;
 
 function toBase64Url(input: ArrayBuffer | ArrayBufferView | undefined | null): string {
   if (input === undefined || input === null) return "";
-  const bytes = input instanceof ArrayBuffer ? new Uint8Array(input) : new Uint8Array(input.buffer, input.byteOffset, input.byteLength);
+  const bytes =
+    input instanceof ArrayBuffer
+      ? new Uint8Array(input)
+      : new Uint8Array(input.buffer, input.byteOffset, input.byteLength);
   let binary = "";
   for (const byte of bytes) binary += String.fromCharCode(byte);
   return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
 function fromBase64Url(text: string): ArrayBuffer {
-  const padded = text.replace(/-/g, "+").replace(/_/g, "/") + "=".repeat((4 - (text.length % 4)) % 4);
+  const padded =
+    text.replace(/-/g, "+").replace(/_/g, "/") + "=".repeat((4 - (text.length % 4)) % 4);
   const binary = atob(padded);
   const bytes = new Uint8Array(binary.length);
   for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
@@ -38,7 +44,8 @@ type Reply =
 export function installPasskeyInterceptor(win: Window & typeof globalThis): void {
   const nav = win.navigator;
   const credentials = nav?.credentials;
-  if (credentials === undefined || (win as unknown as Record<string, unknown>)[`__${TAG}`] === true) return;
+  if (credentials === undefined || (win as unknown as Record<string, unknown>)[`__${TAG}`] === true)
+    return;
   (win as unknown as Record<string, unknown>)[`__${TAG}`] = true;
   const originalCreate = credentials.create.bind(credentials);
   const originalGet = credentials.get.bind(credentials);
@@ -58,10 +65,24 @@ export function installPasskeyInterceptor(win: Window & typeof globalThis): void
     }
   });
 
-  const ask = (type: "create" | "get", request: unknown, signal: AbortSignal | undefined): Promise<Reply> =>
+  /**
+   * Asks the isolated content script. A modal ceremony gives it one short chance to answer,
+   * since a person is waiting. A conditional one (the page asking at load, ready to accept a
+   * passkey whenever the person offers one) is patient: it keeps asking until the content
+   * script has loaded, and then waits as long as the page does.
+   */
+  const ask = (
+    type: "create" | "get",
+    request: unknown,
+    signal: AbortSignal | undefined,
+    patient = false,
+  ): Promise<Reply> =>
     new Promise((resolve) => {
       const id = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
       let acknowledged = false;
+      let attempts = 0;
+      let ackTimer = 0;
+      let replyTimer = 0;
       const finish = (reply: Reply) => {
         pending.delete(id);
         win.clearTimeout(ackTimer);
@@ -73,14 +94,29 @@ export function installPasskeyInterceptor(win: Window & typeof globalThis): void
         win.postMessage({ tag: TAG, direction: "cancel", id }, "/");
         finish({ error: { name: "AbortError", message: "The operation was aborted." } });
       };
-      const ackTimer = win.setTimeout(() => {
-        // No content script answered: the extension is not here for this page.
-        if (!acknowledged) finish({ fallback: true });
-      }, ACK_TIMEOUT_MS);
-      const replyTimer = win.setTimeout(
-        () => finish({ error: { name: "NotAllowedError", message: "The passkey request timed out." } }),
-        REPLY_TIMEOUT_MS,
-      );
+      const post = () => {
+        attempts += 1;
+        win.postMessage({ tag: TAG, direction: "request", id, type, request }, "/");
+      };
+      const awaitAck = () => {
+        ackTimer = win.setTimeout(() => {
+          if (acknowledged) return;
+          // No content script answered yet. A modal request goes to the browser now; a
+          // patient one asks again until the script is there, then gives up quietly.
+          if (patient && attempts < PATIENT_ATTEMPTS) {
+            post();
+            awaitAck();
+          } else finish({ fallback: true });
+        }, ACK_TIMEOUT_MS);
+      };
+      if (!patient)
+        replyTimer = win.setTimeout(
+          () =>
+            finish({
+              error: { name: "NotAllowedError", message: "The passkey request timed out." },
+            }),
+          REPLY_TIMEOUT_MS,
+        );
       pending.set(id, {
         ack: () => {
           acknowledged = true;
@@ -88,10 +124,14 @@ export function installPasskeyInterceptor(win: Window & typeof globalThis): void
         settle: finish,
       });
       signal?.addEventListener("abort", onAbort, { once: true });
-      win.postMessage({ tag: TAG, direction: "request", id, type, request }, "/");
+      post();
+      awaitAck();
     });
 
-  const buildResponse = (type: "create" | "get", result: Record<string, string>): CredentialLike => {
+  const buildResponse = (
+    type: "create" | "get",
+    result: Record<string, string>,
+  ): CredentialLike => {
     const rawId = fromBase64Url(result.credentialId ?? "");
     const clientDataJSON = fromBase64Url(result.clientDataJson ?? "");
     const base = {
@@ -148,10 +188,13 @@ export function installPasskeyInterceptor(win: Window & typeof globalThis): void
             },
           };
     const responseProto =
-      type === "create" ? win.AuthenticatorAttestationResponse?.prototype : win.AuthenticatorAssertionResponse?.prototype;
+      type === "create"
+        ? win.AuthenticatorAttestationResponse?.prototype
+        : win.AuthenticatorAssertionResponse?.prototype;
     if (responseProto) Object.setPrototypeOf(response, responseProto);
     const credential = { ...base, response, toJSON };
-    if (win.PublicKeyCredential?.prototype) Object.setPrototypeOf(credential, win.PublicKeyCredential.prototype);
+    if (win.PublicKeyCredential?.prototype)
+      Object.setPrototypeOf(credential, win.PublicKeyCredential.prototype);
     return credential;
   };
 
@@ -178,9 +221,11 @@ export function installPasskeyInterceptor(win: Window & typeof globalThis): void
 
   credentials.create = async (options?: CredentialCreationOptions): Promise<Credential | null> => {
     const publicKey = options?.publicKey;
-    if (!publicKey || !publicKey.challenge || !publicKey.rp || !publicKey.user) return originalCreate(options);
+    if (!publicKey || !publicKey.challenge || !publicKey.rp || !publicKey.user)
+      return originalCreate(options);
     // A cross-platform/security-key request is for a hardware key; leave it to the browser.
-    if (publicKey.authenticatorSelection?.authenticatorAttachment === "cross-platform") return originalCreate(options);
+    if (publicKey.authenticatorSelection?.authenticatorAttachment === "cross-platform")
+      return originalCreate(options);
     const reply = await ask("create", serializeCreate(publicKey), options.signal ?? undefined);
     if ("fallback" in reply) return originalCreate(options);
     if ("error" in reply) throw new win.DOMException(reply.error.message, reply.error.name);
@@ -190,9 +235,16 @@ export function installPasskeyInterceptor(win: Window & typeof globalThis): void
   credentials.get = async (options?: CredentialRequestOptions): Promise<Credential | null> => {
     const publicKey = options?.publicKey;
     if (!publicKey || !publicKey.challenge) return originalGet(options);
-    // Conditional (autofill) mediation is the browser's own UI surface; do not interpose.
-    if (options.mediation === "conditional") return originalGet(options);
-    const reply = await ask("get", serializeGet(publicKey), options.signal ?? undefined);
+    // Conditional mediation: the page asks at load and accepts a passkey whenever one is
+    // offered. ShardPass offers its own, and hands the request to the browser's UI when it
+    // has none or the person declines; the browser's prompt then works as before.
+    const conditional = options.mediation === "conditional";
+    const reply = await ask(
+      "get",
+      { ...serializeGet(publicKey), conditional },
+      options.signal ?? undefined,
+      conditional,
+    );
     if ("fallback" in reply) return originalGet(options);
     if ("error" in reply) throw new win.DOMException(reply.error.message, reply.error.name);
     return buildResponse("get", reply.result);

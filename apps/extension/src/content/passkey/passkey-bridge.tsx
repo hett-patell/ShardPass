@@ -21,7 +21,13 @@ type CreateRequest = Readonly<{
   algorithms: number[];
   excludeCredentialIds: string[];
 }>;
-type GetRequest = Readonly<{ challenge: string; rpId: string | null; allowCredentialIds: string[] }>;
+type GetRequest = Readonly<{
+  challenge: string;
+  rpId: string | null;
+  allowCredentialIds: string[];
+  /** The page asked at load, ready for a passkey whenever one is offered; nobody is waiting. */
+  conditional?: boolean;
+}>;
 
 function errorCode(error: unknown): string | undefined {
   const code = (error as { code?: unknown } | null)?.code;
@@ -42,7 +48,8 @@ export function createPasskeyBridge(
   let host: PickerHandle | null = null;
   let activeId: string | null = null;
 
-  const post = (message: Record<string, unknown>) => options.window.postMessage({ tag: TAG, ...message }, "/");
+  const post = (message: Record<string, unknown>) =>
+    options.window.postMessage({ tag: TAG, ...message }, "/");
   const closeHost = () => {
     const current = host;
     host = null;
@@ -85,7 +92,12 @@ export function createPasskeyBridge(
     let attachToName: string | null = null;
     let attachTo: string | undefined;
     try {
-      const preview = await options.platform.sendPasskeyMessage({ version: 1, kind: "passkey.preview", rpId, userName: request.user.name });
+      const preview = await options.platform.sendPasskeyMessage({
+        version: 1,
+        kind: "passkey.preview",
+        rpId,
+        userName: request.user.name,
+      });
       if (preview.kind === "passkey.previewResult" && preview.login !== null) {
         attachToName = preview.login.name;
         attachTo = preview.login.itemId;
@@ -137,7 +149,12 @@ export function createPasskeyBridge(
               });
             } catch (error) {
               if (errorCode(error) === "PASSKEY_EXISTS")
-                reply(id, { error: { name: "InvalidStateError", message: "A passkey for this account already exists in ShardPass." } });
+                reply(id, {
+                  error: {
+                    name: "InvalidStateError",
+                    message: "A passkey for this account already exists in ShardPass.",
+                  },
+                });
               else fallback(id);
             }
           })();
@@ -161,7 +178,9 @@ export function createPasskeyBridge(
       });
       if (response.kind === "passkey.candidatesResult") candidates = response.candidates;
     } catch (error) {
-      if (errorCode(error) === "VAULT_LOCKED") {
+      // A page asking at load has not been asked by anyone: a locked vault stays quiet then,
+      // rather than putting a prompt on every sign-in page.
+      if (errorCode(error) === "VAULT_LOCKED" && request.conditional !== true) {
         show(id, () => <PasskeyPrompt mode="locked" rpId={rpId} onFallback={() => fallback(id)} />);
         return;
       }
@@ -175,6 +194,7 @@ export function createPasskeyBridge(
         rpId={rpId}
         candidates={candidates}
         busy={busy}
+        conditional={request.conditional === true}
         onFallback={() => fallback(id)}
         onSelect={(candidate) => {
           setBusy?.();
@@ -211,8 +231,20 @@ export function createPasskeyBridge(
 
   const onMessage = (event: MessageEvent) => {
     if (disposed || event.source !== options.window) return;
-    const data = event.data as { tag?: unknown; direction?: unknown; id?: unknown; type?: unknown; request?: unknown } | null;
-    if (data === null || typeof data !== "object" || data.tag !== TAG || typeof data.id !== "string") return;
+    const data = event.data as {
+      tag?: unknown;
+      direction?: unknown;
+      id?: unknown;
+      type?: unknown;
+      request?: unknown;
+    } | null;
+    if (
+      data === null ||
+      typeof data !== "object" ||
+      data.tag !== TAG ||
+      typeof data.id !== "string"
+    )
+      return;
     if (data.direction === "cancel") {
       if (activeId === data.id) {
         activeId = null;
@@ -222,6 +254,9 @@ export function createPasskeyBridge(
     }
     if (data.direction !== "request") return;
     post({ direction: "ack", id: data.id });
+    // A patient request is posted again until it is acknowledged; the repeats are the same
+    // ceremony, not a second one.
+    if (activeId === data.id) return;
     if (activeId !== null) {
       // One ceremony at a time; a second request while a prompt is open goes to the browser.
       post({ direction: "reply", id: data.id, fallback: true });
