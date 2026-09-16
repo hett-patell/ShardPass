@@ -15,7 +15,7 @@
   },
   "scripts": {
     "build": "vite build && node scripts/inventory-ente-production-graph.mjs",
-    "build:security": "node scripts/clean-dist.mjs && vite build && node scripts/inventory-ente-production-graph.mjs && vitest run --config tests/security/vitest-output.config.ts && node --experimental-strip-types scripts/scan-build.mjs",
+    "build:security": "pnpm scan:secrets:source && node scripts/clean-dist.mjs && vite build && node scripts/inventory-ente-production-graph.mjs && vitest run --config tests/security/vitest-output.config.ts && node --experimental-strip-types scripts/scan-build.mjs",
     "dependencies": "depcruise --config dependency-cruiser.config.cjs apps packages",
     "scan:secrets:allowlist": "node scripts/generate-project1-secret-allowlist.mjs",
     "scan:secrets:allowlist:write": "node scripts/generate-project1-secret-allowlist.mjs --write",
@@ -38,7 +38,7 @@
     "test:browser": "pnpm build:security && pnpm test:browser:built",
     "test:browser:built": "pnpm build:test:crypto && pnpm build:test:ente-srp && playwright test",
     "test:browser:crypto": "pnpm build:test:crypto && playwright test tests/browser/crypto-smoke.spec.ts",
-    "verify": "pnpm typecheck && pnpm lint && pnpm format:check && pnpm test && pnpm dependencies && pnpm build:security",
+    "verify": "pnpm typecheck && pnpm lint && pnpm format:check && pnpm build:security && pnpm test && pnpm dependencies",
     "verify:project0:evidence": "pnpm verify && pnpm test:browser:built && node scripts/verify-reproducible-build.mjs && pnpm audit --prod",
     "verify:project0": "node scripts/check-engine.mjs && pnpm verify:project0:evidence",
     "verify:project0:local-node24": "node scripts/check-engine.mjs --allow-node24 && pnpm verify:project0:evidence",

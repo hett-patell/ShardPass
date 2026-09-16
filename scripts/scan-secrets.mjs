@@ -79,12 +79,14 @@ export const REPORTABLE_RULE_IDS = Object.freeze([
   "environment-file",
   "fixture-marker",
   "high-entropy-literal",
+  "jwt",
   "otpauth-uri",
   "pem-private-key",
   "secret-logging",
   "serialized-secret",
   "source-map",
   "test-helper",
+  "url-credentials",
 ]);
 const REPORTABLE_RULE_ID_SET = new Set(REPORTABLE_RULE_IDS);
 
@@ -92,14 +94,27 @@ const RULES = [
   {
     id: "pem-private-key",
     pattern:
-      /-----BEGIN (?:ENCRYPTED |RSA |EC |OPENSSH )?PRIVATE KEY-----[\s\S]*?-----END (?:ENCRYPTED |RSA |EC |OPENSSH )?PRIVATE KEY-----/gu,
+      // Marker, a body of nothing but base64 lines, marker. Code that merely names the markers
+      // (an importer deciding what it was handed) has quotes and punctuation in between.
+      /-----BEGIN (?:ENCRYPTED |RSA |EC |OPENSSH )?PRIVATE KEY-----[ \t]*[\r\n]+(?:[ \t]*[A-Za-z\d+/=:,. -]{1,120}[\r\n]+)+[ \t]*-----END (?:ENCRYPTED |RSA |EC |OPENSSH )?PRIVATE KEY-----/gu,
   },
   { id: "otpauth-uri", pattern: /otpauth:\/\/[^\s"'`<>]+/giu },
   { id: "bearer-token", pattern: /\bBearer\s+[A-Za-z\d._~+/=-]{12,}/giu },
+  // A password carried in a URL's authority (the part before the @). Neither half may
+  // hold a slash or an @ of its own.
+  {
+    id: "url-credentials",
+    pattern: /\b[a-z][a-z\d+.-]*:\/\/[^\s"'`/@:]+:[^\s"'`/@]{3,}@[a-z\d.-]+/giu,
+  },
+  // A JSON Web Token: three base64url parts, the first decoding to a JSON header.
+  {
+    id: "jwt",
+    pattern: /\beyJ[A-Za-z\d_-]{10,}\.[A-Za-z\d_-]{10,}\.[A-Za-z\d_-]{10,}/gu,
+  },
   {
     id: "serialized-secret",
     pattern:
-      /(?:["']?(?:password|passwd|passphrase|token|api[_-]?key|auth[_-]?key|private[_-]?key|secret|seed|ciphertext)["']?\s*[:=]\s*["'`])([^"'`\r\n]{6,})(?:["'`])/giu,
+      /(?<![A-Za-z\d_$])(?:["']?(?:password|passwd|passphrase|token|api[_-]?key|auth[_-]?key|private[_-]?key|secret|seed|ciphertext)["']?\s*[:=]\s*["'`])([^"'`\r\n]{6,})(?:["'`])/giu,
     group: 1,
     sourceOnly: true,
   },
@@ -337,7 +352,11 @@ function sourceSerializedValue(value) {
     ) &&
     !/^(?:enter (?:a |the )?|conceal |reveal |invalid |missing |canonical )[a-z\d ._-]+$/u.test(
       normalized,
-    )
+    ) &&
+    // A sentence or a label, not a credential: "Add a secret", "Show password", "No notes yet."
+    !/\s/u.test(value) &&
+    // A plain word, so a Record of display names ({ secret: "Secret" }) is not a finding.
+    !/^[A-Za-z][a-z]+$/u.test(value)
   );
 }
 function scanText(relativePath, bytes, mode, fileSha256, text = decodeText(bytes)) {
@@ -366,7 +385,9 @@ function scanText(relativePath, bytes, mode, fileSha256, text = decodeText(bytes
           /(?:alphabet|regex|pattern|regexp)/iu.test(
             text.slice(Math.max(0, match.index - 96), match.index),
           )) ||
-        (mode === "source" && rule.id === "otpauth-uri" && match[0].includes("${")) ||
+        (mode === "source" &&
+          rule.id === "otpauth-uri" &&
+          (match[0].includes("${") || !/[?&]secret=[A-Za-z2-7]/iu.test(match[0]))) ||
         (mode === "source" &&
           rule.id === "high-entropy-literal" &&
           /(?:alphabet|regex|pattern|regexp)/iu.test(

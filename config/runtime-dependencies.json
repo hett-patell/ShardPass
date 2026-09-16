@@ -1,0 +1,99 @@
+{
+  "schemaVersion": 1,
+  "allowedLicenses": [
+    "0BSD",
+    "Apache-2.0",
+    "(Apache-2.0 AND BSD-3-Clause)",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "CC0-1.0",
+    "ISC",
+    "MIT",
+    "OFL-1.1",
+    "Unlicense"
+  ],
+  "dependencies": [
+    {
+      "name": "@bufbuild/protobuf",
+      "license": "(Apache-2.0 AND BSD-3-Clause)",
+      "why": "Decodes Google Authenticator's migration payload, which is protobuf."
+    },
+    {
+      "name": "@fontsource/ibm-plex-mono",
+      "license": "OFL-1.1",
+      "why": "The monospace face, packaged so no font is fetched from a network."
+    },
+    {
+      "name": "@fontsource/inter-tight",
+      "license": "OFL-1.1",
+      "why": "The interface face, packaged so no font is fetched from a network."
+    },
+    {
+      "name": "@noble/ciphers",
+      "license": "MIT",
+      "why": "AES-GCM and XChaCha20-Poly1305 where WebCrypto has no equivalent."
+    },
+    {
+      "name": "@noble/hashes",
+      "license": "MIT",
+      "why": "Argon2id, HMAC and SHA-2 in a form that runs in a worker."
+    },
+    {
+      "name": "@streamparser/json",
+      "license": "MIT",
+      "why": "Reads a multi-gigabyte export without holding it all in memory."
+    },
+    {
+      "name": "@zxcvbn-ts/core",
+      "license": "MIT",
+      "why": "Scores how guessable a password is, for the health report."
+    },
+    {
+      "name": "@zxcvbn-ts/language-common",
+      "license": "MIT",
+      "why": "The dictionaries zxcvbn scores against."
+    },
+    {
+      "name": "@zxcvbn-ts/language-en",
+      "license": "MIT",
+      "why": "English dictionaries the strength estimator scores against."
+    },
+    {
+      "name": "buffer",
+      "license": "MIT",
+      "why": "fast-srp-hap is written against Node's Buffer; this is the browser shim it gets."
+    },
+    {
+      "name": "fast-srp-hap",
+      "license": "MIT",
+      "why": "The SRP-6a client Ente's login speaks, pinned by evidence in the candidate report."
+    },
+    {
+      "name": "image-dimensions",
+      "license": "MIT",
+      "why": "Reads a QR screenshot's size without decoding the whole image."
+    },
+    {
+      "name": "jsqr",
+      "license": "Apache-2.0",
+      "why": "Decodes a QR code from a screenshot during one-time-code import."
+    },
+    {
+      "name": "libsodium-wrappers-sumo",
+      "license": "ISC",
+      "why": "Ente's own crypto: secretbox, sealed boxes and secretstream, one approved copy."
+    },
+    {
+      "name": "lucide-react",
+      "license": "ISC",
+      "why": "The icon set the popup and vault page draw from."
+    },
+    { "name": "react", "license": "MIT", "why": "Renders the popup and the vault page." },
+    { "name": "react-dom", "license": "MIT", "why": "Renders the popup and the vault page." },
+    {
+      "name": "zod",
+      "license": "MIT",
+      "why": "Every message and stored record is parsed by a schema."
+    }
+  ]
+}
