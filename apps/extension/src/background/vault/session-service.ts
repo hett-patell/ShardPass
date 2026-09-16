@@ -1108,6 +1108,49 @@ export class SessionService {
     });
   }
 
+  /**
+   * Seals a small secret (an integration token) under the vault key, so what local storage
+   * holds is unreadable while the vault is locked and gone with the vault when it is reset.
+   */
+  async sealSecret(
+    purpose: string,
+    plaintext: Uint8Array,
+  ): Promise<{ nonce: string; ciphertext: string }> {
+    const operationEpoch = this.epoch;
+    await this.assertActiveRoot();
+    if (this.dek === null || plaintext.byteLength > MAX_SEALED_SECRET_BYTES)
+      throw new VaultSessionError("VAULT_LOCKED");
+    const envelope = await encryptEnvelope(
+      this.dek,
+      plaintext,
+      sealedSecretAad(purpose),
+      this.dependencies.random,
+    );
+    this.assertEpoch(operationEpoch);
+    return { nonce: encodeBase64(envelope.nonce), ciphertext: encodeBase64(envelope.ciphertext) };
+  }
+
+  async openSecret(
+    purpose: string,
+    sealed: { nonce: string; ciphertext: string },
+  ): Promise<Uint8Array> {
+    const operationEpoch = this.epoch;
+    await this.assertActiveRoot();
+    if (this.dek === null) throw new VaultSessionError("VAULT_LOCKED");
+    try {
+      const plaintext = await decryptEnvelope(
+        this.dek,
+        { nonce: decodeBase64(sealed.nonce), ciphertext: decodeBase64(sealed.ciphertext) },
+        sealedSecretAad(purpose),
+      );
+      this.assertEpoch(operationEpoch);
+      return plaintext;
+    } catch (error) {
+      if (error instanceof VaultSessionError) throw error;
+      throw new VaultSessionError("VAULT_UNAVAILABLE");
+    }
+  }
+
   async openMigrationTransaction(
     candidate: unknown,
   ): Promise<{ transactionId: string; plaintext: Uint8Array }> {
@@ -2057,6 +2100,18 @@ function isAttemptState(value: unknown): value is AttemptState {
     candidate.observedAt! >= 0
   );
 }
+const MAX_SEALED_SECRET_BYTES = 8192;
+function sealedSecretAad(purpose: string) {
+  return {
+    format: "shardpass-sealed-secret",
+    formatVersion: 1,
+    itemId: purpose,
+    kind: "sealed-secret",
+    schemaVersion: 1,
+    revision: 1,
+  } as const;
+}
+
 function migrationTransactionAad(transactionId: string) {
   return {
     format: MIGRATION_TRANSACTION_FORMAT,

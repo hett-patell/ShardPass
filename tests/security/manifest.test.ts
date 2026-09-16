@@ -39,7 +39,10 @@ function assertManifestPolicy(candidate: Record<string, unknown>): void {
   expect(candidate.permissions).not.toContain("clipboardRead");
   expect(candidate.permissions).not.toContain("clipboardWrite");
   expect(candidate.permissions).not.toContain("offscreen");
-  expect(candidate.host_permissions).toEqual(["https://api.ente.io/*"]);
+  expect(candidate.host_permissions).toEqual([
+    "https://api.ente.io/*",
+    "https://quack.duckduckgo.com/*",
+  ]);
   expect(candidate).not.toHaveProperty("optional_host_permissions");
   expect(candidate).not.toHaveProperty("externally_connectable");
   expect(candidate).not.toHaveProperty("sandbox");

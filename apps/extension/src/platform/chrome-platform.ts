@@ -88,6 +88,9 @@ function runtimeError(): (Error & { code: string; detail: string }) | null {
 }
 
 const safeErrorCodes = new Set<SafeErrorCode>([
+  "ALIAS_NOT_CONFIGURED",
+  "ALIAS_REJECTED",
+  "ALIAS_UNAVAILABLE",
   "BACKUP_INVALID",
   "BACKUP_AUTH_FAILED",
   "BACKUP_EXPIRED",

@@ -30,3 +30,30 @@ describe("LoginPicker username suggestion", () => {
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
 });
+
+describe("LoginPicker forwarding address", () => {
+  it("offers a new @duck.com address only when the controller says one is available", () => {
+    const onDuckAddress = vi.fn();
+    const { unmount } = render(
+      <LoginPicker
+        suggestions={[]}
+        state="empty"
+        onDuckAddress={onDuckAddress}
+        onClose={() => undefined}
+        onSelect={() => undefined}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Use a new @duck.com address" }));
+    expect(onDuckAddress).toHaveBeenCalledTimes(1);
+    unmount();
+    render(
+      <LoginPicker
+        suggestions={[]}
+        state="empty"
+        onClose={() => undefined}
+        onSelect={() => undefined}
+      />,
+    );
+    expect(screen.queryByRole("button", { name: /duck\.com/u })).not.toBeInTheDocument();
+  });
+});

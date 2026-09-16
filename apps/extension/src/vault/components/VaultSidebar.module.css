@@ -13,6 +13,44 @@
   padding: var(--space-3);
 }
 
+.tools {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.toolButton {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 36px;
+  padding: 7px 10px;
+  color: var(--text-secondary);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background 80ms,
+    color 80ms;
+}
+
+.toolButton:hover {
+  color: var(--text-primary);
+  background: var(--bg-secondary);
+}
+
+.toolButtonActive,
+.toolButtonActive:hover {
+  color: var(--accent);
+  background: var(--accent-subtle);
+}
+
 .sectionLabel {
   margin: 0 0 var(--space-1);
   padding: 0 var(--space-2);

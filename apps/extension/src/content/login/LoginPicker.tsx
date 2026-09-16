@@ -28,6 +28,8 @@ export interface LoginPickerProps {
   /** A username for a sign-up form, from the person's own settings (plus-address, catch-all, or words). */
   readonly suggestedUsername?:
     Readonly<{ username: string; onUse: () => void; onAnother: () => void }> | undefined;
+  /** A fresh @duck.com address on request, when DuckDuckGo Email Protection is connected. */
+  readonly onDuckAddress?: (() => void) | undefined;
   readonly onClose: () => void;
   readonly onSelect: (suggestion: LoginPickerSuggestion) => void;
 }
@@ -84,10 +86,25 @@ export function LoginPicker({
   activeIndex = -1,
   generated,
   suggestedUsername,
+  onDuckAddress,
   onClose,
   onSelect,
 }: LoginPickerProps) {
   const visible = filterSuggestions(suggestions, filter);
+  const duckRow = onDuckAddress ? (
+    <div className="suggestRow">
+      <button
+        className="suggestUse"
+        type="button"
+        aria-label="Use a new @duck.com address"
+        onMouseDown={(event) => event.preventDefault()}
+        onClick={onDuckAddress}
+      >
+        <span className="suggestCaption">Use a new @duck.com address</span>
+        <span className="suggestValue">DuckDuckGo Email Protection</span>
+      </button>
+    </div>
+  ) : null;
   const usernameRow = suggestedUsername ? (
     <div className="suggestRow">
       <button
@@ -150,8 +167,9 @@ export function LoginPicker({
         </button>
       </div>
       {usernameRow}
+      {duckRow}
       {suggestion}
-      {(generated || suggestedUsername) &&
+      {(generated || suggestedUsername || onDuckAddress) &&
       (state === "empty" || (state === "ready" && visible.length === 0)) ? null : state !==
         "ready" ? (
         <p className="status" role="status">

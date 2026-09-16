@@ -33,7 +33,9 @@ import { updateItem } from "./components/forms/submit-item";
 import { ItemDetailPanel } from "./components/ItemDetailPanel";
 import { ItemListPanel } from "./components/ItemListPanel";
 import { NewItemMenu } from "./components/NewItemMenu";
-import { VaultSidebar, type VaultSidebarView } from "./components/VaultSidebar";
+import { VaultSidebar, type GeneratorTool, type VaultSidebarView } from "./components/VaultSidebar";
+import { EmailAliasView } from "./tools/EmailAliasView";
+import { GeneratorView } from "./tools/GeneratorView";
 import { EnteSettings } from "./ente/EnteSettings";
 import { useFolders } from "./hooks/useFolders";
 import { countByKind, useVaultState } from "./hooks/useVaultState";
@@ -72,6 +74,7 @@ export function VaultApp({ platform }: VaultAppProps) {
   const presentation = statusPresentation(foundation.state);
   const [vaultUnlocked, setVaultUnlocked] = useState(false);
   const [view, setView] = useState<VaultSidebarView>("vault");
+  const [generatorTool, setGeneratorTool] = useState<GeneratorTool>("random");
   const [creatingKind, setCreatingKind] = useState<VaultItemKind | null>(null);
   const [otpCreating, setOtpCreating] = useState(false);
   const [otpCreateError, setOtpCreateError] = useState("");
@@ -199,7 +202,10 @@ export function VaultApp({ platform }: VaultAppProps) {
     if (route === null || !vaultUnlocked) return;
     if ("view" in route) {
       setCreatingKind(null);
-      setView(route.view === "import" ? "settings" : route.view);
+      if (route.view === "generator" || route.view === "usernames") {
+        setGeneratorTool(route.view === "usernames" ? "username" : "random");
+        setView("generator");
+      } else setView(route.view === "import" ? "settings" : route.view);
     } else if ("newItem" in route) startCreate(route.newItem);
     else {
       goToVaultView();
@@ -305,6 +311,12 @@ export function VaultApp({ platform }: VaultAppProps) {
                 onOpenEnte={() => setView("ente")}
                 onOpenHealth={() => setView("health")}
                 healthCount={healthCount}
+                onOpenGenerator={(tool) => {
+                  setGeneratorTool(tool);
+                  setView("generator");
+                }}
+                onOpenAliases={() => setView("aliases")}
+                generatorTool={generatorTool}
               />
             </div>
 
@@ -466,6 +478,17 @@ export function VaultApp({ platform }: VaultAppProps) {
                 />
               </div>
             ) : null}
+            {view === "generator" ? (
+              <div className={`${styles.settingsPanel} ${styles.settingsPanelSingle}`}>
+                <GeneratorView platform={platform} mode={generatorTool} />
+              </div>
+            ) : null}
+            <div
+              className={`${styles.settingsPanel} ${styles.settingsPanelSingle}`}
+              hidden={view !== "aliases"}
+            >
+              <EmailAliasView platform={platform} active={view === "aliases"} />
+            </div>
             <div
               className={`${styles.settingsPanel} ${styles.settingsPanelSingle}`}
               hidden={view !== "ente"}

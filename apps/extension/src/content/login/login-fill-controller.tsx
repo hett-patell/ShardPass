@@ -100,6 +100,8 @@ type PickerView = {
   generated: string | null;
   /** A username for the sign-up form's username field, once the background has answered. */
   suggestedUsername: string | null;
+  /** Whether the picker may offer a fresh @duck.com address as well. */
+  duckAvailable: boolean;
   state: LoginPickerState;
   suggestions: readonly LoginPickerSuggestion[];
   /** What the person typed into the field since the picker opened; a prefill does not count. */
@@ -370,12 +372,29 @@ export function createLoginFillController(
       });
       if (picker !== view || response.kind !== "login.usernameSuggestion") return;
       view.suggestedUsername = response.username;
+      view.duckAvailable = response.duckAvailable === true;
       refreshPicker();
     } catch {
       // No suggestion is not an error the page needs to hear about.
     }
   };
 
+  /** A forwarding address is minted only when asked for, since each one is a real mailbox. */
+  const useDuckAddress = async (view: PickerView): Promise<void> => {
+    try {
+      const response = await options.platform.sendLoginFillMessage({
+        version: 1,
+        kind: "login.suggestUsername",
+        source: "duck",
+      });
+      if (picker !== view || response.kind !== "login.usernameSuggestion") return;
+      if (response.username === null) return;
+      view.suggestedUsername = response.username;
+      useSuggestedUsername(view);
+    } catch {
+      // Nothing to fill; the picker stays as it was.
+    }
+  };
   const pickerContent = (view: PickerView) => (
     <LoginPicker
       suggestions={view.suggestions}
@@ -390,6 +409,11 @@ export function createLoginFillController(
               onUse: () => useSuggestedUsername(view),
               onAnother: () => void requestUsername(view),
             }
+      }
+      onDuckAddress={
+        view.duckAvailable && view.candidate.fieldSet.usernameField === view.candidate.input
+          ? () => void useDuckAddress(view)
+          : undefined
       }
       generated={
         view.generated === null
@@ -466,6 +490,7 @@ export function createLoginFillController(
       candidate,
       generated: previous?.generated ?? (signup ? suggestPassword() : null),
       suggestedUsername: previous?.suggestedUsername ?? null,
+      duckAvailable: previous?.duckAvailable ?? false,
       state,
       suggestions,
       filter: previous?.filter ?? "",

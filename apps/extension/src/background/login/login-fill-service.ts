@@ -71,7 +71,9 @@ type LoginFillServiceDependencies = Readonly<{
    */
   offerStore?: StoragePort;
   /** A username the sign-up form on this host might like; null when nothing is configured. */
-  suggestUsername?(host: string): Promise<string | null>;
+  suggestUsername?(host: string, source: "settings" | "duck"): Promise<string | null>;
+  /** Whether a forwarding-address provider is connected, for the picker's extra row. */
+  duckAvailable?(): Promise<boolean>;
 }>;
 
 const OFFERS_KEY = "shardpass:v1:save-offers";
@@ -192,11 +194,20 @@ export class LoginFillService {
           return validated(await this.suggestions(senderPage()));
         case "login.suggestUsername": {
           const suggest = this.dependencies.suggestUsername;
+          const source = command.source ?? "settings";
           const username =
             suggest === undefined
               ? null
-              : await suggest(hostnameOf(senderPage())).catch(() => null);
-          return validated({ version: 1, kind: "login.usernameSuggestion", username });
+              : await suggest(hostnameOf(senderPage()), source).catch(() => null);
+          const duckAvailable = await (
+            this.dependencies.duckAvailable?.() ?? Promise.resolve(false)
+          ).catch(() => false);
+          return validated({
+            version: 1,
+            kind: "login.usernameSuggestion",
+            username,
+            duckAvailable,
+          });
         }
         case "login.fillSelect":
           return validated(

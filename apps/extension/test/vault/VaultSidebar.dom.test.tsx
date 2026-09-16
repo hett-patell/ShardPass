@@ -43,6 +43,8 @@ function renderSidebar(overrides: Partial<VaultSidebarProps> = {}) {
     onOpenSettings: vi.fn(),
     onOpenEnte: vi.fn(),
     onOpenHealth: vi.fn(),
+    onOpenGenerator: vi.fn(),
+    onOpenAliases: vi.fn(),
     ...overrides,
   };
   return { ...render(<VaultSidebar {...props} />), props };
@@ -70,5 +72,32 @@ describe("VaultSidebar folders", () => {
     fireEvent.click(screen.getByRole("button", { name: "Delete Clients" }));
     fireEvent.click(await screen.findByRole("button", { name: "Cancel" }));
     await waitFor(() => expect(screen.getByRole("button", { name: /^Clients/ })).toHaveFocus());
+  });
+});
+
+describe("VaultSidebar tools", () => {
+  it("lists the tools above the categories and opens each", () => {
+    const { props } = renderSidebar();
+    const nav = screen.getByRole("navigation", { name: "Tools" });
+    expect(
+      nav.compareDocumentPosition(screen.getByRole("navigation", { name: "Categories" })),
+    ).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    fireEvent.click(screen.getByRole("button", { name: "Password generator" }));
+    expect(props.onOpenGenerator).toHaveBeenCalledWith("random");
+    fireEvent.click(screen.getByRole("button", { name: "Username generator" }));
+    expect(props.onOpenGenerator).toHaveBeenCalledWith("username");
+    fireEvent.click(screen.getByRole("button", { name: "Email aliases" }));
+    expect(props.onOpenAliases).toHaveBeenCalledTimes(1);
+  });
+
+  it("marks the open tool as current", () => {
+    renderSidebar({ view: "generator", generatorTool: "username" });
+    expect(screen.getByRole("button", { name: "Username generator" })).toHaveAttribute(
+      "aria-current",
+      "true",
+    );
+    expect(screen.getByRole("button", { name: "Password generator" })).not.toHaveAttribute(
+      "aria-current",
+    );
   });
 });

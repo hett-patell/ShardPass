@@ -878,6 +878,7 @@ describe("LoginFillService username suggestions", () => {
       version: 1,
       kind: "login.usernameSuggestion",
       username: "me+example1234@example.com",
+      duckAvailable: false,
     });
     expect(hosts).toEqual(["example.test"]);
     const bare = new LoginFillService({
@@ -889,6 +890,33 @@ describe("LoginFillService username suggestions", () => {
       version: 1,
       kind: "login.usernameSuggestion",
       username: null,
+      duckAvailable: false,
     });
+  });
+});
+
+describe("LoginFillService forwarding addresses", () => {
+  it("passes the source through and says whether a forwarding provider is connected", async () => {
+    const calls: string[] = [];
+    const service = new LoginFillService({
+      repository: new FakeRepository([]),
+      now: () => 15_000,
+      notePrivilegedActivity: () => Promise.resolve(),
+      suggestUsername: (host, source) => {
+        calls.push(`${source}:${host}`);
+        return Promise.resolve(source === "duck" ? "abc@duck.com" : "quiet.falcon42");
+      },
+      duckAvailable: () => Promise.resolve(true),
+    });
+    expect(await service.handle({ version: 1, kind: "login.suggestUsername" }, sender)).toEqual({
+      version: 1,
+      kind: "login.usernameSuggestion",
+      username: "quiet.falcon42",
+      duckAvailable: true,
+    });
+    expect(
+      await service.handle({ version: 1, kind: "login.suggestUsername", source: "duck" }, sender),
+    ).toMatchObject({ username: "abc@duck.com" });
+    expect(calls).toEqual(["settings:example.test", "duck:example.test"]);
   });
 });

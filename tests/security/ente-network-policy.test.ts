@@ -9,7 +9,7 @@ import {
 } from "../../apps/extension/src/background/ente/protocol";
 
 const approvedCsp =
-  "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'; connect-src 'self' https://api.ente.io https://api.pwnedpasswords.com; img-src 'self' data:; media-src 'self'; font-src 'self'; style-src 'self'";
+  "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'; connect-src 'self' https://api.ente.io https://api.pwnedpasswords.com https://quack.duckduckgo.com; img-src 'self' data:; media-src 'self'; font-src 'self'; style-src 'self'";
 
 describe("Task 12 production network policy", () => {
   it("allows only the exact Ente origin and protocol table", async () => {
@@ -18,7 +18,10 @@ describe("Task 12 production network policy", () => {
       host_permissions?: string[];
       content_security_policy: { extension_pages: string };
     };
-    expect(sourceManifest.host_permissions).toEqual(["https://api.ente.io/*"]);
+    expect(sourceManifest.host_permissions).toEqual([
+      "https://api.ente.io/*",
+      "https://quack.duckduckgo.com/*",
+    ]);
     expect(sourceManifest.content_security_policy.extension_pages).toBe(approvedCsp);
     expect(ENTE_PROTOCOL_ENDPOINTS).toEqual([
       ["GET", "/users/srp/attributes"],

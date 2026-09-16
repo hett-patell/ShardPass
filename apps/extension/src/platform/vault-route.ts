@@ -6,7 +6,7 @@ import { VAULT_ITEM_KINDS, type VaultItemKind } from "@shardpass/domain";
  * can be moved there without a reload and a fresh one boots straight into it.
  */
 export type VaultPageTarget =
-  | { view: "settings" | "ente" | "import" | "health" }
+  | { view: "settings" | "ente" | "import" | "health" | "generator" | "usernames" | "aliases" }
   | { newItem: VaultItemKind }
   | { item: string };
 
@@ -14,7 +14,12 @@ const ITEM_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 export function vaultPageHash(target?: VaultPageTarget): string {
   if (target === undefined) return "";
-  if ("view" in target) return target.view === "import" ? "#/settings/import" : `#/${target.view}`;
+  if ("view" in target) {
+    if (target.view === "import") return "#/settings/import";
+    if (target.view === "generator" || target.view === "usernames" || target.view === "aliases")
+      return `#/tools/${target.view}`;
+    return `#/${target.view}`;
+  }
   if ("newItem" in target) return `#/new/${target.newItem}`;
   return ITEM_ID.test(target.item) ? `#/item/${target.item}` : "";
 }
@@ -30,6 +35,12 @@ export function parseVaultPageHash(hash: string): VaultPageTarget | null {
       return { view: "ente" };
     case "/health":
       return { view: "health" };
+    case "/tools/generator":
+      return { view: "generator" };
+    case "/tools/usernames":
+      return { view: "usernames" };
+    case "/tools/aliases":
+      return { view: "aliases" };
     default:
       break;
   }

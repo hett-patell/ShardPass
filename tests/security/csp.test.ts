@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import manifest from "../../apps/extension/src/manifest";
 
 export const productionCsp =
-  "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'; connect-src 'self' https://api.ente.io https://api.pwnedpasswords.com; img-src 'self' data:; media-src 'self'; font-src 'self'; style-src 'self'";
+  "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'; connect-src 'self' https://api.ente.io https://api.pwnedpasswords.com https://quack.duckduckgo.com; img-src 'self' data:; media-src 'self'; font-src 'self'; style-src 'self'";
 
 export function assertProductionCsp(candidate: Record<string, unknown>): void {
   expect(candidate.content_security_policy).toEqual({ extension_pages: productionCsp });

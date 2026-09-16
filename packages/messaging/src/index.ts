@@ -335,3 +335,12 @@ export {
   parseDataFillResponseForRequest,
 } from "./data-fill";
 export type { DataFillCommandKind, DataFillRequest, DataFillResponse } from "./data-fill";
+export {
+  AliasGeneratedResponseSchema,
+  AliasRequestSchema,
+  AliasResponseSchema,
+  AliasStatusResponseSchema,
+  aliasSenderPolicy,
+  parseAliasResponseForRequest,
+} from "./alias";
+export type { AliasCommandKind, AliasRequest, AliasResponse } from "./alias";

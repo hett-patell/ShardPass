@@ -162,11 +162,15 @@ export const SaveLoginResultSchema = z.strictObject({
 export const LoginSuggestUsernameRequestSchema = z.strictObject({
   version: z.literal(MESSAGE_VERSION),
   kind: z.literal("login.suggestUsername"),
+  /** What to suggest: a name from the generator settings, or a fresh forwarding address. */
+  source: z.optional(z.enum(["settings", "duck"])),
 });
 export const LoginUsernameSuggestionSchema = z.strictObject({
   version: z.literal(MESSAGE_VERSION),
   kind: z.literal("login.usernameSuggestion"),
   username: z.nullable(z.string().check(z.maxLength(320))),
+  /** A DuckDuckGo token is set, so the picker may offer a @duck.com address too. */
+  duckAvailable: z.optional(z.boolean()),
 });
 
 export const LoginFillRequestSchema = z.discriminatedUnion("kind", [

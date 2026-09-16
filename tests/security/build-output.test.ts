@@ -35,7 +35,7 @@ const safeManifest = JSON.stringify({
   minimum_chrome_version: "111",
   description: "Local-first password manager foundation.",
   permissions: ["storage", "unlimitedStorage", "alarms", "idle", "activeTab", "contextMenus"],
-  host_permissions: ["https://api.ente.io/*"],
+  host_permissions: ["https://api.ente.io/*", "https://quack.duckduckgo.com/*"],
   action: { default_popup: "popup/index.html", default_title: "ShardPass" },
   options_page: "vault/index.html",
   background: { service_worker: "service-worker-loader.js", type: "module" },
@@ -49,7 +49,7 @@ const safeManifest = JSON.stringify({
   ],
   content_security_policy: {
     extension_pages:
-      "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'; connect-src 'self' https://api.ente.io https://api.pwnedpasswords.com; img-src 'self' data:; media-src 'self'; font-src 'self'; style-src 'self'",
+      "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'; connect-src 'self' https://api.ente.io https://api.pwnedpasswords.com https://quack.duckduckgo.com; img-src 'self' data:; media-src 'self'; font-src 'self'; style-src 'self'",
   },
   web_accessible_resources: [
     {

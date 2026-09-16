@@ -20,7 +20,7 @@ export default defineManifest({
   // contextMenus: a "Fill login with ShardPass" entry on editable fields; the click carries
   // the tab, and activeTab then covers reading its URL and messaging its content script.
   permissions: ["storage", "unlimitedStorage", "alarms", "idle", "activeTab", "contextMenus"],
-  host_permissions: ["https://api.ente.io/*"],
+  host_permissions: ["https://api.ente.io/*", "https://quack.duckduckgo.com/*"],
   // A shortcut to open the popup, as every password manager has; changeable at
   // chrome://extensions/shortcuts.
   commands: {
@@ -54,6 +54,6 @@ export default defineManifest({
   ],
   content_security_policy: {
     extension_pages:
-      "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'; connect-src 'self' https://api.ente.io https://api.pwnedpasswords.com; img-src 'self' data:; media-src 'self'; font-src 'self'; style-src 'self'",
+      "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'; connect-src 'self' https://api.ente.io https://api.pwnedpasswords.com https://quack.duckduckgo.com; img-src 'self' data:; media-src 'self'; font-src 'self'; style-src 'self'",
   },
 });

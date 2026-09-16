@@ -29,3 +29,13 @@ describe("vault page deep links", () => {
     expect(vaultPageHash({ item: "../x" })).toBe("");
   });
 });
+
+describe("tool routes", () => {
+  it("round-trips the generator, username and alias tools", () => {
+    for (const view of ["generator", "usernames", "aliases"] as const) {
+      expect(vaultPageHash({ view })).toBe(`#/tools/${view}`);
+      expect(parseVaultPageHash(`#/tools/${view}`)).toEqual({ view });
+    }
+    expect(parseVaultPageHash("#/tools/other")).toBeNull();
+  });
+});

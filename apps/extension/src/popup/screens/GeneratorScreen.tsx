@@ -10,9 +10,12 @@ import styles from "./GeneratorScreen.module.css";
 export interface GeneratorScreenProps {
   platform: Pick<ExtensionPlatform, "sendMessage">;
   onCopy: (value: string, label: string) => void;
+  /** Which tab opens first; "random" when not given. */
+  initialMode?: GeneratorMode;
 }
 
-type Mode = "random" | "passphrase" | "username";
+export type GeneratorMode = "random" | "passphrase" | "username";
+type Mode = GeneratorMode;
 type UsernameKind = "word" | "random" | "plus" | "catchall";
 const usernameKindOptions: readonly { value: UsernameKind; label: string }[] = [
   { value: "word", label: "Two words and a number" },
@@ -42,8 +45,12 @@ function strength(entropyBits: number): { status: Status; word: string } {
  * screen, with Copy as the main action because that is what the popup is for -- a sign-up
  * form is open in the tab behind it. Generation itself happens in the background (CSPRNG).
  */
-export function GeneratorScreen({ platform, onCopy }: GeneratorScreenProps) {
-  const [mode, setMode] = useState<Mode>("random");
+export function GeneratorScreen({
+  platform,
+  onCopy,
+  initialMode = "random",
+}: GeneratorScreenProps) {
+  const [mode, setMode] = useState<Mode>(initialMode);
   const [length, setLength] = useState(20);
   const [uppercase, setUppercase] = useState(true);
   const [lowercase, setLowercase] = useState(true);

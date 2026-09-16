@@ -1,4 +1,4 @@
-import type { SecurityResponse, DataFillResponse } from "@shardpass/messaging";
+import type { SecurityResponse, DataFillResponse, AliasResponse } from "@shardpass/messaging";
 import {
   authorizeSender,
   BackupRequestSchema,
@@ -38,12 +38,15 @@ import {
   parseOtpImportResponseForRequest,
   parseOtpResponseForRequest,
   parsePasskeyResponseForRequest,
+  parseAliasResponseForRequest,
   parseSecurityResponseForRequest,
   PasskeyRequestSchema,
   passkeySenderPolicy,
   passwordGenSenderPolicy,
   SecurityRequestSchema,
   securitySenderPolicy,
+  AliasRequestSchema,
+  aliasSenderPolicy,
   type BackupRequest,
   type BackupResponse,
   type EnteSafeState,
@@ -90,6 +93,7 @@ import type { VaultService } from "./vault/vault-service";
 import type { EnteService } from "./ente/ente-service";
 import { EnteProtocolError } from "./ente/protocol";
 import { DataFillServiceError, type DataFillService } from "./login/data-fill-service";
+import { AliasError, type AliasService } from "./alias/alias-service";
 import { BreachCheckError, type BreachCheckService } from "./security/breach-check-service";
 
 export type BackgroundErrorResponse = Readonly<{
@@ -117,6 +121,7 @@ export type BackgroundResponse =
   | VaultResponse
   | EnteSafeState
   | SecurityResponse
+  | AliasResponse
   | DataFillResponse
   | BackgroundErrorResponse;
 
@@ -352,6 +357,7 @@ export function routeMessage(
   folderService?: FolderHandler,
   passkeyService?: PasskeyHandler,
   breachCheckService?: Pick<BreachCheckService, "handle">,
+  aliasService?: Pick<AliasService, "handle">,
   dataFillService?: Pick<DataFillService, "handle">,
 ): Promise<BackgroundResponse> {
   const dataFillRequest = DataFillRequestSchema.safeParse(input);
@@ -386,6 +392,23 @@ export function routeMessage(
       })
       .catch((error: unknown) =>
         errorResponse(error instanceof BreachCheckError ? error.code : "VAULT_UNAVAILABLE"),
+      );
+  }
+
+  const aliasRequest = AliasRequestSchema.safeParse(input);
+  if (aliasRequest.success) {
+    const policy = aliasSenderPolicy[aliasRequest.data.kind];
+    if (!authorizeSender(senderContext, { extensionId: expectedExtensionId, ...policy }))
+      return Promise.resolve(errorResponse("UNAUTHORIZED_SENDER"));
+    if (aliasService === undefined) return Promise.resolve(errorResponse("VAULT_UNAVAILABLE"));
+    return aliasService
+      .handle(aliasRequest.data)
+      .then((candidate) => {
+        const parsed = parseAliasResponseForRequest(aliasRequest.data, candidate);
+        return parsed.success ? parsed.data : errorResponse("ALIAS_UNAVAILABLE");
+      })
+      .catch((error: unknown) =>
+        errorResponse(error instanceof AliasError ? error.code : "ALIAS_UNAVAILABLE"),
       );
   }
 

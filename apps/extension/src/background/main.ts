@@ -29,6 +29,7 @@ import { createEnteRuntimeOwner, type EnteRuntimeDependencies } from "./ente/run
 import { FolderService } from "./folder/folder-service";
 import { PasskeyService } from "./passkey/passkey-service";
 import { ItemService } from "./item/item-service";
+import { AliasError, AliasService } from "./alias/alias-service";
 import { BreachCheckService } from "./security/breach-check-service";
 import { RepromptGrants } from "./vault/reprompt-grants";
 import { DataFillService } from "./login/data-fill-service";
@@ -168,6 +169,30 @@ export function installBackground(
     now: () => Date.now(),
     notePrivilegedActivity: () => settings.notePrivilegedActivity(),
   });
+  // DuckDuckGo Email Protection: the token, sealed under the vault key, goes only to
+  // quack.duckduckgo.com, and only when a fresh address is asked for.
+  const aliases = new AliasService({
+    local: platform.localStorage,
+    secrets: {
+      seal: (purpose, plaintext) => sessions.sealSecret(purpose, plaintext),
+      open: (purpose, sealed) => sessions.openSecret(purpose, sealed),
+    },
+    requestDuckAddress: async (token) => {
+      const response = await fetch("https://quack.duckduckgo.com/api/email/addresses", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: "{}",
+        cache: "no-store",
+      });
+      if (response.status === 401 || response.status === 403)
+        throw new AliasError("ALIAS_REJECTED");
+      if (!response.ok) throw new AliasError("ALIAS_UNAVAILABLE");
+      const body = (await response.json().catch(() => null)) as { address?: unknown } | null;
+      if (body === null || typeof body.address !== "string")
+        throw new AliasError("ALIAS_UNAVAILABLE");
+      return body.address;
+    },
+  });
   const passwordGen = new PasswordGenService({ local: platform.localStorage });
   const loginFill = new LoginFillService({
     repository: sessions.vaultRepository,
@@ -175,7 +200,9 @@ export function installBackground(
     notePrivilegedActivity: () => settings.notePrivilegedActivity(),
     offerStore: platform.sessionStorage,
     repromptGranted: (itemId) => repromptGrants.granted(itemId),
-    suggestUsername: (host) => passwordGen.suggestForSite(host),
+    suggestUsername: (host, source) =>
+      source === "duck" ? aliases.generateDuckAddress() : passwordGen.suggestForSite(host),
+    duckAvailable: () => aliases.configured(),
   });
   const dataFill = new DataFillService({
     repository: sessions.vaultRepository,
@@ -455,6 +482,7 @@ export function installBackground(
         folder,
         passkey,
         breachCheck,
+        aliases,
         dataFill,
       );
       if (parsedVault.success) {

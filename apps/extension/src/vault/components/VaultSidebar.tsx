@@ -2,10 +2,13 @@ import type { Folder } from "@shardpass/domain";
 import { CategoryNav, type CategoryKey } from "@shardpass/ui";
 import {
   Archive,
+  AtSign,
   Cloud,
   Folder as FolderIcon,
   FolderPlus,
   HeartPulse,
+  KeyRound,
+  Mail,
   Pencil,
   Plus,
   Settings,
@@ -17,7 +20,8 @@ import { folderSubtreeIds, folderTree } from "../item-support";
 import { FolderDeleteDialog } from "./FolderDeleteDialog";
 import styles from "./VaultSidebar.module.css";
 
-export type VaultSidebarView = "vault" | "settings" | "ente" | "health";
+export type VaultSidebarView = "vault" | "settings" | "ente" | "health" | "generator" | "aliases";
+export type GeneratorTool = "random" | "username";
 
 export interface VaultSidebarProps {
   category: CategoryKey;
@@ -43,6 +47,11 @@ export interface VaultSidebarProps {
   onOpenHealth: () => void;
   /** Findings worth a look (reused passwords, unencrypted sites), shown beside "Health". */
   healthCount?: number | undefined;
+  /** The Tools section: password or username generator, and e-mail aliases. */
+  onOpenGenerator: (tool: GeneratorTool) => void;
+  onOpenAliases: () => void;
+  /** Which generator tab is open, so the matching tool row reads as current. */
+  generatorTool?: GeneratorTool | undefined;
 }
 
 type FolderEdit =
@@ -72,6 +81,9 @@ export function VaultSidebar({
   onOpenEnte,
   onOpenHealth,
   healthCount = 0,
+  onOpenGenerator,
+  onOpenAliases,
+  generatorTool = "random",
 }: VaultSidebarProps) {
   const [edit, setEdit] = useState<FolderEdit | null>(null);
   const [pendingDelete, setPendingDelete] = useState<Folder | null>(null);
@@ -134,6 +146,36 @@ export function VaultSidebar({
   return (
     <aside className={styles.sidebar}>
       <div className={styles.scroll}>
+        <nav className={styles.tools} aria-label="Tools">
+          <p className={styles.sectionLabel}>Tools</p>
+          <button
+            type="button"
+            className={`${styles.toolButton} ${view === "generator" && generatorTool === "random" ? styles.toolButtonActive : ""}`}
+            aria-current={view === "generator" && generatorTool === "random" ? "true" : undefined}
+            onClick={() => onOpenGenerator("random")}
+          >
+            <KeyRound size={16} aria-hidden="true" />
+            <span>Password generator</span>
+          </button>
+          <button
+            type="button"
+            className={`${styles.toolButton} ${view === "generator" && generatorTool === "username" ? styles.toolButtonActive : ""}`}
+            aria-current={view === "generator" && generatorTool === "username" ? "true" : undefined}
+            onClick={() => onOpenGenerator("username")}
+          >
+            <AtSign size={16} aria-hidden="true" />
+            <span>Username generator</span>
+          </button>
+          <button
+            type="button"
+            className={`${styles.toolButton} ${view === "aliases" ? styles.toolButtonActive : ""}`}
+            aria-current={view === "aliases" ? "true" : undefined}
+            onClick={onOpenAliases}
+          >
+            <Mail size={16} aria-hidden="true" />
+            <span>Email aliases</span>
+          </button>
+        </nav>
         <CategoryNav
           active={browsing ? category : "all"}
           counts={itemCounts}
