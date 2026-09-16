@@ -279,7 +279,15 @@ describe("native OTP field fill primitive", () => {
       box.setAttribute("maxlength", "1");
       box.setAttribute("inputmode", "numeric");
       vi.spyOn(box, "getBoundingClientRect").mockReturnValue({
-        x: 1, y: 1, top: 1, left: 1, right: 40, bottom: 30, width: 39, height: 29, toJSON: () => ({}),
+        x: 1,
+        y: 1,
+        top: 1,
+        left: 1,
+        right: 40,
+        bottom: 30,
+        width: 39,
+        height: 29,
+        toJSON: () => ({}),
       });
       return box;
     });
@@ -303,5 +311,20 @@ describe("native OTP field fill primitive", () => {
     expect(result).toEqual({ status: "filled" });
     expect(boxes.map((box) => box.value)).toEqual(["2", "4", "6", "8", "1", "0"]);
     expect(document.activeElement).toBe(boxes[5]);
+  });
+});
+
+describe("the page a code was released for", () => {
+  it("still fills after the page rewrote its query or fragment, and refuses another path", () => {
+    const here = new URL(window.location.href);
+    expect(fill(setup(), { expectedUrl: `${here.origin}${here.pathname}?step=code` })).toEqual({
+      status: "filled",
+    });
+    expect(fill(setup(), { expectedUrl: `${here.origin}${here.pathname}#code` })).toEqual({
+      status: "filled",
+    });
+    expect(fill(setup(), { expectedUrl: `${here.origin}/somewhere-else` })).toEqual({
+      status: "field-changed",
+    });
   });
 });

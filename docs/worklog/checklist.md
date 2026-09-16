@@ -101,6 +101,12 @@ Baseline at 2.3.0: typecheck clean, lint clean after one test fix, full suite gr
 - [ ] E9 low (still open, narrow) · `login.fillFromPopup` first-answer race across frames (narrow).
 - [x] E10 low · dead `useOtpList.ts`; stale scan-build/manifest-test comments; GeneratorScreen's deferred settings fetch overwrites what was typed and requests a username per keystroke.
 
+## 2026-09-16 · One-time codes (2.5.2)
+
+- [x] Clicking a code in the picker did nothing on pages that rewrite their URL while you choose. The fill refused unless `location.href` was byte-identical to the URL captured when the picker opened, so a sign-in step adding a query parameter (common on two-factor pages) turned every click into a silent refusal. Origin and path must still match; a query or fragment rewrite does not.
+- [x] The vault's live code froze: the countdown effect scheduled one timer and, because the tick's own state was not a dependency, never scheduled another. The code stayed on screen past its period and was never asked for again. The popup's copy of the same hook was already correct.
+- [x] Both covered by tests that fail without the fix.
+
 ## 2026-09-16 · The chip on every login field (2.5.0)
 
 Reported on HackerOne's sign-in: 1Password's island appears, ShardPass shows nothing.

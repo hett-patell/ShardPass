@@ -68,7 +68,9 @@ export function useOtpLiveCode(
       else setTime(currentTime);
     }, delay);
     return () => clearTimeout(timer);
-  }, [active, code, now, reload]);
+    // `time` is a dependency on purpose: each tick schedules the next one, so the countdown
+    // keeps running and the code is asked for again when it expires.
+  }, [active, code, now, reload, time]);
 
   const remaining = code === null ? 0 : Math.max(0, Math.ceil((code.expiresAt - time) / 1_000));
   return { code, remaining, failed };

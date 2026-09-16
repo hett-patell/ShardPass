@@ -63,6 +63,23 @@ function currentOrigin(ownerWindow: Window): string | null {
   }
 }
 
+/**
+ * Whether the page is still the one the code was released for. Origin and path must match;
+ * a query or fragment the page rewrote while the person was choosing (a sign-in step
+ * recording its progress, say) is the same page, and refusing to fill there left the person
+ * clicking a code that never arrived.
+ */
+function samePage(href: string, expected: string): boolean {
+  if (href === expected) return true;
+  try {
+    const current = new URL(href);
+    const before = new URL(expected);
+    return current.origin === before.origin && current.pathname === before.pathname;
+  } catch {
+    return false;
+  }
+}
+
 export function fillOtpField(options: FillOtpFieldOptions): OtpFillPrimitiveResult {
   const now = options.now ?? Date.now;
   if (options.attempt === undefined || !isAvailableOtpFillAttempt(options.attempt))
@@ -71,7 +88,7 @@ export function fillOtpField(options: FillOtpFieldOptions): OtpFillPrimitiveResu
   const ownerWindow = options.input.ownerDocument.defaultView;
   if (
     ownerWindow === null ||
-    ownerWindow.location.href !== options.expectedUrl ||
+    !samePage(ownerWindow.location.href, options.expectedUrl) ||
     currentOrigin(ownerWindow) !== options.expectedOrigin
   )
     return { status: "field-changed" };
@@ -87,8 +104,9 @@ export function fillOtpField(options: FillOtpFieldOptions): OtpFillPrimitiveResu
     return { status: "field-changed" };
   }
 
+  // Checked again after the focus call, in case focusing navigated or moved the field.
   if (
-    ownerWindow.location.href !== options.expectedUrl ||
+    !samePage(ownerWindow.location.href, options.expectedUrl) ||
     currentOrigin(ownerWindow) !== options.expectedOrigin ||
     options.registry.resolveActive(options.fieldHandle) !== options.input ||
     !options.input.isConnected ||
