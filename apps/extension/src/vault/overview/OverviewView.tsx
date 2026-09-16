@@ -45,6 +45,25 @@ const KINDS: readonly Readonly<{ kind: VaultItemKind; label: string; icon: Lucid
 ];
 
 const RECENT = 6;
+const KIND_LABEL: Record<VaultItemKind, string> = {
+  login: "Login",
+  otp: "One-time code",
+  note: "Note",
+  card: "Card",
+  identity: "Identity",
+  secret: "Secret",
+};
+
+/** "today", "yesterday", "3 days ago", else the date: enough to place a change. */
+function whenLabel(iso: string, now = Date.now()): string {
+  const at = Date.parse(iso);
+  if (Number.isNaN(at)) return "";
+  const days = Math.floor((now - at) / 86_400_000);
+  if (days <= 0) return "today";
+  if (days === 1) return "yesterday";
+  if (days < 30) return `${days} days ago`;
+  return new Date(at).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
 /** Quick strength is cheap, but a vault of thousands still deserves a bound per render. */
 const STRENGTH_BATCH = 2_000;
 
@@ -137,7 +156,7 @@ export function OverviewView({
         </p>
       </header>
 
-      <div className={styles.grid}>
+      <div className={styles.stats}>
         <section className={`${styles.card} ${styles.gaugeCard}`} aria-labelledby="overview-health">
           <h4 id="overview-health" className={styles.cardTitle}>
             Health
@@ -177,8 +196,10 @@ export function OverviewView({
           <span className={styles.statValue}>{folderCount.toLocaleString("en-US")}</span>
           <span className={styles.statLabel}>Folders</span>
         </section>
+      </div>
 
-        <section className={styles.card} aria-labelledby="overview-attention">
+      <div className={styles.panels}>
+        <section className={`${styles.card} ${styles.panel}`} aria-labelledby="overview-attention">
           <h4 id="overview-attention" className={styles.cardTitle}>
             Needs a look
           </h4>
@@ -200,7 +221,7 @@ export function OverviewView({
           )}
         </section>
 
-        <section className={styles.card} aria-labelledby="overview-recent">
+        <section className={`${styles.card} ${styles.panel}`} aria-labelledby="overview-recent">
           <h4 id="overview-recent" className={styles.cardTitle}>
             Recently changed
           </h4>
@@ -217,11 +238,26 @@ export function OverviewView({
                       className={styles.open}
                       onClick={() => onOpenItem(item.id)}
                     >
-                      {icon !== undefined ? (
-                        <img className={styles.favicon} src={icon} alt="" width={16} height={16} />
-                      ) : null}
-                      <span className={styles.rowLabel}>{itemDisplayName(item)}</span>
-                      <span className={styles.rowSub}>{itemDisplaySubtitle(item) ?? ""}</span>
+                      <span className={styles.rowIcon} aria-hidden="true">
+                        {icon !== undefined ? (
+                          <img
+                            className={styles.favicon}
+                            src={icon}
+                            alt=""
+                            width={16}
+                            height={16}
+                          />
+                        ) : (
+                          <Globe size={16} />
+                        )}
+                      </span>
+                      <span className={styles.rowText}>
+                        <span className={styles.rowLabel}>{itemDisplayName(item)}</span>
+                        <span className={styles.rowSub}>
+                          {itemDisplaySubtitle(item) ?? KIND_LABEL[item.kind]}
+                        </span>
+                      </span>
+                      <span className={styles.rowWhen}>{whenLabel(item.updatedAt)}</span>
                     </button>
                   </li>
                 );
@@ -230,17 +266,20 @@ export function OverviewView({
           )}
         </section>
 
-        <section className={styles.card} aria-labelledby="overview-actions">
+        <section className={`${styles.card} ${styles.panel}`} aria-labelledby="overview-actions">
           <h4 id="overview-actions" className={styles.cardTitle}>
             Quick actions
           </h4>
-          <div className={styles.actions}>
+          <div className={styles.quickActions}>
             <Button onClick={onNewLogin}>New login</Button>
             <Button variant="secondary" onClick={onOpenGenerator}>
               Generate a password
             </Button>
             <Button variant="secondary" onClick={onOpenImport}>
-              Import
+              Import from another manager
+            </Button>
+            <Button variant="secondary" onClick={onOpenHealth}>
+              Run the health check
             </Button>
           </div>
         </section>
