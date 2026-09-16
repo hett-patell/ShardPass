@@ -101,6 +101,16 @@ Baseline at 2.3.0: typecheck clean, lint clean after one test fix, full suite gr
 - [ ] E9 low (still open, narrow) · `login.fillFromPopup` first-answer race across frames (narrow).
 - [x] E10 low · dead `useOtpList.ts`; stale scan-build/manifest-test comments; GeneratorScreen's deferred settings fetch overwrites what was typed and requests a username per keystroke.
 
+## 2026-09-16 · Small things with real weight (2.6.0)
+
+- [x] The passkey prompt's header used a class no stylesheet defines, so it had no grid, no column for the close button and none of the save banner's spacing: cramped box, close glyph outside it. It now uses the shared heading row, with a wider prompt and more room around the title, rows and buttons.
+- [x] Swept the content scripts for the same mistake: every class name used has a rule, and every rule is used.
+- [x] `pnpm format:check` had been failing on 101 files since the formatter's version changed, which meant `pnpm verify` could not pass. The tree is formatted, and the two directories that exist only between assistant runs are ignored rather than rewritten.
+- [x] B22 · a click in the sidebar threw away a half-filled new item without a word. It now asks, and only when something was actually typed: the form's fields are compared with what they held when it opened.
+- [x] B24 · deleting the folder you were filtering by moved you to the vault list even from Settings or Health. The filter is cleared where it lives now, and the view stays put.
+- [x] B20 · a new item that could not be filed into the open folder failed silently as an unhandled rejection. It says so, above the item.
+- [ ] B26 stays open: a locked dialog desyncing from React on a second Escape was never reproduced.
+
 ## 2026-09-16 · Google and passkeys, again (2.5.4)
 
 - [x] Every passkey ShardPass created told the site it was reachable over "hybrid" as well as "internal". Hybrid means "this credential can be used from a phone", so Google offered the phone, which is the same prompt that asks to turn Bluetooth on. Bitwarden advertises hybrid deliberately, because it has a phone app to reach; ShardPass has none, so it now says "internal" only.

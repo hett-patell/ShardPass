@@ -140,11 +140,8 @@ export function VaultSidebar({
     const ok = await onDeleteFolder(pendingDelete.id);
     setBusy(false);
     if (ok) {
-      if (
-        selectedFolderId !== null &&
-        folderSubtreeIds(folders, pendingDelete.id).has(selectedFolderId)
-      )
-        onFolderSelect(null);
+      // Whoever owns the filter clears it: doing it here moved the person to the vault list
+      // even when they were reading Settings or Health.
       setPendingDelete(null);
       focusAfterDialog(pendingDelete.id);
     }

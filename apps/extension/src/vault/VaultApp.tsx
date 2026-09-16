@@ -8,7 +8,7 @@ import {
   type CategoryKey,
   type Status,
 } from "@shardpass/ui";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useFoundationStatus } from "../foundation/useFoundationStatus";
 import { clearClipboardIfDue, clearClipboardNow } from "./components/detail/clipboard";
@@ -43,7 +43,8 @@ import { EnteSettings } from "./ente/EnteSettings";
 import { useFolders } from "./hooks/useFolders";
 import { countByKind, useVaultState } from "./hooks/useVaultState";
 import { ImportDialog } from "./import/ImportDialog";
-import { countItemsByFolder, folderPath } from "./item-support";
+import { DeleteItemDialog } from "./components/DeleteItemDialog";
+import { countItemsByFolder, folderPath, folderSubtreeIds } from "./item-support";
 import { MigrationPanel } from "./migration/MigrationPanel";
 import { defaultOtpInput, OtpEditor } from "./otp/OtpEditor";
 import styles from "./VaultApp.module.css";
@@ -88,6 +89,10 @@ export function VaultApp({ platform }: VaultAppProps) {
   const [creatingKind, setCreatingKind] = useState<VaultItemKind | null>(null);
   const [otpCreating, setOtpCreating] = useState(false);
   const [otpCreateError, setOtpCreateError] = useState("");
+  /** A newly created item that could not be filed into the folder being browsed. */
+  const [filingError, setFilingError] = useState("");
+  /** What to do once the person has said the half-filled create form may go. */
+  const [pendingLeave, setPendingLeave] = useState<(() => void) | null>(null);
   // A just-created item is selected before the list has re-fetched it; the detail pane
   // stays blank for that beat instead of flashing "Select an item".
   const [pendingId, setPendingId] = useState<string | null>(null);
@@ -110,37 +115,91 @@ export function VaultApp({ platform }: VaultAppProps) {
     );
   }, [vaultState.liveItems, vaultState.redactedIds]);
 
+  /**
+   * What a create form looked like when it opened. The forms do not report their own state,
+   * and asking every kind to would be a wide change; what a person would lose is what is in
+   * the fields, so the fields are what gets compared.
+   */
+  const draftOpenedWith = useRef<string[]>([]);
+  const readDraftFields = useCallback((): string[] => {
+    const region = document.getElementById("vault-content");
+    if (region === null) return [];
+    return [...region.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>("input, textarea")]
+      .filter(
+        (field) =>
+          !(field instanceof HTMLInputElement) ||
+          (field.type !== "checkbox" && field.type !== "radio"),
+      )
+      .map((field) => field.value);
+  }, []);
+
+  useEffect(() => {
+    draftOpenedWith.current = creatingKind === null ? [] : readDraftFields();
+  }, [creatingKind, readDraftFields]);
+
+  /** Whether the open create form holds anything the person typed into it. */
+  const createFormHasInput = useCallback((): boolean => {
+    const opened = draftOpenedWith.current;
+    return readDraftFields().some(
+      (value, index) => value.trim() !== "" && value !== (opened[index] ?? ""),
+    );
+  }, [readDraftFields]);
+
+  /** Runs `next`, first asking about a create form that would be discarded by it. */
+  const leavingCreate = useCallback(
+    (next: () => void): void => {
+      if (creatingKind === null || !createFormHasInput()) {
+        next();
+        return;
+      }
+      setPendingLeave(() => next);
+    },
+    [createFormHasInput, creatingKind],
+  );
+
   const goToVaultView = useCallback(() => {
-    setView("vault");
-    setCreatingKind(null);
-    vaultState.setArchived(false);
-  }, [vaultState]);
+    leavingCreate(() => {
+      setView("vault");
+      setCreatingKind(null);
+      vaultState.setArchived(false);
+    });
+  }, [leavingCreate, vaultState]);
 
   const openArchive = useCallback(() => {
-    setView("vault");
-    setCreatingKind(null);
-    vaultState.setSelectedId(null);
-    vaultState.setCategory("all");
-    vaultState.setFolderId(null);
-    vaultState.setArchived(true);
-  }, [vaultState]);
+    leavingCreate(() => {
+      setView("vault");
+      setCreatingKind(null);
+      vaultState.setSelectedId(null);
+      vaultState.setCategory("all");
+      vaultState.setFolderId(null);
+      vaultState.setArchived(true);
+    });
+  }, [leavingCreate, vaultState]);
 
   // Deleting a folder un-files its items in the background; the list must catch up.
   const deleteFolder = useCallback(
     async (id: string) => {
+      const affected = folderSubtreeIds(folderState.folders, id);
       const ok = await folderState.remove(id);
-      if (ok) vaultState.refresh();
-      return ok;
+      if (!ok) return false;
+      // The filter went with the folder. Clearing it here, rather than through the sidebar's
+      // own selection, keeps whoever was reading Settings or Health where they were.
+      if (vaultState.folderId !== null && affected.has(vaultState.folderId))
+        vaultState.setFolderId(null);
+      vaultState.refresh();
+      return true;
     },
     [folderState, vaultState],
   );
 
   const selectItem = useCallback(
     (id: string) => {
-      setCreatingKind(null);
-      vaultState.setSelectedId(id);
+      leavingCreate(() => {
+        setCreatingKind(null);
+        vaultState.setSelectedId(id);
+      });
     },
-    [vaultState],
+    [leavingCreate, vaultState],
   );
 
   const handleCategoryChange = useCallback(
@@ -267,6 +326,7 @@ export function VaultApp({ platform }: VaultAppProps) {
       // the open directory. The forms know nothing about folders, so it is one update.
       const folderId = vaultState.folderId;
       setCreatingKind(null);
+      setFilingError("");
       setPendingId(item.id);
       vaultState.setSelectedId(item.id);
       vaultState.setCategory("all");
@@ -275,10 +335,14 @@ export function VaultApp({ platform }: VaultAppProps) {
         folderId === null
           ? Promise.resolve()
           : updateItem(platform, item.id, item.revision, { folderId }).then(() => undefined);
-      void filed.finally(() => {
-        vaultState.refresh();
-        vaultState.setSelectedId(item.id);
-      });
+      // The item exists either way; only the filing can fail, and it says so instead of
+      // becoming an unhandled rejection with the item silently outside the open folder.
+      void filed
+        .catch(() => setFilingError("Saved, but it could not be filed in this folder."))
+        .finally(() => {
+          vaultState.refresh();
+          vaultState.setSelectedId(item.id);
+        });
     },
     [platform, vaultState],
   );
@@ -348,17 +412,19 @@ export function VaultApp({ platform }: VaultAppProps) {
                 archived={vaultState.archived}
                 onOpenArchive={openArchive}
                 view={view}
-                onOpenSettings={() => setView("settings")}
-                onOpenEnte={() => setView("ente")}
-                onOpenHealth={() => setView("health")}
+                onOpenSettings={() => leavingCreate(() => setView("settings"))}
+                onOpenEnte={() => leavingCreate(() => setView("ente"))}
+                onOpenHealth={() => leavingCreate(() => setView("health"))}
                 healthCount={healthCount}
-                onOpenGenerator={(tool) => {
-                  setGeneratorTool(tool);
-                  setView("generator");
-                }}
-                onOpenAliases={() => setView("aliases")}
-                onOpenOverview={() => setView("overview")}
-                onOpenAbout={() => setView("about")}
+                onOpenGenerator={(tool) =>
+                  leavingCreate(() => {
+                    setGeneratorTool(tool);
+                    setView("generator");
+                  })
+                }
+                onOpenAliases={() => leavingCreate(() => setView("aliases"))}
+                onOpenOverview={() => leavingCreate(() => setView("overview"))}
+                onOpenAbout={() => leavingCreate(() => setView("about"))}
                 generatorTool={generatorTool}
               />
             </div>
@@ -416,6 +482,11 @@ export function VaultApp({ platform }: VaultAppProps) {
                 </div>
 
                 <div className={styles.detail}>
+                  {filingError ? (
+                    <p role="alert" className={styles.notice}>
+                      {filingError}
+                    </p>
+                  ) : null}
                   {creatingKind === "otp" ? (
                     <>
                       <OtpEditor
@@ -565,6 +636,21 @@ export function VaultApp({ platform }: VaultAppProps) {
           </div>
         )}
       </main>
+      {pendingLeave !== null ? (
+        <DeleteItemDialog
+          itemName="this new item"
+          title="Discard this draft?"
+          description="What you have typed has not been saved yet."
+          confirmLabel="Discard"
+          submitting={false}
+          onCancel={() => setPendingLeave(null)}
+          onConfirm={() => {
+            const leave = pendingLeave;
+            setPendingLeave(null);
+            leave();
+          }}
+        />
+      ) : null}
     </div>
   );
 }

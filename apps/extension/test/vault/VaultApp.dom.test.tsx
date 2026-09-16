@@ -377,6 +377,28 @@ describe("VaultApp foundation shell", () => {
     expect(within(tree).getByText("Work")).toBeVisible();
   });
 
+  it("asks before a click in the sidebar throws away a half-filled new item", async () => {
+    const platform = readyUnlockedPlatform();
+    render(<VaultApp platform={platform} />);
+    await screen.findByText("Example Login");
+
+    fireEvent.click(screen.getByRole("button", { name: "New item" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: /Login/ }));
+    const name = await screen.findByRole("textbox", { name: /Name/ });
+    fireEvent.change(name, { target: { value: "Half typed" } });
+
+    fireEvent.click(screen.getByRole("button", { name: /Health/ }));
+    expect(await screen.findByRole("heading", { name: "Discard this draft?" })).toBeVisible();
+
+    // Keeping it leaves the form exactly as it was.
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Cancel" }));
+    expect(screen.getByRole("textbox", { name: /Name/ })).toHaveValue("Half typed");
+
+    fireEvent.click(screen.getByRole("button", { name: /Health/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Discard" }));
+    expect(screen.queryByRole("textbox", { name: /Name/ })).toBeNull();
+  });
+
   it("opens the Archive as a separate query and offers no New button there", async () => {
     const platform = readyUnlockedPlatform();
     render(<VaultApp platform={platform} />);

@@ -119,6 +119,17 @@
   overflow-y: auto;
 }
 
+/* A newly saved item that could not be filed into the open folder: said once, above the item
+   itself, rather than left for the person to notice. */
+.notice {
+  margin: 0 0 var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  color: var(--color-text);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+}
+
 /* Settings are tiles: equal columns, equal rows, one frame for every card whatever its own
    module says. The import card takes the whole row while it shows a preview, and the rows
    stop equalising then, so a long preview does not stretch its neighbours. */
