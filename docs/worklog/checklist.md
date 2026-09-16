@@ -101,6 +101,15 @@ Baseline at 2.3.0: typecheck clean, lint clean after one test fix, full suite gr
 - [ ] E9 low (still open, narrow) · `login.fillFromPopup` first-answer race across frames (narrow).
 - [x] E10 low · dead `useOtpList.ts`; stale scan-build/manifest-test comments; GeneratorScreen's deferred settings fetch overwrites what was typed and requests a username per keystroke.
 
+## 2026-09-16 · The chip on every login field (2.5.0)
+
+Reported on HackerOne's sign-in: 1Password's island appears, ShardPass shows nothing.
+
+- [x] Read the real page (the form is a plain Rails one: hidden token, `user[email]` text input, `user[password]`, a checkbox) and pinned it as a detection test. Detection was never the problem.
+- [x] The chip only appeared when the vault already held a match, was locked, or the form looked like a sign-up. Bitwarden and 1Password put their menu beside any login field and offer "New login" when nothing matches; ShardPass now does the same.
+- [x] With nothing saved, the picker offers a generated password and a row that opens the vault at a new login for this site.
+- [x] Focus no longer asks the background anything: the chip is drawn beside the field, and the vault is asked once, when the picker opens. That also removes the chip's old side effect of telling a page whether this site is in the vault.
+
 ## 2026-09-16 · Google passkey: the Bluetooth prompt (2.4.5)
 
 - [x] Root cause: the page-world interceptor runs at `document_start` and the isolated half at `document_idle`. A ceremony started in that window got no answer within 700 ms, so it went to the browser, which on a desktop with no platform authenticator offers a phone over Bluetooth.

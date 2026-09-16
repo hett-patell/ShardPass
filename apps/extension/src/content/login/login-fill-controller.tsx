@@ -249,9 +249,6 @@ export function createLoginFillController(
   let rescanScheduled = false;
   let owner: Owner | null = null;
   let host: PickerHandle | null = null;
-  let cachedSuggestions: readonly LoginPickerSuggestion[] = [];
-  /** The vault was locked when last asked: the chip stays, and a click asks again. */
-  let locked = false;
   let pickerRequest: object | null = null;
   let picker: PickerView | null = null;
   let disposeRuntimeMessages: (() => void) | null = null;
@@ -303,8 +300,6 @@ export function createLoginFillController(
   const invalidate = (restoreFocus: boolean): void => {
     const previousInput = owner?.input ?? null;
     owner = null;
-    cachedSuggestions = [];
-    locked = false;
     pickerRequest = null;
     closeHost();
     if (restoreFocus && previousInput !== null && previousInput.isConnected) {
@@ -345,10 +340,13 @@ export function createLoginFillController(
     }, RESCAN_SETTLE_MS);
   };
 
-  const chipAvailable = (): boolean =>
-    cachedSuggestions.length > 0 ||
-    locked ||
-    (owner !== null && signupFieldsOf(owner.fieldSet) !== null);
+  /**
+   * The chip belongs beside every login field, not only the ones ShardPass already has an
+   * answer for: a site with nothing saved is exactly where a person reaches for the vault, to
+   * take a generated password or to add the login. Its presence also stops saying whether
+   * this site is in the vault.
+   */
+  const chipAvailable = (): boolean => owner !== null;
 
   const showChip = (candidate: Owner): void => {
     if (!owns(candidate)) return;
@@ -374,8 +372,20 @@ export function createLoginFillController(
     candidate.input.focus({ preventScroll: true });
   };
 
+  /** Opens the vault at a new login, for a site the person has nothing saved for yet. */
+  const addLoginForThisSite = async (candidate: Owner): Promise<void> => {
+    dismissPicker(candidate);
+    try {
+      await options.platform.openVaultPage({ newItem: "login" });
+    } catch {
+      // The vault page could not be opened (the extension was reloaded); nothing else to do.
+    }
+  };
+
   const useGenerated = (view: PickerView): void => {
-    const fields = signupFieldsOf(view.candidate.fieldSet);
+    const password = view.candidate.fieldSet.passwordField;
+    const fields =
+      signupFieldsOf(view.candidate.fieldSet) ?? (password === null ? null : [password]);
     if (view.generated === null || fields === null || !owns(view.candidate)) return;
     for (const field of fields)
       fillLoginFields(
@@ -462,6 +472,10 @@ export function createLoginFillController(
               },
             }
       }
+      onAddLogin={
+        view.state === "empty" ? () => void addLoginForThisSite(view.candidate) : undefined
+      }
+      domain={domainFor()}
       onClose={() => dismissPicker(view.candidate)}
       onSelect={(suggestion) => void selectSuggestion(view.candidate, suggestion)}
     />
@@ -523,9 +537,13 @@ export function createLoginFillController(
     closeHost();
     if (!owns(candidate)) return;
     const signup = signupFieldsOf(candidate.fieldSet) !== null;
+    // Nothing saved for this site: a fresh password is the useful offer, on a sign-in form
+    // as much as a sign-up one (this is where a new account gets made).
+    const offerPassword =
+      signup || (state === "empty" && candidate.fieldSet.passwordField !== null);
     const view: PickerView = {
       candidate,
-      generated: previous?.generated ?? (signup ? suggestPassword() : null),
+      generated: previous?.generated ?? (offerPassword ? suggestPassword() : null),
       suggestedUsername: previous?.suggestedUsername ?? null,
       duckAvailable: previous?.duckAvailable ?? false,
       state,
@@ -571,15 +589,9 @@ export function createLoginFillController(
     }
   };
 
-  // Suggestions are fetched once on focus purely to decide whether a chip should appear at
-  // all: it shows once there is something to offer, or when the vault is locked (so the
-  // person learns why nothing is offered). Opening the picker asks again, since an unlock or
-  // a new login may have happened since the chip appeared.
-  const loadSuggestions = async (candidate: Owner): Promise<void> => {
-    const result = await fetchSuggestions();
-    if (!owns(candidate)) return;
-    cachedSuggestions = result.suggestions;
-    locked = result.state === "locked";
+  // The chip appears beside the field itself; what the vault holds for this site is asked
+  // only when the picker opens, so nothing is fetched merely because a field took focus.
+  const offerChip = (candidate: Owner): void => {
     if (chipAvailable()) showChip(candidate);
   };
 
@@ -596,8 +608,6 @@ export function createLoginFillController(
     pickerRequest = request;
     void fetchSuggestions().then((result) => {
       if (pickerRequest !== request || !owns(candidate)) return;
-      cachedSuggestions = result.suggestions;
-      locked = result.state === "locked";
       renderPicker(candidate, result.state, result.suggestions);
     });
   };
@@ -722,8 +732,6 @@ export function createLoginFillController(
     } catch (error) {
       sendCancel(suggestion.itemId);
       if (errorCode(error) === "VAULT_LOCKED" && owns(candidate)) {
-        cachedSuggestions = [];
-        locked = true;
         renderPicker(candidate, "locked", []);
         return;
       }
@@ -769,7 +777,7 @@ export function createLoginFillController(
       origin,
     };
     owner = candidate;
-    void loadSuggestions(candidate);
+    offerChip(candidate);
   };
 
   const onPageInvalidated = (): void => invalidate(false);

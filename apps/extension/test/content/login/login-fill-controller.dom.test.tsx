@@ -312,7 +312,7 @@ describe("Login fill controller", () => {
     expect(roots.some((root) => root.querySelector(".loginTrigger") !== null)).toBe(true);
   });
 
-  it("shows no chip on a sign-in form that merely links to sign-up when nothing is saved", async () => {
+  it("shows the chip on a sign-in form with nothing saved, and offers a password and a way to add one", async () => {
     const roots = captureClosedRoots();
     const form = document.createElement("form");
     const heading = document.createElement("h1");
@@ -338,7 +338,18 @@ describe("Login fill controller", () => {
     start(candidate);
     focusField(password);
     await flush();
-    expect(roots.some((root) => root.querySelector(".loginTrigger") !== null)).toBe(false);
+    // Every other manager puts something beside a login field whether or not it holds a
+    // match; a site with nothing saved is exactly where a person reaches for the vault.
+    expect(roots.some((root) => root.querySelector(".loginTrigger") !== null)).toBe(true);
+
+    await clickAndFlush(
+      within(roots[0] as unknown as HTMLElement).getByRole("button", {
+        name: "Fill login with ShardPass",
+      }),
+    );
+    const picker = within(roots.at(-1) as unknown as HTMLElement);
+    expect(picker.getByRole("button", { name: /Use suggested password/u })).toBeVisible();
+    expect(picker.getByRole("button", { name: /Add a login for/u })).toBeVisible();
   });
 
   it("fills a change-password form's new and confirm fields, never the current password", async () => {
@@ -593,7 +604,7 @@ describe("Login fill controller", () => {
     expect(selected?.[0]).toMatchObject({ kind: "login.fillSelect", itemId: other.itemId });
   });
 
-  it("shows no trigger for a login field when no saved logins match the domain", async () => {
+  it("shows the trigger for a login field even when no saved login matches the domain", async () => {
     captureClosedRoots();
     const { password } = loginForm();
     start(platform(() => ({ version: 1, kind: "login.fillSuggestionsResult", suggestions: [] })));
@@ -601,7 +612,7 @@ describe("Login fill controller", () => {
     focusField(password);
     await flush();
 
-    expect(document.querySelector("shardpass-picker-host")).toBeNull();
+    expect(document.querySelector("shardpass-picker-host")).not.toBeNull();
   });
 
   it("shows no trigger for an unrelated input that is not part of a login field set", async () => {
@@ -670,9 +681,6 @@ describe("Login fill controller", () => {
       focusField(username);
       await flush();
 
-      expect(candidate.sendLoginFillMessage).toHaveBeenCalledWith(
-        expect.objectContaining({ kind: "login.fillSuggestions", domain: "localhost" }),
-      );
       await clickAndFlush(
         within(roots[0] as unknown as HTMLElement).getByRole("button", {
           name: "Fill login with ShardPass",
@@ -685,9 +693,12 @@ describe("Login fill controller", () => {
           .getAllByRole("button", { name: /Use login/u })
           .map((node) => node.textContent),
       ).toEqual([expect.stringContaining("Primary"), expect.stringContaining("Secondary")]);
-      // One fetch gated the trigger; opening the picker asks once more, so an unlock or a new
-      // login since the chip appeared is noticed.
-      expect(suggestionRequests(candidate)).toBe(2);
+      expect(candidate.sendLoginFillMessage).toHaveBeenCalledWith(
+        expect.objectContaining({ kind: "login.fillSuggestions", domain: "localhost" }),
+      );
+      // Focus alone asks the background nothing: the chip is drawn beside the field, and what
+      // the vault holds for this site is asked once, when the picker opens.
+      expect(suggestionRequests(candidate)).toBe(1);
 
       // Typing in the page's own field narrows the rows; there is no search box to reach for.
       await act(async () => {
@@ -886,7 +897,9 @@ describe("Login fill controller", () => {
     focusField(username);
     await flush();
     expect(chipIn(roots.at(-1))).toBeVisible();
-    expect(suggestionRequests(candidate)).toBe(2);
+    // Opening the picker asked once; closing it and coming back to the field draws the chip
+    // again without asking anything further.
+    expect(suggestionRequests(candidate)).toBe(1);
   });
 
   it("fills from the popup into a rendered form only, and says no-form after a moment when every form is hidden", async () => {

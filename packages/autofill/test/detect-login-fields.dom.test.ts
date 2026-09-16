@@ -248,3 +248,23 @@ describe("detectLoginFields and what a person cannot see", () => {
     expect(detectLoginFields(document).map((fieldSet) => fieldSet.form?.id)).toEqual(["login"]);
   });
 });
+
+describe("real sign-in pages", () => {
+  it("detects HackerOne's form: a hidden token, a text email named user[email], and a checkbox", () => {
+    // Taken from https://hackerone.com/users/sign_in: Rails field names, autocomplete="on",
+    // and the token and "remember me" inputs on either side of the credentials.
+    document.body.innerHTML = `
+      <form action="/users/sign_in" class="spec-sign-in-form">
+        <input type="hidden" name="authenticity_token" value="token" />
+        <input type="text" name="user[email]" id="sign_in_email" autocomplete="on" />
+        <input type="password" name="user[password]" id="sign_in_password" autocomplete="on" />
+        <input type="checkbox" name="user[remember_me]" id="user_remember_me" />
+        <button type="submit">Sign in</button>
+      </form>
+    `;
+    const fieldSets = detectLoginFields(document);
+    expect(fieldSets).toHaveLength(1);
+    expect(fieldSets[0]?.usernameField?.id).toBe("sign_in_email");
+    expect(fieldSets[0]?.passwordField?.id).toBe("sign_in_password");
+  });
+});

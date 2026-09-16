@@ -30,6 +30,10 @@ export interface LoginPickerProps {
     Readonly<{ username: string; onUse: () => void; onAnother: () => void }> | undefined;
   /** A fresh @duck.com address on request, when DuckDuckGo Email Protection is connected. */
   readonly onDuckAddress?: (() => void) | undefined;
+  /** Opens the vault at a new login for this site, for when nothing is saved for it yet. */
+  readonly onAddLogin?: (() => void) | undefined;
+  /** The site the picker is open on, named in the "add a login" row. */
+  readonly domain?: string | undefined;
   readonly onClose: () => void;
   readonly onSelect: (suggestion: LoginPickerSuggestion) => void;
 }
@@ -87,6 +91,8 @@ export function LoginPicker({
   generated,
   suggestedUsername,
   onDuckAddress,
+  onAddLogin,
+  domain,
   onClose,
   onSelect,
 }: LoginPickerProps) {
@@ -126,6 +132,20 @@ export function LoginPicker({
         onClick={suggestedUsername.onAnother}
       >
         ↻
+      </button>
+    </div>
+  ) : null;
+  const addRow = onAddLogin ? (
+    <div className="suggestRow">
+      <button
+        className="suggestUse"
+        type="button"
+        aria-label={`Add a login for ${domain ?? "this site"} in ShardPass`}
+        onMouseDown={(event) => event.preventDefault()}
+        onClick={onAddLogin}
+      >
+        <span className="suggestCaption">Add a login</span>
+        <span className="suggestValue">{domain ?? "this site"}</span>
       </button>
     </div>
   ) : null;
@@ -169,7 +189,8 @@ export function LoginPicker({
       {usernameRow}
       {duckRow}
       {suggestion}
-      {(generated || suggestedUsername || onDuckAddress) &&
+      {state === "empty" ? addRow : null}
+      {(generated || suggestedUsername || onDuckAddress || (onAddLogin && state === "empty")) &&
       (state === "empty" || (state === "ready" && visible.length === 0)) ? null : state !==
         "ready" ? (
         <p className="status" role="status">
