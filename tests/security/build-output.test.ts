@@ -31,7 +31,7 @@ const safeManifest = JSON.stringify({
   manifest_version: 3,
   name: "ShardPass",
   short_name: "ShardPass",
-  version: "2.4.4",
+  version: "2.4.5",
   minimum_chrome_version: "111",
   description: "Local-first password manager foundation.",
   permissions: [
@@ -295,6 +295,25 @@ describe("production build output scanner", () => {
       file: "extensionless-script",
       rule: "function-reference",
     });
+  });
+
+  it("reports console.error in ShardPass's own chunks and allows it in the vendored bundles", async () => {
+    const ours = await temporaryProject({
+      ...safeArtifact,
+      "dist/assets/app.js":
+        'export const report = (error) => console.error("vault failed", error);',
+    });
+    await expect(scanBuild(ours.dist, { projectRoot: ours.project })).resolves.toContainEqual({
+      file: "assets/app.js",
+      rule: "console-transport",
+    });
+
+    // React DOM and libsodium log on their own account and are not ShardPass's to edit.
+    const vendored = await temporaryProject({
+      ...safeArtifact,
+      "dist/assets/client-Cc4URx2i.js": 'export const warn = () => console.error("react");',
+    });
+    await expect(scanBuild(vendored.dist, { projectRoot: vendored.project })).resolves.toEqual([]);
   });
 
   it("reports a network destination in the background chunk that the CSP does not allow", async () => {

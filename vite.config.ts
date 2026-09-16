@@ -48,6 +48,25 @@ function config(command: "build" | "serve"): UserConfig {
           };
         },
       },
+      // The generated content-script loader ends with `.catch(console.error)`, which would
+      // print ShardPass's failures into every page it runs in. A page is not where this
+      // extension reports anything, so the handler is emptied.
+      {
+        name: "shardpass-silence-content-loader",
+        enforce: "post" as const,
+        generateBundle(
+          _options: unknown,
+          bundle: Record<string, { type: string; code?: string; source?: unknown }>,
+        ) {
+          const silence = (text: string) =>
+            text.replace(/\.catch\(console\.error\)/gu, ".catch(() => {})");
+          for (const [name, output] of Object.entries(bundle)) {
+            if (!name.includes("-loader-")) continue;
+            if (typeof output.code === "string") output.code = silence(output.code);
+            else if (typeof output.source === "string") output.source = silence(output.source);
+          }
+        },
+      },
       enteSrpVitePlugin({
         workspaceRoot,
         productionEntry: path.resolve(

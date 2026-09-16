@@ -14,6 +14,13 @@ const executableRemoteUrl = /^(?:https?:)?\/\//iu;
 const sourceMapReference = /(?:\/\/[#@]|\/\*[#@])\s*sourceMappingURL\s*=/u;
 const forbiddenConsoleMethod =
   /\bconsole\s*(?:\.\s*(?:log|debug|info)\b|\[\s*["'](?:log|debug|info)["']\s*\])/u;
+// error and warn as well, everywhere ShardPass's own code ends up. They are not forbidden in
+// the third-party bundles below, which log on their own account and cannot be edited here.
+const forbiddenConsoleReport =
+  /\bconsole\s*(?:\.\s*(?:error|warn|trace|table|dir)\b|\[\s*["'](?:error|warn|trace|table|dir)["']\s*\])/u;
+/** Vendored bundles whose own logging is not ShardPass's to remove (React DOM, libsodium). */
+const vendorLoggingChunk =
+  /^assets\/(?:client|react-dom|libsodium(?:-wrappers)?(?:-sumo)?)-[\w-]+\.js$/u;
 // A bare `console` identifier, but not the word inside a string literal: the passphrase
 // wordlist bundled with the password generator contains "console".
 const rawConsoleReference = /(?<!["'`])\bconsole\b(?!\s*(?:\.|\[|["'`]))/u;
@@ -421,12 +428,12 @@ export async function scanBuild(directory, options = {}) {
     const source = await readFile(file, "utf8");
     if (source.includes("AGFzbQE")) sodiumContainingFiles.push({ file, source });
     if (cryptoTestArtifact.test(source)) add(violations, dist, file, "crypto-test-artifact");
-    if (
-      [".js", ".mjs"].includes(path.extname(file).toLowerCase()) &&
-      !source.includes("AGFzbQE") &&
-      (forbiddenConsoleMethod.test(source) || rawConsoleReference.test(source))
-    )
-      add(violations, dist, file, "console-transport");
+    if ([".js", ".mjs"].includes(path.extname(file).toLowerCase()) && !source.includes("AGFzbQE")) {
+      if (forbiddenConsoleMethod.test(source) || rawConsoleReference.test(source))
+        add(violations, dist, file, "console-transport");
+      else if (!vendorLoggingChunk.test(relative) && forbiddenConsoleReport.test(source))
+        add(violations, dist, file, "console-transport");
+    }
     if (legacyName.test(source)) add(violations, dist, file, "legacy-artifact-reference");
     if (testHarnessText.test(source)) add(violations, dist, file, "test-harness-reference");
     if (environmentFilenameText.test(source)) add(violations, dist, file, "environment-filename");
