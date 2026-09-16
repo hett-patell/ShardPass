@@ -11,6 +11,7 @@ import {
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useFoundationStatus } from "../foundation/useFoundationStatus";
+import { clearClipboardIfDue, clearClipboardNow } from "./components/detail/clipboard";
 import type {
   BackupUiExtensionPlatform,
   EnteUiPlatform,
@@ -157,6 +158,20 @@ export function VaultApp({ platform }: VaultAppProps) {
     },
     [goToVaultView, vaultState],
   );
+
+  // A copy made in the popup is cleared by whichever ShardPass document is focused when the
+  // delay runs out; this page is one, so it finishes the job on every return to it.
+  useEffect(() => {
+    void clearClipboardIfDue();
+    const onFocus = () => void clearClipboardIfDue();
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, []);
+
+  // A lock ends the session; anything copied during it leaves the clipboard with it.
+  useEffect(() => {
+    if (!vaultUnlocked) void clearClipboardNow();
+  }, [vaultUnlocked]);
 
   useEffect(() => {
     if (pendingId === null) return;

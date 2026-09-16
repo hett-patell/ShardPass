@@ -14,7 +14,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { EnteUiPlatform, ExtensionPlatform } from "../platform/extension-platform";
 import type { VaultPageTarget } from "../platform/vault-route";
-import { clearClipboardNow } from "../vault/components/detail/clipboard";
+import { clearClipboardIfDue, clearClipboardNow } from "../vault/components/detail/clipboard";
 import { RepromptPrompt } from "../vault-access/RepromptPrompt";
 import { VaultAccess } from "../vault-access/VaultAccess";
 import { PopupTitleBar } from "./components/PopupTitleBar";
@@ -212,6 +212,12 @@ export function PopupApp({ platform }: PopupAppProps) {
     [fillData, notify],
   );
 
+  // A copy made in a popup that was closed before its timer ran still has to be cleared: this
+  // popup is focused now, so it can do it.
+  useEffect(() => {
+    void clearClipboardIfDue();
+  }, []);
+
   const screen = stack[stack.length - 1] ?? { kind: "home" };
   // Lists, the generator and the identity chooser are remembered for a few minutes; a detail
   // screen is not (its item may be gone, and it may show a secret). Nothing is written before
@@ -253,6 +259,8 @@ export function PopupApp({ platform }: PopupAppProps) {
       // The background drops its reprompt grants on lock; so do we, and any prompt still open.
       grantedRef.current.clear();
       setReprompt(null);
+      // A secret copied during that session goes now, while this document still has focus.
+      void clearClipboardNow();
       // Where the person was browsing is part of the unlocked session: a lock ends it, and
       // the next popup opens at home. A popup that opens locked has nothing to end, and must
       // leave what an earlier popup remembered alone.

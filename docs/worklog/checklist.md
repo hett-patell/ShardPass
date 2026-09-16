@@ -19,7 +19,7 @@ Baseline at 2.3.0: typecheck clean, lint clean after one test fix, full suite gr
 - [x] Batch C (importers): Bitwarden fields/reprompt/clamps, KeePass lookup order, KDBX bounds, Dashlane caps, LastPass leftovers, Proton timestamps, generic mapping, ragged CSV, UTF-16 clamps, per-field sample checks — 2.4.2
 - [x] Passkey prompt given room to breathe (wider host, larger title, taller rows and buttons) — 2.4.2
 - [x] Batch D (content scripts, autofill, passkeys) — shipped in 2.4.3; D5's frame check is verified by reading (jsdom cannot frame a document)
-- [x] Batch E (popup, platform, gates) — shipped in 2.4.3 except E1 (clipboard auto-clear) and E9 (narrow popup fill race)
+- [x] Batch E (popup, platform, gates) — shipped in 2.4.3; E1 (clipboard auto-clear) followed in 2.4.4; E9 (narrow popup fill race) left open
 - [ ] Audit 6 (tests and tooling) — not run yet
 - [x] Google "Create a passkey": the page script answers isUserVerifyingPlatformAuthenticatorAvailable / isConditionalMediationAvailable / getClientCapabilities as a platform authenticator, so Google calls create() on desktops without one (2.4.1)
 
@@ -71,7 +71,7 @@ Baseline at 2.3.0: typecheck clean, lint clean after one test fix, full suite gr
 
 ### Batch E · popup, platform, gates (verified by the audit)
 
-- [ ] E1 high (still open) · popup clipboard auto-clear never fires: the timer dies with the popup and `document.hasFocus()` is false. Needs an alarm-driven clear through the active tab's content script.
+- [x] E1 high · popup clipboard auto-clear never fires: the timer dies with the popup and `document.hasFocus()` is false. Needs an alarm-driven clear through the active tab's content script. Fixed in 2.4.4: the due time is written down and the next ShardPass document to open or regain focus carries the clear out; a clear more than ten minutes past due is dropped rather than wiping what was copied since. Without a clipboard permission, a person who never opens ShardPass again still keeps the value.
 - [x] E2 medium · `PopupApp.tsx`: `grantedRef` and the reprompt overlay survive a lock; after unlock a granted item shows "Password unavailable".
 - [x] E3 medium · DetailScreen's own reprompt does not tell PopupApp, so "Fill in host" asks for the master password again.
 - [x] E4 medium · "Reopen where you were" is dead: the reset effect runs before the restore effect; `readLastScreen` accepts any category string.
