@@ -44,7 +44,10 @@ describe("EnteClient fixed transport", () => {
       client.getSrpAttributes("phase2@example.invalid", new AbortController().signal),
     ).rejects.toMatchObject({ code: "ENTE_UNAVAILABLE", message: "Ente request failed" });
     const [, init] = fetch.mock.calls[0]!;
-    expect(init.headers).toEqual({ Accept: "application/json", "X-Client-Package": "io.ente.auth.web" });
+    expect(init.headers).toEqual({
+      Accept: "application/json",
+      "X-Client-Package": "io.ente.auth.web",
+    });
   });
 
   it("charges exact response bytes to one cycle budget before JSON decoding", async () => {

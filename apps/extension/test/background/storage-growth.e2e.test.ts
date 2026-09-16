@@ -7,22 +7,43 @@ import { installBackground } from "../../src/background/main";
 
 const extensionId = "growth";
 const kek = Buffer.from(Uint8Array.from({ length: 32 }, (_, i) => i + 1)).toString("base64");
-const vaultSender = { extensionId, senderUrl: `chrome-extension://${extensionId}/vault/index.html`, documentId: "d" };
+const vaultSender = {
+  extensionId,
+  senderUrl: `chrome-extension://${extensionId}/vault/index.html`,
+  documentId: "d",
+};
 const login = (n: number) => ({
-  id: `018f47a6-7d11-7c2f-8bd9-${n.toString(16).padStart(12, "0")}`, schemaVersion: 2, revision: 1,
-  createdAt: "2026-08-10T12:00:00.000Z", updatedAt: "2026-08-10T12:00:00.000Z", favorite: false, tags: ["work"],
-  kind: "login", name: `Site ${n}`, username: `user${n}@example.test`, password: "correct horse battery staple " + n,
-  urls: [`https://site${n}.example.test/login`], notes: "imported from KeePass\n\nKeePass group: Web / Banking",
+  id: `018f47a6-7d11-7c2f-8bd9-${n.toString(16).padStart(12, "0")}`,
+  schemaVersion: 2,
+  revision: 1,
+  createdAt: "2026-08-10T12:00:00.000Z",
+  updatedAt: "2026-08-10T12:00:00.000Z",
+  favorite: false,
+  tags: ["work"],
+  kind: "login",
+  name: `Site ${n}`,
+  username: `user${n}@example.test`,
+  password: "correct horse battery staple " + n,
+  urls: [`https://site${n}.example.test/login`],
+  notes: "imported from KeePass\n\nKeePass group: Web / Banking",
 });
 async function boot() {
   const platform = new FakeExtensionPlatform(extensionId);
   const dispose = installBackground(platform);
-  const ch = (await platform.dispatchMessage({ version: 1, kind: "vault.getKdfChallenge", purpose: "setup" }, vaultSender)) as { challengeId: string };
-  await platform.dispatchMessage({ version: 1, kind: "vault.setup", challengeId: ch.challengeId, keyEncryptionKey: kek }, vaultSender);
+  const ch = (await platform.dispatchMessage(
+    { version: 1, kind: "vault.getKdfChallenge", purpose: "setup" },
+    vaultSender,
+  )) as { challengeId: string };
+  await platform.dispatchMessage(
+    { version: 1, kind: "vault.setup", challengeId: ch.challengeId, keyEncryptionKey: kek },
+    vaultSender,
+  );
   return { platform, dispose };
 }
 async function measure(platform: FakeExtensionPlatform) {
-  const snap = (await (platform.localStorage as { snapshot(): Promise<Record<string, unknown>> }).snapshot());
+  const snap = await (
+    platform.localStorage as { snapshot(): Promise<Record<string, unknown>> }
+  ).snapshot();
   const entries = Object.entries(snap);
   const bytes = entries.reduce((sum, [, value]) => sum + JSON.stringify(value).length, 0);
   const generations = new Set(
@@ -40,7 +61,10 @@ describe("storage stays bounded", () => {
     const N = 80;
     const { platform, dispose } = await boot();
     for (let i = 0; i < N; i++)
-      await platform.dispatchMessage({ version: 1, kind: "item.create", item: login(i) }, vaultSender);
+      await platform.dispatchMessage(
+        { version: 1, kind: "item.create", item: login(i) },
+        vaultSender,
+      );
     const after = await measure(platform);
     dispose();
     expect(after.generations).toBeLessThanOrEqual(2);
@@ -51,7 +75,10 @@ describe("storage stays bounded", () => {
     const N = 40;
     const a = await boot();
     for (let i = 0; i < N; i++)
-      await a.platform.dispatchMessage({ version: 1, kind: "item.create", item: login(i) }, vaultSender);
+      await a.platform.dispatchMessage(
+        { version: 1, kind: "item.create", item: login(i) },
+        vaultSender,
+      );
     const sequential = await measure(a.platform);
     a.dispose();
 

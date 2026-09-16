@@ -133,8 +133,22 @@ describe("operational Ente coordinator cycle", () => {
       getEntityDiff: vi.fn(() =>
         Promise.resolve({
           diff: [
-            { id: remoteId, encryptedData: "AQ==", header: "Ag==", isDeleted: false as const, createdAt: 1, updatedAt: 1 },
-            { id: unreadableId, encryptedData: "AQ==", header: "Aw==", isDeleted: false as const, createdAt: 2, updatedAt: 2 },
+            {
+              id: remoteId,
+              encryptedData: "AQ==",
+              header: "Ag==",
+              isDeleted: false as const,
+              createdAt: 1,
+              updatedAt: 1,
+            },
+            {
+              id: unreadableId,
+              encryptedData: "AQ==",
+              header: "Aw==",
+              isDeleted: false as const,
+              createdAt: 2,
+              updatedAt: 2,
+            },
           ],
           timestamp: 2,
         }),
@@ -169,18 +183,33 @@ describe("operational Ente coordinator cycle", () => {
   it("records an expired Ente session met on the read path, so the panel asks to sign in again", async () => {
     const repo = repository(snapshot());
     const client = {
-      getAuthenticatorKey: vi.fn(() => Promise.reject(new EnteProtocolError("ENTE_REAUTH_REQUIRED"))),
+      getAuthenticatorKey: vi.fn(() =>
+        Promise.reject(new EnteProtocolError("ENTE_REAUTH_REQUIRED")),
+      ),
       getEntityDiff: vi.fn(),
       createEntity: vi.fn(),
       updateEntity: vi.fn(),
       deleteEntity: vi.fn(),
     };
-    const cycle = createEnteOperationalCycle({ repository: repo, client, crypto, now: () => 4_242, nextId: () => localId });
-    await expect(cycle("alarm", new AbortController().signal)).rejects.toMatchObject({ code: "ENTE_REAUTH_REQUIRED" });
+    const cycle = createEnteOperationalCycle({
+      repository: repo,
+      client,
+      crypto,
+      now: () => 4_242,
+      nextId: () => localId,
+    });
+    await expect(cycle("alarm", new AbortController().signal)).rejects.toMatchObject({
+      code: "ENTE_REAUTH_REQUIRED",
+    });
     expect(repo.commit).toHaveBeenCalledTimes(1);
-    expect(repo.current().state).toMatchObject({ needsReauth: true, scheduler: { lastAttemptAt: 4_242 } });
+    expect(repo.current().state).toMatchObject({
+      needsReauth: true,
+      scheduler: { lastAttemptAt: 4_242 },
+    });
     // Already recorded: a second failing cycle does not rewrite the vault again.
-    await expect(cycle("alarm", new AbortController().signal)).rejects.toMatchObject({ code: "ENTE_REAUTH_REQUIRED" });
+    await expect(cycle("alarm", new AbortController().signal)).rejects.toMatchObject({
+      code: "ENTE_REAUTH_REQUIRED",
+    });
     expect(repo.commit).toHaveBeenCalledTimes(1);
   });
 

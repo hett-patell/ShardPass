@@ -69,8 +69,15 @@ describe("Ente periodic alarm scheduler", () => {
 
   it("keeps an alarm Chrome still holds instead of restarting its phase on every wake", async () => {
     const scheduleEnteSync = vi.fn(() => Promise.resolve());
-    const coordinator = { lock: vi.fn(), cancel: vi.fn(), dispose: vi.fn() } as unknown as EnteSyncCoordinator;
-    const scheduler = new EnteSyncScheduler({ scheduleEnteSync, enteSyncPending: () => Promise.resolve(true) }, coordinator);
+    const coordinator = {
+      lock: vi.fn(),
+      cancel: vi.fn(),
+      dispose: vi.fn(),
+    } as unknown as EnteSyncCoordinator;
+    const scheduler = new EnteSyncScheduler(
+      { scheduleEnteSync, enteSyncPending: () => Promise.resolve(true) },
+      coordinator,
+    );
     await scheduler.setState(true, true);
     expect(scheduleEnteSync).not.toHaveBeenCalled();
     await scheduler.setUnlocked(false);

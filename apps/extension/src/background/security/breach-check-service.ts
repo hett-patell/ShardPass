@@ -4,7 +4,11 @@ import type { StoragePort } from "@shardpass/storage";
 import type { SessionVaultRepository } from "../vault/session-vault-repository";
 
 export type BreachCheckErrorCode =
-  "BREACH_CHECK_DISABLED" | "BREACH_CHECK_UNAVAILABLE" | "ITEM_NOT_FOUND" | "VAULT_LOCKED";
+  | "BREACH_CHECK_DISABLED"
+  | "BREACH_CHECK_UNAVAILABLE"
+  | "ITEM_NOT_FOUND"
+  | "REPROMPT_REQUIRED"
+  | "VAULT_LOCKED";
 
 export class BreachCheckError extends Error {
   constructor(readonly code: BreachCheckErrorCode) {
@@ -37,6 +41,8 @@ type BreachCheckDependencies = Readonly<{
   }>;
   /** Non-secret preference; local storage so it survives a browser restart. */
   local: StoragePort;
+  /** Whether an item's master-password re-prompt has been answered recently. */
+  repromptGranted?(itemId: string): boolean;
   /** Fetches the padded range body for a five-character SHA-1 prefix. */
   fetchRange(prefix: string): Promise<string>;
   now(): number;
@@ -224,6 +230,10 @@ export class BreachCheckService {
     }
     if (item === null || item.kind !== "login" || item.password === "")
       throw new BreachCheckError("ITEM_NOT_FOUND");
+    // Only a hash prefix would leave, but a re-prompted login is read only once answered,
+    // the same rule every other reader of its password follows.
+    if (item.reprompt === true && !(this.dependencies.repromptGranted?.(itemId) ?? false))
+      throw new BreachCheckError("REPROMPT_REQUIRED");
     return item.password;
   }
 

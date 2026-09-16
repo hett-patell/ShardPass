@@ -119,7 +119,9 @@ async function pull(
     }
   }
   if (unreadable > 0)
-    diagnostics.warn(`[ShardPass] Ente sync skipped ${unreadable} unreadable ${unreadable === 1 ? "entity" : "entities"}.`);
+    diagnostics.warn(
+      `[ShardPass] Ente sync skipped ${unreadable} unreadable ${unreadable === 1 ? "entity" : "entities"}.`,
+    );
   return { ...result, projections };
 }
 

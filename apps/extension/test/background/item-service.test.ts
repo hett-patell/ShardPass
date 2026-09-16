@@ -246,6 +246,66 @@ function fixture(
   return { activity, repository, service };
 }
 
+describe("ItemService redaction of other kinds", () => {
+  it("withholds an OTP secret and an identity's document numbers until the re-prompt is answered", async () => {
+    const otp = {
+      id: ids.created,
+      schemaVersion: 2 as const,
+      revision: 1,
+      createdAt: nowIso,
+      updatedAt: nowIso,
+      favorite: false,
+      tags: [],
+      kind: "otp" as const,
+      issuer: "Example",
+      label: "account",
+      secret: "JBSWY3DPEHPK3PXP",
+      otpType: "totp" as const,
+      algorithm: "SHA1" as const,
+      digits: 6,
+      period: 30,
+      note: "",
+      reprompt: true,
+    };
+    const identity = {
+      id: "018f47a6-7d11-7c2f-8bd9-a1d37f147a77",
+      schemaVersion: 2 as const,
+      revision: 1,
+      createdAt: nowIso,
+      updatedAt: nowIso,
+      favorite: false,
+      tags: [],
+      kind: "identity" as const,
+      name: "Me",
+      firstName: "A",
+      lastName: "B",
+      email: "",
+      phone: "",
+      street: "",
+      city: "",
+      state: "",
+      zip: "",
+      country: "",
+      passportNumber: "P123",
+      licenseNumber: "L456",
+      nationalId: "N789",
+      notes: "private",
+      reprompt: true,
+    };
+    const service = new ItemService({
+      repository: new FakeRepository([otp, identity] as never),
+      now: () => Date.parse(nowIso),
+      notePrivilegedActivity: () => Promise.resolve(),
+      repromptGranted: () => false,
+    });
+    const listed = await service.handle(request("item.query", {}), vaultSender);
+    const text = JSON.stringify(listed);
+    for (const secret of ["JBSWY3DPEHPK3PXP", "P123", "L456", "N789", "private"])
+      expect(text).not.toContain(secret);
+    expect(listed).toMatchObject({ redacted: [ids.created, identity.id] });
+  });
+});
+
 describe("ItemService", () => {
   it("withholds a re-prompted item's secrets and blocks its use until the master password is given again", async () => {
     let granted = false;

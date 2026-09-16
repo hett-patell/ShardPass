@@ -332,11 +332,21 @@ function redactSecrets(item: VaultItem): VaultItem {
     case "secret":
       return { ...item, value: "", notes: "" };
     case "identity":
-      return { ...item, notes: "" };
+      return {
+        ...item,
+        passportNumber: undefined,
+        licenseNumber: undefined,
+        nationalId: undefined,
+        notes: "",
+      };
     case "otp":
-      return item;
+      // The schema wants a canonical Base32 secret, so a fixed all-zero one stands in; codes
+      // come from the background, which refuses them until the re-prompt is answered.
+      return { ...item, secret: REDACTED_OTP_SECRET };
   }
 }
+
+const REDACTED_OTP_SECRET = "AAAAAAAAAAAAAAAA";
 
 export function normalizeItemSearch(value: string): string {
   return value.trim().normalize("NFKC").toLocaleLowerCase("en-US");

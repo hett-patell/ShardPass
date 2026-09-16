@@ -101,8 +101,15 @@ describe("Ente conflict service path", () => {
       () => Promise.resolve({ connected: true, lastAttemptAt } as never),
     );
     await expect(service.shouldRunOnRestart(1_000_000)).resolves.toBe(true);
-    service.noteFailure(Object.assign(new Error("x"), { code: "ENTE_UNAVAILABLE", detail: "/authenticator/key" }), 1_000_000);
-    expect(service.snapshot().lastFailure).toEqual({ code: "ENTE_UNAVAILABLE", detail: "/authenticator/key", at: 1_000_000 });
+    service.noteFailure(
+      Object.assign(new Error("x"), { code: "ENTE_UNAVAILABLE", detail: "/authenticator/key" }),
+      1_000_000,
+    );
+    expect(service.snapshot().lastFailure).toEqual({
+      code: "ENTE_UNAVAILABLE",
+      detail: "/authenticator/key",
+      at: 1_000_000,
+    });
     await expect(service.shouldRunOnRestart(1_000_000 + 30_000)).resolves.toBe(false);
     await expect(service.shouldRunOnRestart(1_000_000 + 61_000)).resolves.toBe(true);
     service.noteFailure(new Error("again"), 1_100_000);
@@ -126,8 +133,23 @@ describe("Ente conflict service path", () => {
       undefined,
       activate,
     );
-    const sender = { extensionId: "x", contextKind: "vault", tabId: -1, frameId: -1, documentId: "d", senderUrl: "chrome-extension://x/vault/index.html" } as never;
-    const reply = await service.handle({ version: 1, kind: "ente.connect", capability: "c".repeat(32), ciphertext: [1, 2, 3] } as never, sender);
+    const sender = {
+      extensionId: "x",
+      contextKind: "vault",
+      tabId: -1,
+      frameId: -1,
+      documentId: "d",
+      senderUrl: "chrome-extension://x/vault/index.html",
+    } as never;
+    const reply = await service.handle(
+      {
+        version: 1,
+        kind: "ente.connect",
+        capability: "c".repeat(32),
+        ciphertext: [1, 2, 3],
+      } as never,
+      sender,
+    );
     expect(reply).toMatchObject({ connected: true, state: "syncing" });
     expect(trigger).toHaveBeenCalledWith("connected");
     finish();
@@ -135,8 +157,18 @@ describe("Ente conflict service path", () => {
 
   it("reports syncing when a manual sync arrives during a running cycle", async () => {
     const trigger = vi.fn(() => Promise.resolve());
-    const service = new EnteService({ trigger, isRunning: () => true } as unknown as EnteSyncCoordinator);
-    const sender = { extensionId: "x", contextKind: "vault", tabId: -1, frameId: -1, documentId: "d", senderUrl: "chrome-extension://x/vault/index.html" } as never;
+    const service = new EnteService({
+      trigger,
+      isRunning: () => true,
+    } as unknown as EnteSyncCoordinator);
+    const sender = {
+      extensionId: "x",
+      contextKind: "vault",
+      tabId: -1,
+      frameId: -1,
+      documentId: "d",
+      senderUrl: "chrome-extension://x/vault/index.html",
+    } as never;
     const reply = await service.handle({ version: 1, kind: "ente.manualSync" } as never, sender);
     expect(reply.state).toBe("syncing");
     expect(trigger).toHaveBeenCalledWith("manual");

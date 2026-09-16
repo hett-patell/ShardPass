@@ -55,14 +55,18 @@ export async function readRemoteState(input: {
           : await input.client.getEntityDiff(input.token, requested, input.signal, input.budget);
       total += response.diff.length;
       if (total > ENTE_SYNC_LIMITS.maxRemoteChanges)
-        throw new EnteProtocolError("ENTE_LIMIT_REACHED", "more remote changes than the sync accepts");
+        throw new EnteProtocolError(
+          "ENTE_LIMIT_REACHED",
+          "more remote changes than the sync accepts",
+        );
 
       let maximum = requested;
       let maximumCount = 0;
       for (const entity of response.diff) {
         if (entity.updatedAt <= requested && mode === "incremental")
           throw ambiguous(page, "an entity is not newer than the cursor");
-        if (entity.updatedAt < requested) throw ambiguous(page, "an entity is older than the cursor");
+        if (entity.updatedAt < requested)
+          throw ambiguous(page, "an entity is older than the cursor");
         if (entity.updatedAt > maximum) {
           maximum = entity.updatedAt;
           maximumCount = 1;
@@ -90,7 +94,10 @@ export async function readRemoteState(input: {
       let liveEntityCount = 0;
       for (const entity of entities.values()) if (!entity.isDeleted) liveEntityCount += 1;
       if (liveEntityCount > ENTE_SYNC_LIMITS.maxLiveRemoteEntities)
-        throw new EnteProtocolError("ENTE_LIMIT_REACHED", "more live remote codes than the sync accepts");
+        throw new EnteProtocolError(
+          "ENTE_LIMIT_REACHED",
+          "more live remote codes than the sync accepts",
+        );
 
       const full = response.diff.length === ENTE_SYNC_LIMITS.pageSize;
       if (full) {

@@ -43,6 +43,15 @@ export function createDataFillController(
     )
       return Promise.resolve(answer("failed"));
     const itemId = request.itemId;
+    // Only the top frame answers: the background releases the values to it alone, and a
+    // silent frame lets the popup hear from the one that filled.
+    const view = options.document.defaultView;
+    if (view === null || view.top !== view) return new Promise(() => undefined);
+    // Look for fields before asking, so a page with none never collects the values at all.
+    const cardFields = detectCardFields(options.document);
+    const identityFields = detectIdentityFields(options.document);
+    if (cardFields.length === 0 && identityFields.length === 0)
+      return Promise.resolve(answer("no-form"));
     return (async () => {
       let release;
       try {
@@ -56,13 +65,11 @@ export function createDataFillController(
       }
       if (release.kind !== "data.fillRelease") return answer("failed");
       if (release.data === "card") {
-        const fields = detectCardFields(options.document);
-        if (fields.length === 0) return answer("no-form");
-        return answer("filled", fillCardFields(fields, release.card));
+        if (cardFields.length === 0) return answer("no-form");
+        return answer("filled", fillCardFields(cardFields, release.card));
       }
-      const fields = detectIdentityFields(options.document);
-      if (fields.length === 0) return answer("no-form");
-      return answer("filled", fillIdentityFields(fields, release.identity));
+      if (identityFields.length === 0) return answer("no-form");
+      return answer("filled", fillIdentityFields(identityFields, release.identity));
     })();
   };
 

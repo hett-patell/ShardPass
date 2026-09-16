@@ -83,7 +83,12 @@ describe("SettingsService", () => {
     it("keeps an alarm Chrome still holds, without starting the countdown over", async () => {
       const platform = new FakeLockPlatform();
       platform.pending = true;
-      const service = new SettingsService(new FakeStoragePort(), platform, () => Promise.resolve(), { activityStore: new FakeStoragePort() });
+      const service = new SettingsService(
+        new FakeStoragePort(),
+        platform,
+        () => Promise.resolve(),
+        { activityStore: new FakeStoragePort() },
+      );
       await service.load();
       await expect(service.resumeCountdown()).resolves.toBe("kept");
       expect(platform.alarm).toBeNull();
@@ -93,7 +98,12 @@ describe("SettingsService", () => {
       let now = 10 * 60_000;
       const platform = new FakeLockPlatform();
       const activity = new FakeStoragePort();
-      const service = new SettingsService(new FakeStoragePort(), platform, () => Promise.resolve(), { activityStore: activity, now: () => now });
+      const service = new SettingsService(
+        new FakeStoragePort(),
+        platform,
+        () => Promise.resolve(),
+        { activityStore: activity, now: () => now },
+      );
       await service.load();
       await service.notePrivilegedActivity();
       expect(platform.alarm).toBe(15);
@@ -112,7 +122,9 @@ describe("SettingsService", () => {
     it("starts one full period when nothing was recorded, and cancels when auto-lock is off", async () => {
       const platform = new FakeLockPlatform();
       const storage = new FakeStoragePort();
-      const service = new SettingsService(storage, platform, () => Promise.resolve(), { activityStore: new FakeStoragePort() });
+      const service = new SettingsService(storage, platform, () => Promise.resolve(), {
+        activityStore: new FakeStoragePort(),
+      });
       await service.load();
       await expect(service.resumeCountdown()).resolves.toBe("kept");
       expect(platform.alarm).toBe(15);
@@ -124,7 +136,9 @@ describe("SettingsService", () => {
 
   it("decides a screen lock from the stored settings even when the event wakes the worker", async () => {
     const storage = new FakeStoragePort();
-    await storage.set({ "shardpass:v1:lock-settings": { autoLockMinutes: 15, lockOnScreenLock: false } });
+    await storage.set({
+      "shardpass:v1:lock-settings": { autoLockMinutes: 15, lockOnScreenLock: false },
+    });
     const platform = new FakeLockPlatform();
     let locks = 0;
     const service = new SettingsService(storage, platform, () => {

@@ -5,7 +5,16 @@ import { MESSAGE_VERSION } from "./envelope";
 
 const challengeId = z.string().check(z.regex(/^[0-9a-f]{32}$/));
 const canonicalKek = z.string().check(z.regex(/^[A-Za-z0-9+/]{43}=$/));
+/** Any minute count a backup or migration may carry; the session normalises it on the way in. */
 const lockMinutes = z.int().check(z.nonnegative(), z.maximum(1_440));
+/** The timers the vault offers; a settings change names one of these, nothing else. */
+const lockMinutesChoice = z.union([
+  z.literal(0),
+  z.literal(5),
+  z.literal(15),
+  z.literal(30),
+  z.literal(60),
+]);
 const purpose = z.enum(["setup", "unlock", "change-current", "change-new", "reprompt"]);
 const kdfParameters = z.strictObject({
   algorithm: z.literal("argon2id"),
@@ -59,7 +68,7 @@ export const VaultUpdateLockSettingsRequestSchema = request(
   z.strictObject({
     version: z.literal(MESSAGE_VERSION),
     kind: z.literal("vault.updateLockSettings"),
-    autoLockMinutes: lockMinutes,
+    autoLockMinutes: lockMinutesChoice,
     lockOnScreenLock: z.boolean(),
     /** Lock as soon as the last ShardPass page closes ("immediately"). */
     lockWhenClosed: z.optional(z.boolean()),

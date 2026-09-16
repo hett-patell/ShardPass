@@ -34,7 +34,9 @@ describe("pinned strict Ente protocol schemas", () => {
     expect(parseEnteProtocolResponse(srpAttributesResponseSchema, valid)).toEqual(valid);
     // Fields the server adds later are stripped, not fatal: a strict parse here turned the
     // first API addition into a sign-in outage.
-    expect(parseEnteProtocolResponse(srpAttributesResponseSchema, { ...valid, drift: true })).toEqual(valid);
+    expect(
+      parseEnteProtocolResponse(srpAttributesResponseSchema, { ...valid, drift: true }),
+    ).toEqual(valid);
     expect(
       parseEnteProtocolResponse(srpAttributesResponseSchema, {
         attributes: { ...valid.attributes, addedLater: 1 },

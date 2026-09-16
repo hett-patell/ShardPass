@@ -12,6 +12,12 @@ export class AliasError extends Error {
 }
 
 const INTEGRATIONS_KEY = "shardpass:v1:integrations";
+
+/** A locked vault is the one sealing failure the person can do something about; the rest is a fault. */
+function sealingError(error: unknown): AliasError {
+  const code = (error as { code?: unknown } | null)?.code;
+  return new AliasError(code === "VAULT_LOCKED" ? "VAULT_LOCKED" : "ALIAS_UNAVAILABLE");
+}
 const DUCK_PURPOSE = "duckduckgo-token";
 const DUCK_DOMAIN = "duck.com";
 
@@ -73,12 +79,16 @@ export class AliasService {
         const address = await this.generateDuckAddressOrThrow(request.site);
         return { version: 1, kind: "alias.generated", provider: "duckduckgo", address };
       }
-      case "alias.listDuck":
-        return { version: 1, kind: "alias.duckList", addresses: await this.readAddresses() };
+      case "alias.listDuck": {
+        const addresses = await this.readAddressesOrNull();
+        if (addresses === null) throw new AliasError("VAULT_LOCKED");
+        return { version: 1, kind: "alias.duckList", addresses };
+      }
       case "alias.forgetDuck": {
-        const kept = (await this.readAddresses()).filter(
-          (entry) => entry.address !== request.address,
-        );
+        // An unreadable list is never overwritten: forgetting one address must not lose all.
+        const addresses = await this.readAddressesOrNull();
+        if (addresses === null) throw new AliasError("VAULT_LOCKED");
+        const kept = addresses.filter((entry) => entry.address !== request.address);
         await this.writeAddresses(kept);
         return { version: 1, kind: "alias.duckList", addresses: kept };
       }
@@ -87,6 +97,11 @@ export class AliasService {
 
   /** Every address minted so far, newest first; empty while the vault is locked. */
   async readAddresses(): Promise<DuckAddress[]> {
+    return (await this.readAddressesOrNull()) ?? [];
+  }
+
+  /** The list, or null when it exists but cannot be opened (a locked vault, a bad record). */
+  private async readAddressesOrNull(): Promise<DuckAddress[] | null> {
     const record = await this.read();
     if (record.duckAddresses === undefined) return [];
     try {
@@ -115,7 +130,7 @@ export class AliasService {
       }
       return addresses;
     } catch {
-      return [];
+      return null;
     }
   }
 
@@ -129,8 +144,8 @@ export class AliasService {
       await this.dependencies.local.set({
         [INTEGRATIONS_KEY]: { ...record, duckAddresses: sealed },
       });
-    } catch {
-      throw new AliasError("VAULT_LOCKED");
+    } catch (error) {
+      throw sealingError(error);
     }
   }
 
@@ -173,8 +188,8 @@ export class AliasService {
   private async seal(plaintext: Uint8Array): Promise<SealedSecret> {
     try {
       return await this.dependencies.secrets.seal(DUCK_PURPOSE, plaintext);
-    } catch {
-      throw new AliasError("VAULT_LOCKED");
+    } catch (error) {
+      throw sealingError(error);
     } finally {
       plaintext.fill(0);
     }
@@ -183,8 +198,8 @@ export class AliasService {
   private async open(sealed: SealedSecret): Promise<Uint8Array> {
     try {
       return await this.dependencies.secrets.open(DUCK_PURPOSE, sealed);
-    } catch {
-      throw new AliasError("VAULT_LOCKED");
+    } catch (error) {
+      throw sealingError(error);
     }
   }
 

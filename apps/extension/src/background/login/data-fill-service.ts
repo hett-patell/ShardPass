@@ -73,17 +73,27 @@ export class DataFillService {
     return { version: 1, kind: "data.fillGranted", itemId, expiresAt };
   }
 
+  /** Every grant goes; called on lock, so nothing outlives the session that made it. */
+  clear(): void {
+    this.grants.clear();
+  }
+
   private async select(itemId: string, sender: SenderContext): Promise<DataFillResponse> {
     const grant = this.grants.get(itemId);
-    this.grants.delete(itemId);
     const tabId = "tabId" in sender ? sender.tabId : undefined;
+    const frameId = "frameId" in sender ? sender.frameId : undefined;
+    // The top frame only: content scripts run in every frame of the tab, and a third-party
+    // iframe with card-shaped fields must never be the one that collects the card. A wrong
+    // asker does not spend the grant either, so it cannot deny the right one its turn.
     if (
       grant === undefined ||
       tabId === undefined ||
       grant.tabId !== tabId ||
+      frameId !== 0 ||
       grant.expiresAt <= this.dependencies.now()
     )
       throw new DataFillServiceError("DATA_FILL_INVALID");
+    this.grants.delete(itemId);
     const item = await this.dependencies.repository.getItem(itemId);
     if (item === null || item.deletedAt !== undefined)
       throw new DataFillServiceError("DATA_FILL_NOT_FOUND");

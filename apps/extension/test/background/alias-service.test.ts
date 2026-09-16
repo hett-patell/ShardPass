@@ -7,14 +7,16 @@ import { AliasError, AliasService } from "../../src/background/alias/alias-servi
 function fakeSecrets(state: { locked: boolean }) {
   return {
     seal: (purpose: string, plaintext: Uint8Array) => {
-      if (state.locked) return Promise.reject(new Error("locked"));
+      if (state.locked)
+        return Promise.reject(Object.assign(new Error("locked"), { code: "VAULT_LOCKED" }));
       return Promise.resolve({
         nonce: purpose,
         ciphertext: Buffer.from(plaintext).toString("base64"),
       });
     },
     open: (purpose: string, sealed: { nonce: string; ciphertext: string }) => {
-      if (state.locked || sealed.nonce !== purpose) return Promise.reject(new Error("locked"));
+      if (state.locked || sealed.nonce !== purpose)
+        return Promise.reject(Object.assign(new Error("locked"), { code: "VAULT_LOCKED" }));
       return Promise.resolve(new Uint8Array(Buffer.from(sealed.ciphertext, "base64")));
     },
   };
@@ -82,6 +84,32 @@ describe("AliasService", () => {
     await expect(odd.handle({ version: 1, kind: "alias.generateDuck" })).rejects.toMatchObject({
       code: "ALIAS_UNAVAILABLE",
     });
+  });
+});
+
+describe("AliasService while locked", () => {
+  it("says the vault is locked instead of answering an empty list or overwriting it", async () => {
+    const local = new FakeStoragePort();
+    const state = { locked: false };
+    const service = new AliasService({
+      local,
+      secrets: fakeSecrets(state),
+      requestDuckAddress: () => Promise.resolve("addr1"),
+    });
+    await service.handle({ version: 1, kind: "alias.setDuckToken", token: "tok" });
+    await service.handle({ version: 1, kind: "alias.generateDuck" });
+    state.locked = true;
+    await expect(service.handle({ version: 1, kind: "alias.listDuck" })).rejects.toMatchObject({
+      code: "VAULT_LOCKED",
+    });
+    await expect(
+      service.handle({ version: 1, kind: "alias.forgetDuck", address: "addr1@duck.com" }),
+    ).rejects.toMatchObject({ code: "VAULT_LOCKED" });
+    state.locked = false;
+    expect((await service.handle({ version: 1, kind: "alias.listDuck" })).kind).toBe(
+      "alias.duckList",
+    );
+    expect(await service.readAddresses()).toHaveLength(1);
   });
 });
 

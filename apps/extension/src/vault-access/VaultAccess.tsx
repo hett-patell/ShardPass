@@ -319,10 +319,18 @@ export function VaultAccess({
       if (isCommittedLocked(response)) {
         onUnlockedChange?.(false);
         setState("locked");
+        setPinAvailable(false);
         setError(
           "The password was changed, but the vault is locked. Unlock with the new password.",
         );
       } else if (!isUnlocked(response)) setError(safeError(response));
+      else {
+        // The background removed the PIN with the old password; say so where the PIN lives.
+        setPinAvailable(false);
+        setPinNotice(
+          "Password changed. The PIN was removed with the old password; set a new one below if you want one.",
+        );
+      }
     } catch {
       setError("The password could not be changed. Try again.");
     } finally {
@@ -567,7 +575,8 @@ export function VaultAccess({
             <p className={styles.weakNote}>
               A PIN is shorter than your master password, so it only counts for this browser
               profile: after five wrong PINs it is removed and the master password is required
-              again.
+              again. Anyone with a copy of this profile could guess PINs offline, so use one only on
+              a device that is yours. Changing the master password removes the PIN.
             </p>
             {pinNotice !== "" ? (
               <p className={styles.working} role="status">

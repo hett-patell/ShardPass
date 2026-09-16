@@ -131,6 +131,7 @@ export function installBackground(
     reservations,
     notePrivilegedActivity: () => settings.notePrivilegedActivity(),
     registerReservationCleanup: (cleanup) => sessions.onLockOrDispose(cleanup),
+    repromptGranted: (itemId) => repromptGrants.granted(itemId),
   });
   const hotpLifecycle = createInternalHotpLifecycle({
     repository: sessions.vaultRepository,
@@ -214,12 +215,19 @@ export function installBackground(
     notePrivilegedActivity: () => settings.notePrivilegedActivity(),
     repromptGranted: (itemId) => repromptGrants.granted(itemId),
   });
+  // Every lock path, not only the auto-lock: an answered re-prompt and a pending card fill
+  // are worth nothing once the key is gone.
+  sessions.onLockOrDispose(() => {
+    repromptGrants.clear();
+    dataFill.clear();
+  });
   // Have I Been Pwned's range endpoint, padded: the reply's size says nothing about the
   // prefix asked for. Only the first five characters of the password's SHA-1 are sent.
   const breachCheck = new BreachCheckService({
     repository: sessions.vaultRepository,
     local: platform.localStorage,
     secrets: sealedSecrets,
+    repromptGranted: (itemId) => repromptGrants.granted(itemId),
     now: () => Date.now(),
     fetchRange: async (prefix) => {
       const response = await fetch(`https://api.pwnedpasswords.com/range/${prefix}`, {

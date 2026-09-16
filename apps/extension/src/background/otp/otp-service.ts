@@ -34,7 +34,8 @@ export type OtpServiceErrorCode =
   | "OTP_HOTP_REQUIRED"
   | "OTP_RESERVATION_INVALID"
   | "OTP_RESERVATION_STALE"
-  | "OTP_RESERVATION_UNCERTAIN";
+  | "OTP_RESERVATION_UNCERTAIN"
+  | "REPROMPT_REQUIRED";
 
 export class OtpServiceError extends Error {
   constructor(readonly code: OtpServiceErrorCode) {
@@ -50,6 +51,8 @@ type OtpServiceDependencies = Readonly<{
   reservations: HotpReservationService;
   notePrivilegedActivity(): Promise<void>;
   registerReservationCleanup?(cleanup: () => void): () => void;
+  /** Whether an item's master-password re-prompt has been answered recently. */
+  repromptGranted?(itemId: string): boolean;
 }>;
 
 export class OtpService {
@@ -146,8 +149,15 @@ export class OtpService {
     return response({ version: 1, kind: "otp.listResult", items: freezeArray(projected) });
   }
 
+  /** A re-prompted code's secret and codes wait for the master password, like any other secret. */
+  private assertRepromptAnswered(value: OtpItem): void {
+    if (value.reprompt === true && !(this.dependencies.repromptGranted?.(value.id) ?? false))
+      throw new OtpServiceError("REPROMPT_REQUIRED");
+  }
+
   private async getEditor(itemId: string): Promise<OtpResponse> {
     const value = await this.getValidItem(itemId);
+    this.assertRepromptAnswered(value);
     return response({
       version: 1,
       kind: "otp.editorResult",
@@ -204,6 +214,7 @@ export class OtpService {
 
   private async getCode(itemId: string, expectedRevision?: number): Promise<OtpResponse> {
     const value = await this.getValidItem(itemId);
+    this.assertRepromptAnswered(value);
     if (expectedRevision !== undefined && value.revision !== expectedRevision) conflict();
     if (value.otpType === "hotp") throw new OtpServiceError("OTP_HOTP_REQUIRED");
     const generated = await generateOtp(value, this.dependencies.clock.now());
@@ -233,6 +244,7 @@ export class OtpService {
   private async reserveHotp(itemId: string, sender: SenderContext): Promise<OtpResponse> {
     const binding = reservationBinding(sender);
     const value = await this.getValidItem(itemId);
+    this.assertRepromptAnswered(value);
     if (value.otpType !== "hotp") throw new OtpServiceError("OTP_RESERVATION_INVALID");
     const reserved = await this.dependencies.reservations.reserveHotp(value, binding);
     const current = await this.dependencies.repository.get(itemId);

@@ -84,8 +84,19 @@ const MUTATING_KINDS = new Set([
   "login.pendingOffer",
 ]);
 
+/**
+ * Save offers per host per minute before the verdict stops saying whether the password
+ * matched. "Same as saved" closes the banner, so a script submitting guesses in a loop
+ * could otherwise read the vault's password one attempt at a time.
+ */
+const MAX_OFFER_VERDICTS_PER_WINDOW = 5;
+const OFFER_VERDICT_WINDOW_MS = 60_000;
+const MAX_TRACKED_HOSTS = 256;
+
 export class LoginFillService {
   private readonly offers = new Map<string, SaveOffer>();
+  /** When each host last asked for a save verdict, for the throttle above. */
+  private readonly verdictTimes = new Map<string, number[]>();
   /** Releases handed out, each good for one confirmation from the tab it went to. */
   private readonly releases = new Map<
     string,
@@ -375,12 +386,14 @@ export class LoginFillService {
     for (const [id, offer] of this.offers) if (offer.tabId === tabId) this.offers.delete(id);
     if (this.offers.size >= MAX_OFFERS) throw new LoginFillServiceError("LOGIN_FILL_UNAVAILABLE");
     let evaluation: Evaluation;
-    try {
-      evaluation = await this.evaluate(domain, username, password);
-    } catch (error) {
-      if (errorCode(error) !== "VAULT_LOCKED") throw error;
-      evaluation = UNKNOWN;
-    }
+    if (this.verdictsExhausted(domain, now)) evaluation = UNKNOWN;
+    else
+      try {
+        evaluation = await this.evaluate(domain, username, password);
+      } catch (error) {
+        if (errorCode(error) !== "VAULT_LOCKED") throw error;
+        evaluation = UNKNOWN;
+      }
     const offerId = this.dependencies.nextOfferId?.() ?? randomOfferId();
     if (evaluation.existing !== "same") {
       this.offers.set(offerId, {
@@ -399,6 +412,21 @@ export class LoginFillService {
       existing: evaluation.existing,
       ...(evaluation.existingName === undefined ? {} : { existingName: evaluation.existingName }),
     };
+  }
+
+  /** Records this verdict request for the host and says whether the window's budget is spent. */
+  private verdictsExhausted(host: string, now: number): boolean {
+    const recent = (this.verdictTimes.get(host) ?? []).filter(
+      (at) => now - at < OFFER_VERDICT_WINDOW_MS,
+    );
+    recent.push(now);
+    this.verdictTimes.set(host, recent);
+    while (this.verdictTimes.size > MAX_TRACKED_HOSTS) {
+      const oldest = this.verdictTimes.keys().next().value;
+      if (oldest === undefined) break;
+      this.verdictTimes.delete(oldest);
+    }
+    return recent.length > MAX_OFFER_VERDICTS_PER_WINDOW;
   }
 
   /** The offer held for the sender's tab, judged now if the vault was locked when it arrived. */

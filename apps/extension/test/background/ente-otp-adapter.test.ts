@@ -76,11 +76,14 @@ const frame = (text: string, key: Uint8Array) => {
 };
 
 describe("Ente entity codec", () => {
-  it.each(projections)("round-trips a $otpType projection through Ente's URI dialect", (projection) => {
-    const key = sodium.randomBytes(32);
-    const encrypted = encryptEnteOtpEntity(projection, key, sodium);
-    expect(parseEnteOtpEntity({ version: 1, ...encrypted }, key, sodium)).toEqual(projection);
-  });
+  it.each(projections)(
+    "round-trips a $otpType projection through Ente's URI dialect",
+    (projection) => {
+      const key = sodium.randomBytes(32);
+      const encrypted = encryptEnteOtpEntity(projection, key, sodium);
+      expect(parseEnteOtpEntity({ version: 1, ...encrypted }, key, sodium)).toEqual(projection);
+    },
+  );
 
   it("writes the URI shape the Ente Auth app reads", () => {
     const uri = projectionToEnteUri(projections[3]);
@@ -142,7 +145,9 @@ describe("Ente entity codec", () => {
 
   it("handles the app's known quirks", () => {
     // Type in the path rather than the host.
-    expect(projectionFromEnteUri("otpauth:////totp/Acme:bob?secret=JBSWY3DPEHPK3PXP")).toMatchObject({
+    expect(
+      projectionFromEnteUri("otpauth:////totp/Acme:bob?secret=JBSWY3DPEHPK3PXP"),
+    ).toMatchObject({
       otpType: "totp",
       issuer: "Acme",
       label: "bob",
@@ -157,15 +162,19 @@ describe("Ente entity codec", () => {
       label: "Acme-bob",
     });
     // A literal "#" in the label.
-    expect(projectionFromEnteUri("otpauth://totp/Acme:bob#1?secret=JBSWY3DPEHPK3PXP")).toMatchObject({
+    expect(
+      projectionFromEnteUri("otpauth://totp/Acme:bob#1?secret=JBSWY3DPEHPK3PXP"),
+    ).toMatchObject({
       label: "bob#1",
     });
     // Steam defaults to 5 digits.
-    expect(projectionFromEnteUri("otpauth://steam/Steam:player?secret=JBSWY3DPEHPK3PXP")).toMatchObject(
-      { otpType: "steam", digits: 5 },
-    );
+    expect(
+      projectionFromEnteUri("otpauth://steam/Steam:player?secret=JBSWY3DPEHPK3PXP"),
+    ).toMatchObject({ otpType: "steam", digits: 5 });
     // Empty account falls back to the issuer for the label.
-    expect(projectionFromEnteUri("otpauth://totp/?secret=JBSWY3DPEHPK3PXP&issuer=Solo")).toMatchObject({
+    expect(
+      projectionFromEnteUri("otpauth://totp/?secret=JBSWY3DPEHPK3PXP&issuer=Solo"),
+    ).toMatchObject({
       issuer: "Solo",
       label: "Solo",
     });
@@ -174,7 +183,9 @@ describe("Ente entity codec", () => {
   it("treats a trashed code as not-a-code rather than an error", () => {
     const key = sodium.randomBytes(32);
     const trashed = frame(
-      JSON.stringify('otpauth://totp/Acme:bob?secret=JBSWY3DPEHPK3PXP&codeDisplay={"trashed":true}'),
+      JSON.stringify(
+        'otpauth://totp/Acme:bob?secret=JBSWY3DPEHPK3PXP&codeDisplay={"trashed":true}',
+      ),
       key,
     );
     expect(parseEnteOtpEntity(trashed, key, sodium)).toBeNull();

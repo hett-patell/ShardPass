@@ -109,32 +109,32 @@ export function createEnteRuntimeOwner(
         const state =
           previous !== null && previous.accountFingerprint === accountFingerprint
             ? {
-              ...previous,
-              credentialEnvelope,
-              masterKeyEnvelope,
-              authKeyEnvelope,
-              scheduler: { ...previous.scheduler, connected: true },
-              needsReauth: false,
-            }
-          : {
-              version: 1 as const,
-              protocolPin: "c69dcf66704ad7ec1f95e32920455be429a566ef" as const,
-              origin: "https://api.ente.io" as const,
-              accountFingerprint,
-              snapshotAccountFingerprint: null,
-              initialSnapshotEstablished: false,
-              credentialEnvelope,
-              masterKeyEnvelope,
-              authKeyEnvelope,
-              mappings: [],
-              bases: [],
-              cursor: 0,
-              pending: [],
-              uncertain: null,
-              conflicts: [],
-              scheduler: { connected: true, lastAttemptAt: null, lastSuccessAt: null },
-              needsReauth: false,
-            };
+                ...previous,
+                credentialEnvelope,
+                masterKeyEnvelope,
+                authKeyEnvelope,
+                scheduler: { ...previous.scheduler, connected: true },
+                needsReauth: false,
+              }
+            : {
+                version: 1 as const,
+                protocolPin: "c69dcf66704ad7ec1f95e32920455be429a566ef" as const,
+                origin: "https://api.ente.io" as const,
+                accountFingerprint,
+                snapshotAccountFingerprint: null,
+                initialSnapshotEstablished: false,
+                credentialEnvelope,
+                masterKeyEnvelope,
+                authKeyEnvelope,
+                mappings: [],
+                bases: [],
+                cursor: 0,
+                pending: [],
+                uncertain: null,
+                conflicts: [],
+                scheduler: { connected: true, lastAttemptAt: null, lastSuccessAt: null },
+                needsReauth: false,
+              };
         const plaintext = new TextEncoder().encode(canonicalJson(state));
         try {
           if (

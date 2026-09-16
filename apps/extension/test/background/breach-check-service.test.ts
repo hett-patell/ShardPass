@@ -159,6 +159,34 @@ function fakeSecrets(state: { locked: boolean }) {
   };
 }
 
+describe("BreachCheckService re-prompted logins", () => {
+  it("waits for the master password before reading a re-prompted login's password", async () => {
+    let granted = false;
+    const service = new BreachCheckService({
+      repository: {
+        getItem: () =>
+          Promise.resolve({
+            id: itemId,
+            kind: "login",
+            password: "password",
+            reprompt: true,
+          } as never),
+      },
+      local: localStore({ "shardpass:v1:breach-checks": { version: 1, enabled: true } }),
+      repromptGranted: () => granted,
+      fetchRange: vi.fn(() => Promise.resolve(`${SUFFIX}:3861493\n`)),
+      now: () => 5,
+    });
+    await expect(
+      service.handle({ version: 1, kind: "security.checkItem", itemId }),
+    ).rejects.toMatchObject({ code: "REPROMPT_REQUIRED" });
+    granted = true;
+    await expect(
+      service.handle({ version: 1, kind: "security.checkItem", itemId }),
+    ).resolves.toMatchObject({ count: 3_861_493 });
+  });
+});
+
 describe("BreachCheckService remembered verdicts", () => {
   const otherId = "10000000-0000-4000-8000-000000000002";
 

@@ -1,7 +1,8 @@
 /**
  * Items whose master-password re-prompt has been answered recently. A grant is per item
- * and short-lived; the lock clears every one. Held in the worker only: a page proves the
- * password to the background and the background remembers, so no page can grant itself.
+ * and short-lived; the session's lock callback clears every one, whichever path locked.
+ * Held in the worker only: a page proves the password to the background and the
+ * background remembers, so no page can grant itself.
  */
 export class RepromptGrants {
   private readonly grants = new Map<string, number>();

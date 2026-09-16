@@ -861,6 +861,24 @@ describe("LoginFillService sender binding", () => {
   });
 });
 
+describe("LoginFillService save-offer verdicts", () => {
+  it("stops saying whether a password matched after a burst of offers from one host", async () => {
+    const stored = loginItem({ urls: ["https://example.test"], password: "pw-1" });
+    const { service } = fixture([stored]);
+    const offer = () =>
+      service.handle(
+        request("login.saveOffer", { domain: "example.test", username: "alice", password: "pw-1" }),
+        sender,
+      );
+    for (let attempt = 0; attempt < 5; attempt += 1)
+      expect(await offer()).toMatchObject({ existing: "same" });
+    const sixth = await offer();
+    expect(sixth).toMatchObject({ kind: "login.saveOfferResult" });
+    expect((sixth as { existing: string }).existing).not.toBe("same");
+    expect((sixth as { existingName?: string }).existingName).toBeUndefined();
+  });
+});
+
 describe("LoginFillService username suggestions", () => {
   it("asks the generator for the page's host and answers null when nothing is configured", async () => {
     const hosts: string[] = [];

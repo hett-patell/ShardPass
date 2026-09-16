@@ -226,7 +226,10 @@ export function createEnteClient(dependencies: { readonly fetch: EnteFetch }): E
         throw fixedError(response.status >= 500 ? "ENTE_UNAVAILABLE" : "ENTE_AUTH_FAILED", where);
       if (input.empty) {
         if (response.status !== 200 && response.status !== 204)
-          throw fixedError("ENTE_PROTOCOL_DRIFT", `${input.method} ${input.path.split("?")[0]} -> ${response.status}`);
+          throw fixedError(
+            "ENTE_PROTOCOL_DRIFT",
+            `${input.method} ${input.path.split("?")[0]} -> ${response.status}`,
+          );
         // The reply is not needed. Read it (bounded, so it is still charged to the budget)
         // and discard it rather than failing if the server chooses to echo something.
         const bytes = await boundedBytes(response, input.budget ?? createEnteResponseBudget());
@@ -373,5 +376,4 @@ export function createEnteClient(dependencies: { readonly fetch: EnteFetch }): E
       });
     },
   };
-
 }

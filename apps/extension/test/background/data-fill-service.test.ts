@@ -48,6 +48,35 @@ function service(now = 1_000, reprompt = false) {
   });
 }
 
+describe("DataFillService frames", () => {
+  it("releases only to the tab's top frame, and a sub-frame's attempt does not spend the grant", async () => {
+    const fill = service();
+    await fill.handle({ version: 1, kind: "data.fillGrant", itemId: cardId, tabId: 7 }, popup);
+    const subframe: SenderContext = {
+      ...(page(7) as Extract<SenderContext, { contextKind: "content" }>),
+      frameId: 3,
+    };
+    await expect(
+      fill.handle({ version: 1, kind: "data.fillSelect", itemId: cardId }, subframe),
+    ).rejects.toMatchObject({ code: "DATA_FILL_INVALID" });
+    await expect(
+      fill.handle({ version: 1, kind: "data.fillSelect", itemId: cardId }, page(7)),
+    ).resolves.toMatchObject({ kind: "data.fillRelease", data: "card" });
+    await expect(
+      fill.handle({ version: 1, kind: "data.fillSelect", itemId: cardId }, page(7)),
+    ).rejects.toMatchObject({ code: "DATA_FILL_INVALID" });
+  });
+
+  it("forgets every grant when asked, as the lock does", async () => {
+    const fill = service();
+    await fill.handle({ version: 1, kind: "data.fillGrant", itemId: cardId, tabId: 7 }, popup);
+    fill.clear();
+    await expect(
+      fill.handle({ version: 1, kind: "data.fillSelect", itemId: cardId }, page(7)),
+    ).rejects.toMatchObject({ code: "DATA_FILL_INVALID" });
+  });
+});
+
 describe("DataFillService", () => {
   it("releases a card once, only to the tab the popup granted, and never to a page on its own", async () => {
     const fill = service();

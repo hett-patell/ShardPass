@@ -46,6 +46,41 @@ async function unlockWithPin(service: SessionService, key: Uint8Array, binding =
   return service.unlockWithPin(challenge.challengeId, key.slice(), binding);
 }
 
+describe("SessionService PIN and the rest of the session", () => {
+  it("drops the PIN when the master password changes", async () => {
+    const { service, local } = fixture();
+    await setup(service);
+    await service.setPin(pinKey.slice(), pinKdf);
+    expect((await service.getState()).pinAvailable).toBe(true);
+    const current = await service.createChallenge("change-current", popupBinding);
+    const next = await service.createChallenge("change-new", popupBinding);
+    const newKek = Uint8Array.from({ length: 32 }, (_, index) => 255 - index);
+    await service.changePassword(
+      current.challengeId,
+      kek.slice(),
+      next.challengeId,
+      newKek.slice(),
+      popupBinding,
+    );
+    expect((await local.get([PIN_KEY]))[PIN_KEY]).toBeUndefined();
+    expect((await service.getState()).pinAvailable).toBe(false);
+  });
+
+  it("refuses to seal or open a secret once a lock has begun, before the key is gone", async () => {
+    const { service } = fixture();
+    await setup(service);
+    const sealed = await service.sealSecret("test", new Uint8Array([1, 2, 3]));
+    const locking = service.lock();
+    await expect(service.sealSecret("test", new Uint8Array([4]))).rejects.toMatchObject({
+      code: "VAULT_LOCKED",
+    });
+    await expect(service.openSecret("test", sealed)).rejects.toMatchObject({
+      code: "VAULT_LOCKED",
+    });
+    await locking;
+  });
+});
+
 describe("SessionService PIN unlock", () => {
   it("reports no PIN until one is set, and only while the vault is open", async () => {
     const { service } = fixture();

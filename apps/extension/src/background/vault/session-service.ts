@@ -477,19 +477,10 @@ export class SessionService {
           throw new VaultSessionError("CHALLENGE_INVALID");
         const record = await this.readPin();
         if (record === null) throw new VaultSessionError("PIN_UNAVAILABLE");
+        // Only a failed unwrap is a wrong PIN; a storage error after it is not the person's.
         try {
           candidateDek = await unwrapVaultDataKeyWithKeyEncryptionKey(pinKey, record.wrapped);
-          this.assertEpoch(operationEpoch);
-          const active = await this.generations.readActive({ dek: candidateDek });
-          this.assertEpoch(operationEpoch);
-          this.dek = candidateDek;
-          candidateDek = null;
-          this.expectedRoot = root;
-          this.rememberAuthenticatedActive(active);
-          await this.dependencies.local.set({ [PIN_KEY]: { ...record, failures: 0 } });
-          await this.rememberSession();
-        } catch (error) {
-          if (error instanceof VaultSessionError && error.code === "VAULT_LOCKED") throw error;
+        } catch {
           const failures = record.failures + 1;
           if (failures >= MAX_PIN_FAILURES) {
             await this.dependencies.local.remove([PIN_KEY]);
@@ -497,6 +488,22 @@ export class SessionService {
           }
           await this.dependencies.local.set({ [PIN_KEY]: { ...record, failures } });
           throw new VaultSessionError("PIN_INVALID");
+        }
+        try {
+          this.assertEpoch(operationEpoch);
+          const active = await this.generations.readActive({ dek: candidateDek });
+          this.assertEpoch(operationEpoch);
+          // A second unlock must not leave an earlier key lying in memory.
+          wipe(this.dek);
+          this.dek = candidateDek;
+          candidateDek = null;
+          this.expectedRoot = root;
+          this.rememberAuthenticatedActive(active);
+          await this.dependencies.local.set({ [PIN_KEY]: { ...record, failures: 0 } });
+          await this.rememberSession();
+        } catch (error) {
+          if (error instanceof VaultSessionError) throw error;
+          throw new VaultSessionError("VAULT_UNAVAILABLE");
         }
       } finally {
         wipe(candidateDek);
@@ -661,6 +668,7 @@ export class SessionService {
   }
 
   async captureBackupSession(): Promise<BackupSessionAuthority> {
+    if (this.lockPending) throw new VaultSessionError("VAULT_LOCKED");
     const operationEpoch = this.epoch;
     await this.assertActiveRoot();
     this.assertEpoch(operationEpoch);
@@ -909,6 +917,8 @@ export class SessionService {
         this.assertEpoch(operationEpoch);
         const active = await this.generations.readActive({ dek: candidateDek });
         this.assertEpoch(operationEpoch);
+        // A second unlock must not leave an earlier key lying in memory.
+        wipe(this.dek);
         this.dek = candidateDek;
         candidateDek = null;
         this.expectedRoot = root;
@@ -1034,6 +1044,9 @@ export class SessionService {
       const verified = await this.generations.verify(staged, context);
       this.assertEpoch(operationEpoch);
       const outcome = await this.commitRoot(verified, context, operationEpoch, this.dek);
+      // The PIN wrapped the same data key; a person changing the password after a scare
+      // expects the old PIN to stop working too. Setting it again is one form away.
+      await this.dependencies.local.remove([PIN_KEY]).catch(() => undefined);
       if (outcome.state === "locked") return outcome;
       await this.clearAttempts();
       this.assertEpoch(operationEpoch);
@@ -1056,8 +1069,12 @@ export class SessionService {
     return this.mutationMutex.run(() => this.clearLockedState());
   }
 
+  /** Set the moment a lock begins, cleared once the key is gone: the gap in between refuses. */
+  private lockPending = false;
+
   private beginLock(): void {
     this.epoch += 1;
+    this.lockPending = true;
     this.challenges.clear();
     for (const callback of [...this.lockCallbacks]) {
       try {
@@ -1116,6 +1133,9 @@ export class SessionService {
     purpose: string,
     plaintext: Uint8Array,
   ): Promise<{ nonce: string; ciphertext: string }> {
+    // A lock that has begun but not yet cleared the key must already refuse: this call
+    // would otherwise read the new epoch and pass its own check.
+    if (this.lockPending) throw new VaultSessionError("VAULT_LOCKED");
     const operationEpoch = this.epoch;
     await this.assertActiveRoot();
     if (this.dek === null || plaintext.byteLength > MAX_SEALED_SECRET_BYTES)
@@ -1134,6 +1154,7 @@ export class SessionService {
     purpose: string,
     sealed: { nonce: string; ciphertext: string },
   ): Promise<Uint8Array> {
+    if (this.lockPending) throw new VaultSessionError("VAULT_LOCKED");
     const operationEpoch = this.epoch;
     await this.assertActiveRoot();
     if (this.dek === null) throw new VaultSessionError("VAULT_LOCKED");
@@ -1831,6 +1852,7 @@ export class SessionService {
     this.authenticatedActive = null;
     this.commitCandidate = null;
     this.backupAuthorities.clear();
+    this.lockPending = false;
     return this.forgetSession();
   }
 
