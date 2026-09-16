@@ -318,6 +318,7 @@ export {
 export type { SaveLoginExisting, PendingSaveOffer } from "./login-fill";
 export {
   BreachResultResponseSchema,
+  BreachResultsListResponseSchema,
   parseSecurityResponseForRequest,
   SecurityRequestSchema,
   SecurityResponseSchema,

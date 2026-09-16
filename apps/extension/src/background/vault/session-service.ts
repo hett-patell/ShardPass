@@ -2100,7 +2100,8 @@ function isAttemptState(value: unknown): value is AttemptState {
     candidate.observedAt! >= 0
   );
 }
-const MAX_SEALED_SECRET_BYTES = 8192;
+/** Integration tokens are tiny; remembered breach results grow with the vault. */
+const MAX_SEALED_SECRET_BYTES = 1024 * 1024;
 function sealedSecretAad(purpose: string) {
   return {
     format: "shardpass-sealed-secret",

@@ -91,6 +91,66 @@ describe("HealthView", () => {
     const breached = screen.getByRole("region", { name: /Breached passwords/u });
     expect(await within(breached).findByText("Weak one")).toBeVisible();
     expect(within(breached).getByText(/seen 42 times/u)).toBeVisible();
-    await waitFor(() => expect(sendMessage).toHaveBeenCalledTimes(4));
+    // One listing at mount, then one check per login.
+    await waitFor(() => expect(sendMessage).toHaveBeenCalledTimes(5));
+    expect(await screen.findByText(/4 of 4 checked/u)).toBeVisible();
+  });
+});
+
+describe("HealthView remembered verdicts", () => {
+  it("shows what the background remembers and checks only the rest", async () => {
+    const items = [
+      login("01", "Checked before", "strong-and-long-one"),
+      login("02", "Changed since", "strong-and-long-two"),
+      login("03", "Never checked", "strong-and-long-three"),
+    ];
+    const checked: string[] = [];
+    const sendMessage = vi.fn((request: { kind: string; itemId?: string; force?: boolean }) => {
+      if (request.kind === "security.listResults")
+        return Promise.resolve({
+          version: 1,
+          kind: "security.results",
+          results: [
+            {
+              itemId: "10000000-0000-4000-8000-000000000001",
+              count: 7,
+              checkedAt: 1,
+              stale: false,
+            },
+            { itemId: "10000000-0000-4000-8000-000000000002", count: 0, checkedAt: 1, stale: true },
+          ],
+        });
+      checked.push(`${request.itemId ?? ""}${request.force ? "!" : ""}`);
+      return Promise.resolve({
+        version: 1,
+        kind: "security.breachResult",
+        itemId: request.itemId,
+        count: 0,
+        checkedAt: 2,
+      });
+    });
+    render(
+      <HealthView
+        platform={{ sendMessage }}
+        items={items}
+        redactedIds={new Set()}
+        active
+        onOpenItem={() => undefined}
+        estimator={estimator}
+      />,
+    );
+    const breached = screen.getByRole("region", { name: /Breached passwords/u });
+    expect(await within(breached).findByText(/1 of 3 checked, 2 not yet/u)).toBeVisible();
+    expect(within(breached).getByText("Checked before")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Check 2 unchecked" }));
+    await waitFor(() => expect(checked).toHaveLength(2));
+    expect(checked).toEqual([
+      "10000000-0000-4000-8000-000000000002",
+      "10000000-0000-4000-8000-000000000003",
+    ]);
+    expect(await within(breached).findByText(/3 of 3 checked/u)).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Check all again" }));
+    await waitFor(() => expect(checked).toHaveLength(5));
+    expect(checked.slice(2).every((entry) => entry.endsWith("!"))).toBe(true);
   });
 });

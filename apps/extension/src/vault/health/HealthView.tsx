@@ -29,9 +29,10 @@ const BREACH_BATCH = 200;
 type BreachRun =
   | Readonly<{ state: "idle" }>
   | Readonly<{ state: "running"; done: number; total: number }>
-  | Readonly<{ state: "done"; found: readonly Readonly<{ login: LoginItem; count: number }>[] }>
   | Readonly<{ state: "disabled" }>
   | Readonly<{ state: "failed" }>;
+/** A remembered verdict for one login; stale once its password changed after the check. */
+type Verdict = Readonly<{ count: number; checkedAt: number; stale: boolean }>;
 
 /**
  * The vault's health: weak, reused, breached and unencrypted-site logins, and those with no
@@ -48,6 +49,37 @@ export function HealthView({
   const report = useMemo(() => computeHealth(items, redactedIds), [items, redactedIds]);
   const [weakness, setWeakness] = useState<ReadonlyMap<string, number>>(new Map());
   const [breach, setBreach] = useState<BreachRun>({ state: "idle" });
+  // Verdicts the background remembers, read once per visit, then updated as checks run.
+  const [verdicts, setVerdicts] = useState<ReadonlyMap<string, Verdict>>(new Map());
+  const [verdictsLoaded, setVerdictsLoaded] = useState(false);
+
+  useEffect(() => {
+    if (!active || verdictsLoaded) return;
+    let live = true;
+    const request = { version: 1 as const, kind: "security.listResults" as const };
+    platform.sendMessage(request).then(
+      (candidate) => {
+        if (!live) return;
+        const parsed = parseSecurityResponseForRequest(request, candidate);
+        if (parsed.success && parsed.data.kind === "security.results")
+          setVerdicts(
+            new Map(
+              parsed.data.results.map((result) => [
+                result.itemId,
+                { count: result.count, checkedAt: result.checkedAt, stale: result.stale },
+              ]),
+            ),
+          );
+        setVerdictsLoaded(true);
+      },
+      () => {
+        if (live) setVerdictsLoaded(true);
+      },
+    );
+    return () => {
+      live = false;
+    };
+  }, [active, platform, verdictsLoaded]);
   const [ownEstimator] = useState(() => estimator ?? createStrengthEstimator());
   useEffect(() => () => ownEstimator.dispose(), [ownEstimator]);
 
@@ -76,16 +108,28 @@ export function HealthView({
   const weak = report.logins.filter((login) => (weakness.get(login.password) ?? 3) < 2);
   const judged = report.logins.filter((login) => weakness.has(login.password)).length;
 
-  const runBreachCheck = async () => {
-    const targets = report.logins.slice(0, BREACH_BATCH);
+  const verdictFor = (login: LoginItem): Verdict | undefined => {
+    const verdict = verdicts.get(login.id);
+    return verdict !== undefined && !verdict.stale ? verdict : undefined;
+  };
+  const unchecked = report.logins.filter((login) => verdictFor(login) === undefined);
+  const checkedCount = report.logins.length - unchecked.length;
+  const found = report.logins.flatMap((login) => {
+    const verdict = verdictFor(login);
+    return verdict !== undefined && verdict.count > 0 ? [{ login, count: verdict.count }] : [];
+  });
+
+  /** Checks what has no verdict yet, or everything again; each verdict is remembered as it lands. */
+  const runBreachCheck = async (mode: "unchecked" | "all") => {
+    const targets = (mode === "all" ? report.logins : unchecked).slice(0, BREACH_BATCH);
     setBreach({ state: "running", done: 0, total: targets.length });
-    const found: Array<Readonly<{ login: LoginItem; count: number }>> = [];
     let done = 0;
     for (const login of targets) {
       const request = {
         version: 1 as const,
         kind: "security.checkItem" as const,
         itemId: login.id,
+        ...(mode === "all" ? { force: true } : {}),
       };
       let candidate: unknown;
       try {
@@ -100,11 +144,12 @@ export function HealthView({
         setBreach(code === "BREACH_CHECK_DISABLED" ? { state: "disabled" } : { state: "failed" });
         return;
       }
-      if (parsed.data.count > 0) found.push({ login, count: parsed.data.count });
+      const { count, checkedAt } = parsed.data;
+      setVerdicts((current) => new Map(current).set(login.id, { count, checkedAt, stale: false }));
       done += 1;
       setBreach({ state: "running", done, total: targets.length });
     }
-    setBreach({ state: "done", found });
+    setBreach({ state: "idle" });
   };
 
   const row = (login: LoginItem, note?: string) => (
@@ -168,15 +213,9 @@ export function HealthView({
         <section className={styles.card} aria-labelledby="health-breached">
           <h4 id="health-breached" className={styles.cardTitle}>
             Breached passwords
-            {breach.state === "done" ? (
-              <span className={styles.count}>{breach.found.length}</span>
-            ) : null}
+            {checkedCount > 0 ? <span className={styles.count}>{found.length}</span> : null}
           </h4>
-          {breach.state === "idle" ? (
-            <p className={styles.quiet}>
-              Checks each password against Have I Been Pwned, one hash prefix at a time.
-            </p>
-          ) : breach.state === "running" ? (
+          {breach.state === "running" ? (
             <p className={styles.quiet} role="status">
               Checking… {breach.done} of {breach.total}
             </p>
@@ -184,24 +223,45 @@ export function HealthView({
             <p className={styles.quiet}>Turn on breach checks in Settings first.</p>
           ) : breach.state === "failed" ? (
             <p className={styles.quiet}>The check could not finish. Try again later.</p>
-          ) : breach.found.length === 0 ? (
-            <p className={styles.quiet}>None of these passwords appear in known breaches.</p>
-          ) : null}
-          {breach.state === "done" ? (
+          ) : checkedCount === 0 ? (
+            <p className={styles.quiet}>
+              Checks each password against Have I Been Pwned, one hash prefix at a time. A password
+              is checked once and remembered until it changes.
+            </p>
+          ) : (
+            <p className={styles.quiet} role="status">
+              {checkedCount} of {report.logins.length} checked
+              {unchecked.length > 0 ? `, ${unchecked.length} not yet` : ""}.
+              {found.length === 0 ? " None appear in known breaches." : ""}
+            </p>
+          )}
+          {found.length > 0 ? (
             <ul className={styles.list}>
-              {breach.found.map(({ login, count }) =>
+              {found.map(({ login, count }) =>
                 row(login, `seen ${count.toLocaleString("en-US")} times`),
               )}
             </ul>
           ) : null}
-          <div>
-            <Button
-              variant="secondary"
-              onClick={() => void runBreachCheck()}
-              loading={breach.state === "running"}
-            >
-              {breach.state === "done" ? "Check again" : "Check now"}
-            </Button>
+          <div className={styles.actions}>
+            {unchecked.length > 0 || checkedCount === 0 ? (
+              <Button
+                variant="secondary"
+                onClick={() => void runBreachCheck("unchecked")}
+                loading={breach.state === "running"}
+                disabled={!verdictsLoaded}
+              >
+                {checkedCount === 0 ? "Check now" : `Check ${unchecked.length} unchecked`}
+              </Button>
+            ) : null}
+            {checkedCount > 0 ? (
+              <Button
+                variant="ghost"
+                onClick={() => void runBreachCheck("all")}
+                disabled={breach.state === "running"}
+              >
+                Check all again
+              </Button>
+            ) : null}
           </div>
         </section>
 

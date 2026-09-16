@@ -171,12 +171,15 @@ export function installBackground(
   });
   // DuckDuckGo Email Protection: the token, sealed under the vault key, goes only to
   // quack.duckduckgo.com, and only when a fresh address is asked for.
+  // Small secrets that must not be readable while the vault is locked, sealed under its key.
+  const sealedSecrets = {
+    seal: (purpose: string, plaintext: Uint8Array) => sessions.sealSecret(purpose, plaintext),
+    open: (purpose: string, sealed: { nonce: string; ciphertext: string }) =>
+      sessions.openSecret(purpose, sealed),
+  };
   const aliases = new AliasService({
     local: platform.localStorage,
-    secrets: {
-      seal: (purpose, plaintext) => sessions.sealSecret(purpose, plaintext),
-      open: (purpose, sealed) => sessions.openSecret(purpose, sealed),
-    },
+    secrets: sealedSecrets,
     requestDuckAddress: async (token) => {
       const response = await fetch("https://quack.duckduckgo.com/api/email/addresses", {
         method: "POST",
@@ -215,6 +218,7 @@ export function installBackground(
   const breachCheck = new BreachCheckService({
     repository: sessions.vaultRepository,
     local: platform.localStorage,
+    secrets: sealedSecrets,
     now: () => Date.now(),
     fetchRange: async (prefix) => {
       const response = await fetch(`https://api.pwnedpasswords.com/range/${prefix}`, {
