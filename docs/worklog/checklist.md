@@ -101,6 +101,15 @@ Baseline at 2.3.0: typecheck clean, lint clean after one test fix, full suite gr
 - [ ] E9 low (still open, narrow) · `login.fillFromPopup` first-answer race across frames (narrow).
 - [x] E10 low · dead `useOtpList.ts`; stale scan-build/manifest-test comments; GeneratorScreen's deferred settings fetch overwrites what was typed and requests a username per keystroke.
 
+## 2026-09-16 · Two scrollbars, three unequal cards, an empty About page (2.6.8)
+
+- [x] The settings page scrolled twice: the panel's own scrollbar beside the page's. The import card's visually-hidden file input is `position: absolute` with no offsets, and with no positioned ancestor it kept the place it would have had in the flow -- measured from the page, 1288px down -- so the document itself grew past the viewport. The four hidden controls are pinned to their corner now, and every settings card is a containing block, so nothing inside one can stretch the page again.
+- [x] Settings held three cards of wildly different sizes: locking, the PIN and the master password shared one card three times the height of its neighbours, and the panel stretched Appearance and breach checks to match it. Each is its own card now, security first, and the two rows come out even (three at 397px, two at 185px, with the importer across the row beneath).
+- [x] Those cards' own fields had no styling: the "Lock the vault" label and its select shared one line, the label's text running under the control. Labels sit above their controls, the select spans the card, and the checkbox takes the accent colour.
+- [x] The PIN card and the locking card each keep their own failure message; one shared message would have appeared under whichever card the reader was not looking at.
+- [x] About was a third of a page. It now names what ShardPass keeps, how the vault is protected (Argon2id at 64 MiB and two passes, XChaCha20-Poly1305, where the key lives, what locks it), what leaves the device and what does not, the shortcuts as this browser actually has them with a button to the browser's own settings page, and the developer and update links. Version, licence and supported browsers sit beside the name.
+- [x] Checked in Chromium at 1440x900: one scrollbar on settings, six even cards on About, all gates green.
+
 ## 2026-09-16 · The interface was rendering at 87.5% (2.6.7)
 
 - [x] Every size in the design system is a rem fraction written against a 16px root, and each token's comment names the pixel size that assumes. The root was 14px, so the whole interface rendered at 87.5% of its own design: body text at 12.25px, section labels at 9px. That is why it needed browser zoom to read comfortably. The root is 16px now, and a test pins it.

@@ -553,18 +553,21 @@ export function VaultApp({ platform }: VaultAppProps) {
             {/* Each card is a grid cell of its own (no wrappers: an empty wrapper for a
                 migration panel that renders nothing would leave a hole), framed and sized
                 alike by the panel's rules. */}
+            {/* Security first, then the short cards: the three security cards are of a height
+                with each other, and Appearance, breach checks and the import card are of a
+                height with each other, so each row of tiles comes out even. */}
             <div className={styles.settingsPanel} hidden={view !== "settings"}>
+              <VaultAccess
+                platform={platform}
+                securityControls
+                onUnlockedChange={setVaultUnlocked}
+              />
               <section className={styles.settingsCard} aria-labelledby="appearance-heading">
                 <h3 id="appearance-heading" className={styles.settingsCardTitle}>
                   Appearance
                 </h3>
                 <ThemeToggle />
               </section>
-              <VaultAccess
-                platform={platform}
-                securityControls
-                onUnlockedChange={setVaultUnlocked}
-              />
               <BreachCheckSettings platform={platform} active={view === "settings"} />
               <MigrationPanel
                 platform={platform}

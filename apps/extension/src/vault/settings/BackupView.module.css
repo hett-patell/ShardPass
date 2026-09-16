@@ -195,10 +195,12 @@
   gap: var(--space-3);
 }
 
+/* Two panes when there is room for both to read normally, one beneath the other when there
+   is not. A fixed pair squeezed each pane to a couple of words per line in a settings tile. */
 .columns {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-4);
+  grid-template-columns: repeat(auto-fit, minmax(22rem, 1fr));
+  gap: var(--space-5);
 }
 
 .panel {
@@ -417,8 +419,14 @@
   font-size: var(--text-sm);
 }
 
+/* Pinned to the corner of its own card, not left at its static place. An absolute element
+   with no offsets keeps the spot it would have had in the flow, and that spot is measured
+   from the page when no ancestor is positioned: one inside a scrolled panel then stretched
+   the document itself, putting a second scrollbar beside the panel's own. */
 .visuallyHidden {
   position: absolute;
+  top: 0;
+  left: 0;
   width: 1px;
   height: 1px;
   padding: 0;

@@ -313,8 +313,14 @@
   border-radius: var(--radius-md);
 }
 
+/* Pinned to the corner of its own card, not left at its static place. An absolute element
+   with no offsets keeps the spot it would have had in the flow, and that spot is measured
+   from the page when no ancestor is positioned: one inside a scrolled panel then stretched
+   the document itself, putting a second scrollbar beside the panel's own. */
 .visuallyHidden {
   position: absolute;
+  top: 0;
+  left: 0;
   width: 1px;
   height: 1px;
   padding: 0;

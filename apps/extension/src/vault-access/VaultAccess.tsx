@@ -82,6 +82,9 @@ export function VaultAccess({
   const [pin, setPin] = useState("");
   const [pinConfirmation, setPinConfirmation] = useState("");
   const [pinNotice, setPinNotice] = useState("");
+  // The PIN card and the locking card each show their own failure: one message shared by both
+  // would appear under whichever card the reader was not looking at.
+  const [pinError, setPinError] = useState("");
   const [changeNotice, setChangeNotice] = useState("");
   // The full estimate (zxcvbn, in its worker) arrives a moment after typing pauses; until
   // then, and wherever workers are missing, the quick arithmetic stands in.
@@ -383,17 +386,17 @@ export function VaultAccess({
 
   async function setPinForDevice(): Promise<void> {
     setPinNotice("");
-    setSettingsError("");
+    setPinError("");
     if (Array.from(pin).length < MIN_PIN_CODE_POINTS) {
-      setSettingsError(`Use at least ${MIN_PIN_CODE_POINTS} characters for the PIN.`);
+      setPinError(`Use at least ${MIN_PIN_CODE_POINTS} characters for the PIN.`);
       return;
     }
     if (new TextEncoder().encode(pin).byteLength > MAX_PIN_UTF8_BYTES) {
-      setSettingsError("The PIN is too long.");
+      setPinError("The PIN is too long.");
       return;
     }
     if (pin !== pinConfirmation) {
-      setSettingsError("The PINs do not match.");
+      setPinError("The PINs do not match.");
       return;
     }
     setWorking(true);
@@ -411,9 +414,9 @@ export function VaultAccess({
         setPinConfirmation("");
         setPinAvailable(true);
         setPinNotice("PIN set. The lock screen offers it from now on.");
-      } else setSettingsError(safeError(response));
+      } else setPinError(safeError(response));
     } catch {
-      setSettingsError("The PIN could not be set. Try again.");
+      setPinError("The PIN could not be set. Try again.");
     } finally {
       setWorking(false);
     }
@@ -421,16 +424,16 @@ export function VaultAccess({
 
   async function removePin(): Promise<void> {
     setPinNotice("");
-    setSettingsError("");
+    setPinError("");
     setWorking(true);
     try {
       const response = await platform.sendMessage({ version: 1, kind: "vault.removePin" });
       if (isUnlocked(response)) {
         setPinAvailable(false);
         setPinNotice("PIN removed. The lock screen asks for your master password.");
-      } else setSettingsError(safeError(response));
+      } else setPinError(safeError(response));
     } catch {
-      setSettingsError("The PIN could not be removed. Try again.");
+      setPinError("The PIN could not be removed. Try again.");
     } finally {
       setWorking(false);
     }
@@ -526,179 +529,203 @@ export function VaultAccess({
       </div>
     );
   if (state === "unlocked") {
+    const lockButton = (
+      <Button
+        variant="secondary"
+        onClick={() =>
+          void platform.sendMessage({ version: 1, kind: "vault.lock" }).then(
+            (reply) => {
+              const candidate = reply as { kind?: unknown; state?: unknown } | null;
+              if (candidate?.kind === "vault.ok" && candidate.state === "locked") {
+                onUnlockedChange?.(false);
+                setState("locked");
+              } else setError("Could not lock the vault. Try again.");
+            },
+            () => setError("Could not lock the vault. Try again."),
+          )
+        }
+      >
+        Lock vault
+      </Button>
+    );
+    const failure = error ? (
+      <p className={styles.error} role="alert">
+        {error}
+      </p>
+    ) : null;
+    if (!securityControls)
+      return (
+        <section className={styles.panel}>
+          <h2>Vault unlocked</h2>
+          <p>ShardPass locks itself after the time below, or as soon as your screen locks.</p>
+          {failure}
+          {lockButton}
+        </section>
+      );
+    // One card per thing a person changes: when it locks, the PIN, the master password. In a
+    // single card those three stood as one column three times the height of its neighbours,
+    // and the panel stretched every other card to match it.
     return (
-      <section className={styles.panel}>
-        <h2>Vault unlocked</h2>
-        <p>ShardPass locks itself after the time below, or as soon as your screen locks.</p>
-        {securityControls ? (
-          <>
-            <h3>Security settings</h3>
-            {settingsError !== "" ? (
-              <p className={styles.loadingError} role="alert">
-                {settingsError}
-              </p>
-            ) : null}
-            {error ? (
-              <p className={styles.error} role="alert">
-                {error}
-              </p>
-            ) : null}
-            {changeNotice !== "" ? (
-              <p className={styles.working} role="status">
-                {changeNotice}
-              </p>
-            ) : null}
-            <label>
-              Lock the vault
-              <select
-                value={
-                  settings.lockWhenClosed === true
-                    ? "immediately"
-                    : String(settings.autoLockMinutes)
-                }
-                onChange={(event) => {
-                  const choice = event.target.value;
-                  if (choice === "immediately") {
-                    void applyLockSettings({ ...settings, lockWhenClosed: true });
-                    return;
-                  }
-                  const autoLockMinutes = Number(choice) as 0 | 5 | 15 | 30 | 60;
-                  void applyLockSettings({ ...settings, autoLockMinutes, lockWhenClosed: false });
-                }}
-              >
-                <option value="immediately">When ShardPass closes</option>
-                <option value="5">After 5 minutes</option>
-                <option value="15">After 15 minutes</option>
-                <option value="30">After 30 minutes</option>
-                <option value="60">After 60 minutes</option>
-                <option value="0">Never, until the browser closes</option>
-              </select>
-            </label>
-            {settings.lockWhenClosed !== true && settings.autoLockMinutes === 0 ? (
-              <p className={styles.weakNote} role="note">
-                Until the browser closes, anyone at this computer can open your vault. Pick a timer
-                unless this device is yours alone and always locked when you step away.
-              </p>
-            ) : null}
-            <label>
-              <input
-                type="checkbox"
-                checked={settings.lockOnScreenLock}
-                onChange={(event) => {
-                  void applyLockSettings({ ...settings, lockOnScreenLock: event.target.checked });
-                }}
-              />
-              Lock when the screen locks
-            </label>
-            <h3>Unlock with a PIN</h3>
-            <p className={styles.weakNote}>
-              A PIN is shorter than your master password, so it only counts for this browser
-              profile: after five wrong PINs it is removed and the master password is required
-              again. Anyone with a copy of this profile could guess PINs offline, so use one only on
-              a device that is yours. Changing the master password removes the PIN.
+      <>
+        <section className={styles.panel} aria-labelledby="vault-locking-heading">
+          <h2 id="vault-locking-heading">Vault unlocked</h2>
+          <p>ShardPass locks itself after the time below, or as soon as your screen locks.</p>
+          {settingsError !== "" ? (
+            <p className={styles.loadingError} role="alert">
+              {settingsError}
             </p>
-            {pinNotice !== "" ? (
-              <p className={styles.working} role="status">
-                {pinNotice}
-              </p>
-            ) : null}
-            {pinAvailable ? (
-              <div className={styles.pinRow}>
-                <span>A PIN is set for this profile.</span>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  onClick={() => void removePin()}
-                  disabled={working}
-                >
-                  Remove PIN
-                </Button>
-              </div>
-            ) : (
-              <form
-                className={styles.changePassword}
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  if (!working) void setPinForDevice();
-                }}
+          ) : null}
+          {failure}
+          <label>
+            Lock the vault
+            <select
+              value={
+                settings.lockWhenClosed === true ? "immediately" : String(settings.autoLockMinutes)
+              }
+              onChange={(event) => {
+                const choice = event.target.value;
+                if (choice === "immediately") {
+                  void applyLockSettings({ ...settings, lockWhenClosed: true });
+                  return;
+                }
+                const autoLockMinutes = Number(choice) as 0 | 5 | 15 | 30 | 60;
+                void applyLockSettings({ ...settings, autoLockMinutes, lockWhenClosed: false });
+              }}
+            >
+              <option value="immediately">When ShardPass closes</option>
+              <option value="5">After 5 minutes</option>
+              <option value="15">After 15 minutes</option>
+              <option value="30">After 30 minutes</option>
+              <option value="60">After 60 minutes</option>
+              <option value="0">Never, until the browser closes</option>
+            </select>
+          </label>
+          {settings.lockWhenClosed !== true && settings.autoLockMinutes === 0 ? (
+            <p className={styles.weakNote} role="note">
+              Until the browser closes, anyone at this computer can open your vault. Pick a timer
+              unless this device is yours alone and always locked when you step away.
+            </p>
+          ) : null}
+          <label>
+            <input
+              type="checkbox"
+              checked={settings.lockOnScreenLock}
+              onChange={(event) => {
+                void applyLockSettings({ ...settings, lockOnScreenLock: event.target.checked });
+              }}
+            />
+            Lock when the screen locks
+          </label>
+          {lockButton}
+        </section>
+        <section className={styles.panel} aria-labelledby="vault-pin-heading">
+          <h2 id="vault-pin-heading">Unlock with a PIN</h2>
+          <p>
+            A PIN is shorter than your master password, so it only counts for this browser profile:
+            after five wrong PINs it is removed and the master password is required again. Anyone
+            with a copy of this profile could guess PINs offline, so use one only on a device that
+            is yours. Changing the master password removes the PIN.
+          </p>
+          {pinError !== "" ? (
+            <p className={styles.loadingError} role="alert">
+              {pinError}
+            </p>
+          ) : null}
+          {pinNotice !== "" ? (
+            <p className={styles.working} role="status">
+              {pinNotice}
+            </p>
+          ) : null}
+          {pinAvailable ? (
+            <div className={styles.pinRow}>
+              <span>A PIN is set for this profile.</span>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => void removePin()}
+                disabled={working}
               >
-                <label>
-                  New PIN
-                  <PasswordInput
-                    autoComplete="off"
-                    value={pin}
-                    onChange={(event) => setPin(event.target.value)}
-                  />
-                </label>
-                <label>
-                  Confirm PIN
-                  <PasswordInput
-                    autoComplete="off"
-                    value={pinConfirmation}
-                    onChange={(event) => setPinConfirmation(event.target.value)}
-                  />
-                </label>
-                <Button type="submit" loading={working}>
-                  Set PIN
-                </Button>
-              </form>
-            )}
-            <h3>Change master password</h3>
+                Remove PIN
+              </Button>
+            </div>
+          ) : (
             <form
               className={styles.changePassword}
               onSubmit={(event) => {
                 event.preventDefault();
-                if (!working) void rotatePassword();
+                if (!working) void setPinForDevice();
               }}
             >
               <label>
-                Current password
+                New PIN
                 <PasswordInput
-                  autoComplete="current-password"
-                  value={currentPassword}
-                  onChange={(event) => setCurrentPassword(event.target.value)}
+                  autoComplete="off"
+                  value={pin}
+                  onChange={(event) => setPin(event.target.value)}
                 />
               </label>
               <label>
-                New password
+                Confirm PIN
                 <PasswordInput
-                  autoComplete="new-password"
-                  value={newPassword}
-                  onChange={(event) => setNewPassword(event.target.value)}
+                  autoComplete="off"
+                  value={pinConfirmation}
+                  onChange={(event) => setPinConfirmation(event.target.value)}
                 />
               </label>
-              <label>
-                Confirm new password
-                <PasswordInput
-                  autoComplete="new-password"
-                  value={newConfirmation}
-                  onChange={(event) => setNewConfirmation(event.target.value)}
-                />
-              </label>
-              <Button type="submit" variant="secondary" loading={working}>
-                Change password
+              <Button type="submit" loading={working}>
+                Set PIN
               </Button>
             </form>
-          </>
-        ) : null}
-        <Button
-          variant="secondary"
-          onClick={() =>
-            void platform.sendMessage({ version: 1, kind: "vault.lock" }).then(
-              (reply) => {
-                const candidate = reply as { kind?: unknown; state?: unknown } | null;
-                if (candidate?.kind === "vault.ok" && candidate.state === "locked") {
-                  onUnlockedChange?.(false);
-                  setState("locked");
-                } else setError("Could not lock the vault. Try again.");
-              },
-              () => setError("Could not lock the vault. Try again."),
-            )
-          }
-        >
-          Lock vault
-        </Button>
-      </section>
+          )}
+        </section>
+        <section className={styles.panel} aria-labelledby="vault-password-heading">
+          <h2 id="vault-password-heading">Change master password</h2>
+          <p>
+            The new password re-encrypts the vault on this device. Any PIN is removed with the old
+            password, and other signed-in browsers ask for the new one.
+          </p>
+          {changeNotice !== "" ? (
+            <p className={styles.working} role="status">
+              {changeNotice}
+            </p>
+          ) : null}
+          <form
+            className={styles.changePassword}
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (!working) void rotatePassword();
+            }}
+          >
+            <label>
+              Current password
+              <PasswordInput
+                autoComplete="current-password"
+                value={currentPassword}
+                onChange={(event) => setCurrentPassword(event.target.value)}
+              />
+            </label>
+            <label>
+              New password
+              <PasswordInput
+                autoComplete="new-password"
+                value={newPassword}
+                onChange={(event) => setNewPassword(event.target.value)}
+              />
+            </label>
+            <label>
+              Confirm new password
+              <PasswordInput
+                autoComplete="new-password"
+                value={newConfirmation}
+                onChange={(event) => setNewConfirmation(event.target.value)}
+              />
+            </label>
+            <Button type="submit" variant="secondary" loading={working}>
+              Change password
+            </Button>
+          </form>
+        </section>
+      </>
     );
   }
   const setup = state === "unconfigured";

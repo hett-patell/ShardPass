@@ -667,6 +667,10 @@ export function ImportDialog({ platform, active, onImported, onDone }: ImportDia
       className={styles.region}
       aria-labelledby="import-dialog-heading"
       data-phase={state.phase}
+      // Importing is a task, not a setting: the source list, the backup pane and the preview
+      // table all read across, and crammed into one settings tile they wrap every few words.
+      // The card takes the whole row and the tiles keep theirs.
+      data-open="true"
     >
       <header className={styles.header}>
         <div>

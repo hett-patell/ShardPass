@@ -155,6 +155,7 @@
 .settingsPanel > div,
 .settingsPanel > form {
   display: flex;
+  position: relative;
   box-sizing: border-box;
   width: 100%;
   max-width: none;
@@ -180,13 +181,15 @@
 
 .settingsPanel > [data-phase="preview"],
 .settingsPanel > [data-phase="importing"],
-.settingsPanel > [data-phase="done"] {
+.settingsPanel > [data-phase="done"],
+.settingsPanel > [data-open="true"] {
   grid-column: 1 / -1;
 }
 
 .settingsPanel:has(> [data-phase="preview"]),
 .settingsPanel:has(> [data-phase="importing"]),
-.settingsPanel:has(> [data-phase="done"]) {
+.settingsPanel:has(> [data-phase="done"]),
+.settingsPanel:has(> [data-open="true"]) {
   grid-auto-rows: auto;
 }
 
