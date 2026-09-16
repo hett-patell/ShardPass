@@ -15,6 +15,13 @@ const ACK_TIMEOUT_MS = 700;
 const REPLY_TIMEOUT_MS = 180_000;
 /** How many acknowledgement windows a conditional request waits for the content script. */
 const PATIENT_ATTEMPTS = 20;
+/**
+ * How many a modal one waits. This script runs at document_start and the content script that
+ * answers it at document_idle, so on a slow page a ceremony can start before anything is
+ * listening. Giving up immediately hands the request to the browser, which on a desktop with
+ * no platform authenticator offers a phone over Bluetooth instead of the vault's own passkey.
+ */
+const MODAL_ATTEMPTS = 8;
 
 function toBase64Url(input: ArrayBuffer | ArrayBufferView | undefined | null): string {
   if (input === undefined || input === null) return "";
@@ -74,11 +81,20 @@ export function installPasskeyInterceptor(win: Window & typeof globalThis): void
       });
   }
 
-  const pending = new Map<string, { ack: () => void; settle: (reply: Reply) => void }>();
+  const pending = new Map<
+    string,
+    { ack: () => void; retry: () => void; settle: (reply: Reply) => void }
+  >();
   win.addEventListener("message", (event: MessageEvent) => {
     if (event.source !== win) return;
     const data = event.data as { tag?: unknown; direction?: unknown; id?: unknown } | null;
     if (data === null || typeof data !== "object" || data.tag !== TAG) return;
+    // The content script announces itself when it loads: anything asked before it was
+    // listening is asked again at once, rather than waiting out its next window.
+    if (data.direction === "ready") {
+      for (const waiter of pending.values()) waiter.retry();
+      return;
+    }
     if (typeof data.id !== "string") return;
     const waiter = pending.get(data.id);
     if (waiter === undefined) return;
@@ -122,12 +138,13 @@ export function installPasskeyInterceptor(win: Window & typeof globalThis): void
         attempts += 1;
         win.postMessage({ tag: TAG, direction: "request", id, type, request }, "/");
       };
+      const attemptLimit = patient ? PATIENT_ATTEMPTS : MODAL_ATTEMPTS;
       const awaitAck = () => {
         ackTimer = win.setTimeout(() => {
           if (acknowledged) return;
-          // No content script answered yet. A modal request goes to the browser now; a
-          // patient one asks again until the script is there, then gives up quietly.
-          if (patient && attempts < PATIENT_ATTEMPTS) {
+          // Nothing has answered yet: ask again until the content script is there, and only
+          // then leave the ceremony to the browser.
+          if (attempts < attemptLimit) {
             post();
             awaitAck();
           } else finish({ fallback: true });
@@ -145,6 +162,12 @@ export function installPasskeyInterceptor(win: Window & typeof globalThis): void
       pending.set(id, {
         ack: () => {
           acknowledged = true;
+        },
+        retry: () => {
+          if (acknowledged) return;
+          win.clearTimeout(ackTimer);
+          post();
+          awaitAck();
         },
         settle: finish,
       });
@@ -223,6 +246,20 @@ export function installPasskeyInterceptor(win: Window & typeof globalThis): void
     return credential;
   };
 
+  /** Whether the request names only cross-device or security-key ways of answering it. */
+  const wantsAnotherDevice = (
+    publicKey: PublicKeyCredentialRequestOptions & { hints?: unknown },
+  ): boolean => {
+    const hints = Array.isArray(publicKey.hints) ? publicKey.hints : [];
+    if (hints.length > 0 && !hints.includes("client-device")) return true;
+    const allow = publicKey.allowCredentials ?? [];
+    if (allow.length === 0) return false;
+    return allow.every((entry) => {
+      const transports = entry.transports ?? [];
+      return transports.length > 0 && !transports.includes("internal");
+    });
+  };
+
   const serializeCreate = (options: PublicKeyCredentialCreationOptions) => ({
     challenge: toBase64Url(options.challenge),
     rp: { id: options.rp.id ?? null, name: options.rp.name ?? "" },
@@ -260,6 +297,9 @@ export function installPasskeyInterceptor(win: Window & typeof globalThis): void
   credentials.get = async (options?: CredentialRequestOptions): Promise<Credential | null> => {
     const publicKey = options?.publicKey;
     if (!publicKey || !publicKey.challenge) return originalGet(options);
+    // The site asked for a phone or a security key by name: that is the browser's ceremony,
+    // and stepping in front of it would offer the wrong thing.
+    if (wantsAnotherDevice(publicKey)) return originalGet(options);
     // Conditional mediation: the page asks at load and accepts a passkey whenever one is
     // offered. ShardPass offers its own, and hands the request to the browser's UI when it
     // has none or the person declines; the browser's prompt then works as before.

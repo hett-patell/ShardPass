@@ -147,7 +147,11 @@ describe("passkey page script", () => {
 
     vi.useFakeTimers();
     const silent = navigator.credentials.get({ publicKey: { challenge: Uint8Array.of(1) } });
+    // A modal request keeps asking for a few seconds first: the content script it needs runs
+    // at document_idle, and the browser's own cross-device prompt is the worse answer.
     await vi.advanceTimersByTimeAsync(800);
+    expect(originalGet).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(8 * 700);
     await silent;
     expect(originalGet).toHaveBeenCalledTimes(1);
     vi.useRealTimers();
@@ -194,6 +198,61 @@ describe("passkey page script", () => {
     expect(credential.id).toBe("Y3JlZA");
     expect(originalGet).not.toHaveBeenCalled();
     expect(relay.seen[0]).toMatchObject({ type: "get", request: { conditional: true } });
+  });
+
+  it("leaves a request that names a phone or a security key to the browser", async () => {
+    const { originalGet } = installWithFakeCredentials();
+    const relay = answerRequests(() => ({ fallback: true }));
+    await navigator.credentials.get({
+      publicKey: {
+        challenge: Uint8Array.of(1),
+        hints: ["hybrid"],
+      } as PublicKeyCredentialRequestOptions,
+    });
+    expect(originalGet).toHaveBeenCalledTimes(1);
+    await navigator.credentials.get({
+      publicKey: {
+        challenge: Uint8Array.of(1),
+        allowCredentials: [{ type: "public-key", id: Uint8Array.of(7), transports: ["usb"] }],
+      },
+    });
+    expect(originalGet).toHaveBeenCalledTimes(2);
+    expect(relay.seen).toHaveLength(0);
+    relay.dispose();
+  });
+
+  it("asks again the moment the content script announces itself", async () => {
+    const { originalGet } = installWithFakeCredentials();
+    let listening = false;
+    const relay = answerRequests(() => ({
+      result: {
+        credentialId: "Y3JlZA",
+        clientDataJson: "e30",
+        authenticatorData: "AwQ",
+        signature: "BQY",
+        userHandle: "",
+      },
+    }));
+    const gate = (event: MessageEvent) => {
+      const data = event.data as { tag?: string; direction?: string } | null;
+      if (data?.tag === "shardpass-passkey" && data.direction === "request" && !listening)
+        event.stopImmediatePropagation();
+    };
+    window.addEventListener("message", gate, true);
+    vi.useFakeTimers();
+    const pending = navigator.credentials.get({ publicKey: { challenge: Uint8Array.of(1) } });
+    await vi.advanceTimersByTimeAsync(100);
+    expect(relay.seen).toHaveLength(0);
+    // The isolated half loads and says so; the waiting ceremony is asked again at once.
+    listening = true;
+    window.postMessage({ tag: "shardpass-passkey", direction: "ready" }, "/");
+    await vi.advanceTimersByTimeAsync(20);
+    const credential = (await pending) as PublicKeyCredential;
+    vi.useRealTimers();
+    window.removeEventListener("message", gate, true);
+    relay.dispose();
+    expect(credential.id).toBe("Y3JlZA");
+    expect(originalGet).not.toHaveBeenCalled();
   });
 
   it("hands a conditional request to the browser once ShardPass has nothing to offer", async () => {

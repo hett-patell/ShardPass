@@ -20,7 +20,7 @@ Baseline at 2.3.0: typecheck clean, lint clean after one test fix, full suite gr
 - [x] Passkey prompt given room to breathe (wider host, larger title, taller rows and buttons) — 2.4.2
 - [x] Batch D (content scripts, autofill, passkeys) — shipped in 2.4.3; D5's frame check is verified by reading (jsdom cannot frame a document)
 - [x] Batch E (popup, platform, gates) — shipped in 2.4.3; E1 (clipboard auto-clear) followed in 2.4.4; E9 (narrow popup fill race) left open
-- [ ] Audit 6 (tests and tooling) — not run yet
+- [x] Audit 6 (tests and tooling) — 15 findings; fixes are batch F below
 - [x] Google "Create a passkey": the page script answers isUserVerifyingPlatformAuthenticatorAvailable / isConditionalMediationAvailable / getClientCapabilities as a platform authenticator, so Google calls create() on desktops without one (2.4.1)
 
 ### Batch A · background (verified by the audit)
@@ -52,6 +52,25 @@ Baseline at 2.3.0: typecheck clean, lint clean after one test fix, full suite gr
 - [ ] B12 medium · empty master password runs a full Argon2 derivation and counts against the throttle (`VaultAccess.tsx` locked path).
 - [ ] B13 low · Move select indentation uses plain spaces (collapsed in `<option>`); B14 `.value`/`.rowValue` need `white-space: pre-wrap`; B15 empty state offers "Add a login" in every category; B16 two `aria-current` entries in the Archive view; B17 folder tree misuses role="tree"; B18 stale `linkedOtpId` re-saved; B19 OTP edits reset on any refresh; B20 `handleCreated` edge cases; B21 CopyButton has no live region; B22 sidebar navigation discards an in-progress create form; B23 BreachCheckRow shows "Not checked yet." on a failed listing; B24 deleting the filtered folder from another view jumps to the vault; B25 weak count shown while judging; B26 (unverified) locked dialog can desync from React on a second Escape; B27 dead CSS (`.folderItemActive`, `.empty`, `.fieldFull`, `.labelRow`, `.labelActions`, `.listAdd`).
 
+### Batch F · tests and tooling (verified by the audit)
+
+- [x] F1 high · the only gate that scans production source for secrets was red (`PRODUCTION_SOURCE_MANIFEST_CLOSURE_INVALID`, a manifest that predated a dozen services) and was not in `pnpm verify`, so nothing scanned it at all. Manifest regenerated (476 files), three noisy rules tightened so the scan passes honestly, and the chain now runs first in `build:security` and in `verify`.
+- [x] F2 high · `console.error` and `console.warn` shipped with no gate. They are now reported outside the vendored bundles that log on their own account, and the generated content-script loader no longer prints ShardPass failures into every page.
+- [x] F3 high · a test wrote `.shardpass-executable-audit.json` into `dist`, and the policy read that file to grant an exemption: the shipped artifact carried its own waiver, and a standalone `node scripts/scan-build.mjs` failed without it. The allowance is now derived from the artifact (exactly one chunk may carry the protobuf text-encoding module, and it must be the Google-migration worker entry); a dropped waiver file grants nothing.
+- [x] F7 · the secret scanner missed credentials inside a URL and JSON Web Tokens; both are now rules. The PEM rule requires a base64-only body, so code that merely names the markers is no longer a finding.
+- [x] F8 · the reproducible-build gate compared two scratch builds to each other and never looked at `dist`; it now compares the working artifact too.
+- [x] F12 · no licence or new-dependency gate existed. `config/runtime-dependencies.json` pins all 18 external runtime dependencies with their licence and why they are there; adding one, or a licence changing, fails `tests/security/runtime-dependencies.test.ts`, and nothing copyleft may enter.
+- [x] F13 · `pnpm verify` ran the tests that read `dist` before the build that writes it; it now builds first.
+- [x] F14 · the build-output security step used vitest's default `passWithNoTests`, so a renamed glob would have turned it into a silent no-op.
+- [x] F15 · two background suites raced real work against a 250 ms wall clock; the deadline is now one only a hang can miss.
+- [x] F4 · the Ente graph's eight constraints were hardcoded `true`; the generator now reads each one off the chunks (Chrome and storage terms included) and refuses to emit a compliant manifest for a graph that breaks one. Proven by planting `chrome.storage` in the entry chunk.
+- [x] F5 · `docs/architecture/permissions.md` claimed three permissions, no host permissions and an inert content script. It now describes the seven permissions, two hosts, three network origins and four controllers that exist, and the test derives its assertions from the manifest instead of restating them.
+- [x] F6 · the boundary test covered 6 of 18 sender policies; it now enumerates every exported policy, pins each family's audience, and fails if any command a content script must not reach starts allowing one.
+- [x] F9 · release steps pinned only their ids, so a step could keep its name while its command was swapped; both are pinned now.
+- [x] F10 · the 14-scan secret-scanner test is split per case with honest timeouts, and resolves its config paths from the module rather than the working directory.
+- [x] F11 · two workspace tests wrapped their whole bodies in a Node 24 check and asserted nothing on the supported runtime; both now assert the behaviour they actually get.
+- [ ] Not fixed: `pnpm format:check` fails on 102 files that predate this work (prettier 3.9.6 against a tree formatted by an older version). Reformatting would rewrite evidence-pinned files, so it wants its own pass.
+
 ### Batch D · content scripts, autofill, passkeys (verified by the audit)
 
 - [x] D1 high · `packages/autofill/src/domain-match.ts` + `equivalent-domains.ts`: hosting-tenant hosts (myshopify.com, digitaloceanspaces.com, force.com, azurewebsites.net) and missing multi-label suffixes (co.il, com.pl, co.th, com.pt, co.at …) hand logins to attacker-registrable hosts; the autofill and passkey suffix lists disagree.
@@ -81,6 +100,13 @@ Baseline at 2.3.0: typecheck clean, lint clean after one test fix, full suite gr
 - [x] E8 low · `LiveCode.tsx` puts the live TOTP code in an `aria-label`.
 - [ ] E9 low (still open, narrow) · `login.fillFromPopup` first-answer race across frames (narrow).
 - [x] E10 low · dead `useOtpList.ts`; stale scan-build/manifest-test comments; GeneratorScreen's deferred settings fetch overwrites what was typed and requests a username per keystroke.
+
+## 2026-09-16 · Google passkey: the Bluetooth prompt (2.4.5)
+
+- [x] Root cause: the page-world interceptor runs at `document_start` and the isolated half at `document_idle`. A ceremony started in that window got no answer within 700 ms, so it went to the browser, which on a desktop with no platform authenticator offers a phone over Bluetooth.
+- [x] A modal request now keeps asking for about five seconds, and the isolated half announces itself when it loads so a waiting ceremony is asked again at once.
+- [x] A request that names a phone or a security key (`hints`, or allow-list transports without `internal`) is left to the browser, so ShardPass no longer steps in front of a deliberate cross-device sign-in.
+- [ ] Deterministic alternative not taken: `chrome.webAuthenticationProxy` (Chrome 115+) would have the browser route ceremonies to ShardPass instead of racing content scripts. It needs a new permission, and only one extension at a time can hold it, so it is the user's call.
 
 ## 2026-09-16 · 1Password-inspired pass (target 2.3.0)
 

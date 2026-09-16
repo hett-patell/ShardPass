@@ -354,6 +354,9 @@ export function createPasskeyBridge(
       if (started || disposed) return;
       started = true;
       options.window.addEventListener("message", onMessage);
+      // The page-world half runs at document_start, this one at document_idle: a ceremony
+      // started in between is waiting, and this tells it to ask again now.
+      post({ direction: "ready" });
     },
     dispose() {
       if (disposed) return;
