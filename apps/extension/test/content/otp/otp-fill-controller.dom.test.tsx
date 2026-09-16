@@ -382,6 +382,72 @@ describe("OTP fill controller", () => {
     expect(document.querySelector("shardpass-picker-host")).toBeNull();
   });
 
+  it("fills even when the picker has outlived its claim on the field", async () => {
+    const roots = captureClosedRoots();
+    const input = eligibleField();
+    let selects = 0;
+    const candidate = platform((request) => {
+      if (request.kind === "otp.fillSuggestions")
+        return {
+          version: 1,
+          kind: "otp.fillSuggestionsResult",
+          capability: "capability_0123456789abcdef",
+          expiresAt: Date.now() + 300_000,
+          suggestions: [
+            {
+              itemId: "018f47a6-7d11-7c2f-8bd9-a1d37f147a20",
+              expectedRevision: 1,
+              issuer: "Primary",
+              label: "Owner",
+              otpType: "totp",
+              favorite: true,
+              tags: [],
+              siteMatch: true,
+              preview: { code: "445566", expiresAt: Date.now() + 20_000 },
+            },
+          ],
+        };
+      if (request.kind === "otp.fillSelect") {
+        selects += 1;
+        return {
+          version: 1,
+          kind: "otp.fillRelease",
+          releaseId: "release_0123456789abcdef",
+          code: "445566",
+          expiresAt: Date.now() + 5_000,
+          codeLength: 6,
+          characterClass: "digits",
+        };
+      }
+      if (request.kind === "otp.fillConfirm")
+        return { version: 1, kind: "otp.fillConfirmed", result: "committed" };
+      return { version: 1, kind: "otp.fillCancelled", cancelled: true };
+    });
+    start(candidate);
+    focusField(input);
+    await flush();
+    await clickAndFlush(
+      within(roots[0] as unknown as HTMLElement).getByRole("button", {
+        name: "Fill one-time code with ShardPass",
+      }),
+    );
+
+    const list = [...roots]
+      .reverse()
+      .find((root) => root.querySelector(".otpRow") !== null) as unknown as HTMLElement;
+    const row = within(list).getByRole("button", { name: /Use OTP account/u });
+
+    // The step moves on while the list is open: a two-factor page rewrites its own path and
+    // keeps the same code field. Every click used to hit a guard and do nothing at all.
+    window.history.pushState({}, "", "/challenge/totp");
+    await flush();
+
+    await clickAndFlush(row);
+
+    expect(selects).toBeGreaterThan(0);
+    expect(input.value).toBe("445566");
+  });
+
   it("says why a click did nothing when the code still cannot be fetched", async () => {
     const roots = captureClosedRoots();
     const input = eligibleField();

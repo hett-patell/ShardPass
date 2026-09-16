@@ -297,53 +297,100 @@ export function createOtpFillController(
   /** Says why a click did nothing, but only into a picker that is still on screen. */
   const reportStale = (candidate: Owner): void => {
     if (host?.status === "open" && owns(candidate)) renderPicker(candidate, "stale", []);
+    else invalidate(false);
+  };
+
+  /**
+   * Takes the field back when the picker on screen has outlived its claim on it. The claim is
+   * a token plus the registry's active handle, and anything that re-scans the page or touches
+   * focus can replace them while the list is open; the click then hit a guard and did nothing
+   * at all. Reclaiming is exactly what clicking the chip again would do -- the field must
+   * still be here, still on this page, still a code field -- and the background re-authorises
+   * from scratch, since the new handle needs its own permission.
+   */
+  const reclaim = (candidate: Owner): Owner | null => {
+    if (disposed) return null;
+    const origin = originOf(options.window);
+    // The origin must be the same one; the path need not be. A two-factor step routinely
+    // rewrites the path while its code field stays exactly where it is, and refusing to act
+    // then is what made clicking a code do nothing. The field itself is the anchor: still
+    // here, still a code field. The fresh claim records the page as it is now, and the fill
+    // re-checks everything against that.
+    if (
+      origin === null ||
+      origin !== candidate.origin ||
+      !candidate.input.isConnected ||
+      !eligibility.isEligible(candidate.input)
+    )
+      return null;
+    const fresh: Owner = {
+      token: Object.freeze({}),
+      input: candidate.input,
+      fieldHandle: registry.activate(candidate.input),
+      url: options.window.location.href,
+      origin,
+    };
+    owner = fresh;
+    return fresh;
   };
 
   const selectSuggestion = async (
     candidate: Owner,
     suggestion: OtpPickerSuggestion,
   ): Promise<void> => {
-    const selectedCapability = capability;
+    const startingCapability = capability;
     capability = null;
-    if (!owns(candidate) || selectedCapability === null) {
-      // The list on screen no longer matches what the background will release: say so rather
-      // than letting the click disappear.
+    // The picker is on screen, so the person is owed an answer: either the field is still
+    // there and this fills, or they are told why it cannot.
+    const active = owns(candidate) ? candidate : reclaim(candidate);
+    if (active === null) {
       reportStale(candidate);
       return;
     }
     try {
       let chosen = suggestion;
-      let response = await requestRelease(candidate, chosen, selectedCapability);
-      if (response === "stale") {
-        const refreshed = owns(candidate) ? await refreshSuggestion(candidate, chosen) : null;
+      let permission = active === candidate ? startingCapability : null;
+      if (permission === null) {
+        const refreshed = await refreshSuggestion(active, chosen);
         if (refreshed === null) {
-          reportStale(candidate);
+          reportStale(active);
+          return;
+        }
+        chosen = refreshed.suggestion;
+        permission = refreshed.permission;
+      }
+      capability = null;
+      let response = await requestRelease(active, chosen, permission);
+      if (response === "stale") {
+        const refreshed = owns(active) ? await refreshSuggestion(active, chosen) : null;
+        if (refreshed === null) {
+          reportStale(active);
           return;
         }
         chosen = refreshed.suggestion;
         capability = null;
-        response = await requestRelease(candidate, chosen, refreshed.permission);
+        response = await requestRelease(active, chosen, refreshed.permission);
       }
       if (response === "stale" || response.kind !== "otp.fillRelease") {
-        reportStale(candidate);
+        reportStale(active);
         return;
       }
       release = response;
-      if (!owns(candidate)) {
+      if (!owns(active)) {
         const stale = clearRelease();
-        if (stale !== null) sendCancel(candidate, stale.releaseId);
+        if (stale !== null) sendCancel(active, stale.releaseId);
         return;
       }
       const current = release;
       const result = fillOtpField({
-        input: candidate.input,
-        fieldHandle: candidate.fieldHandle,
+        input: active.input,
+        fieldHandle: active.fieldHandle,
         registry,
         eligibility,
         code: current.code,
         expiresAt: current.expiresAt,
-        expectedUrl: candidate.url,
-        expectedOrigin: candidate.origin,
+        expectedUrl: active.url,
+        expectedOrigin: active.origin,
         attempt: createOtpFillAttempt(),
       });
       const terminal = clearRelease();
@@ -351,32 +398,32 @@ export function createOtpFillController(
       if (result.status !== "filled") {
         // The field would not take it (a widget that rewrites itself, a changed page): the
         // code goes to the clipboard so the person can still paste it, and the picker says so.
-        sendCancel(candidate, terminal.releaseId);
+        sendCancel(active, terminal.releaseId);
         try {
           await options.window.navigator.clipboard.writeText(terminal.code);
         } catch {
           // No clipboard here; the message still explains what happened.
         }
-        if (owns(candidate)) renderPicker(candidate, "failed", []);
+        if (owns(active)) renderPicker(active, "failed", []);
         return;
       }
       closeHost();
-      candidate.input.focus({ preventScroll: true });
+      active.input.focus({ preventScroll: true });
       void options.platform
         .sendOtpFillMessage({
           version: 1,
           kind: "otp.fillConfirm",
           releaseId: terminal.releaseId,
-          fieldHandle: candidate.fieldHandle,
+          fieldHandle: active.fieldHandle,
           result: "filled",
         })
         .catch(() => undefined);
     } catch {
       const stale = clearRelease();
-      if (stale !== null) sendCancel(candidate, stale.releaseId);
+      if (stale !== null) sendCancel(active, stale.releaseId);
       // The picker stays, saying what happened: closing it made a refused click look like a
       // click that did nothing at all.
-      if (host?.status === "open" && owns(candidate)) reportStale(candidate);
+      if (host?.status === "open" && owns(active)) reportStale(active);
       else invalidate(false);
     }
   };

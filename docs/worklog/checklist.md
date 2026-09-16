@@ -101,6 +101,12 @@ Baseline at 2.3.0: typecheck clean, lint clean after one test fix, full suite gr
 - [ ] E9 low (still open, narrow) · `login.fillFromPopup` first-answer race across frames (narrow).
 - [x] E10 low · dead `useOtpList.ts`; stale scan-build/manifest-test comments; GeneratorScreen's deferred settings fetch overwrites what was typed and requests a username per keystroke.
 
+## 2026-09-16 · Clicking a one-time code, the real cause (2.6.2)
+
+- [x] The click died at the ownership guard, before any of 2.6.1's retry could run. The picker's claim on the field records the page it opened on, and a two-factor step that rewrites its own path (which is what these pages do between steps) invalidates that claim while the picker stays on screen. Every click then hit the guard and returned in silence.
+- [x] The claim is now retaken when the field itself is still there and still a code field: same origin, connected, eligible. That is what clicking the chip again would do, and the background re-authorises from scratch because the new claim needs its own permission.
+- [x] The test drives the real shape: open the list, let the page rewrite its path, click the account. It fails without the fix.
+
 ## 2026-09-16 · Clicking a one-time code (2.6.1)
 
 Reported: the list appears, clicking the account does nothing, the code has to be typed by hand.
