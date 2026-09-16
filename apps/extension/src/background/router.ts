@@ -100,8 +100,9 @@ export type BackgroundErrorResponse = Readonly<{
   version: 1;
   kind: "error";
   /**
-   * `detail` is set for Ente errors only: the background names the request or step that
-   * failed (never a body, token or email) so the panel can show where, not just what.
+   * `detail` names where a failure happened, never what was in flight: for Ente errors the
+   * request or step, and for a startup failure on the extension's own pages the reason the
+   * background could not come up. It is never a body, a token or an e-mail.
    */
   error: SafeError & Readonly<{ detail?: string }>;
 }>;

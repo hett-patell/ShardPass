@@ -879,6 +879,32 @@ describe("LoginFillService save-offer verdicts", () => {
   });
 });
 
+describe("LoginFillService username suggestion budget", () => {
+  it("mints at most a few forwarding addresses a minute for one host, then answers null", async () => {
+    let now = 15_000;
+    let minted = 0;
+    const service = new LoginFillService({
+      repository: new FakeRepository([]),
+      now: () => now,
+      notePrivilegedActivity: () => Promise.resolve(),
+      suggestUsername: (_host, source) =>
+        Promise.resolve(source === "duck" ? `addr${(minted += 1)}@duck.com` : "quiet.falcon42"),
+    });
+    const ask = () =>
+      service.handle({ version: 1, kind: "login.suggestUsername", source: "duck" }, sender);
+    for (let attempt = 0; attempt < 3; attempt += 1)
+      expect(await ask()).toMatchObject({ username: `addr${attempt + 1}@duck.com` });
+    expect(await ask()).toMatchObject({ username: null });
+    expect(minted).toBe(3);
+    // The settings-based suggestion has its own, larger budget.
+    expect(
+      await service.handle({ version: 1, kind: "login.suggestUsername" }, sender),
+    ).toMatchObject({ username: "quiet.falcon42" });
+    now += 61_000;
+    expect(await ask()).toMatchObject({ username: "addr4@duck.com" });
+  });
+});
+
 describe("LoginFillService username suggestions", () => {
   it("asks the generator for the page's host and answers null when nothing is configured", async () => {
     const hosts: string[] = [];

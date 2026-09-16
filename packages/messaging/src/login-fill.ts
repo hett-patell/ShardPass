@@ -25,6 +25,10 @@ export type LoginFillSuggestion = z.infer<typeof LoginFillSuggestionSchema>;
 export const LoginFillSuggestionsRequestSchema = z.strictObject({
   version: z.literal(MESSAGE_VERSION),
   kind: z.literal("login.fillSuggestions"),
+  /**
+   * What the page believes its site is. Carried for diagnostics only: the background judges
+   * by the sender's own URL, never by this field, so a page cannot ask for another site.
+   */
   domain: z.string().check(z.minLength(1), z.maxLength(2048)),
   /** Full page URL when known; lets path-sensitive match modes ("startsWith", "exact") apply. */
   pageUrl: z.optional(z.string().check(z.minLength(1), z.maxLength(2048))),

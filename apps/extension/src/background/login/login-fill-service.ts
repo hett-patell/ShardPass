@@ -92,11 +92,20 @@ const MUTATING_KINDS = new Set([
 const MAX_OFFER_VERDICTS_PER_WINDOW = 5;
 const OFFER_VERDICT_WINDOW_MS = 60_000;
 const MAX_TRACKED_HOSTS = 256;
+/**
+ * Username suggestions per host per minute. A page can open the picker by focusing its own
+ * field; the plus-address carries the person's real e-mail and a Duck mint spends a real
+ * address, so neither is handed out without limit.
+ */
+const MAX_SUGGESTIONS_PER_WINDOW = 12;
+const MAX_DUCK_MINTS_PER_WINDOW = 3;
 
 export class LoginFillService {
   private readonly offers = new Map<string, SaveOffer>();
   /** When each host last asked for a save verdict, for the throttle above. */
   private readonly verdictTimes = new Map<string, number[]>();
+  /** When each host last asked for a username, per source. */
+  private readonly suggestionTimes = new Map<string, number[]>();
   /** Releases handed out, each good for one confirmation from the tab it went to. */
   private readonly releases = new Map<
     string,
@@ -206,10 +215,18 @@ export class LoginFillService {
         case "login.suggestUsername": {
           const suggest = this.dependencies.suggestUsername;
           const source = command.source ?? "settings";
+          const host = hostnameOf(senderPage());
+          const budget = source === "duck" ? MAX_DUCK_MINTS_PER_WINDOW : MAX_SUGGESTIONS_PER_WINDOW;
+          const exhausted = this.exhausted(
+            this.suggestionTimes,
+            `${source}:${host}`,
+            this.dependencies.now(),
+            budget,
+          );
           const username =
-            suggest === undefined
+            suggest === undefined || exhausted
               ? null
-              : await suggest(hostnameOf(senderPage()), source).catch(() => null);
+              : await suggest(host, source).catch(() => null);
           const duckAvailable = await (
             this.dependencies.duckAvailable?.() ?? Promise.resolve(false)
           ).catch(() => false);
@@ -416,17 +433,25 @@ export class LoginFillService {
 
   /** Records this verdict request for the host and says whether the window's budget is spent. */
   private verdictsExhausted(host: string, now: number): boolean {
-    const recent = (this.verdictTimes.get(host) ?? []).filter(
-      (at) => now - at < OFFER_VERDICT_WINDOW_MS,
-    );
+    return this.exhausted(this.verdictTimes, host, now, MAX_OFFER_VERDICTS_PER_WINDOW);
+  }
+
+  /** Counts one more request under `key` and says whether the minute's budget is spent. */
+  private exhausted(
+    times: Map<string, number[]>,
+    key: string,
+    now: number,
+    limit: number,
+  ): boolean {
+    const recent = (times.get(key) ?? []).filter((at) => now - at < OFFER_VERDICT_WINDOW_MS);
     recent.push(now);
-    this.verdictTimes.set(host, recent);
-    while (this.verdictTimes.size > MAX_TRACKED_HOSTS) {
-      const oldest = this.verdictTimes.keys().next().value;
+    times.set(key, recent);
+    while (times.size > MAX_TRACKED_HOSTS) {
+      const oldest = times.keys().next().value;
       if (oldest === undefined) break;
-      this.verdictTimes.delete(oldest);
+      times.delete(oldest);
     }
-    return recent.length > MAX_OFFER_VERDICTS_PER_WINDOW;
+    return recent.length > limit;
   }
 
   /** The offer held for the sender's tab, judged now if the vault was locked when it arrived. */
