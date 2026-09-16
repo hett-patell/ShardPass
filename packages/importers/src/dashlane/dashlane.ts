@@ -56,6 +56,10 @@ export async function importDashlane(bytes: ArrayBuffer): Promise<ImportResult> 
     const kind = classify(index);
     if (kind === null) continue;
     recognised += 1;
+    if (kind === "personalinfo") {
+      importPersonalInfo(boundEntries(rows, warnings), index, warnings, items);
+      continue;
+    }
     for (const row of boundEntries(rows, warnings)) {
       const field = (...names: string[]) => pickField(row, index, ...names);
       const category = field("category").trim();
@@ -115,7 +119,8 @@ export async function importDashlane(bytes: ArrayBuffer): Promise<ImportResult> 
               base,
               {
                 name: title || "Imported card",
-                cardholderName: field("account_holder"),
+                // The export writes the holder's name as the card's name when no holder is set.
+                cardholderName: field("account_holder") || title,
                 number: field("cc_number"),
                 cvv: field("code"),
                 expMonth: field("expiration_month"),
@@ -149,60 +154,8 @@ export async function importDashlane(bytes: ArrayBuffer): Promise<ImportResult> 
           );
           break;
         }
-        case "personalinfo": {
-          const title = field("item_name", "title").trim();
-          const first = field("first_name").trim();
-          const last = field("last_name").trim();
-          const name = title || [first, last].filter((part) => part !== "").join(" ");
-          const label = warningLabel(name, "unnamed");
-          emitIdentity(
-            base,
-            {
-              name: name || "Imported identity",
-              firstName: first,
-              middleName: field("middle_name"),
-              lastName: last,
-              username: field("login"),
-              birthDate: field("date_of_birth"),
-              company: field("job_title"),
-              email: field("email"),
-              phone: field("phone_number"),
-              street: [field("address").trim(), field("address_building").trim()]
-                .filter((part) => part !== "")
-                .join(", "),
-              address2: [field("address_apartment").trim(), field("address_floor").trim()]
-                .filter((part) => part !== "")
-                .join(", "),
-              city: field("city"),
-              state: field("state"),
-              zip: field("zip"),
-              country: field("country"),
-            },
-            label,
-            warnings,
-            items,
-          );
-          break;
-        }
         case "ids": {
-          const type = field("type").trim();
-          const holder = field("name").trim();
-          const name = [type, holder].filter((part) => part !== "").join(" – ");
-          const lines = describeLines([
-            ["Number", field("number")],
-            ["Name", holder],
-            ["Issued", field("issue_date")],
-            ["Expires", field("expiration_date")],
-            ["Place of issue", field("place_of_issue")],
-            ["State", field("state")],
-          ]);
-          emitNote(
-            base,
-            { name: name || "Imported ID", content: lines.join("\n") },
-            warningLabel(name, "unnamed"),
-            warnings,
-            items,
-          );
+          importId(base, row, index, warnings, items);
           break;
         }
       }
@@ -232,4 +185,194 @@ function describeLines(pairs: readonly (readonly [string, string])[]): string[] 
   return pairs
     .filter(([, value]) => value.trim() !== "")
     .map(([key, value]) => `${key}: ${value.trim()}`);
+}
+
+type IdentityDraftFields = Parameters<typeof emitIdentity>[1];
+
+/**
+ * personalinfo.csv keeps one row per fact: a `name` row, then `email`, `number`, `address` and
+ * `website` rows, each with its own item_name. They are folded into one identity per name
+ * row (a file with several people has several), the way the person sees them in Dashlane.
+ */
+function importPersonalInfo(
+  rows: readonly Record<string, string>[],
+  index: Map<string, string>,
+  warnings: string[],
+  items: ImportResult["items"],
+): void {
+  type Draft = { fields: Record<string, string>; notes: string[]; label: string };
+  const drafts: Draft[] = [];
+  const current = (): Draft => {
+    const last = drafts[drafts.length - 1];
+    if (last !== undefined) return last;
+    const fresh: Draft = { fields: {}, notes: [], label: "" };
+    drafts.push(fresh);
+    return fresh;
+  };
+  const set = (draft: Draft, key: string, value: string, label: string) => {
+    const trimmed = value.trim();
+    if (trimmed === "") return;
+    if ((draft.fields[key] ?? "") === "") draft.fields[key] = trimmed;
+    else draft.notes.push(`${label}: ${trimmed}`);
+  };
+  for (const row of rows) {
+    const field = (...names: string[]) => pickField(row, index, ...names);
+    const type = field("type").trim().toLowerCase();
+    const itemName = field("item_name").trim();
+    switch (type) {
+      case "name": {
+        const first = field("first_name").trim();
+        const last = field("last_name").trim();
+        const draft: Draft = {
+          fields: {},
+          notes: [],
+          label: [first, last].filter((part) => part !== "").join(" ") || itemName,
+        };
+        drafts.push(draft);
+        set(draft, "firstName", first, "First name");
+        set(draft, "middleName", field("middle_name"), "Middle name");
+        set(draft, "lastName", last, "Last name");
+        set(draft, "username", field("login"), "Login");
+        set(draft, "birthDate", field("date_of_birth"), "Date of birth");
+        set(draft, "company", field("job_title"), "Job title");
+        const born = field("place_of_birth").trim();
+        if (born !== "") draft.notes.push(`Place of birth: ${born}`);
+        const title = field("title").trim();
+        if (title !== "") draft.notes.push(`Title: ${title}`);
+        // Dashlane writes contact details on their own rows; a hand-made file may not.
+        set(draft, "email", field("email"), "E-mail");
+        set(draft, "phone", field("phone_number"), "Phone");
+        set(draft, "street", field("address"), "Address");
+        set(draft, "city", field("city"), "City");
+        set(draft, "state", field("state"), "State");
+        set(draft, "zip", field("zip"), "Postal code");
+        set(draft, "country", field("country"), "Country");
+        break;
+      }
+      case "email":
+        set(current(), "email", field("email"), itemName || "E-mail");
+        break;
+      case "number":
+      case "phone":
+        set(current(), "phone", field("phone_number"), itemName || "Phone");
+        break;
+      case "address": {
+        const draft = current();
+        const street = [field("address").trim(), field("address_building").trim()]
+          .filter((part) => part !== "")
+          .join(", ");
+        const line2 = [
+          field("address_apartment").trim() === ""
+            ? ""
+            : `Apt ${field("address_apartment").trim()}`,
+          field("address_floor").trim() === "" ? "" : `Floor ${field("address_floor").trim()}`,
+        ]
+          .filter((part) => part !== "")
+          .join(", ");
+        set(draft, "street", street, itemName || "Address");
+        set(draft, "address2", line2, "Address line 2");
+        set(draft, "city", field("city"), "City");
+        set(draft, "state", field("state"), "State");
+        set(draft, "zip", field("zip"), "Postal code");
+        set(draft, "country", field("country"), "Country");
+        const recipient = field("address_recipient").trim();
+        if (recipient !== "") draft.notes.push(`Recipient: ${recipient}`);
+        const code = field("address_door_code").trim();
+        if (code !== "") draft.notes.push(`Door code: ${code}`);
+        break;
+      }
+      case "website": {
+        const url = field("url").trim();
+        if (url !== "") current().notes.push(`${itemName || "Website"}: ${url}`);
+        break;
+      }
+      default: {
+        const value = [field("email"), field("phone_number"), field("url"), field("address")]
+          .map((part) => part.trim())
+          .find((part) => part !== "");
+        if (value !== undefined) current().notes.push(`${itemName || type || "Detail"}: ${value}`);
+      }
+    }
+  }
+  for (const draft of drafts) {
+    const name = draft.label || "Imported identity";
+    const { firstName, lastName, ...rest } = draft.fields;
+    const fields: IdentityDraftFields = {
+      name,
+      firstName: firstName ?? "",
+      lastName: lastName ?? "",
+      ...rest,
+      notes: draft.notes.join("\n"),
+    };
+    emitIdentity(newItemBase(), fields, warningLabel(name, "unnamed"), warnings, items);
+  }
+}
+
+/** ids.csv: passports, licences and national numbers become identities; the rest stay notes. */
+function importId(
+  base: Parameters<typeof emitNote>[0],
+  row: Record<string, string>,
+  index: Map<string, string>,
+  warnings: string[],
+  items: ImportResult["items"],
+): void {
+  const field = (...names: string[]) => pickField(row, index, ...names);
+  const type = field("type").trim().toLowerCase();
+  const holder = field("name").trim();
+  const number = field("number").trim();
+  const [firstName, ...rest] = holder.split(/\s+/u).filter((part) => part !== "");
+  const notes = describeLines([
+    ["Issued", field("issue_date")],
+    ["Expires", field("expiration_date")],
+    ["Place of issue", field("place_of_issue")],
+    ["State", field("state")],
+  ]).join("\n");
+  const typeLabel: Record<string, string> = {
+    passport: "Passport",
+    license: "Driver's licence",
+    social_security: "Social security number",
+    card: "ID card",
+    tax_number: "Tax number",
+  };
+  const label = typeLabel[type] ?? (type === "" ? "ID" : type);
+  const name = holder === "" ? label : `${label} – ${holder}`;
+  const identityField =
+    type === "passport"
+      ? "passportNumber"
+      : type === "license"
+        ? "licenseNumber"
+        : type === "social_security"
+          ? "nationalId"
+          : null;
+  if (identityField !== null && number !== "") {
+    emitIdentity(
+      base,
+      {
+        name,
+        firstName: firstName ?? "",
+        lastName: rest.join(" "),
+        [identityField]: number,
+        notes,
+      },
+      warningLabel(name, "unnamed"),
+      warnings,
+      items,
+    );
+    return;
+  }
+  emitNote(
+    base,
+    {
+      name,
+      content: describeLines([
+        ["Number", number],
+        ["Name", holder],
+      ])
+        .concat(notes === "" ? [] : [notes])
+        .join("\n"),
+    },
+    warningLabel(name, "unnamed"),
+    warnings,
+    items,
+  );
 }

@@ -11,6 +11,9 @@ describe("typed item helpers", () => {
     expect(splitExpiry("March,2027")).toEqual({ expMonth: "03", expYear: "2027" });
     expect(splitExpiry("0327")).toEqual({ expMonth: "03", expYear: "2027" });
     expect(splitExpiry("2027")).toEqual({ expMonth: "", expYear: "2027" });
+    expect(splitExpiry("January,")).toEqual({ expMonth: "01", expYear: "" });
+    expect(splitExpiry(",2020")).toEqual({ expMonth: "", expYear: "2020" });
+    expect(splitExpiry("June,19,2951")).toEqual({ expMonth: "06", expYear: "2951" });
     expect(splitExpiry("")).toEqual({ expMonth: "", expYear: "" });
     expect(twoDigitMonth("Dec")).toBe("12");
     expect(twoDigitMonth("13")).toBe("13");

@@ -1,0 +1,6 @@
+name,url,additional_urls,username,password,note,cardholdername,cardnumber,cvc,expirydate,zipcode,folder,full_name,phone_number,email,address1,address2,city,country,state,type,custom_fields
+Work,,,,,,,,,,,,,,,,,,,,,
+Example,https://example.com,https://login.example.com,alice@example.com,N0rdPass-Sample-1,Main login,,,,,,Work,,,,,,,,,password,"[{""label"":""Member ID"",""type"":""text"",""value"":""42""},{""label"":""Recovery"",""type"":""hidden"",""value"":""N0rd-recovery""}]"
+My Visa,,,,,,Alice Example,4111111111111111,123,03 / 29,62701,,,,,,,,,,credit_card,
+Alice,,,,,Home,,,,,62701,,Alice Example,555-0100,alice@example.com,1 Main St,Apt 2,Springfield,US,IL,identity,
+Router,,,,,Admin password on the box,,,,,,Work,,,,,,,,,note,

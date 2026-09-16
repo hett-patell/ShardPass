@@ -1,0 +1,4 @@
+type,number,name,issue_date,expiration_date,place_of_issue,state
+passport,P1234567,Alice Example,2020-01-30,2030-01-30,Springfield,
+license,L7654321,Alice Example,2022-08-10,2032-08-10,,IL
+social_security,123-45-6789,Alice Example,,,,

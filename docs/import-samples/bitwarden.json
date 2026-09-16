@@ -1,0 +1,24 @@
+{
+  "encrypted": false,
+  "folders": [{ "id": "f1", "name": "Work" }],
+  "items": [
+    {
+      "id": "1", "folderId": "f1", "type": 1, "name": "Example", "notes": "Main login", "favorite": true,
+      "login": { "username": "alice@example.com", "password": "B1twarden-Sample-1", "totp": "JBSWY3DPEHPK3PXP", "uris": [{ "match": null, "uri": "https://example.com" }] },
+      "fields": [{ "name": "Member ID", "value": "42", "type": 0 }]
+    },
+    { "id": "2", "folderId": null, "type": 2, "name": "Wi-Fi", "notes": "Router password on the box", "favorite": false, "secureNote": { "type": 0 } },
+    {
+      "id": "3", "folderId": null, "type": 3, "name": "Visa", "notes": "", "favorite": false,
+      "card": { "cardholderName": "Alice Example", "brand": "Visa", "number": "4111111111111111", "expMonth": "3", "expYear": "2029", "code": "123" }
+    },
+    {
+      "id": "4", "folderId": null, "type": 4, "name": "Alice", "notes": "", "favorite": false,
+      "identity": { "title": "Ms", "firstName": "Alice", "middleName": null, "lastName": "Example", "address1": "1 Main St", "address2": null, "city": "Springfield", "state": "IL", "postalCode": "62701", "country": "US", "company": "ACME", "email": "alice@example.com", "phone": "555-0100", "ssn": null, "username": "alice", "passportNumber": null, "licenseNumber": null }
+    },
+    {
+      "id": "5", "folderId": null, "type": 5, "name": "Deploy key", "notes": "", "favorite": false,
+      "sshKey": { "privateKey": "-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZW\nQyNTUxOQAAACBzYW1wbGUtcHVibGljLWtleS1ieXRlcy0zMi1sb25nLXh4AAAAkAAAAAAA\n-----END OPENSSH PRIVATE KEY-----\n", "publicKey": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHNhbXBsZS1wdWJsaWMta2V5LWJ5dGVzLTMyLWxvbmcteHg= alice@laptop", "keyFingerprint": "SHA256:0000000000000000000000000000000000000000000" }
+    }
+  ]
+}

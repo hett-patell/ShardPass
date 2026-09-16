@@ -35,6 +35,14 @@ export function importNordPassCsv(text: string): ImportResult {
     const label = warningLabel(name || url, "unnamed");
     const type = field("type").trim().toLowerCase();
     if (type === "folder") continue;
+    // Older exports list a folder as a row with a name and nothing else.
+    if (
+      name !== "" &&
+      headers.every(
+        (header) => header.trim().toLowerCase() === "name" || (row[header] ?? "").trim() === "",
+      )
+    )
+      continue;
     const folderId = folders.idFor(folderPath(field("folder")));
     const base = { ...newItemBase(), ...(folderId === undefined ? {} : { folderId }) };
     const kind = type !== "" ? type : inferKind(row, index);
@@ -98,7 +106,9 @@ export function importNordPassCsv(text: string): ImportResult {
             name: name || url || "Imported login",
             username: field("username"),
             password,
-            urls: url === "" ? [] : [url],
+            urls: [url, ...field("additional_urls").split(",")]
+              .map((entry) => entry.trim())
+              .filter((entry) => entry !== ""),
             ...(customFields.length === 0 ? {} : { customFields }),
             notes: note,
           },

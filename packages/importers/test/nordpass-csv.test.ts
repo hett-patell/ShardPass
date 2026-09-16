@@ -63,3 +63,21 @@ describe("importNordPassCsv", () => {
     expect(result.items[1]).toMatchObject({ brand: "mastercard", expMonth: "12", expYear: "2030" });
   });
 });
+
+describe("importNordPassCsv export details", () => {
+  it("skips an untyped folder row and keeps additional URLs", () => {
+    const csv =
+      "name,url,additional_urls,username,password,note,cardholdername,cardnumber,cvc,expirydate,zipcode,folder,full_name,phone_number,email,address1,address2,city,country,state,type,custom_fields\n" +
+      "notesFolder,,,,,,,,,,,,,,,,,,,,,\n" +
+      'Site,https://example.com,"https://one.example, https://two.example",alice,pw,,,,,,,notesFolder,,,,,,,,,password,\n' +
+      "SomeVisa,,,,,,SomeHolder,4024007103939509,123,01 / 22,12345,,,,,,,,,,credit_card,\n";
+    const result = importNordPassCsv(csv);
+    expect(result.items.map((item) => item.kind)).toEqual(["login", "card"]);
+    expect(result.items[0]).toMatchObject({
+      urls: ["https://example.com", "https://one.example", "https://two.example"],
+    });
+    expect(result.folders?.map((folder) => folder.name)).toEqual(["notesFolder"]);
+    expect(result.items[1]).toMatchObject({ brand: "visa", expMonth: "01", expYear: "2022" });
+    expect(result.warnings).toEqual([]);
+  });
+});

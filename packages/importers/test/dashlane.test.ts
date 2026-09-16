@@ -38,7 +38,7 @@ describe("importDashlane", () => {
     for (const [csv, kind] of [
       [payments, ["card", "note"]],
       [personal, ["identity"]],
-      [ids, ["note"]],
+      [ids, ["identity"]],
       [notes, ["note"]],
     ] as const) {
       const result = await importDashlane(encode(csv));
@@ -61,7 +61,7 @@ describe("importDashlane", () => {
     });
     const identity = await importDashlane(encode(personal));
     expect(identity.items[0]).toMatchObject({
-      name: "Alice",
+      name: "Alice Example",
       firstName: "Alice",
       lastName: "Example",
       username: "alice",
@@ -75,5 +75,86 @@ describe("importDashlane", () => {
 
   it("rejects a file with no Dashlane columns", async () => {
     await expect(importDashlane(encode("a,b\n1,2\n"))).rejects.toBeInstanceOf(DashlaneFormatError);
+  });
+});
+
+describe("importDashlane personal info and IDs", () => {
+  it("folds the one-fact-per-row personal info file into one identity per name row", async () => {
+    const csv =
+      "type,title,first_name,middle_name,last_name,login,date_of_birth,place_of_birth,email,email_type,item_name,phone_number,address,country,state,city,zip,address_recipient,address_building,address_apartment,address_floor,address_door_code,job_title,url\n" +
+      "name,MR,John,,Doe,jdoe,2022-01-30,world,,,,,,,,,,,,,,,,\n" +
+      "email,,,,,,,,jdoe@example.com,personal,Johns email,,,,,,,,,,,,,\n" +
+      "number,,,,,,,,,,John's number,+49123123123,,,,,,,,,,,,\n" +
+      "address,,,,,,,,,,John's home address,,1 some street,de,DE-0-NW,some city,123123,John,1,1,1,123,,\n" +
+      "website,,,,,,,,,,Website,,,,,,,,,,,,,website.com\n" +
+      "name,Mrs,Jane,,Doe,jane,1990-05-06,earth,,,,,,,,,,,,,,,,\n";
+    const result = await importDashlane(encode(csv));
+    expect(result.items.map((item) => item.kind)).toEqual(["identity", "identity"]);
+    expect(result.items[0]).toMatchObject({
+      name: "John Doe",
+      firstName: "John",
+      lastName: "Doe",
+      username: "jdoe",
+      birthDate: "2022-01-30",
+      email: "jdoe@example.com",
+      phone: "+49123123123",
+      street: "1 some street, 1",
+      address2: "Apt 1, Floor 1",
+      city: "some city",
+      state: "DE-0-NW",
+      zip: "123123",
+      country: "de",
+    });
+    expect((result.items[0] as { notes: string }).notes).toContain("Website: website.com");
+    expect((result.items[0] as { notes: string }).notes).toContain("Door code: 123");
+    expect(result.items[1]).toMatchObject({
+      name: "Jane Doe",
+      firstName: "Jane",
+      username: "jane",
+    });
+  });
+
+  it("turns passports, licences and social security numbers into identities, the rest into notes", async () => {
+    const csv =
+      "type,number,name,issue_date,expiration_date,place_of_issue,state\n" +
+      "card,123123123,John Doe,2022-1-30,2032-1-30,,\n" +
+      "passport,P123,John Doe,2022-1-30,2032-1-30,somewhere,\n" +
+      "license,L456,John Doe,2022-8-10,2022-10-10,,DC\n" +
+      "social_security,S789,John Doe,,,,\n" +
+      "tax_number,T000,,,,,\n";
+    const result = await importDashlane(encode(csv));
+    expect(result.items.map((item) => item.kind)).toEqual([
+      "note",
+      "identity",
+      "identity",
+      "identity",
+      "note",
+    ]);
+    expect(result.items[1]).toMatchObject({
+      name: "Passport – John Doe",
+      firstName: "John",
+      lastName: "Doe",
+      passportNumber: "P123",
+    });
+    expect((result.items[1] as { notes: string }).notes).toBe(
+      "Issued: 2022-1-30\nExpires: 2032-1-30\nPlace of issue: somewhere",
+    );
+    expect(result.items[2]).toMatchObject({ licenseNumber: "L456" });
+    expect(result.items[3]).toMatchObject({ nationalId: "S789" });
+    expect(result.items[4]).toMatchObject({ name: "Tax number", content: "Number: T000" });
+  });
+
+  it("uses the card's name as the holder when the export leaves the holder empty", async () => {
+    const csv =
+      "type,account_name,account_holder,cc_number,code,expiration_month,expiration_year,routing_number,account_number,country,issuing_bank\n" +
+      "credit_card,John Doe,,41111111111111111,123,01,2023,,,US,\n";
+    const result = await importDashlane(encode(csv));
+    expect(result.items[0]).toMatchObject({
+      kind: "card",
+      name: "John Doe",
+      cardholderName: "John Doe",
+      expMonth: "01",
+      expYear: "2023",
+    });
   });
 });

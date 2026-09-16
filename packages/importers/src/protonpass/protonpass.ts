@@ -1,6 +1,12 @@
-import type { LoginCustomField } from "@shardpass/domain";
+import {
+  MAX_SECRET_NAME_LENGTH,
+  MAX_SECRET_NOTES_LENGTH,
+  MAX_SECRET_VALUE_LENGTH,
+  SecretItemSchema,
+  type LoginCustomField,
+} from "@shardpass/domain";
 
-import { warningLabel } from "../common/clamp";
+import { clampName, clampText, keepIfValid, warningLabel } from "../common/clamp";
 import { buildHeaderIndex, pickField } from "../common/csv-fields";
 import { parseCsv } from "../common/csv-parser";
 import { createFolderIndex, type ImportResult } from "../common/import-result";
@@ -78,7 +84,8 @@ export function importProtonPassCsv(text: string): ImportResult {
     const email = field("email").trim();
     const username = field("username").trim();
     const password = field("password");
-    if (password === "")
+    // An alias is an address, not an account: no password is the normal case.
+    if (password === "" && type !== "alias")
       warnings.push(`"${label}": imported without a password (the export has none).`);
     const totp = field("totp").trim();
     const customFields: LoginCustomField[] =
@@ -215,8 +222,99 @@ export function importProtonPassJson(text: string): ImportResult {
           items,
         );
         break;
+      case "custom":
+      case "wifi":
+      case "sshKey": {
+        const kind = asString(data["type"]);
+        const lines = [
+          ...fieldLines(content["sections"]),
+          ...(extras.asText === "" ? [] : [extras.asText]),
+        ];
+        if (kind === "sshKey" && asString(content["privateKey"]).trim() !== "") {
+          const publicKey = asString(content["publicKey"]).trim();
+          const metadata: Record<string, string> = {};
+          if (publicKey !== "") {
+            metadata["publicKey"] = publicKey;
+            metadata["keyType"] = publicKey.split(/\s+/u)[0] ?? "";
+          }
+          keepIfValid(
+            SecretItemSchema,
+            {
+              ...base,
+              kind: "secret" as const,
+              name: clampName(name, MAX_SECRET_NAME_LENGTH, "Imported key", label, warnings),
+              secretType: "ssh_key" as const,
+              value: clampText(
+                asString(content["privateKey"]),
+                MAX_SECRET_VALUE_LENGTH,
+                "private key",
+                label,
+                warnings,
+              ),
+              metadata,
+              notes: clampText(
+                [note, lines.join("\n")].filter((part) => part !== "").join("\n\n"),
+                MAX_SECRET_NOTES_LENGTH,
+                "notes",
+                label,
+                warnings,
+              ),
+            },
+            "secret",
+            label,
+            warnings,
+            items,
+          );
+          break;
+        }
+        if (kind === "wifi" && asString(content["ssid"]).trim() !== "") {
+          const security = asString(content["security"]).trim();
+          emitLogin(
+            base,
+            {
+              name: name || asString(content["ssid"]),
+              username: asString(content["ssid"]),
+              password: asString(content["password"]),
+              urls: [],
+              notes: [
+                note,
+                [security === "" ? "" : `Security: ${security}`, ...lines]
+                  .filter((part) => part !== "")
+                  .join("\n"),
+              ]
+                .filter((part) => part !== "")
+                .join("\n\n"),
+            },
+            label,
+            warnings,
+            items,
+          );
+          break;
+        }
+        emitNote(
+          base,
+          {
+            name: name || "Imported item",
+            content: [note, lines.join("\n")].filter((part) => part !== "").join("\n\n"),
+          },
+          label,
+          warnings,
+          items,
+        );
+        break;
+      }
       case "identity": {
         const text = (key: string) => asString(content[key]);
+        // What has no column of its own stays readable in the notes: work details, handles,
+        // Proton's own extra fields and sections.
+        const detailLines = describeIdentityDetails(content);
+        const extraLines = [
+          ...fieldLines(content["extraPersonalDetails"]),
+          ...fieldLines(content["extraAddressDetails"]),
+          ...fieldLines(content["extraContactDetails"]),
+          ...fieldLines(content["extraWorkDetails"]),
+          ...fieldLines(content["extraSections"]),
+        ];
         emitIdentity(
           base,
           {
@@ -237,7 +335,9 @@ export function importProtonPassJson(text: string): ImportResult {
             passportNumber: text("passportNumber"),
             licenseNumber: text("licenseNumber"),
             nationalId: text("socialSecurityNumber"),
-            notes: [note, extras.asText].filter((part) => part !== "").join("\n\n"),
+            notes: [note, ...detailLines, ...extraLines, extras.asText]
+              .filter((part) => part !== "")
+              .join("\n"),
           },
           label,
           warnings,
@@ -263,7 +363,8 @@ function extraFields(raw: unknown): { fields: LoginCustomField[]; totp: string; 
     if (!isRecord(entry)) continue;
     const name = asString(entry["fieldName"]).trim();
     const data = isRecord(entry["data"]) ? entry["data"] : {};
-    const value = asString(data["content"]) || asString(data["totpUri"]);
+    const value =
+      asString(data["content"]) || asString(data["totpUri"]) || asString(data["timestamp"]);
     if (value === "") continue;
     const type = asString(entry["type"]);
     if (type === "totp" && totp === "") {
@@ -277,4 +378,54 @@ function extraFields(raw: unknown): { fields: LoginCustomField[]; totp: string; 
     totp,
     asText: fields.map((field) => `${field.name}: ${field.value}`).join("\n"),
   };
+}
+
+/** Identity columns Proton keeps that the vault has no field for, as "Key: value" lines. */
+function describeIdentityDetails(content: Json): string[] {
+  const labels: [string, string][] = [
+    ["gender", "Gender"],
+    ["secondPhoneNumber", "Second phone"],
+    ["website", "Website"],
+    ["personalWebsite", "Personal website"],
+    ["xHandle", "X"],
+    ["linkedin", "LinkedIn"],
+    ["reddit", "Reddit"],
+    ["facebook", "Facebook"],
+    ["yahoo", "Yahoo"],
+    ["instagram", "Instagram"],
+    ["jobTitle", "Job title"],
+    ["workPhoneNumber", "Work phone"],
+    ["workEmail", "Work e-mail"],
+  ];
+  const lines: string[] = [];
+  for (const [key, label] of labels) {
+    const value = asString(content[key]).trim();
+    if (value !== "") lines.push(`${label}: ${value}`);
+  }
+  return lines;
+}
+
+/**
+ * Proton's field lists ("extraFields", "extraPersonalDetails"…) and section lists
+ * ({ sectionName, sectionFields }) as "Key: value" lines; sections are headed by their name.
+ */
+function fieldLines(raw: unknown): string[] {
+  const lines: string[] = [];
+  for (const entry of asList(raw)) {
+    if (!isRecord(entry)) continue;
+    if (Array.isArray(entry["sectionFields"])) {
+      const heading = asString(entry["sectionName"]).trim();
+      const inner = fieldLines(entry["sectionFields"]);
+      if (inner.length > 0) lines.push(...(heading === "" ? inner : [`${heading}:`, ...inner]));
+      continue;
+    }
+    const data = isRecord(entry["data"]) ? entry["data"] : {};
+    const value =
+      asString(data["content"]).trim() ||
+      asString(data["timestamp"]).trim() ||
+      asString(data["totpUri"]).trim();
+    if (value === "") continue;
+    lines.push(`${asString(entry["fieldName"]).trim() || "Field"}: ${value}`);
+  }
+  return lines;
 }

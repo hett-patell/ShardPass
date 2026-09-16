@@ -1,0 +1,4 @@
+Title,URL,Username,Password,Notes,OTPAuth
+example.com (alice),https://example.com,alice,S4fari-Sample-1,"Two lines
+of notes",otpauth://totp/Example:alice?secret=JBSWY3DPEHPK3PXP&issuer=Example
+shop.example.org (alice),https://shop.example.org,alice@example.com,S4fari-Sample-2,,

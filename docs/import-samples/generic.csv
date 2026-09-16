@@ -1,0 +1,3 @@
+Account,Login URL,User Name,Pass,Comments,2FA code,Group
+Example,https://example.com,alice@example.com,Gener1c-Sample-1,Main login,JBSWY3DPEHPK3PXP,Work/Sites
+Forum,https://forum.example.org,alice_f,Gener1c-Sample-2,,,Personal

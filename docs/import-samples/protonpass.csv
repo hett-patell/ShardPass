@@ -1,0 +1,4 @@
+type,name,url,email,username,password,note,totp,createTime,modifyTime,vault
+login,Example,https://example.com,alice@example.com,alice,Pr0ton-Sample-1,Main login,otpauth://totp/Example:alice?secret=JBSWY3DPEHPK3PXP&issuer=Example,1700000000,1700000000,Personal
+note,Router,,,,,Admin password on the box,,1700000000,1700000000,Personal
+alias,Shop alias,,shop.alias@passmail.net,,,,,1700000000,1700000000,Personal

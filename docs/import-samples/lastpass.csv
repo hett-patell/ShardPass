@@ -1,0 +1,41 @@
+url,username,password,totp,extra,name,grouping,fav
+https://example.com/login,alice@example.com,LastP4ss-Sample-1,JBSWY3DPEHPK3PXP,Main login,Example,Work\Sites,1
+http://sn,,,,"Just a plain secure note
+on two lines",Plain note,(none),0
+http://sn,,,,"NoteType:Credit Card
+Language:en-US
+Name on Card:Alice Example
+Type:Visa
+Number:4111 1111 1111 1111
+Security Code:123
+Start Date:,
+Expiration Date:March,2029
+Notes:Personal card",My Visa,Finance,0
+http://sn,,,,"NoteType:Address
+Language:en-US
+Title:Ms
+First Name:Alice
+Middle Name:
+Last Name:Example
+Username:alice
+Gender:
+Birthday:January 2,1990
+Company:ACME
+Address 1:1 Main St
+Address 2:Apt 2
+City / Town:Springfield
+County:
+State:IL
+Zip / Postal Code:62701
+Country:US
+Timezone:
+Email Address:alice@example.com
+Phone:555-0100
+Evening Phone:
+Mobile Phone:
+Fax:
+Notes:Home",Home address,Personal,0
+http://sn,,,,"NoteType:Wi-Fi Password
+SSID:HomeNet
+Password:LastP4ss-WiFi
+Notes:Router in the hall",Home Wi-Fi,Personal,0

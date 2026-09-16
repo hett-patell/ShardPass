@@ -177,3 +177,102 @@ describe("importProtonPass", () => {
     expect(result.warnings.some((warning) => warning.includes("export as JSON"))).toBe(true);
   });
 });
+
+describe("importProtonPass dedicated and custom items", () => {
+  it("keeps custom items as notes with their sections, and identity extras in the notes", async () => {
+    const data = {
+      version: "1.21.2",
+      userId: "u",
+      encrypted: false,
+      vaults: {
+        v: {
+          name: "Personal",
+          description: "",
+          items: [
+            {
+              itemId: "1",
+              shareId: "s",
+              state: 1,
+              data: {
+                metadata: { name: "Test Bank Account", note: "", itemUuid: "a" },
+                extraFields: [
+                  { fieldName: "Bank name", type: "text", data: { content: "Bank of the Shire" } },
+                  { fieldName: "Account number", type: "hidden", data: { content: "123456" } },
+                  { fieldName: "Opened", type: "timestamp", data: { timestamp: "2951-06-19" } },
+                ],
+                type: "custom",
+                content: {
+                  sections: [
+                    {
+                      sectionName: "Branch",
+                      sectionFields: [
+                        { fieldName: "Town", type: "text", data: { content: "Bree" } },
+                      ],
+                    },
+                  ],
+                },
+              },
+            },
+            {
+              itemId: "2",
+              shareId: "s",
+              state: 1,
+              data: {
+                metadata: { name: "Me", note: "", itemUuid: "b" },
+                extraFields: [],
+                type: "identity",
+                content: {
+                  fullName: "Test 1",
+                  firstName: "Test",
+                  lastName: "Test",
+                  email: "test@example.com",
+                  gender: "Male",
+                  jobTitle: "Engineer",
+                  xHandle: "@twitter",
+                  extraPersonalDetails: [
+                    { fieldName: "TestPersonal", type: "text", data: { content: "Personal" } },
+                  ],
+                  extraSections: [
+                    {
+                      sectionName: "TestSection",
+                      sectionFields: [
+                        { fieldName: "Field", type: "hidden", data: { content: "Section" } },
+                      ],
+                    },
+                  ],
+                },
+              },
+            },
+            {
+              itemId: "3",
+              shareId: "s",
+              state: 1,
+              data: {
+                metadata: { name: "Home Wi-Fi", note: "", itemUuid: "c" },
+                extraFields: [],
+                type: "wifi",
+                content: { ssid: "HomeNet", password: "hunter2", security: "WPA2" },
+              },
+            },
+          ],
+        },
+      },
+    };
+    const result = await importProtonPass(encode(JSON.stringify(data)));
+    expect(result.items.map((item) => item.kind)).toEqual(["note", "identity", "login"]);
+    expect(result.items[0]).toMatchObject({
+      name: "Test Bank Account",
+      content:
+        "Branch:\nTown: Bree\nBank name: Bank of the Shire\nAccount number: 123456\nOpened: 2951-06-19",
+    });
+    expect((result.items[1] as { notes: string }).notes).toBe(
+      "Gender: Male\nX: @twitter\nJob title: Engineer\nTestPersonal: Personal\nTestSection:\nField: Section",
+    );
+    expect(result.items[2]).toMatchObject({
+      username: "HomeNet",
+      password: "hunter2",
+      notes: "Security: WPA2",
+    });
+    expect(result.warnings).toEqual([]);
+  });
+});

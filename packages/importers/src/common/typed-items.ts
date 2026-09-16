@@ -206,12 +206,20 @@ export function splitExpiry(value: string): { expMonth: string; expYear: string 
     if (/^\d{4}$/u.test(month)) return { expMonth: twoDigitMonth(year), expYear: month };
     return { expMonth: twoDigitMonth(month), expYear: fourDigitYear(year) };
   }
-  if (/^\d{4}$/u.test(trimmed)) {
+  const only = parts.length === 1 ? (parts[0] ?? "") : "";
+  // "January," names a month alone; ",2020" a year alone.
+  if (/^[a-z]{3,}$/iu.test(only)) {
+    const month = twoDigitMonth(only);
+    return /^\d{2}$/u.test(month)
+      ? { expMonth: month, expYear: "" }
+      : { expMonth: "", expYear: "" };
+  }
+  if (/^\d{4}$/u.test(only)) {
     // "0327" (MMYY) is ambiguous with a bare year; only a plausible month is split.
-    const month = Number(trimmed.slice(0, 2));
-    return month >= 1 && month <= 12 && Number(trimmed.slice(2)) < 100
-      ? { expMonth: trimmed.slice(0, 2), expYear: `20${trimmed.slice(2)}` }
-      : { expMonth: "", expYear: trimmed };
+    const month = Number(only.slice(0, 2));
+    return month >= 1 && month <= 12 && Number(only.slice(2)) < 100
+      ? { expMonth: only.slice(0, 2), expYear: `20${only.slice(2)}` }
+      : { expMonth: "", expYear: only };
   }
   return { expMonth: "", expYear: "" };
 }

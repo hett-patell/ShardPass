@@ -94,3 +94,51 @@ describe("importLastPassCsv", () => {
     expect(result.warnings).toEqual(['"A": imported without a password (the export has none).']);
   });
 });
+
+describe("importLastPassCsv typed notes", () => {
+  it("turns passports, driver's licences and social security notes into identities", () => {
+    const passport =
+      "NoteType:Passport\nLanguage:en-US\nType:Shire Passport\nName:Bilbo Baggins\nCountry:The Shire\nNumber:1234567890\nSex:Male\nNationality:Shire-folk\nIssuing Authority:The Shire\nDate of Birth:September,22,2890\nIssued Date:June,19,2941\nExpiration Date:June,19,2951\nNotes:";
+    const licence =
+      "NoteType:Driver's License\nLanguage:en-US\nNumber:1234567890\nExpiration Date:September,22,2926\nLicense Class:D\nName:Bilbo Baggins\nAddress:Bag End, Bagshot Row\nCity / Town:Hobbiton\nState:Westfarthing\nZIP / Postal Code:00000\nCountry:The Shire\nDate of Birth:September,22,2890\nSex:Male\nNotes:keep safe";
+    const ssn =
+      "NoteType:Social Security\nLanguage:en-US\nName:Bilbo Baggins\nNumber:123-45-6789\nNotes:";
+    const csv =
+      HEADER +
+      `http://sn,,,,"${passport}",Test Passport,Tools Test Items,0\n` +
+      `http://sn,,,,"${licence}",Test Drivers License,Tools Test Items,0\n` +
+      `http://sn,,,,"${ssn}",Test SSN,Tools Test Items,0\n`;
+    const result = importLastPassCsv(csv);
+    expect(result.items.map((item) => item.kind)).toEqual(["identity", "identity", "identity"]);
+    expect(result.items[0]).toMatchObject({
+      name: "Test Passport",
+      firstName: "Bilbo",
+      lastName: "Baggins",
+      passportNumber: "1234567890",
+      country: "The Shire",
+      birthDate: "September,22,2890",
+    });
+    expect((result.items[0] as { notes: string }).notes).toContain("Issuing Authority: The Shire");
+    expect((result.items[0] as { notes: string }).notes).not.toContain("Language");
+    expect(result.items[1]).toMatchObject({
+      licenseNumber: "1234567890",
+      street: "Bag End, Bagshot Row",
+      city: "Hobbiton",
+      state: "Westfarthing",
+      zip: "00000",
+      country: "The Shire",
+    });
+    expect((result.items[1] as { notes: string }).notes).toBe(
+      "Expiration Date: September,22,2926\nLicense Class: D\nSex: Male\nkeep safe",
+    );
+    expect(result.items[2]).toMatchObject({ nationalId: "123-45-6789" });
+    expect(result.folders?.map((folder) => folder.name)).toEqual(["Tools Test Items"]);
+  });
+
+  it("reads a card whose expiry names only the month", () => {
+    const card =
+      "NoteType:Credit Card\nName on Card:John Doe\nType:Visa\nNumber:4111111111111111\nSecurity Code:123\nStart Date:,\nExpiration Date:January,\nNotes:";
+    const result = importLastPassCsv(HEADER + `http://sn,,,,"${card}",Card,,0\n`);
+    expect(result.items[0]).toMatchObject({ kind: "card", expMonth: "01", expYear: "" });
+  });
+});

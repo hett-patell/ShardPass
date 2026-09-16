@@ -134,9 +134,86 @@ function importNote(
         items,
       );
       return;
+    case "passport": {
+      const [firstName, ...rest] = field("Name")
+        .split(/\s+/u)
+        .filter((part) => part !== "");
+      emitIdentity(
+        base,
+        {
+          name: title,
+          firstName: firstName ?? "",
+          lastName: rest.join(" "),
+          passportNumber: field("Number"),
+          country: field("Country"),
+          birthDate: field("Date of Birth"),
+          notes: noteLines(typed, ["Name", "Number", "Country", "Date of Birth", "Notes"]),
+        },
+        label,
+        warnings,
+        items,
+      );
+      return;
+    }
+    case "driver's license": {
+      const [firstName, ...rest] = field("Name")
+        .split(/\s+/u)
+        .filter((part) => part !== "");
+      emitIdentity(
+        base,
+        {
+          name: title,
+          firstName: firstName ?? "",
+          lastName: rest.join(" "),
+          licenseNumber: field("Number"),
+          street: field("Address"),
+          city: field("City / Town"),
+          state: field("State"),
+          zip: field("ZIP / Postal Code"),
+          country: field("Country"),
+          birthDate: field("Date of Birth"),
+          notes: noteLines(typed, [
+            "Name",
+            "Number",
+            "Address",
+            "City / Town",
+            "State",
+            "ZIP / Postal Code",
+            "Country",
+            "Date of Birth",
+            "Notes",
+          ]),
+        },
+        label,
+        warnings,
+        items,
+      );
+      return;
+    }
+    case "social security": {
+      const [firstName, ...rest] = field("Name")
+        .split(/\s+/u)
+        .filter((part) => part !== "");
+      emitIdentity(
+        base,
+        {
+          name: title,
+          firstName: firstName ?? "",
+          lastName: rest.join(" "),
+          nationalId: field("Number"),
+          notes: noteLines(typed, ["Name", "Number", "Notes"]),
+        },
+        label,
+        warnings,
+        items,
+      );
+      return;
+    }
     default: {
-      // Bank accounts, licences, passports, Wi-Fi, servers…: the fields stay readable as text.
-      const lines = [...typed.entries].map(([key, value]) => `${key}: ${value}`);
+      // Bank accounts, Wi-Fi, servers…: the fields stay readable as text.
+      const lines = [...typed.entries]
+        .filter(([key, value]) => key.toLowerCase() !== "language" && value.trim() !== "")
+        .map(([key, value]) => `${key}: ${value}`);
       emitNote(
         base,
         { name: title, content: [`Type: ${typed.type}`, ...lines].join("\n") },
@@ -146,6 +223,16 @@ function importNote(
       );
     }
   }
+}
+
+/** The typed note's remaining fields as "Key: value" lines, with the free-text Notes last. */
+function noteLines(typed: TypedNote, used: readonly string[]): string {
+  const skip = new Set([...used.map((key) => key.toLowerCase()), "language"]);
+  const lines = typed.entries
+    .filter(([key, value]) => !skip.has(key.toLowerCase()) && value.trim() !== "")
+    .map(([key, value]) => `${key}: ${value.trim()}`);
+  const notes = typed.fields.get("notes") ?? "";
+  return [...lines, ...(notes === "" ? [] : [notes])].join("\n");
 }
 
 type TypedNote = Readonly<{
