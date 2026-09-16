@@ -303,7 +303,7 @@ export function HealthView({
           id="health-weak"
           tone="warning"
           icon={<KeyRound size={40} />}
-          count={weak.length}
+          count={judged < report.logins.length ? null : weak.length}
           title="Weak passwords"
           description={
             judged < report.logins.length

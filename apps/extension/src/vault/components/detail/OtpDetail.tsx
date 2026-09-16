@@ -74,7 +74,7 @@ export function OtpDetail({ item, platform, folders, onUpdate, onDeleted }: OtpD
   const baseline = useMemo(() => editableValue(item), [item]);
 
   const liveCodeEligible = item.otpType !== "hotp";
-  const { code, remaining } = useOtpLiveCode(
+  const { code, remaining, failed } = useOtpLiveCode(
     platform,
     liveCodeEligible ? item.id : null,
     liveCodeEligible && !editing,
@@ -171,6 +171,18 @@ export function OtpDetail({ item, platform, folders, onUpdate, onDeleted }: OtpD
             {saveError}
           </p>
         ) : null}
+        {deleteOpen ? (
+          <DeleteOtpDialog
+            label={name}
+            submitting={submitting}
+            onCancel={() => {
+              if (submitting) return;
+              setDeleteOpen(false);
+              deleteOpener.current?.focus();
+            }}
+            onConfirm={() => void confirmDelete()}
+          />
+        ) : null}
       </>
     );
   }
@@ -201,7 +213,11 @@ export function OtpDetail({ item, platform, folders, onUpdate, onDeleted }: OtpD
             configuration.
           </p>
         ) : code === null ? (
-          <p className={styles.valueMuted}>Loading code…</p>
+          <p className={styles.valueMuted}>
+            {failed
+              ? "The code could not be loaded. Unlock the vault and try again."
+              : "Loading code…"}
+          </p>
         ) : (
           <div className={styles.row}>
             <span className={styles.otpCode}>{code.code}</span>

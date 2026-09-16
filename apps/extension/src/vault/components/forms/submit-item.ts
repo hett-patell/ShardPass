@@ -13,7 +13,8 @@ export type SubmitItemResult =
   | Readonly<{ status: "error"; code?: string }>;
 
 function errorCode(candidate: unknown): string | undefined {
-  if (typeof candidate !== "object" || candidate === null || !("error" in candidate)) return undefined;
+  if (typeof candidate !== "object" || candidate === null || !("error" in candidate))
+    return undefined;
   const error = (candidate as { error?: unknown }).error;
   if (typeof error !== "object" || error === null || !("code" in error)) return undefined;
   const code = (error as { code?: unknown }).code;

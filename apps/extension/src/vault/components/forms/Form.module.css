@@ -11,7 +11,6 @@
   gap: var(--space-1);
 }
 
-
 .title {
   margin: 0;
   color: var(--text-primary);
@@ -34,10 +33,6 @@
   gap: var(--space-3) var(--space-4);
 }
 
-.fieldFull {
-  grid-column: 1 / -1;
-}
-
 .field {
   display: flex;
   flex-direction: column;
@@ -48,19 +43,6 @@
   color: var(--text-primary);
   font-size: var(--text-sm);
   font-weight: 500;
-}
-
-.labelRow {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-2);
-}
-
-.labelActions {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
 }
 
 .textInput,
@@ -140,12 +122,15 @@
   gap: var(--space-2);
 }
 
-.listRow .textInput {
-  flex: 1;
+/* A select beside an input shares the row; its full-width default would take it all. */
+.listRow .select {
+  flex: 0 1 12rem;
+  width: auto;
+  min-width: 8rem;
 }
 
-.listAdd {
-  align-self: flex-start;
+.listRow .textInput {
+  flex: 1;
 }
 
 .actions {

@@ -205,7 +205,11 @@ export function LoginForm({ item, platform, otpItems, onSaved, onCancel }: Login
     // Optional keys are always sent explicitly (value or undefined) rather than omitted:
     // item.update merges `fields` with a plain spread, where an omitted key keeps the old
     // value but an explicit `undefined` clears it. Clearing must therefore send undefined.
-    const linkedOtpId = value.linkedOtpId.length > 0 ? value.linkedOtpId : undefined;
+    // A link to an authenticator entry that no longer exists is dropped rather than re-saved.
+    const linkedOtpId =
+      value.linkedOtpId.length > 0 && otpItems.some((otp) => otp.id === value.linkedOtpId)
+        ? value.linkedOtpId
+        : undefined;
     const fields = {
       name,
       username: value.username,

@@ -82,6 +82,7 @@ export function VaultAccess({
   const [pin, setPin] = useState("");
   const [pinConfirmation, setPinConfirmation] = useState("");
   const [pinNotice, setPinNotice] = useState("");
+  const [changeNotice, setChangeNotice] = useState("");
   // The full estimate (zxcvbn, in its worker) arrives a moment after typing pauses; until
   // then, and wherever workers are missing, the quick arithmetic stands in.
   const estimator = useMemo(() => createStrengthEstimator(), []);
@@ -284,6 +285,7 @@ export function VaultAccess({
 
   async function rotatePassword(): Promise<void> {
     setError("");
+    setChangeNotice("");
     if (Array.from(newPassword).length < MIN_SETUP_PASSWORD_CODE_POINTS) {
       setError(`Use at least ${MIN_SETUP_PASSWORD_CODE_POINTS} characters.`);
       return;
@@ -327,6 +329,7 @@ export function VaultAccess({
       else {
         // The background removed the PIN with the old password; say so where the PIN lives.
         setPinAvailable(false);
+        setChangeNotice("Master password changed.");
         setPinNotice(
           "Password changed. The PIN was removed with the old password; set a new one below if you want one.",
         );
@@ -435,6 +438,12 @@ export function VaultAccess({
 
   async function submit(): Promise<void> {
     setError("");
+    // An empty password is never right; deriving a key from it would only cost time and a
+    // failed attempt against the throttle.
+    if (state !== "unconfigured" && password === "") {
+      setError("Enter your master password.");
+      return;
+    }
     const bytes = new TextEncoder().encode(password).byteLength;
     if (state === "unconfigured" && Array.from(password).length < MIN_SETUP_PASSWORD_CODE_POINTS) {
       setError(`Use at least ${MIN_SETUP_PASSWORD_CODE_POINTS} characters.`);
@@ -527,6 +536,16 @@ export function VaultAccess({
             {settingsError !== "" ? (
               <p className={styles.loadingError} role="alert">
                 {settingsError}
+              </p>
+            ) : null}
+            {error ? (
+              <p className={styles.error} role="alert">
+                {error}
+              </p>
+            ) : null}
+            {changeNotice !== "" ? (
+              <p className={styles.working} role="status">
+                {changeNotice}
               </p>
             ) : null}
             <label>

@@ -26,7 +26,12 @@ workerScope.onmessage = (event: MessageEvent<unknown>) => {
         request.password,
         request.keyFile === undefined ? undefined : new Uint8Array(request.keyFile),
       );
-      workerScope.postMessage({ ok: true, items: result.items, warnings: result.warnings, folders: result.folders ?? [] });
+      workerScope.postMessage({
+        ok: true,
+        items: result.items,
+        warnings: result.warnings,
+        folders: result.folders ?? [],
+      });
     } catch (error) {
       workerScope.postMessage({
         ok: false,

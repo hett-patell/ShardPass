@@ -63,11 +63,11 @@ export function LoginDetail({
       ? null
       : (otpItems.find((otp) => otp.id === item.linkedOtpId) ?? null);
   const liveCodeItemId = linkedOtp !== null && linkedOtp.otpType !== "hotp" ? linkedOtp.id : null;
-  const { code, remaining } = useOtpLiveCode(
-    platform,
-    liveCodeItemId,
-    liveCodeItemId !== null && !editing,
-  );
+  const {
+    code,
+    remaining,
+    failed: codeFailed,
+  } = useOtpLiveCode(platform, liveCodeItemId, liveCodeItemId !== null && !editing);
   const inline = useInlineTotp(item, !editing);
 
   const confirmRemovePasskey = async () => {
@@ -279,7 +279,9 @@ export function LoginDetail({
                 Counter-based — open the entry to view a code
               </span>
             ) : code === null ? (
-              <span className={styles.valueMuted}>Loading code…</span>
+              <span className={styles.valueMuted}>
+                {codeFailed ? "The code could not be loaded." : "Loading code…"}
+              </span>
             ) : (
               <div className={styles.row}>
                 <span className={styles.otpCode}>{code.code}</span>

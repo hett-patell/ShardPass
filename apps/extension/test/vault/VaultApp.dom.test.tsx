@@ -373,7 +373,7 @@ describe("VaultApp foundation shell", () => {
         name: "Work",
       }),
     );
-    const tree = await screen.findByRole("tree", { name: "Folders" });
+    const tree = await screen.findByRole("list", { name: "Folders" });
     expect(within(tree).getByText("Work")).toBeVisible();
   });
 

@@ -71,6 +71,13 @@ function statusPresentation(state: "loading" | "ready" | "error"): {
 
 const createOtpError = "Could not create this item. Try again.";
 
+/** What "add one" means in the open category: a login for "all", the category's kind otherwise. */
+function kindForCategory(category: CategoryKey): VaultItemKind {
+  if (category === "all") return "login";
+  if (category === "api_key" || category === "ssh_key") return "secret";
+  return category;
+}
+
 export function VaultApp({ platform }: VaultAppProps) {
   const foundation = useFoundationStatus(platform);
   const presentation = statusPresentation(foundation.state);
@@ -184,7 +191,24 @@ export function VaultApp({ platform }: VaultAppProps) {
     [vaultState],
   );
 
-  const cancelCreate = useCallback(() => setCreatingKind(null), []);
+  const cancelCreate = useCallback(() => {
+    setCreatingKind(null);
+    // The form and its buttons are gone; land on the content region, not the page body.
+    document.getElementById("vault-content")?.focus();
+  }, []);
+
+  // From Health or the Overview: the item must be visible once selected, so the filters that
+  // could hide it are cleared the way a deep link clears them.
+  const openItemFromElsewhere = useCallback(
+    (itemId: string) => {
+      goToVaultView();
+      vaultState.setCategory("all");
+      vaultState.setFolderId(null);
+      vaultState.setSearch("");
+      vaultState.setSelectedId(itemId);
+    },
+    [goToVaultView, vaultState],
+  );
 
   // Deep links from the popup and the save prompt ride in the URL hash; they apply once the
   // vault is unlocked (a locked page keeps them until then) and are then cleared, so a
@@ -369,7 +393,7 @@ export function VaultApp({ platform }: VaultAppProps) {
                       {...(vaultState.archived
                         ? {}
                         : {
-                            onCreate: () => startCreate("login"),
+                            onCreate: () => startCreate(kindForCategory(vaultState.category)),
                             onImport: () => setView("settings"),
                           })}
                     />
@@ -475,10 +499,7 @@ export function VaultApp({ platform }: VaultAppProps) {
                   items={vaultState.liveItems}
                   redactedIds={vaultState.redactedIds}
                   active={view === "health"}
-                  onOpenItem={(itemId) => {
-                    goToVaultView();
-                    vaultState.setSelectedId(itemId);
-                  }}
+                  onOpenItem={openItemFromElsewhere}
                 />
               </div>
             ) : null}
@@ -490,10 +511,7 @@ export function VaultApp({ platform }: VaultAppProps) {
                   folderCount={folderState.folders.length}
                   redactedIds={vaultState.redactedIds}
                   active={view === "overview"}
-                  onOpenItem={(itemId) => {
-                    goToVaultView();
-                    vaultState.setSelectedId(itemId);
-                  }}
+                  onOpenItem={openItemFromElsewhere}
                   onOpenHealth={() => setView("health")}
                   onOpenGenerator={() => {
                     setGeneratorTool("random");

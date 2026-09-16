@@ -59,6 +59,19 @@ function emptyCopy(
   };
 }
 
+/** The empty state's button names what the open category holds. */
+const ADD_LABELS: Partial<Record<string, string>> = {
+  all: "Add a login",
+  login: "Add a login",
+  otp: "Add a one-time code",
+  note: "Add a note",
+  card: "Add a card",
+  identity: "Add an identity",
+  secret: "Add a secret",
+  api_key: "Add an API credential",
+  ssh_key: "Add an SSH key",
+};
+
 /** The item list, with honest loading, error and empty states. */
 export function ItemListPanel({
   items,
@@ -113,7 +126,7 @@ export function ItemListPanel({
           <div className={styles.emptyActions}>
             {onCreate ? (
               <Button variant="secondary" onClick={onCreate}>
-                Add a login
+                {ADD_LABELS[category] ?? "Add a login"}
               </Button>
             ) : null}
             {onImport &&

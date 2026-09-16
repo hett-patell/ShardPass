@@ -18,6 +18,12 @@ export function useModalDialog(
   useEffect(() => {
     const dialog = ref.current;
     if (dialog === null || dialog.open) return;
+    // Whoever had focus is the opener; the browser only restores focus to it when the dialog
+    // closes while attached, and React detaches first, so it is put back by hand below.
+    const opener =
+      dialog.ownerDocument.activeElement instanceof HTMLElement
+        ? dialog.ownerDocument.activeElement
+        : null;
     // Some DOM implementations used in tests lack showModal(); fall back to plain open so the
     // content still renders. Browsers always take the modal path.
     if (typeof dialog.showModal === "function") dialog.showModal();
@@ -25,6 +31,10 @@ export function useModalDialog(
     return () => {
       if (typeof dialog.close === "function" && dialog.open) dialog.close();
       else dialog.removeAttribute("open");
+      const active = dialog.ownerDocument.activeElement;
+      const focusLost =
+        active === null || active === dialog.ownerDocument.body || dialog.contains(active);
+      if (focusLost && opener !== null && opener.isConnected) opener.focus({ preventScroll: true });
     };
   }, [ref]);
 

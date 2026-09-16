@@ -1,6 +1,6 @@
 import { OtpEditableInputSchema, type OtpEditableInput } from "@shardpass/messaging";
 import { Button, Field } from "@shardpass/ui";
-import { useEffect, useLayoutEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useState, useRef } from "react";
 
 import { parseTags } from "../item-support";
 import styles from "./OtpVaultView.module.css";
@@ -42,6 +42,7 @@ function validate(value: FormValue): Errors {
 export function OtpEditor({
   mode,
   value,
+  revision,
   submitting,
   conflict = false,
   onSubmit,
@@ -57,14 +58,19 @@ export function OtpEditor({
   // grew a space per key. Parsed once, on save, like every other form.
   const [tagText, setTagText] = useState(() => value.tags.join(", "));
 
+  // A refresh that changes nothing about this item (another folder deleted, say) hands in a
+  // new `value` object; the form resets only when the item's revision or the mode changes.
+  const latestValue = useRef(value);
+  latestValue.current = value;
   useEffect(() => {
-    setForm(value);
-    setTagText(value.tags.join(", "));
+    const current = latestValue.current;
+    setForm(current);
+    setTagText(current.tags.join(", "));
     setSecretVisible(false);
     setSecretBuffer("");
     setSecretChanged(false);
     setErrors({});
-  }, [mode, value]);
+  }, [mode, revision]);
 
   useLayoutEffect(
     () => () => {

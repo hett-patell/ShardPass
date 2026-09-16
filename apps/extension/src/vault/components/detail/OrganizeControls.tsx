@@ -31,13 +31,17 @@ export function OrganizeControls({ item, folders, platform, onUpdate }: Organize
   const filedIn = item.folderId;
   const orphaned = filedIn !== undefined && !folders.some((folder) => folder.id === filedIn);
 
-  const save = async (fields: Record<string, unknown>) => {
+  const save = async (fields: Record<string, unknown>, leavesList = false) => {
     setBusy(true);
     setError("");
     const result = await updateItem(platform, item.id, item.revision, fields);
     setBusy(false);
-    if (result.status === "saved") onUpdate();
-    else if (result.status === "conflict")
+    if (result.status === "saved") {
+      onUpdate();
+      // Archiving or restoring takes the item, and this button, out of the list: land on the
+      // content region rather than on the page body.
+      if (leavesList) document.getElementById("vault-content")?.focus();
+    } else if (result.status === "conflict")
       setError("This item changed elsewhere. Reload and try again.");
     else setError(saveFailed);
   };
@@ -68,7 +72,9 @@ export function OrganizeControls({ item, folders, platform, onUpdate }: Organize
       <Button
         variant="ghost"
         disabled={busy}
-        onClick={() => void save({ archivedAt: archived ? undefined : new Date().toISOString() })}
+        onClick={() =>
+          void save({ archivedAt: archived ? undefined : new Date().toISOString() }, true)
+        }
       >
         {archived ? (
           <ArchiveRestore size={14} aria-hidden="true" />

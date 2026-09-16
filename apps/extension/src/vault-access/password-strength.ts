@@ -27,5 +27,9 @@ export function passwordStrength(password: string): PasswordStrength {
   const effective = Math.min(chars.length, distinct * 2);
   const bits = effective * Math.log2(pool);
   const level: StrengthLevel = bits < 28 ? 0 : bits < 45 ? 1 : bits < 70 ? 2 : 3;
-  return { bits: Math.round(bits), level, label: (["Too weak", "Weak", "Fair", "Strong"] as const)[level] };
+  return {
+    bits: Math.round(bits),
+    level,
+    label: (["Too weak", "Weak", "Fair", "Strong"] as const)[level],
+  };
 }

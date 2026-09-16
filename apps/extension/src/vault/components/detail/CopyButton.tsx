@@ -5,6 +5,15 @@ import { useEffect, useRef, useState } from "react";
 import { copyWithAutoClear } from "./clipboard";
 
 const COPIED_RESET_MS = 1_500;
+/** Off-screen but in the accessibility tree. */
+const HIDDEN_TEXT = {
+  position: "absolute",
+  width: 1,
+  height: 1,
+  overflow: "hidden",
+  clip: "rect(0 0 0 0)",
+  whiteSpace: "nowrap",
+} as const;
 
 export interface CopyButtonProps {
   /** Accessible label for the button, e.g. "Copy password". */
@@ -35,19 +44,25 @@ export function CopyButton({ label, value }: CopyButtonProps) {
   };
 
   return (
-    <IconButton
-      aria-label={outcome === "copied" ? "Copied" : outcome === "failed" ? "Copy failed" : label}
-      title={outcome === "failed" ? "Copy failed. Try again." : undefined}
-      disabled={value.length === 0}
-      onClick={onClick}
-    >
-      {outcome === "copied" ? (
-        <Check size={16} />
-      ) : outcome === "failed" ? (
-        <X size={16} />
-      ) : (
-        <Copy size={16} />
-      )}
-    </IconButton>
+    <>
+      <IconButton
+        aria-label={outcome === "copied" ? "Copied" : outcome === "failed" ? "Copy failed" : label}
+        title={outcome === "failed" ? "Copy failed. Try again." : undefined}
+        disabled={value.length === 0}
+        onClick={onClick}
+      >
+        {outcome === "copied" ? (
+          <Check size={16} />
+        ) : outcome === "failed" ? (
+          <X size={16} />
+        ) : (
+          <Copy size={16} />
+        )}
+      </IconButton>
+      {/* A label swap is silent to a screen reader; the outcome is announced here. */}
+      <span role="status" aria-live="polite" style={HIDDEN_TEXT}>
+        {outcome === "copied" ? "Copied" : outcome === "failed" ? "Copy failed" : ""}
+      </span>
+    </>
   );
 }

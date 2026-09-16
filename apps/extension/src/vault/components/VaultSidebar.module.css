@@ -89,11 +89,6 @@
   background: var(--bg-secondary);
 }
 
-.folderItemActive {
-  color: var(--accent);
-  background: var(--accent-subtle);
-}
-
 .folderLabel {
   overflow: hidden;
   flex: 1;

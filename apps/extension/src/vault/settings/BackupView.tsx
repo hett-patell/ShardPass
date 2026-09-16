@@ -125,7 +125,11 @@ export function BackupView({
       className={styles.region}
       aria-labelledby="backup-heading"
       onKeyDown={(event) => {
-        if (event.key === "Escape") backup.cancel();
+        // Escape cancels a pending export or import preview, but not from inside a field: there
+        // it is the browser's own way to close an autocomplete popup, and typed passwords stay.
+        const inField =
+          event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement;
+        if (event.key === "Escape" && !inField) backup.cancel();
       }}
     >
       <header className={styles.header}>

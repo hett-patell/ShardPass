@@ -1,4 +1,9 @@
-import { MAX_FOLDERS, MAX_FOLDER_DEPTH, MAX_FOLDER_NAME_LENGTH, type Folder } from "@shardpass/domain";
+import {
+  MAX_FOLDERS,
+  MAX_FOLDER_DEPTH,
+  MAX_FOLDER_NAME_LENGTH,
+  type Folder,
+} from "@shardpass/domain";
 import type { ImportFolder } from "@shardpass/importers";
 
 /** A folder the import will create or reuse, with any over-deep source folders folded in. */
@@ -28,7 +33,10 @@ export type FolderPlan = Readonly<{
 const PATH_SEPARATOR = " / ";
 
 export function sameFolderName(left: string, right: string): boolean {
-  return left.normalize("NFKC").toLocaleLowerCase("en-US") === right.normalize("NFKC").toLocaleLowerCase("en-US");
+  return (
+    left.normalize("NFKC").toLocaleLowerCase("en-US") ===
+    right.normalize("NFKC").toLocaleLowerCase("en-US")
+  );
 }
 
 function nameKey(name: string): string {
@@ -37,7 +45,9 @@ function nameKey(name: string): string {
 
 function clampFolderName(name: string): string {
   const scalars = Array.from(name.trim());
-  return scalars.length <= MAX_FOLDER_NAME_LENGTH ? scalars.join("") : scalars.slice(0, MAX_FOLDER_NAME_LENGTH).join("").trim();
+  return scalars.length <= MAX_FOLDER_NAME_LENGTH
+    ? scalars.join("")
+    : scalars.slice(0, MAX_FOLDER_NAME_LENGTH).join("").trim();
 }
 
 /**
@@ -76,7 +86,12 @@ export function planFolders(
       key = `${key}/${nameKey(name)}`;
       let folder = plannedByPath.get(key);
       if (folder === undefined) {
-        folder = { id: crypto.randomUUID(), name, ...(parent === undefined ? {} : { parentId: parent.id }), folded: false };
+        folder = {
+          id: crypto.randomUUID(),
+          name,
+          ...(parent === undefined ? {} : { parentId: parent.id }),
+          folded: false,
+        };
         plannedByPath.set(key, folder);
         order.push(folder);
       }
@@ -114,7 +129,8 @@ export function planFolders(
     const parentReal = folder.parentId === undefined ? undefined : reused.get(folder.parentId);
     if (folder.parentId !== undefined && parentReal === undefined) continue;
     const match = existing.find(
-      (candidate) => candidate.parentId === parentReal && sameFolderName(candidate.name, folder.name),
+      (candidate) =>
+        candidate.parentId === parentReal && sameFolderName(candidate.name, folder.name),
     );
     if (match !== undefined) reused.set(folder.id, match.id);
   }

@@ -56,6 +56,7 @@
 
 .value {
   overflow-wrap: anywhere;
+  white-space: pre-wrap;
   color: var(--text-primary);
   font-size: var(--text-md);
   line-height: var(--line-body);
@@ -78,6 +79,7 @@
 
 .rowValue {
   overflow-wrap: anywhere;
+  white-space: pre-wrap;
   flex: 1;
   min-width: 0;
 }

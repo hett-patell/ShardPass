@@ -59,7 +59,8 @@ export function BreachCheckRow({ itemId, platform }: BreachCheckRowProps) {
         else setOutcome({ state: "clear", checkedAt: verdict.checkedAt });
       },
       () => {
-        if (live) setOutcome({ state: "idle" });
+        // The background did not answer at all: say so rather than "not checked yet".
+        if (live) setOutcome({ state: "failed" });
       },
     );
     return () => {

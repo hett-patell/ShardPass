@@ -50,7 +50,8 @@ export function runKeePassImport(
         message?: unknown;
       };
       if (message.ok !== true) {
-        const reason = typeof message.message === "string" ? message.message : "The database could not be read.";
+        const reason =
+          typeof message.message === "string" ? message.message : "The database could not be read.";
         finish(() => reject(new Error(reason)));
         return;
       }

@@ -6,6 +6,8 @@ import type { ExtensionPlatform } from "../../../platform/extension-platform";
 export interface OtpLiveCodeState {
   code: OtpCodeProjection | null;
   remaining: number;
+  /** The last request failed (locked, re-prompt pending, background gone); nothing is loading. */
+  failed: boolean;
 }
 
 /**
@@ -21,6 +23,7 @@ export function useOtpLiveCode(
   now: () => number = Date.now,
 ): OtpLiveCodeState {
   const [code, setCode] = useState<OtpCodeProjection | null>(null);
+  const [failed, setFailed] = useState(false);
   const [time, setTime] = useState(now());
   const generation = useRef(0);
 
@@ -30,11 +33,15 @@ export function useOtpLiveCode(
     platform.sendOtpMessage({ version: 1, kind: "otp.getCode", itemId }).then(
       (response) => {
         if (token !== generation.current) return;
-        setCode(response.kind === "otp.codeResult" ? response : null);
+        const result = response.kind === "otp.codeResult" ? response : null;
+        setCode(result);
+        setFailed(result === null);
         setTime(now());
       },
       () => {
-        if (token === generation.current) setCode(null);
+        if (token !== generation.current) return;
+        setCode(null);
+        setFailed(true);
       },
     );
   }, [active, itemId, now, platform]);
@@ -43,6 +50,7 @@ export function useOtpLiveCode(
     if (!active || itemId === null) {
       generation.current += 1;
       setCode(null);
+      setFailed(false);
       return;
     }
     reload();
@@ -50,7 +58,10 @@ export function useOtpLiveCode(
 
   useEffect(() => {
     if (!active || code === null) return;
-    const delay = Math.max(250, Math.min(1_000, code.expiresAt - now()));
+    // A code already past its end (the background's clock ahead of this page's) is asked for
+    // again after a full second, not every quarter of one.
+    const delay =
+      code.expiresAt <= now() ? 1_000 : Math.max(250, Math.min(1_000, code.expiresAt - now()));
     const timer = setTimeout(() => {
       const currentTime = now();
       if (currentTime >= code.expiresAt) reload();
@@ -60,5 +71,5 @@ export function useOtpLiveCode(
   }, [active, code, now, reload]);
 
   const remaining = code === null ? 0 : Math.max(0, Math.ceil((code.expiresAt - time) / 1_000));
-  return { code, remaining };
+  return { code, remaining, failed };
 }

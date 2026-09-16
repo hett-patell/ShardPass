@@ -38,7 +38,8 @@ const CATEGORIES: readonly CategoryDefinition[] = [
 ];
 
 export interface CategoryNavProps {
-  active: CategoryKey;
+  /** The open category; null while another view (the archive, say) is current instead. */
+  active: CategoryKey | null;
   className?: string;
   counts?: Partial<Record<CategoryKey, number>>;
   onSelect: (key: CategoryKey) => void;

@@ -36,6 +36,7 @@ export function HealthGauge({
       aria-valuemin={0}
       aria-valuemax={100}
       aria-valuenow={clamped}
+      aria-valuetext={caption ? `${clamped} out of 100, ${caption}` : `${clamped} out of 100`}
       aria-label={label}
     >
       <svg className={styles.ring} viewBox="0 0 120 66" aria-hidden="true">

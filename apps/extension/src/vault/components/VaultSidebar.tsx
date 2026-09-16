@@ -100,8 +100,11 @@ export function VaultSidebar({
 
   const newFolderRef = useRef<HTMLButtonElement>(null);
   const cancelEdit = () => {
+    const current = edit;
     setEdit(null);
     onClearFolderError?.();
+    // The inline editor unmounts with focus inside it; put focus back on the row or "New folder".
+    focusAfterDialog(current?.mode === "rename" ? current.id : "");
   };
   // The native <dialog> returns focus to its opener, but the row's trash button is only
   // rendered while the row is hovered or focused; land on the folder itself, or on "New
@@ -125,7 +128,10 @@ export function VaultSidebar({
         ? await onCreateFolder(trimmed, edit.parentId)
         : await onRenameFolder(edit.id, trimmed);
     setBusy(false);
-    if (ok) setEdit(null);
+    if (ok) {
+      setEdit(null);
+      focusAfterDialog(edit.mode === "rename" ? edit.id : "");
+    }
   };
 
   const confirmDelete = async () => {
@@ -195,7 +201,7 @@ export function VaultSidebar({
           </button>
         </nav>
         <CategoryNav
-          active={browsing ? category : "all"}
+          active={browsing ? category : null}
           counts={itemCounts}
           onSelect={onCategoryChange}
         />
@@ -220,12 +226,12 @@ export function VaultSidebar({
             <p className={styles.emptyFolders}>No folders yet. Use + to add one.</p>
           ) : null}
 
-          <div className={styles.folderList} role="tree" aria-label="Folders">
+          <div className={styles.folderList} role="list" aria-label="Folders">
             {tree.map(({ folder, depth }) => {
               const active = browsing && selectedFolderId === folder.id;
               const renaming = edit?.mode === "rename" && edit.id === folder.id;
               return (
-                <div key={folder.id} role="none">
+                <div key={folder.id} role="listitem">
                   {renaming ? (
                     <FolderNameInput
                       initial={edit.initial}
@@ -239,9 +245,6 @@ export function VaultSidebar({
                     <div
                       className={`${styles.folderRow} ${active ? styles.folderRowActive : ""}`}
                       style={{ paddingInlineStart: `calc(var(--space-2) + ${depth} * 14px)` }}
-                      role="treeitem"
-                      aria-selected={active}
-                      aria-level={depth + 1}
                     >
                       <button
                         type="button"

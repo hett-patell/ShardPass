@@ -173,7 +173,10 @@ export function useMigration({
       } catch {
         // The count survives a failure: "3 items" still describes what is waiting.
         if (request === generation.current && !abortController.signal.aborted)
-          setState((current) => ({ phase: "failed", itemCount: "itemCount" in current ? current.itemCount : 0 }));
+          setState((current) => ({
+            phase: "failed",
+            itemCount: "itemCount" in current ? current.itemCount : 0,
+          }));
       } finally {
         passwordBytes?.fill(0);
         saltBytes?.fill(0);

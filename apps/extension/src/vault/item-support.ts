@@ -77,10 +77,10 @@ export function itemDisplaySubtitle(item: VaultItem): string | undefined {
     case "login":
       return item.username.length > 0 ? item.username : undefined;
     case "note": {
-      const preview = item.content
-        .split(/\r?\n/u)
-        .map((line) => line.trim())
-        .find((line) => line.length > 0);
+      // A note's body is the secret; only how much of it there is goes in the list.
+      const lines = item.content.split(/\r?\n/u).filter((line) => line.trim().length > 0).length;
+      const preview: string | undefined =
+        lines === 0 ? undefined : `${lines} ${lines === 1 ? "line" : "lines"}`;
       return preview === undefined
         ? undefined
         : preview.length > 120

@@ -34,8 +34,8 @@ export function DeleteOtpDialog({
     >
       <h3 id="delete-otp-heading">Delete authenticator entry</h3>
       <p id="delete-otp-description">
-        Delete <strong>{label}</strong>? Codes for this account will no longer be generated
-        here. If it syncs with Ente, it is removed there too.
+        Delete <strong>{label}</strong>? Codes for this account will no longer be generated here. If
+        it syncs with Ente, it is removed there too.
       </p>
       <div className={styles.dialogActions}>
         <Button ref={cancelRef} variant="ghost" onClick={onCancel} disabled={submitting}>

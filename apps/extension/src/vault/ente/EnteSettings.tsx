@@ -13,7 +13,6 @@ export interface EnteSettingsProps {
   onSynced?: () => void;
 }
 
-
 export function EnteSettings({ platform, active, onSynced }: EnteSettingsProps) {
   const sync = useEnteSync({ platform, active, ...(onSynced === undefined ? {} : { onSynced }) });
   const [showCredentials, setShowCredentials] = useState(false);
@@ -74,7 +73,8 @@ export function EnteSettings({ platform, active, onSynced }: EnteSettingsProps) 
         <p className={styles.error} role="status">
           The last background sync failed {formatWhen(state.lastFailure.at).text}. Reason:{" "}
           <code>{state.lastFailure.code}</code>
-          {state.lastFailure.detail ? <> — {state.lastFailure.detail}</> : null}. It is retried with a growing wait; Sync now tries at once.
+          {state.lastFailure.detail ? <> — {state.lastFailure.detail}</> : null}. It is retried with
+          a growing wait; Sync now tries at once.
         </p>
       ) : null}
 
@@ -95,12 +95,7 @@ export function EnteSettings({ platform, active, onSynced }: EnteSettingsProps) 
           </label>
           <label>
             Ente password
-            <PasswordInput
-              ref={sync.passwordRef}
-              autoComplete="off"
-              maxLength={1024}
-              required
-            />
+            <PasswordInput ref={sync.passwordRef} autoComplete="off" maxLength={1024} required />
           </label>
           <p className={styles.help}>
             {state.state === "connecting"
@@ -319,11 +314,15 @@ export function EnteSettings({ platform, active, onSynced }: EnteSettingsProps) 
             </div>
             <div>
               <dt>Last successful sync</dt>
-              <dd title={formatWhen(state.lastSuccessAt).title}>{formatWhen(state.lastSuccessAt).text}</dd>
+              <dd title={formatWhen(state.lastSuccessAt).title}>
+                {formatWhen(state.lastSuccessAt).text}
+              </dd>
             </div>
             <div>
               <dt>Next eligible run</dt>
-              <dd title={formatWhen(state.nextEligibleAt).title}>{formatWhen(state.nextEligibleAt).text}</dd>
+              <dd title={formatWhen(state.nextEligibleAt).title}>
+                {formatWhen(state.nextEligibleAt).text}
+              </dd>
             </div>
             <div>
               <dt>Pending</dt>

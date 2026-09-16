@@ -15,7 +15,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import type { ExtensionPlatform } from "../../platform/extension-platform";
 import { faviconUrl } from "../../platform/favicon";
-import { passwordStrength } from "../../vault-access/password-strength";
+import { createStrengthEstimator } from "../../vault-access/strength-estimator";
 import { computeHealth } from "../health/health-report";
 import { computeHealthScore } from "../health/health-score";
 import { itemDisplayName, itemDisplaySubtitle } from "../item-support";
@@ -64,8 +64,8 @@ function whenLabel(iso: string, now = Date.now()): string {
   if (days < 30) return `${days} days ago`;
   return new Date(at).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
-/** Quick strength is cheap, but a vault of thousands still deserves a bound per render. */
-const STRENGTH_BATCH = 2_000;
+/** Passwords judged per pass on the worker; a vault of thousands takes a few passes. */
+const STRENGTH_BATCH = 200;
 
 /** The vault at a glance: a health score, what is in it, what needs a look, what changed last. */
 export function OverviewView({
@@ -81,13 +81,31 @@ export function OverviewView({
   onNewLogin,
 }: OverviewViewProps) {
   const report = useMemo(() => computeHealth(items, redactedIds), [items, redactedIds]);
-  const weak = useMemo(
-    () =>
-      report.logins
-        .slice(0, STRENGTH_BATCH)
-        .filter((login) => passwordStrength(login.password).level < 2).length,
-    [report.logins],
-  );
+  // Strength on the same worker the health view uses, so both pages agree on "weak".
+  const [ownEstimator] = useState(() => createStrengthEstimator());
+  useEffect(() => () => ownEstimator.dispose(), [ownEstimator]);
+  const [weakness, setWeakness] = useState<ReadonlyMap<string, number>>(new Map());
+  useEffect(() => {
+    if (!active) return;
+    let live = true;
+    const pending = report.logins
+      .filter((login) => !weakness.has(login.password))
+      .slice(0, STRENGTH_BATCH);
+    if (pending.length === 0) return;
+    void (async () => {
+      const next = new Map(weakness);
+      for (const login of pending) {
+        if (!live) return;
+        const estimate = await ownEstimator.estimate(login.password, [login.username, login.name]);
+        next.set(login.password, estimate.level);
+      }
+      if (live) setWeakness(next);
+    })();
+    return () => {
+      live = false;
+    };
+  }, [active, ownEstimator, report.logins, weakness]);
+  const weak = report.logins.filter((login) => (weakness.get(login.password) ?? 3) < 2).length;
   const [breached, setBreached] = useState<ReadonlySet<string> | null>(null);
 
   // Remembered breach verdicts, once per visit; nothing is checked from here.
