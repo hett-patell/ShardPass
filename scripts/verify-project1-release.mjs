@@ -27,17 +27,6 @@ import { scanProductionSources } from "./scan-project1-production-sources.mjs";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 const sha256 = (value) => createHash("sha256").update(value).digest("hex");
-const REQUIRED_STEPS = [
-  "offline-static",
-  "lint",
-  "format",
-  "dependencies",
-  "source-scan",
-  "project1-tests",
-  "mock-browser",
-  "audit",
-  "docs",
-];
 const KIND_BY_STEP = {
   "offline-static": "offline-static",
   lint: "offline-static",
@@ -49,6 +38,27 @@ const KIND_BY_STEP = {
   audit: "audit",
   docs: "docs",
 };
+// The id names the step; the command is what actually runs under it. Pinning only the ids let a
+// step keep its name while its command was swapped for a cheaper one, so both are pinned here.
+const STEP_BY_ID = {
+  "offline-static": { mode: "offline", command: ["pnpm", "typecheck"] },
+  lint: { mode: "offline", command: ["pnpm", "lint"] },
+  format: { mode: "offline", command: ["pnpm", "format:check"] },
+  dependencies: { mode: "offline", command: ["pnpm", "dependencies"] },
+  "source-scan": { mode: "offline", command: ["pnpm", "scan:secrets:source"] },
+  "project1-tests": {
+    mode: "offline",
+    command: ["pnpm", "exec", "vitest", "run", "--maxWorkers=1", "--no-file-parallelism"],
+  },
+  "mock-browser": { mode: "mock", command: ["pnpm", "test:browser:built"] },
+  audit: { mode: "audit", command: ["pnpm", "audit", "--prod"] },
+  docs: {
+    mode: "offline",
+    command: ["pnpm", "exec", "vitest", "run", "tests/security/docs.test.ts"],
+  },
+};
+// One list, so the required order and the pinned commands cannot drift apart.
+const REQUIRED_STEPS = Object.keys(STEP_BY_ID);
 const byteSort = (a, b) => Buffer.compare(Buffer.from(a), Buffer.from(b));
 function parseTestManifest(text) {
   let value;
@@ -66,15 +76,17 @@ function parseTestManifest(text) {
     value.steps.map((step) => step.id).join("\0") !== REQUIRED_STEPS.join("\0")
   )
     throw new Error("RELEASE_TEST_MANIFEST_INVALID");
-  for (const step of value.steps)
+  for (const step of value.steps) {
+    const expected = STEP_BY_ID[step.id];
     if (
       Object.keys(step).join(",") !== "id,mode,command" ||
-      !["offline", "mock", "audit"].includes(step.mode) ||
+      expected === undefined ||
+      step.mode !== expected.mode ||
       !Array.isArray(step.command) ||
-      step.command.length < 2 ||
-      step.command.some((part) => typeof part !== "string" || !part)
+      step.command.join("\0") !== expected.command.join("\0")
     )
       throw new Error("RELEASE_TEST_MANIFEST_INVALID");
+  }
   return value;
 }
 function evidenceNode({

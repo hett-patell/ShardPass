@@ -67,7 +67,11 @@ describe("isolated Ente SRP emitted graph policy", () => {
       cwd: root,
       env: { ...process.env, SHARDPASS_OUT_DIR: productionOutput },
     });
-    await promisify(execFile)(process.execPath, ["scripts/inventory-ente-production-graph.mjs", productionOutput], { cwd: root });
+    await promisify(execFile)(
+      process.execPath,
+      ["scripts/inventory-ente-production-graph.mjs", productionOutput],
+      { cwd: root },
+    );
     const manifest = JSON.parse(
       await readFile(path.resolve(productionOutput, ".ente-srp-production-graph.json"), "utf8"),
     ) as {
@@ -76,6 +80,17 @@ describe("isolated Ente SRP emitted graph policy", () => {
       constraints: Record<string, boolean>;
     };
     expect(manifest.entry).toMatch(/^assets\/ente-srp-worker-entry-[\w-]+\.js$/u);
+    // Named, so an empty or shortened constraint set fails instead of passing vacuously.
+    expect(Object.keys(manifest.constraints).sort()).toEqual([
+      "dormant",
+      "noChromeAuthority",
+      "noDynamicCode",
+      "noNetworkAuthority",
+      "noNodeExternals",
+      "noRandomBytes",
+      "noStorageAuthority",
+      "noTranscriptsIncluded",
+    ]);
     expect(Object.values(manifest.constraints).every(Boolean)).toBe(true);
     for (const file of manifest.files) {
       const source = await readFile(path.resolve(productionOutput, file.path), "utf8");
@@ -91,5 +106,6 @@ describe("isolated Ente SRP emitted graph policy", () => {
     );
     expect(production).toContain("enteSrpVitePlugin");
     expect(harness).toContain("enteSrpVitePlugin");
-  }, 30_000);
+    // This case runs a full production build; under the whole suite it needs the room.
+  }, 180_000);
 });

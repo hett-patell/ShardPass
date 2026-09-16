@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import { scanSecretRoot } from "../../scripts/scan-secrets.mjs";
 
 import manifest from "../../apps/extension/src/manifest";
+import * as messaging from "../../packages/messaging/src/index";
 import {
   authorizeSender,
   BackupRequestSchema,
@@ -81,6 +82,54 @@ function rejectsForbiddenFields(
 
 function authorize(policy: CommandSenderPolicy, sender: unknown): boolean {
   return authorizeSender(sender, { extensionId, ...policy });
+}
+
+// Every exported sender policy, so a family added to the messaging package is covered the
+// moment it is exported rather than when somebody remembers to list it here.
+const senderPolicies: ReadonlyArray<
+  readonly [string, Readonly<Record<string, CommandSenderPolicy>>]
+> = Object.entries(messaging)
+  .filter(([name]) => name.endsWith("SenderPolicy"))
+  .map(([name, family]) => [name, family as Readonly<Record<string, CommandSenderPolicy>>] as const)
+  .sort(([left], [right]) => left.localeCompare(right));
+
+// The only commands a page's content script may reach: OTP fill, login fill, the one data-fill
+// selection the picker makes, and the passkey bridge. Flipping any other entry to "content"
+// adds a kind to this audience and fails the pinned lists below.
+const CONTENT_REACHABLE = new Set([
+  "data.fillSelect",
+  "login.fillCancel",
+  "login.fillConfirm",
+  "login.fillSelect",
+  "login.fillSuggestions",
+  "login.pendingOffer",
+  "login.saveConfirm",
+  "login.saveDismiss",
+  "login.saveOffer",
+  "login.suggestUsername",
+  "otp.fillCancel",
+  "otp.fillConfirm",
+  "otp.fillSelect",
+  "otp.fillSuggestions",
+  "passkey.assert",
+  "passkey.candidates",
+  "passkey.preview",
+  "passkey.register",
+]);
+
+// Contexts plus the browser-owned bindings each command demands; the whole audience, not just
+// who is allowed.
+function audience(policy: CommandSenderPolicy): string {
+  const contexts = [...policy.allowedContexts].sort().join("+");
+  return `${contexts === "" ? "(none)" : contexts}|tab:${policy.requireTab === true}|frame:${
+    policy.requireFrame === true
+  }|doc:${policy.requireDocument === true}`;
+}
+
+function commands(): ReadonlyArray<readonly [string, string, CommandSenderPolicy]> {
+  return senderPolicies.flatMap(([name, family]) =>
+    Object.entries(family).map(([kind, policy]) => [name, kind, policy] as const),
+  );
 }
 
 describe("Project 1 scanner boundary", () => {
@@ -164,15 +213,144 @@ describe("Project 1 content and popup authority", () => {
     ]) {
       expect(OtpFillRequestSchema.safeParse(request).success, request.kind).toBe(false);
     }
-    const nonContentPolicies: readonly CommandSenderPolicy[] = [
-      ...Object.values(otpSenderPolicy),
-      ...Object.values(vaultSenderPolicy),
-      ...Object.values(backupSenderPolicy),
-      ...Object.values(migrationSenderPolicy),
-      ...Object.values(otpImportSenderPolicy),
-      ...Object.values(enteSenderPolicy),
-    ];
-    for (const policy of nonContentPolicies) expect(authorize(policy, content)).toBe(false);
+    const nonContentPolicies = commands().filter(([, kind]) => !CONTENT_REACHABLE.has(kind));
+    expect(nonContentPolicies.length).toBeGreaterThan(70);
+    for (const [family, kind, policy] of nonContentPolicies)
+      expect(authorize(policy, content), `${family}.${kind}`).toBe(false);
+  });
+
+  it("pins the exact audience of every exported message family", () => {
+    expect(senderPolicies.map(([name]) => name)).toEqual([
+      "aliasSenderPolicy",
+      "backupSenderPolicy",
+      "dataFillSenderPolicy",
+      "enteSenderPolicy",
+      "folderSenderPolicy",
+      "foundationSenderPolicy",
+      "itemCrudSenderPolicy",
+      "loginFillSenderPolicy",
+      "migrationSenderPolicy",
+      "otpFillSenderPolicy",
+      "otpImportSenderPolicy",
+      "otpSenderPolicy",
+      "passkeySenderPolicy",
+      "passwordGenSenderPolicy",
+      "securitySenderPolicy",
+      "vaultSenderPolicy",
+    ]);
+
+    const byAudience = new Map<string, string[]>();
+    for (const [, kind, policy] of commands())
+      byAudience.set(audience(policy), [...(byAudience.get(audience(policy)) ?? []), kind].sort());
+
+    // Content: bound to the tab, frame, and document the browser reported, and to nothing else.
+    expect(byAudience.get("content|tab:true|frame:true|doc:true")).toEqual(
+      [...CONTENT_REACHABLE].sort(),
+    );
+    // Popup and vault page share one origin; these four survive a reload with no live document.
+    expect(byAudience.get("popup+vault|tab:false|frame:false|doc:false")).toEqual([
+      "foundation.getStatus",
+      "vault.getState",
+      "vault.lock",
+      "vault.updateLockSettings",
+    ]);
+    expect(byAudience.get("popup+vault|tab:false|frame:false|doc:true")).toEqual([
+      "alias.generateDuck",
+      "alias.getStatus",
+      "alias.listDuck",
+      "data.fillGrant",
+      "ente.status",
+      "item.get",
+      "item.list",
+      "login.reveal",
+      "otp.copyCode",
+      "otp.getCode",
+      "otp.list",
+      "password.generate",
+      "password.generateUsername",
+      "password.getGeneratorSettings",
+      "password.setGeneratorSettings",
+      "security.getSettings",
+      "security.listResults",
+      "vault.confirmReprompt",
+      "vault.getKdfChallenge",
+      "vault.getPinChallenge",
+      "vault.setup",
+      "vault.unlock",
+      "vault.unlockWithPin",
+    ]);
+    // Full-secret access, whole-vault reads, writes, and every remote or destructive
+    // operation: the vault page with a live document only.
+    expect(byAudience.get("vault|tab:false|frame:false|doc:true")).toEqual([
+      "alias.clearDuckToken",
+      "alias.forgetDuck",
+      "alias.setDuckToken",
+      "backup.beginExportStepUp",
+      "backup.cancelImport",
+      "backup.confirmImport",
+      "backup.finishExportStepUp",
+      "backup.previewImport",
+      "backup.readPortableSnapshot",
+      "ente.authChallenge",
+      "ente.cancel",
+      "ente.connect",
+      "ente.disconnectConfirm",
+      "ente.disconnectPreview",
+      "ente.manualSync",
+      "ente.reauthenticate",
+      "ente.resolveConflict",
+      "ente.submitTotp2fa",
+      "folder.create",
+      "folder.delete",
+      "folder.list",
+      "folder.rename",
+      "item.create",
+      "item.createMany",
+      "item.delete",
+      "item.query",
+      "item.update",
+      "migration.activate",
+      "migration.authorizeCredential",
+      "migration.getCredentialChallenge",
+      "migration.inspect",
+      "migration.retry",
+      "migration.start",
+      "migration.verify",
+      "otp.create",
+      "otp.delete",
+      "otp.getEditor",
+      "otp.importCancel",
+      "otp.importConfirm",
+      "otp.importPreview",
+      "otp.update",
+      "security.checkItem",
+      "security.setBreachChecks",
+      "vault.changePassword",
+      "vault.removePin",
+      "vault.setPin",
+    ]);
+    // Low-level HOTP lifecycle: no context at all, so no sender can reach it over the router.
+    expect(byAudience.get("(none)|tab:false|frame:false|doc:true")).toEqual([
+      "otp.cancelHotp",
+      "otp.commitHotp",
+      "otp.reserveHotp",
+    ]);
+    // A family that invents a sixth audience — "content+vault", say — fails here.
+    expect([...byAudience.keys()].sort()).toEqual([
+      "(none)|tab:false|frame:false|doc:true",
+      "content|tab:true|frame:true|doc:true",
+      "popup+vault|tab:false|frame:false|doc:false",
+      "popup+vault|tab:false|frame:false|doc:true",
+      "vault|tab:false|frame:false|doc:true",
+    ]);
+
+    for (const [family, kind, policy] of commands()) {
+      const label = `${family}.${kind}`;
+      expect(authorize(policy, content), label).toBe(CONTENT_REACHABLE.has(kind));
+      if (!CONTENT_REACHABLE.has(kind)) continue;
+      expect(authorize(policy, popup), label).toBe(false);
+      expect(authorize(policy, vault), label).toBe(false);
+    }
   });
 
   it("limits popup to summaries/code operations and lock authority while management is exact vault-document only", () => {

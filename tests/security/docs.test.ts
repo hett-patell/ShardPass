@@ -2,6 +2,8 @@ import { readFile } from "node:fs/promises";
 
 import { describe, expect, it } from "vitest";
 
+import manifest from "../../apps/extension/src/manifest";
+
 const root = new URL("../../", import.meta.url);
 const researchDate = "2026-07-29";
 
@@ -201,18 +203,53 @@ describe("Project 0 security documentation", () => {
     expect(runtime).toMatch(/background service worker/iu);
     expect(runtime).toMatch(/popup/iu);
     expect(runtime).toMatch(/full-page vault/iu);
-    expect(runtime).toMatch(/content script[\s\S]*inert/iu);
+    // The content entry stopped being inert once it gained fill and passkey controllers, so
+    // the runtime document has to describe what it actually runs and what it refuses to do.
+    expect(runtime).toMatch(
+      /content controller[\s\S]*runs in each matched top-level and child frame/iu,
+    );
+    expect(runtime).toMatch(/never submits/iu);
     expect(runtime).toMatch(/Project 0[\s\S]*foundation\.getStatus/iu);
 
-    expect(permissions).toMatch(/exactly `storage`, `alarms`, and `idle`/iu);
-    expect(permissions).toContain("`<all_urls>`");
-    expect(permissions).toMatch(/retained[\s\S]*future field detection/iu);
-    expect(permissions).toMatch(/broad injection surface|broad page reach/iu);
-    expect(permissions).toMatch(/no `host_permissions`/iu);
-    for (const absent of ["clipboardRead", "clipboardWrite", "offscreen"]) {
+    // Read the contract off the manifest rather than restating it: a permission, host, or
+    // network origin added there fails here until this document explains why it is needed.
+    const declared = manifest as unknown as {
+      permissions: string[];
+      host_permissions: string[];
+      content_security_policy: { extension_pages: string };
+    };
+    const csp = declared.content_security_policy.extension_pages;
+    for (const permission of declared.permissions)
+      expect(permissions, permission).toContain(`\`${permission}\``);
+    for (const host of declared.host_permissions) expect(permissions, host).toContain(host);
+    for (const [, origin] of csp.matchAll(/https:\/\/([\w.-]+)/gu))
+      expect(permissions, origin).toContain(origin);
+    expect(permissions).toContain(csp);
+    expect(permissions).toContain("`host_permissions`");
+
+    // Nothing the document calls absent may in fact be declared.
+    const claimedAbsent = [...permissions.matchAll(/no `([A-Za-z_]+)`/gu)].map(([, name]) => name);
+    expect(claimedAbsent).toEqual(expect.arrayContaining(["clipboardRead", "clipboardWrite"]));
+    for (const absent of [...claimedAbsent, "offscreen"])
+      expect(declared.permissions, absent).not.toContain(absent);
+    for (const absent of ["clipboardRead", "clipboardWrite", "offscreen"])
       expect(permissions).toMatch(new RegExp(`no \\x60${absent}\\x60`, "iu"));
-    }
-    expect(permissions).toMatch(/no runtime host network access/iu);
+
+    // The three claims the manifest contradicts. They must not come back.
+    expect(permissions).not.toMatch(/exactly `storage`, `alarms`, and `idle`/iu);
+    expect(permissions).not.toMatch(/no `host_permissions`/iu);
+    expect(permissions).not.toMatch(/no runtime host network access/iu);
+
+    expect(permissions).toContain("`<all_urls>`");
+    expect(permissions).toMatch(/broad injection surface|broad page reach/iu);
+    expect(permissions).toMatch(/cannot discover fields on a site it does not match/iu);
+    for (const controller of [
+      "OTP fill controller",
+      "login fill controller",
+      "data fill controller",
+      "passkey bridge",
+    ])
+      expect(permissions, controller).toContain(controller);
   });
 
   it("defines release blockers, review gates, screenshots, and artifact handling", async () => {

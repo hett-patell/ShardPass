@@ -16,6 +16,12 @@ import { describe, expect, expectTypeOf, it } from "vitest";
 import { SessionService } from "../../src/background/vault/session-service";
 import type { SessionVaultRepository } from "../../src/background/vault/session-vault-repository";
 
+/**
+ * A deadline only a hang can miss: the work settles in milliseconds, and a tight bound
+ * would turn a loaded machine into a failing test.
+ */
+const OPERATION_DEADLINE_MS = 5_000;
+
 const kek = Uint8Array.from({ length: 32 }, (_, index) => index + 1);
 const binding = {
   extensionId: "extension-id",
@@ -419,7 +425,9 @@ describe("SessionVaultRepository", () => {
     await expect(
       Promise.race([
         bridge.create(otpCandidate()),
-        new Promise((_, reject) => setTimeout(() => reject(new Error("operation timed out")), 250)),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("operation timed out")), OPERATION_DEADLINE_MS),
+        ),
       ]),
     ).resolves.toMatchObject({ revision: 1 });
     await expect(notification).resolves.toBeUndefined();

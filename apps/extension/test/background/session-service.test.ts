@@ -22,6 +22,12 @@ import {
   VaultSessionError,
 } from "../../src/background/vault/session-service";
 
+/**
+ * A deadline that only a hang can miss. The work under test settles in single-digit
+ * milliseconds; a tight bound turns a loaded machine into a failing test.
+ */
+const COMMIT_DEADLINE_MS = 5_000;
+
 const kek = Uint8Array.from({ length: 32 }, (_, index) => index + 1);
 const wrongKek = new Uint8Array(32);
 const popupBinding = {
@@ -306,7 +312,9 @@ describe("SessionService", () => {
     await expect(
       Promise.race([
         values.service.setup(challenge.challengeId, kek.slice(), popupBinding),
-        new Promise((_, reject) => setTimeout(() => reject(new Error("commit timed out")), 250)),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("commit timed out")), COMMIT_DEADLINE_MS),
+        ),
       ]),
     ).resolves.toEqual({ committed: true, state: "locked" });
     await expect(values.service.getState()).resolves.toMatchObject({ state: "locked" });
@@ -343,7 +351,9 @@ describe("SessionService", () => {
       await expect(
         Promise.race([
           values.service.setup(challenge.challengeId, kek.slice(), popupBinding),
-          new Promise((_, reject) => setTimeout(() => reject(new Error("commit timed out")), 250)),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error("commit timed out")), COMMIT_DEADLINE_MS),
+          ),
         ]),
       ).rejects.toMatchObject({ code: "VAULT_LOCKED" });
       await expect(values.service.getState()).resolves.toMatchObject({ state: "locked" });
@@ -368,7 +378,9 @@ describe("SessionService", () => {
     await expect(
       Promise.race([
         values.service.setup(challenge.challengeId, kek.slice(), popupBinding),
-        new Promise((_, reject) => setTimeout(() => reject(new Error("commit timed out")), 250)),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("commit timed out")), COMMIT_DEADLINE_MS),
+        ),
       ]),
     ).rejects.toMatchObject({ code: "VAULT_LOCKED" });
     await expect(values.service.getState()).resolves.toMatchObject({ state: "locked" });

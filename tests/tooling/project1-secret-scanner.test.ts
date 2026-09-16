@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { deflateRawSync, deflateSync } from "node:zlib";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
 import {
   parseSecretAllowlist,
@@ -17,6 +17,7 @@ import {
   parseProductionSourceManifest,
   scanProductionSources,
 } from "../../scripts/scan-project1-production-sources.mjs";
+import type { ProductionSourceManifest } from "../../scripts/scan-project1-production-sources.mjs";
 
 const temporaryDirectories: string[] = [];
 const emptyAllowlist = '{"schemaVersion":1,"scannerSchemaVersion":1,"allowances":[]}';
@@ -696,12 +697,14 @@ describe("canonical exact secret allowances", () => {
       "environment-file",
       "fixture-marker",
       "high-entropy-literal",
+      "jwt",
       "otpauth-uri",
       "pem-private-key",
       "secret-logging",
       "serialized-secret",
       "source-map",
       "test-helper",
+      "url-credentials",
     ]);
   });
 
@@ -749,77 +752,89 @@ describe("canonical exact secret allowances", () => {
       findings: [expect.objectContaining({ ruleId: "candidate-allowlist" })],
     });
   });
+});
 
-  it("scans every closed production root with the empty allowlist and catches a canary in each", async () => {
-    const project = await mkdtemp(path.join(tmpdir(), "shardpass-production-source-"));
-    temporaryDirectories.push(project);
-    const manifestText = await readFile(
-      path.resolve("config/project1-production-source-manifest.json"),
+// Every scanProductionSources call copies the whole production tree into a fresh staging
+// directory, so one call is a few hundred file copies. The tree is materialised once and shared,
+// and each case carries the timeout its own scans actually cost instead of hiding fourteen of
+// them behind one default-5s test that flakes under the full suite.
+describe("closed production source roots", () => {
+  const safeContents = (sourcePath: string) =>
+    sourcePath.endsWith(".json") ? '{"safe":true}' : "export const safe = true;\n";
+  let project = "";
+  let manifestText = "";
+  let manifest: ProductionSourceManifest;
+
+  const scanProject = async (text: string = manifestText) =>
+    scanProductionSources({
+      projectRoot: project,
+      manifestPath: path.join(project, "manifest.json"),
+      manifestText: text,
+      allowlistPath: path.join(project, "empty.json"),
+    });
+
+  beforeAll(async () => {
+    project = await mkdtemp(path.join(tmpdir(), "shardpass-production-source-"));
+    // Resolved from this file, not the process CWD, like every other path in this suite.
+    manifestText = await readFile(
+      new URL("../../config/project1-production-source-manifest.json", import.meta.url),
       "utf8",
     );
-    const manifest = parseProductionSourceManifest(manifestText);
-    const safeContents = (sourcePath: string) =>
-      sourcePath.endsWith(".json") ? '{"safe":true}' : "export const safe = true;\n";
+    manifest = parseProductionSourceManifest(manifestText);
     for (const sourcePath of manifest.files) {
       const target = path.join(project, sourcePath);
       await mkdir(path.dirname(target), { recursive: true });
       await writeFile(target, safeContents(sourcePath));
     }
     await cp(
-      path.resolve("config/project1-secret-allowlist-empty.json"),
+      new URL("../../config/project1-secret-allowlist-empty.json", import.meta.url),
       path.join(project, "empty.json"),
     );
-    const clean = await scanProductionSources({
-      projectRoot: project,
-      manifestPath: path.join(project, "manifest.json"),
-      manifestText,
-      allowlistPath: path.join(project, "empty.json"),
-    });
+  }, 30_000);
+
+  afterAll(async () => {
+    await rm(project, { recursive: true, force: true });
+  });
+
+  it("scans every closed production root with the empty allowlist", async () => {
+    const clean = await scanProject();
     expect(clean.status).toBe("PASS");
     expect(clean.reports).toHaveLength(manifest.roots.length);
     expect(clean.eligibleFileCount).toBe(manifest.files.length);
+  }, 15_000);
 
-    const unlistedEligible = [
+  it("refuses an eligible file the manifest does not list, in every eligible location", async () => {
+    for (const sourcePath of [
       "apps/extension/src/unlisted.ts",
       "packages/domain/src/unlisted.ts",
       "scripts/unlisted.mjs",
       "tools/security/unlisted.ts",
       "vite.injected.config.ts",
       "docs/security/unlisted.md",
-    ];
-    for (const sourcePath of unlistedEligible) {
+    ]) {
       const target = path.join(project, sourcePath);
       await mkdir(path.dirname(target), { recursive: true });
       await writeFile(target, "safe\n");
-      await expect(
-        scanProductionSources({
-          projectRoot: project,
-          manifestPath: path.join(project, "manifest.json"),
-          manifestText,
-          allowlistPath: path.join(project, "empty.json"),
-        }),
-        sourcePath,
-      ).rejects.toThrow("PRODUCTION_SOURCE_MANIFEST_CLOSURE_INVALID");
+      await expect(scanProject(), sourcePath).rejects.toThrow(
+        "PRODUCTION_SOURCE_MANIFEST_CLOSURE_INVALID",
+      );
       await rm(target);
     }
+  }, 30_000);
 
-    const stale = JSON.parse(manifestText) as {
-      roots: { name: string; files: string[] }[];
-    };
+  it("refuses a well-formed manifest that lists a file the tree does not have", async () => {
+    const stale = JSON.parse(manifestText) as { roots: { name: string; files: string[] }[] };
     const staleTools = stale.roots.find((root) => root.name === "tools-production");
     expect(staleTools).toBeDefined();
     staleTools?.files.push("tools/zz-stale.ts");
     const staleText = JSON.stringify(stale);
     expect(() => parseProductionSourceManifest(staleText)).not.toThrow();
-    await expect(
-      scanProductionSources({
-        projectRoot: project,
-        manifestPath: path.join(project, "manifest.json"),
-        manifestText: staleText,
-        allowlistPath: path.join(project, "empty.json"),
-      }),
-    ).rejects.toThrow("PRODUCTION_SOURCE_MANIFEST_CLOSURE_INVALID");
+    await expect(scanProject(staleText)).rejects.toThrow(
+      "PRODUCTION_SOURCE_MANIFEST_CLOSURE_INVALID",
+    );
+  }, 15_000);
 
+  it("catches a planted canary in each closed production root", async () => {
     for (const sourceRoot of manifest.roots) {
       const sourcePath = sourceRoot.files[0];
       expect(sourcePath).toBeDefined();
@@ -828,12 +843,7 @@ describe("canonical exact secret allowances", () => {
         ? '{"token":"Bearer injected-production-secret"}'
         : 'const token = "Bearer injected-production-secret";\n';
       await writeFile(path.join(project, sourcePath), canary);
-      const result = await scanProductionSources({
-        projectRoot: project,
-        manifestPath: path.join(project, "manifest.json"),
-        manifestText,
-        allowlistPath: path.join(project, "empty.json"),
-      });
+      const result = await scanProject();
       expect(result.status, sourceRoot.name).toBe("FAIL");
       expect(
         result.reports
@@ -845,5 +855,5 @@ describe("canonical exact secret allowances", () => {
       ).toBe(true);
       await writeFile(path.join(project, sourcePath), safeContents(sourcePath));
     }
-  });
+  }, 30_000);
 });

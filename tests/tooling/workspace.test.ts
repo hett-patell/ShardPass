@@ -5,6 +5,24 @@ import { describe, expect, it } from "vitest";
 
 const root = new URL("../../", import.meta.url);
 
+// check-engine.mjs reads the real process version, not the spoofed user agent, so these spawns
+// take the Node 24 branch only when the suite itself runs on Node 24. On the supported Node 22
+// they take the approved-runtime branch, and that is what gets asserted there: a body that only
+// checks the Node 24 message asserts nothing on the runtime the repo pins.
+const onNode24 = process.versions.node.startsWith("24.");
+const approvedRuntime = `Approved runtime verified: Node ${process.versions.node}, pnpm 10.14.0.\n`;
+
+function checkEngine(...args: string[]) {
+  return spawnSync(
+    process.execPath,
+    [fileURLToPath(new URL("scripts/check-engine.mjs", root)), ...args],
+    {
+      encoding: "utf8",
+      env: { ...process.env, npm_config_user_agent: "pnpm/10.14.0 npm/? node/v24.18.0 linux x64" },
+    },
+  );
+}
+
 describe("workspace policy", () => {
   it("keeps generated builds and local secrets out of source", async () => {
     const ignore = await readFile(new URL(".gitignore", root), "utf8");
@@ -62,6 +80,7 @@ describe("workspace policy", () => {
     );
     const buildSecuritySteps = scripts["build:security"]?.split(" && ");
     expect(buildSecuritySteps).toEqual([
+      "pnpm scan:secrets:source",
       "node scripts/clean-dist.mjs",
       "vite build",
       "node scripts/inventory-ente-production-graph.mjs",
@@ -184,55 +203,37 @@ describe("workspace policy", () => {
   });
 
   it("prints Task 9 local guidance on Node 24 without starting evidence", () => {
-    const result = spawnSync(
-      process.execPath,
-      [
-        fileURLToPath(new URL("scripts/check-engine.mjs", root)),
-        "--local-command=verify:project1:task9:local-node24",
-      ],
-      {
-        encoding: "utf8",
-        env: {
-          ...process.env,
-          npm_config_user_agent: "pnpm/10.14.0 npm/? node/v24.18.0 linux x64",
-        },
-      },
-    );
+    const result = checkEngine("--local-command=verify:project1:task9:local-node24");
 
-    expect(result.status).toBe(process.versions.node.startsWith("24.") ? 1 : 0);
-    if (process.versions.node.startsWith("24.")) {
+    expect(result.status).toBe(onNode24 ? 1 : 0);
+    if (onNode24) {
       expect(result.stderr).toBe(
         `Project 1 Task 9 requires Node >=22.14.0 <23 and pnpm 10.14.0; found Node ${process.versions.node} and pnpm 10.14.0. Use verify:project1:task9:local-node24 for development evidence only.\n`,
       );
-      expect(result.stderr).not.toContain("Project 0");
-      expect(result.stderr).not.toContain("verify:project0:local-node24");
       expect(result.stdout).toBe("");
+    } else {
+      expect(result.stdout).toBe(approvedRuntime);
+      expect(result.stderr).toBe("");
     }
+    expect(result.stderr).not.toContain("Project 0");
+    expect(result.stderr).not.toContain("verify:project0:local-node24");
   });
 
   it("prints Task 8 local guidance on Node 24 without leaking Project 0 guidance", () => {
-    const result = spawnSync(
-      process.execPath,
-      [
-        fileURLToPath(new URL("scripts/check-engine.mjs", root)),
-        "--local-command=verify:project1:task8:local-node24",
-      ],
-      {
-        encoding: "utf8",
-        env: {
-          ...process.env,
-          npm_config_user_agent: "pnpm/10.14.0 npm/? node/v24.18.0 linux x64",
-        },
-      },
-    );
+    const result = checkEngine("--local-command=verify:project1:task8:local-node24");
 
-    expect(result.status).toBe(process.versions.node.startsWith("24.") ? 1 : 0);
-    if (process.versions.node.startsWith("24.")) {
+    expect(result.status).toBe(onNode24 ? 1 : 0);
+    if (onNode24) {
       expect(result.stderr).toContain(
         "Use verify:project1:task8:local-node24 for development evidence only.",
       );
-      expect(result.stderr).not.toContain("verify:project0:local-node24");
+      expect(result.stdout).toBe("");
+    } else {
+      expect(result.stdout).toBe(approvedRuntime);
+      expect(result.stderr).toBe("");
     }
+    // Task 8 borrows Project 0's requirement wording; it must never hand out Project 0's command.
+    expect(result.stderr).not.toContain("verify:project0:local-node24");
   });
 
   it("orders the Task 12 production inventory prerequisite before serial evidence", async () => {
@@ -296,87 +297,54 @@ describe("workspace policy", () => {
   });
 
   it("prints Project 1 local guidance on Node 24 before release evidence starts", () => {
-    const result = spawnSync(
-      process.execPath,
-      [
-        fileURLToPath(new URL("scripts/check-engine.mjs", root)),
-        "--local-command=verify:project1:local-node24",
-      ],
-      {
-        encoding: "utf8",
-        env: {
-          ...process.env,
-          npm_config_user_agent: "pnpm/10.14.0 npm/? node/v24.18.0 linux x64",
-        },
-      },
-    );
+    const result = checkEngine("--local-command=verify:project1:local-node24");
 
-    if (process.versions.node.startsWith("24.")) {
-      expect(result.status).toBe(1);
+    expect(result.status).toBe(onNode24 ? 1 : 0);
+    if (onNode24) {
       expect(result.stderr).toBe(
         `Project 1 requires Node >=22.14.0 <23 and pnpm 10.14.0; found Node ${process.versions.node} and pnpm 10.14.0. Use verify:project1:local-node24 for development evidence only.\n`,
       );
       expect(result.stdout).toBe("");
+    } else {
+      expect(result.stdout).toBe(approvedRuntime);
+      expect(result.stderr).toBe("");
     }
+    expect(result.stderr).not.toContain("PASS-PROJECT1-RELEASE");
   });
 
   it("prints Task 12 local guidance on Node 24 before evidence starts", () => {
-    const result = spawnSync(
-      process.execPath,
-      [
-        fileURLToPath(new URL("scripts/check-engine.mjs", root)),
-        "--local-command=verify:project1:task12:local-node24",
-      ],
-      {
-        encoding: "utf8",
-        env: {
-          ...process.env,
-          npm_config_user_agent: "pnpm/10.14.0 npm/? node/v24.18.0 linux x64",
-        },
-      },
-    );
+    const result = checkEngine("--local-command=verify:project1:task12:local-node24");
 
-    expect(result.status).toBe(process.versions.node.startsWith("24.") ? 1 : 0);
-    if (process.versions.node.startsWith("24.")) {
+    expect(result.status).toBe(onNode24 ? 1 : 0);
+    if (onNode24) {
       expect(result.stderr).toBe(
         `Project 1 Task 12 requires Node >=22.14.0 <23 and pnpm 10.14.0; found Node ${process.versions.node} and pnpm 10.14.0. Use verify:project1:task12:local-node24 for development evidence only.\n`,
       );
       expect(result.stdout).toBe("");
+    } else {
+      expect(result.stdout).toBe(approvedRuntime);
+      expect(result.stderr).toBe("");
     }
   });
 
   it("accepts the exact Task 12 local bypass on Node 24", () => {
-    const result = spawnSync(
-      process.execPath,
-      [fileURLToPath(new URL("scripts/check-engine.mjs", root)), "--allow-node24"],
-      {
-        encoding: "utf8",
-        env: {
-          ...process.env,
-          npm_config_user_agent: "pnpm/10.14.0 npm/? node/v24.18.0 linux x64",
-        },
-      },
-    );
+    const result = checkEngine("--allow-node24");
 
-    if (process.versions.node.startsWith("24.")) {
-      expect(result.status).toBe(0);
+    expect(result.status).toBe(0);
+    if (onNode24) {
       expect(result.stderr).toContain("Development-only runtime bypass");
+      expect(result.stderr).toContain("does not clear the official Node 22 release blocker");
+    } else {
+      // The flag changes nothing on the runtime the repo pins: Node 22 is already approved, so
+      // the bypass warning must not appear and nothing is waived.
+      expect(result.stdout).toBe(approvedRuntime);
+      expect(result.stderr).toBe("");
     }
   });
 
   it("rejects an unallowlisted local command without reflecting it", () => {
     const injected = "verify:project1:task12:local-node24;unsafe";
-    const result = spawnSync(
-      process.execPath,
-      [fileURLToPath(new URL("scripts/check-engine.mjs", root)), `--local-command=${injected}`],
-      {
-        encoding: "utf8",
-        env: {
-          ...process.env,
-          npm_config_user_agent: "pnpm/10.14.0 npm/? node/v24.18.0 linux x64",
-        },
-      },
-    );
+    const result = checkEngine(`--local-command=${injected}`);
 
     expect(result.status).toBe(1);
     expect(result.stderr).toContain("Invalid local verification command.");

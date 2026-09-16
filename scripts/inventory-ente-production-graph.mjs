@@ -11,15 +11,32 @@ if (!entry) throw new Error("Production Ente SRP entry missing");
 const queue = [entry];
 const visited = new Set();
 const files = [];
-const forbidden =
-  /randomBytes|__vite-browser-external|node:buffer|\brequire\s*\(\s*[^"']|eval\(|new Function|importScripts|XMLHttpRequest|WebSocket|EventSource|fetch\(|https?:\/\/|wss?:\/\/|clientPrivateHex|expectedM1Hex|expectedM2Hex|premasterSecretHex/u;
+// Every constraint the manifest publishes names the terms that would disprove it, so the
+// emitted booleans are read off the chunks instead of asserted. A graph that gains Chrome,
+// storage, or network authority now fails the scan rather than being recorded as compliant.
+const CONSTRAINT_TERMS = {
+  noNetworkAuthority:
+    /XMLHttpRequest|WebSocket|EventSource|fetch\(|sendBeacon|https?:\/\/|wss?:\/\//u,
+  noChromeAuthority: /\bchrome\b|\bbrowser\s*\.\s*runtime\b|webextension/u,
+  noStorageAuthority: /\bstorage\b|localStorage|sessionStorage|indexedDB|\bcaches\b/u,
+  noTranscriptsIncluded: /clientPrivateHex|expectedM1Hex|expectedM2Hex|premasterSecretHex/u,
+  noNodeExternals: /__vite-browser-external|\bnode:[a-z]|\brequire\s*\(\s*[^"']/u,
+  noRandomBytes: /randomBytes/u,
+  noDynamicCode: /eval\(|new Function|importScripts/u,
+};
+const scanned = Object.fromEntries(Object.keys(CONSTRAINT_TERMS).map((name) => [name, true]));
+const violations = [];
 while (queue.length > 0) {
   const name = queue.shift();
   if (!name || visited.has(name)) continue;
   visited.add(name);
   const bytes = await readFile(path.resolve(assets, name));
   const source = bytes.toString("utf8");
-  if (forbidden.test(source)) throw new Error(`Forbidden production SRP output in ${name}`);
+  for (const [constraint, term] of Object.entries(CONSTRAINT_TERMS))
+    if (term.test(source)) {
+      scanned[constraint] = false;
+      violations.push(`${constraint} in ${name}`);
+    }
   const imports = [...source.matchAll(/(?:from\s*|import\s*\()["']\.\/([^"']+\.js)["']/gu)]
     .map((match) => match[1])
     .filter((value) => names.includes(value));
@@ -50,20 +67,17 @@ for (const [name, source] of allOtherSources) {
   )
     throw new Error(`Approved auth worker crypto boundary missing from ${name}`);
 }
+// dormant: the entry is emitted but unowned. No chunk outside its own graph names the entry
+// file, so nothing in the production build can start the worker.
+const dormant = allOtherSources.every(([, source]) => !source.includes(entry));
+if (!dormant) violations.push(`dormant: ${entry} has a runtime owner`);
+if (violations.length > 0)
+  throw new Error(`Forbidden production SRP output: ${violations.sort().join(", ")}`);
 const manifest = {
   schemaVersion: 1,
   entry: `assets/${entry}`,
   files: files.sort((left, right) => left.path.localeCompare(right.path)),
-  constraints: {
-    dormant: true,
-    noNetworkAuthority: true,
-    noChromeAuthority: true,
-    noStorageAuthority: true,
-    noTranscriptsIncluded: true,
-    noNodeExternals: true,
-    noRandomBytes: true,
-    noDynamicCode: true,
-  },
+  constraints: { dormant, ...scanned },
 };
 await writeFile(
   path.resolve(dist, ".ente-srp-production-graph.json"),
