@@ -71,6 +71,13 @@ export function VaultAccess({
   const [password, setPassword] = useState("");
   const [confirmation, setConfirmation] = useState("");
   const [weakAllowed, setWeakAllowed] = useState(false);
+
+  // Whatever locked the vault -- this page, another page, or the background on its timer or
+  // when the screen locked -- the page stops holding judgements about the vault's passwords.
+  // Placing this on the transition covers the pushed states that no click passes through.
+  useEffect(() => {
+    if (state === "locked" || state === "unconfigured") clearStrengthCache();
+  }, [state]);
   const [error, setError] = useState("");
   const [working, setWorking] = useState(false);
   const [settings, setSettings] = useState<VaultLockSettings>({
@@ -328,7 +335,6 @@ export function VaultAccess({
       if (isCommittedLocked(response)) {
         onUnlockedChange?.(false);
         setState("locked");
-        clearStrengthCache();
         setPinAvailable(false);
         setError(
           "The password was changed, but the vault is locked. Unlock with the new password.",
@@ -493,7 +499,6 @@ export function VaultAccess({
           setPassword("");
           setConfirmation("");
           setState("locked");
-          clearStrengthCache();
           setError("The vault change was saved, but the vault is locked. Unlock again.");
         } else {
           setError(safeError(response));
@@ -545,7 +550,6 @@ export function VaultAccess({
               if (candidate?.kind === "vault.ok" && candidate.state === "locked") {
                 onUnlockedChange?.(false);
                 setState("locked");
-                clearStrengthCache();
               } else setError("Could not lock the vault. Try again.");
             },
             () => setError("Could not lock the vault. Try again."),

@@ -4,6 +4,23 @@ What changed in each release of the ShardPass extension. Versions are plain `2.x
 for features, a patch for fixes. The manifest version in `apps/extension/src/manifest.ts` is
 the number the browser reports on the About page.
 
+## 2.7.7
+
+- **A vault that could not be opened.** Chrome reports some machines as screen-locked the
+  whole time -- remote sessions and some Linux desktops among them -- and with "lock when the
+  screen locks" on, that event landed on the unlock the person was in the middle of: it threw
+  away the challenge just issued, and the derived key came back to nothing. Every attempt
+  failed with "That secure request expired. Try again.", including the first one, so the vault
+  could never be created either. A lock that fires on its own -- the inactivity alarm, the
+  screen lock, the last page closing -- now passes over a vault that holds no key. Asking for
+  a lock by the shortcut or the button still throws everything away, as it did.
+- Seven more reads decrypted every record a second time after the load had already decrypted
+  them: backup export, the backup preview and restore, and the Ente one-time-code writes.
+- `pnpm package` can be run twice: it replaces its own output for that version instead of
+  stopping at `ARCHIVE_OUTPUT_EXISTS`.
+- The strength cache is emptied on every transition into a locked vault, including a lock that
+  came from the background, rather than only the three a click passes through.
+
 ## 2.7.6
 
 - Every read of the vault decrypted each record twice: authenticating a record does the whole

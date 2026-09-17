@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { readFile, rm, stat } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -20,6 +20,12 @@ async function main() {
   const candidate = await snapshotCandidate(dist);
   const { version } = candidate.identity;
   const output = path.join(projectRoot, "release", `shardpass-${version}.zip`);
+  // The archiver refuses to write over an existing file, which is right for the release
+  // evidence it was built for and wrong here: packaging the same version again after a
+  // rebuild is the ordinary case. The previous package is a derived artifact of this same
+  // version, so it is replaced, and the replacement is reported.
+  const replaced = (await stat(output).catch(() => null)) !== null;
+  if (replaced) await rm(output);
   const archive = await createDeterministicArchive(candidate, output, { flat: true });
   // Unpacks the file just written and rebuilds the candidate identity from it: proof that what
   // is about to be uploaded is the build that was verified, not a neighbouring directory.
@@ -27,7 +33,7 @@ async function main() {
   const manifest = JSON.parse(await readFile(path.join(dist, "manifest.json"), "utf8"));
   process.stdout.write(
     [
-      `Packaged ShardPass ${version} (${manifest.name})`,
+      `Packaged ShardPass ${version} (${manifest.name})${replaced ? ", replacing the previous package for this version" : ""}`,
       `  ${path.relative(projectRoot, archive.path)}`,
       `  ${archive.entryCount} entries, ${(archive.size / 1024).toFixed(1)} KiB`,
       `  sha256 ${archive.sha256}`,

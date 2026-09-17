@@ -484,6 +484,32 @@ describe("SessionService", () => {
     });
   });
 
+  it("lets an automatic lock pass over a vault that is already locked", async () => {
+    const { service } = fixture();
+    const challenge = await service.createChallenge("setup", popupBinding);
+
+    // What the inactivity alarm and the screen-lock event call. Chrome reports some machines
+    // as screen-locked the whole time; when this cleared the challenge, the unlock underway
+    // could never finish.
+    await service.lockIfUnlocked();
+
+    await expect(
+      service.setup(challenge.challengeId, kek.slice(), popupBinding),
+    ).resolves.toMatchObject({ state: "unlocked" });
+  });
+
+  it("still throws away outstanding challenges when an unlocked vault locks automatically", async () => {
+    const { service } = fixture();
+    await setup(service);
+    const challenge = await service.createChallenge("unlock", popupBinding);
+
+    await service.lockIfUnlocked();
+
+    await expect(
+      service.unlock(challenge.challengeId, kek.slice(), popupBinding),
+    ).rejects.toMatchObject({ code: "CHALLENGE_INVALID" });
+  });
+
   it("persists throttling across service instances without revealing vault contents", async () => {
     const values = fixture();
     await setup(values.service);

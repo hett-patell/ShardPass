@@ -101,7 +101,8 @@ export function installBackground(
     isoNow: () => new Date().toISOString(),
     nextId: () => crypto.randomUUID(),
   });
-  let lockTransition = () => sessions.lock();
+  // The automatic triggers: an alarm or a screen lock must not abort an unlock in progress.
+  let lockTransition = () => sessions.lockIfUnlocked();
   const settings = new SettingsService(platform.localStorage, platform, () => lockTransition(), {
     activityStore: platform.sessionStorage,
   });
@@ -353,7 +354,13 @@ export function installBackground(
     }
   })();
 
-  const lockAndPublish = async () => {
+  /**
+   * `automatic` is the inactivity alarm, the screen-lock event and the last page closing --
+   * things that fire on their own. When the vault already holds no key they must not abort
+   * the unlock someone is in the middle of; see `SessionService.lockIfUnlocked`. A person
+   * asking for a lock, by the shortcut or the button, always gets the full one.
+   */
+  const lockAndPublish = async (trigger: "automatic" | "explicit" = "explicit") => {
     await ready;
     if (disposed || readyFailed) return;
     enteUnlocked = false;
@@ -361,14 +368,14 @@ export function installBackground(
     enteService.lock();
     repromptGrants.clear();
     runtimeOwner?.clearSessionHandoffs();
-    await sessions.lock();
+    await (trigger === "automatic" ? sessions.lockIfUnlocked() : sessions.lock());
     await settings.cancelAutoLock();
     publisher.publish();
   };
-  lockTransition = lockAndPublish;
+  lockTransition = () => lockAndPublish("automatic");
   // "Lock when ShardPass closes": the last popup or vault page went away a moment ago.
   const disposePagesClosed = platform.onVaultPagesClosed?.(() => {
-    if (settings.snapshot().lockWhenClosed === true) void lockAndPublish();
+    if (settings.snapshot().lockWhenClosed === true) void lockAndPublish("automatic");
   });
 
   const awaitReady = async (): Promise<boolean> => {
@@ -376,7 +383,7 @@ export function installBackground(
     return !disposed && !readyFailed;
   };
 
-  const disposeAlarm = platform.onAutoLock(() => void lockAndPublish());
+  const disposeAlarm = platform.onAutoLock(() => void lockAndPublish("automatic"));
   const fillCommand = createFillCommand({
     activeTab: () => platform.activeTab?.() ?? Promise.resolve(null),
     suggestionsFor: (pageUrl) => loginFill.suggestionsForPage(pageUrl),
@@ -393,7 +400,7 @@ export function installBackground(
   });
   // The keyboard commands: lock everything now, or fill the page's one login, from anywhere.
   const disposeCommands = platform.onCommand?.((name) => {
-    if (name === "lock-vault") void lockAndPublish();
+    if (name === "lock-vault") void lockAndPublish("explicit");
     if (name === "fill-login") void fillCommand.run(null);
   });
   void platform.installContextMenu?.([

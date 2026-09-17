@@ -307,13 +307,8 @@ export class VaultRepository {
       // records of every other kind are carried through untouched (not decrypted,
       // not re-encrypted, and never journaled as deleted).
       const otherRecords = loaded.records.filter((record) => record.kind !== "otp");
-      const currentItems = (
-        await Promise.all(
-          loaded.records
-            .filter((record) => record.kind === "otp")
-            .map((record) => decryptVaultRecord(record, context.dek)),
-        )
-      ).filter(isOtpItem);
+      // Loading the generation decrypted every record already; the items are the same ones.
+      const currentItems = loaded.items.filter(isOtpItem);
       const current = new Map(currentItems.map((item) => [item.id, item]));
       const requestedIds = new Set<string>();
       const now = context.clock.now();
@@ -412,13 +407,7 @@ export class VaultRepository {
   ): Promise<void> {
     return this.serialize(async () => {
       const loaded = await this.load(context);
-      const currentOtpItems = (
-        await Promise.all(
-          loaded.records
-            .filter((record) => record.kind === "otp")
-            .map((record) => decryptVaultRecord(record, context.dek)),
-        )
-      ).filter(isOtpItem);
+      const currentOtpItems = loaded.items.filter(isOtpItem);
       if (canonicalJson(currentOtpItems) !== canonicalJson(candidates)) conflict();
       const metadataPlaintext = await Promise.all(
         loaded.metadata
@@ -590,9 +579,8 @@ export class VaultRepository {
 
   async readPortableState(context: VaultCryptoContext): Promise<PortableVaultState> {
     const loaded = await this.load(context);
-    const items = await Promise.all(
-      loaded.records.map((record) => decryptVaultRecord(record, context.dek)),
-    );
+    // The load already decrypted every record to authenticate it.
+    const items = loaded.items;
     // The portable history is OTP-only: entries for other item kinds must not leak into
     // the exported journal (its consumers only understand one-time codes), so the journal
     // is filtered to OTP-kind entries before deriving tombstones.
@@ -650,9 +638,7 @@ export class VaultRepository {
   ): Promise<PortableImportPreview> {
     validatePortableDescriptor(descriptor);
     const loaded = await this.load(context);
-    const existing = await Promise.all(
-      loaded.records.map((record) => decryptVaultRecord(record, context.dek)),
-    );
+    const existing = loaded.items;
     const currentJournal = await Promise.all(
       loaded.journal.map((record) => this.changes.decrypt(record, context.dek)),
     );
@@ -685,9 +671,7 @@ export class VaultRepository {
     return this.serialize(async () => {
       validatePortableDescriptor(descriptor);
       const loaded = await this.load(context);
-      const existing = await Promise.all(
-        loaded.records.map((record) => decryptVaultRecord(record, context.dek)),
-      );
+      const existing = loaded.items;
       const currentJournal = await Promise.all(
         loaded.journal.map((record) => this.changes.decrypt(record, context.dek)),
       );
@@ -865,9 +849,7 @@ export class VaultRepository {
   ): Promise<Readonly<{ statuses: readonly PortableOtpImportStatus[] }>> {
     validatePortableCandidates(candidates);
     const loaded = await this.load(context);
-    const existing = await Promise.all(
-      loaded.records.map((record) => decryptVaultRecord(record, context.dek)),
-    );
+    const existing = loaded.items;
     return Object.freeze({
       statuses: Object.freeze(classifyPortableItems(existing, candidates).statuses),
     });
@@ -882,9 +864,7 @@ export class VaultRepository {
       validatePortableCandidates(candidates);
       if (candidates.length !== expectedStatuses.length) throw new StorageError("VAULT_INVALID");
       const loaded = await this.load(context);
-      const existing = await Promise.all(
-        loaded.records.map((record) => decryptVaultRecord(record, context.dek)),
-      );
+      const existing = loaded.items;
       const classified = classifyPortableItems(existing, candidates);
       const duplicate = classified.statuses.filter((status) => status === "duplicate").length;
       const conflictCount = classified.statuses.filter((status) => status === "conflict").length;
@@ -1004,9 +984,7 @@ export class VaultRepository {
       )
         throw new StorageError("VAULT_INVALID");
       const loaded = await this.load(context);
-      const existing = await Promise.all(
-        loaded.records.map((record) => decryptVaultRecord(record, context.dek)),
-      );
+      const existing = loaded.items;
       const acceptedCandidates: OtpImportCandidate[] = [];
       const statuses = candidates.map((candidate) => {
         validateImportCandidate(candidate);

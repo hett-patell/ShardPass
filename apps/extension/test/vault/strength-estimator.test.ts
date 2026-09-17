@@ -114,3 +114,42 @@ describe("judgements already made", () => {
     expect(asked).toBe(3);
   });
 });
+
+describe("judgements and the lock", () => {
+  it("forgets them when the vault locks from anywhere, including the background", async () => {
+    let asked = 0;
+    const worker = {
+      onmessage: null as ((event: MessageEvent<unknown>) => void) | null,
+      onerror: null,
+      postMessage(message: unknown) {
+        asked += 1;
+        const { id } = message as { id: number };
+        queueMicrotask(() =>
+          this.onmessage?.({
+            data: {
+              version: 1,
+              kind: "estimate",
+              id,
+              score: 1,
+              guessesLog10: 6,
+              crackTime: "minutes",
+              warning: "",
+              suggestions: [],
+            },
+          } as MessageEvent<unknown>),
+        );
+      },
+      terminate() {},
+    };
+    const estimator = createStrengthEstimator(() => worker as unknown as Worker);
+    await estimator.estimate("held-password", []);
+    await estimator.estimate("held-password", []);
+    expect(asked).toBe(1);
+
+    // VaultAccess calls this on every transition into a locked state, which is what an
+    // auto-lock or a lock from another page arrives as.
+    clearStrengthCache();
+    await estimator.estimate("held-password", []);
+    expect(asked).toBe(2);
+  });
+});

@@ -101,6 +101,14 @@ Baseline at 2.3.0: typecheck clean, lint clean after one test fix, full suite gr
 - [ ] E9 low (still open, narrow) · `login.fillFromPopup` first-answer race across frames (narrow).
 - [x] E10 low · dead `useOtpList.ts`; stale scan-build/manifest-test comments; GeneratorScreen's deferred settings fetch overwrites what was typed and requests a username per keystroke.
 
+## 2026-09-17 · Audit of the day's own changes (2.7.7)
+
+- [x] **Found while auditing, not introduced by it: the vault could not be opened at all on a machine Chrome reports as screen-locked.** `chrome.idle.queryState` returns "locked" on this very machine. With the default "lock when the screen locks", that event calls the full lock, and a lock clears every outstanding challenge and bumps the epoch -- which is precisely what the unlock in flight was relying on. Setup and unlock both died with "That secure request expired. Try again.", reproducibly, 3 times out of 3. The automatic triggers (alarm, screen lock, last page closed) now call `lockIfUnlocked`, which passes over a vault holding no key; the shortcut and the button still take the full lock. Both sides are pinned by tests. Verified: creating a vault and unlocking it both work on this machine now.
+- [x] Introduced by me and fixed: the strength cache was cleared at three click paths, so a lock that arrived from the background -- the auto-lock, or another page locking -- left every password's judgement in the page's memory. It is cleared on the state transition now, which covers every way the vault can lock, with a test.
+- [x] Incomplete fix from 2.7.6, completed: seven further reads still decrypted every record a second time (backup export, portable preview and import, the two Ente one-time-code writes). All now use the items the load produced.
+- [x] Shipped rough edge from 2.7.3: `pnpm package` failed on a second run for the same version with a raw `ARCHIVE_OUTPUT_EXISTS`. It replaces its own output and says so.
+- [x] Checked and found sound: journal sequence and nonce-uniqueness checks still run after the journal change; `get` still verifies the record it returns; the remaining single-record decrypts on update paths are index-aligned and left alone rather than risk an aliasing bug for 0.05 ms.
+
 ## 2026-09-17 · The read path did everything twice (2.7.6)
 
 - [x] Measured the parts first, per 1,000 records: AEAD 43 ms, zod parse 25 ms, canonical hash 20 ms, JSON.parse plus canonical re-check 6 ms.

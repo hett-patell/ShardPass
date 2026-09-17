@@ -1069,6 +1069,21 @@ export class SessionService {
     return this.mutationMutex.run(() => this.clearLockedState());
   }
 
+  /**
+   * The lock behind the inactivity alarm and the screen-lock event. A person pressing "Lock
+   * vault" means "throw everything away, now", and `lock` does that. These fire on their own,
+   * and when the vault holds no key there is nothing for them to protect -- while the epoch
+   * bump and the cleared challenges would abort an unlock in progress. Chrome reports some
+   * machines as screen-locked continuously (remote sessions among them), and on those this
+   * was the difference between a vault that opens and one that answers every attempt with
+   * "That secure request expired".
+   */
+  lockIfUnlocked(): Promise<void> {
+    if (this.dek === null && !this.lockPending)
+      return this.mutationMutex.run(() => this.clearLockedState());
+    return this.lock();
+  }
+
   /** Set the moment a lock begins, cleared once the key is gone: the gap in between refuses. */
   private lockPending = false;
 
