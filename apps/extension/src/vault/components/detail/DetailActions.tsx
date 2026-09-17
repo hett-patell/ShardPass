@@ -84,10 +84,8 @@ export function DetailActions({
     <>
       <OrganizeControls item={item} folders={folders} platform={platform} onUpdate={onUpdate} />
       <div className={styles.actions}>
-        <Button variant="secondary" onClick={onEdit}>
-          Edit
-        </Button>
-        <Button variant="destructive" onClick={() => setConfirming(true)}>
+        <Button onClick={onEdit}>Edit</Button>
+        <Button variant="ghost" className={styles.delete} onClick={() => setConfirming(true)}>
           Delete
         </Button>
         {confirming ? (

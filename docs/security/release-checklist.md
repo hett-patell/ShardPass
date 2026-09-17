@@ -31,7 +31,19 @@ Use this checklist for the implemented current Project 1 candidate. `pnpm verify
 - [ ] Preserve the legacy ShardPass 1.2.1 artifact (`manifest.json`, `assets/`, `icons/`, `service-worker-loader.js`, `src/popup/index.html`) byte-for-byte. Do not import it as source or package it into the clean build.
 - [ ] Remove stale `dist/`, perform a fresh build, and run source plus built-output CSP/manifest/executable-policy checks. Never approve a stale artifact.
 - [ ] Preserve the exact candidate output, lockfile, command output, tool/runtime/browser versions, security/audit results, reviewed browser screenshots, and hashes/packaging evidence when Task 12 supplies them. Do not rebuild silently after review.
-- [ ] Confirm `dist/manifest.json` has exactly `storage`, `alarms`, and `idle`, no host/optional-host/external message grants, the exact self-only script/object/connect/image/media/font/style CSP, and an inert top-frame `<all_urls>` content entry. The approved top-level shape permits the source fields plus CRXJS-generated `web_accessible_resources` only for that reviewed inert content asset; `homepage_url` is permitted harmless metadata if later supplied. Nested action/background/content/CSP/generated-resource keys are strict. Executable page fields such as `options_ui`, `devtools_page`, `side_panel`, `chrome_url_overrides`, and `sandbox` are not approved.
+- [ ] Confirm `dist/manifest.json` has exactly `storage`, `unlimitedStorage`, `alarms`, `idle`, `activeTab`, `contextMenus`, and `favicon`, no optional-host or external message grants, the exact self-only script/object/connect/image/media/font/style CSP, and the reviewed content entries. The approved top-level shape permits the source fields plus CRXJS-generated `web_accessible_resources` only for that reviewed inert content asset; `homepage_url` and `icons` are inert metadata, and the scanner checks that every declared icon is a packaged `.png` that exists in the build. Nested action/background/content/CSP/generated-resource keys are strict, with `default_icon` the only addition to `action`. Executable page fields such as `options_ui`, `devtools_page`, `side_panel`, `chrome_url_overrides`, and `sandbox` are not approved.
+
+## Store listing
+
+- [ ] `icons` and `action.default_icon` declare the packaged 16/32/48/128 PNGs, and the toolbar
+      button shows the mark rather than a generic puzzle piece in a real profile.
+- [ ] `description` reads as something a person would decide on, not an internal label, and fits
+      the 132-character store limit.
+- [ ] `homepage_url` resolves, and the listing's privacy-policy link points at a published copy of
+      `docs/privacy-policy.md`.
+- [ ] The listing's permission justifications match the reasons recorded in `manifest.ts`; a
+      permission with no user-visible feature behind it is removed rather than justified.
+- [ ] `CHANGELOG.md` names this version and what changed in it.
 
 ## Automated checks
 
@@ -73,7 +85,7 @@ Use this checklist for the implemented current Project 1 candidate. `pnpm verify
 - [ ] Run `pnpm verify:project1:task11` under Node `>=22.14.0 <23` and pnpm 10.14.0. `pnpm verify:project1:task11:local-node24` is development-only and does not clear the Node 22 blocker.
 - [ ] Execute the packaged candidate in actual Chrome/Chromium 110. Later Chromium and static `chrome110` compatibility evidence do not clear the minimum-browser blocker.
 - [ ] Confirm the exact 17 preserved legacy artifacts remain regular non-symlink files at pinned hashes and remain outside `dist/`.
-- [ ] Confirm content injection is the exact reviewed `<all_urls>`, `document_idle`, `all_frames: true` contract, permissions remain exactly `storage`, `alarms`, and `idle`, CSP is unchanged, and no host/optional-host/network/clipboard/camera/downloads/context-menu/offscreen/external authority was added.
+- [ ] Confirm content injection is the exact reviewed `<all_urls>`, `document_idle`, `all_frames: true` contract plus the single `document_start` MAIN-world passkey script, permissions remain the seven listed above, CSP is unchanged, and no optional-host, network, camera, downloads, offscreen, or external authority was added.
 - [ ] Verify bounded explicit/heuristic discovery and false positives across top, same-origin, and cross-origin frames; explicit inline activation; metadata-only favorite-first suggestions/search; and TOTP, Steam, and exactly-once HOTP through the packaged UI.
 - [ ] Verify exact sender/origin/document/field/item/session binding and failure behavior for lock, expiry, cancellation, navigation, frame/document or element replacement, worker restart, duplicate confirmation, failure, timeout, and uncertain HOTP receipt reconciliation.
 - [ ] Verify native React-controlled input compatibility, no automatic open/selection/submit/Enter/page click/focus advance/retry, encrypted persistence, and page observability disclosure.
@@ -104,7 +116,7 @@ Use this checklist for the implemented current Project 1 candidate. `pnpm verify
 - [ ] Verify activity scheduling only after successful unlocked operations; explicit/off/alarm/idle lock paths cancel and broadcast.
 - [ ] Verify strict saturating throttle against maximum-safe counts, NaN/Infinity/malformed state, and backward clocks.
 - [ ] Verify multi-page state synchronization, disconnect/restart conservative UI, full-vault security controls, successful rotation, and old-password rejection.
-- [ ] Historical Task 5 check: permissions remain exactly `storage`, `alarms`, and `idle`; no `offscreen`. Current Project 1 OTP/copy/fill/Ente authority must satisfy the later Task 11–13 checks; password autofill remains outside Project 1.
+- [ ] Historical Task 5 check, superseded: it required exactly `storage`, `alarms`, and `idle` and no `offscreen`. The `offscreen` bar still holds; the permission set has since grown to the seven above, each with a stated reason in `apps/extension/src/manifest.ts` and `docs/architecture/permissions.md`. Current OTP/copy/fill/Ente authority must satisfy the later Task 11-13 checks.
 
 ## Project 1 Task 5 round-two checks
 

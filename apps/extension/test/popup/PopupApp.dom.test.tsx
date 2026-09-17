@@ -221,6 +221,10 @@ describe("PopupApp home", () => {
     expect(screen.getByRole("button", { name: "Lock vault" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Open vault" })).toBeVisible();
     expect(screen.queryByText("Suggestions")).not.toBeInTheDocument();
+    // The fixture holds a login, a code and a note: the kinds it does not hold say nothing,
+    // rather than filling the popup with rows reading 0.
+    expect(screen.queryByRole("button", { name: /Cards/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Identities/ })).not.toBeInTheDocument();
     await expectNoSeriousAxeViolations(container);
   });
 

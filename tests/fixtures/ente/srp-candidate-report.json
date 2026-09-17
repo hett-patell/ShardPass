@@ -164,7 +164,7 @@
       "disposition": "derived-pass:a789f6c7b0a1bfe6e87408a5a199490d523d075ad822dcc0ffb68add2d9aac92"
     }
   },
-  "disposition": "derived-pass:3a951fa270548a34f3f45a5c1a9dce2c79a92375d176796ec0c18a8a22d6a08f",
+  "disposition": "derived-pass:eebb92ee5f318d82419ea266efc75b0f47ce45e28f28aed305b5351cdbd2a51a",
   "evidence": {
     "reference": {
       "path": "scripts/replay-ente-srp-reference.mjs",
@@ -188,7 +188,7 @@
     },
     "outputScanner": {
       "path": "scripts/scan-build.mjs",
-      "sha256": "5dd0d49de5a0703271b3dd24d056f3d099a0c965e3305e432655652f9fc48131"
+      "sha256": "6fedc4a3dc0bfc6b1c51d2f288d66ea317dae2ee0a2de49b34105b1b9d7eecf4"
     }
   }
 }

@@ -296,6 +296,10 @@ export function HomeScreen({
               <ul className={styles.list}>
                 {CATEGORIES.map(({ id, label, icon: Icon }) => {
                   const count = status === "ready" ? itemsInCategory(items, id).length : null;
+                  // A kind nobody has saved is a row that says so and then takes the place of
+                  // one that could have named something. "All items" stays whatever it holds,
+                  // as the way back to the whole vault.
+                  if (count === 0 && id !== "all") return null;
                   return (
                     <li key={id}>
                       <button

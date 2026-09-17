@@ -46,6 +46,9 @@ const allowedManifestKeys = new Set([
   "description",
   // Harmless optional metadata; it is not an executable root.
   "homepage_url",
+  // Toolbar and store artwork. Checked below: every path is a packaged PNG that exists in the
+  // build, never a remote URL and never a file that could be executed.
+  "icons",
   "host_permissions",
   "manifest_version",
   "minimum_chrome_version",
@@ -66,7 +69,7 @@ const executableManifestFields = new Set([
   "newtab",
 ]);
 const nestedManifestKeys = {
-  action: new Set(["default_popup", "default_title"]),
+  action: new Set(["default_icon", "default_popup", "default_title"]),
   background: new Set(["service_worker", "type"]),
   content_script: new Set(["all_frames", "js", "matches", "run_at", "world"]),
   content_security_policy: new Set(["extension_pages"]),
@@ -502,6 +505,31 @@ export async function scanBuild(directory, options = {}) {
         if (!allowed.has(key)) add(violations, dist, manifestFile, "unapproved-manifest-key");
       }
     };
+    for (const [field, declared] of [
+      ["icons", manifest.icons],
+      ["action.default_icon", manifest.action?.default_icon],
+    ]) {
+      if (declared === undefined) continue;
+      if (typeof declared !== "object" || Array.isArray(declared)) {
+        add(violations, dist, manifestFile, `manifest-icon-shape:${field}`);
+        continue;
+      }
+      for (const reference of Object.values(declared)) {
+        if (
+          typeof reference !== "string" ||
+          !reference.endsWith(".png") ||
+          reference.includes("..")
+        ) {
+          add(violations, dist, manifestFile, `manifest-icon-reference:${field}`);
+          continue;
+        }
+        const packaged = await access(path.join(dist, reference)).then(
+          () => true,
+          () => false,
+        );
+        if (!packaged) add(violations, dist, manifestFile, `manifest-icon-missing:${field}`);
+      }
+    }
     checkNestedKeys(manifest.action, nestedManifestKeys.action);
     checkNestedKeys(manifest.background, nestedManifestKeys.background);
     checkNestedKeys(manifest.content_security_policy, nestedManifestKeys.content_security_policy);

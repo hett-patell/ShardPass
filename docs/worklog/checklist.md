@@ -101,6 +101,20 @@ Baseline at 2.3.0: typecheck clean, lint clean after one test fix, full suite gr
 - [ ] E9 low (still open, narrow) · `login.fillFromPopup` first-answer race across frames (narrow).
 - [x] E10 low · dead `useOtpList.ts`; stale scan-build/manifest-test comments; GeneratorScreen's deferred settings fetch overwrites what was typed and requests a username per keystroke.
 
+## 2026-09-17 · The item record, the popup's categories, and the store blockers (2.7.2)
+
+- [x] The item detail stacked five all-caps labels over five short values, so a login took twice the height it needed and the name of a thing was set louder than the thing. Label sits beside value now, one row per fact, with a hairline between rows and the folder control on the same grid. One CSS change covers every item kind, since the markup was already uniform.
+- [x] A note's body still spans the full width: it is the item, not a value beside a label.
+- [x] Edit is the primary action on an item; Delete is a quiet danger button pushed to the far end, rather than standing beside Edit as an equal.
+- [x] The popup listed every category including the five reading 0. It lists what the vault holds, with All items always there as the way back.
+- [x] **Icons, the store blocker.** The manifest had no `icons` and no `action.default_icon`, so Brave and Chrome showed a puzzle piece and no listing was possible. Four PNGs rendered from the shipped mark (16/32/48/128) ship in `apps/extension/public/icons`, the manifest declares them for both the toolbar and the listing, and the build scanner now checks every declared icon is a packaged `.png` present in the build. Confirmed on chrome://extensions in a real profile.
+- [x] `homepage_url` points at the repository, and the description says what ShardPass does instead of "Local-first password manager foundation."
+- [x] The manifest key allow-lists in `tests/security/manifest.test.ts`, the built-manifest test and `scripts/scan-build.mjs` were extended deliberately rather than loosened: the new keys are pinned to exact values, and `default_icon` is the only addition permitted inside `action`.
+- [x] `docs/privacy-policy.md` written from the actual data flows: what is stored on the device, the three features that can reach the network (HIBP by hash prefix, Ente for OTP records, DuckDuckGo for aliases), what each sends, and the permission-by-permission reasons.
+- [x] `CHANGELOG.md` written from the version history.
+- [x] The release checklist demanded a permission set from three releases ago (`storage`, `alarms`, `idle` only). Corrected to the seven that ship, with the superseded Task 5 line marked as such, and a store-listing section added.
+- [x] Re-pinned the Ente SRP evidence and regenerated the sodium vectors after the scanner change, as that gate requires. All gates green.
+
 ## 2026-09-16 · The dashboard, health and the generator, redesigned (2.7.0)
 
 - [x] The dashboard reported counts where it should have said what to do. Seven identical tiles, six of them reading 0; the same five findings printed twice, once as a run-on line under the gauge and once as a list beside it; "passkeys available" filed as a defect; and every row opening the same undifferentiated health page.

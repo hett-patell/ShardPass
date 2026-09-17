@@ -4,10 +4,23 @@ export default defineManifest({
   manifest_version: 3,
   name: "ShardPass",
   short_name: "ShardPass",
-  version: "2.7.1",
+  version: "2.7.2",
   // 111: content scripts may run in the page's main world, which passkey support needs.
   minimum_chrome_version: "111",
-  description: "Local-first password manager foundation.",
+  // What the store listing and the extensions page show. Store descriptions are capped at 132
+  // characters, and this is what someone reads before deciding to install.
+  description:
+    "Keeps your passwords, passkeys and one-time codes on this device, and fills them as you browse. No account, no server.",
+  homepage_url: "https://github.com/hett-patell/ShardPass",
+  // The toolbar, the extensions page and the store listing all draw from these. Rendered from
+  // the same mark the interface uses, vermillion with the letterform cut out, so the shape
+  // holds on a light or a dark toolbar.
+  icons: {
+    16: "icons/shardpass-16.png",
+    32: "icons/shardpass-32.png",
+    48: "icons/shardpass-48.png",
+    128: "icons/shardpass-128.png",
+  },
   // storage persists the encrypted vault and non-secret lock settings. alarms enforces
   // inactivity locking, and idle receives the operating-system locked state. No offscreen
   // permission is needed: trusted popup/vault pages run Argon2 in a dedicated local Worker.
@@ -44,6 +57,12 @@ export default defineManifest({
   action: {
     default_popup: "popup/index.html",
     default_title: "ShardPass",
+    default_icon: {
+      16: "icons/shardpass-16.png",
+      32: "icons/shardpass-32.png",
+      48: "icons/shardpass-48.png",
+      128: "icons/shardpass-128.png",
+    },
   },
   options_page: "vault/index.html",
   background: {
