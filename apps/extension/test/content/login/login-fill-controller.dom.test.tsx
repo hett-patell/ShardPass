@@ -902,6 +902,38 @@ describe("Login fill controller", () => {
     expect(suggestionRequests(candidate)).toBe(1);
   });
 
+  it("makes a frame that cannot fill wait before answering the popup", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    captureClosedRoots();
+    const form = loginForm();
+    Object.defineProperty(form.password, "getClientRects", { value: () => [{}] });
+    // The form is here and fillable, but the background refuses: this frame holds no such login. A tab hands the popup's request
+    // to every frame and keeps the first answer, so this one must not beat the frame that is
+    // filling -- that is how a fill that worked came back as "no form on this page".
+    const candidate = platform((request) =>
+      // Anything but a release: the background did not hand this frame the login.
+      request.kind === "login.fillSelect"
+        ? { version: 1, kind: "login.fillAck", ok: true }
+        : undefined,
+    );
+    start(candidate);
+    const answer = candidate.runtime.handler?.(
+      { version: 1, kind: "login.fillFromPopup", itemId: account.itemId, expectedRevision: 1 },
+      { extensionId: "extension-test" },
+    );
+    await flush();
+
+    let settled = false;
+    void answer?.then(() => (settled = true));
+    await flush();
+    expect(settled).toBe(false);
+
+    act(() => {
+      vi.advanceTimersByTime(1_000);
+    });
+    await expect(answer).resolves.toMatchObject({ status: "failed" });
+  });
+
   it("fills from the popup into a rendered form only, and says no-form after a moment when every form is hidden", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     captureClosedRoots();

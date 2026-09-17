@@ -1033,15 +1033,22 @@ export function createLoginFillController(
       fieldSets.find((candidate) => candidate.passwordField !== null && isRendered(candidate)) ??
       fieldSets.find(isRendered) ??
       null;
-    if (fieldSet === null)
-      return new Promise((resolve) =>
-        options.window.setTimeout(
-          () => resolve({ version: 1, kind: "login.fillFromPopupResult", status: "no-form" }),
-          NO_FORM_ANSWER_DELAY_MS,
-        ),
-      );
+    if (fieldSet === null) return answerLater("no-form");
     return fillFromPopup(fieldSet, request.itemId, request.expectedRevision);
   };
+
+  /**
+   * Every answer but "filled" waits a moment. A tab hands the popup's request to all of its
+   * frames and the first reply wins, so a frame with nothing to fill must not get in before
+   * the frame that is filling.
+   */
+  const answerLater = (status: "no-form" | "failed") =>
+    new Promise((resolve) =>
+      options.window.setTimeout(
+        () => resolve({ version: 1, kind: "login.fillFromPopupResult", status }),
+        NO_FORM_ANSWER_DELAY_MS,
+      ),
+    );
 
   const fillFromPopup = async (
     fieldSet: LoginFieldSet,
@@ -1055,12 +1062,10 @@ export function createLoginFillController(
         itemId,
         expectedRevision,
       });
-      if (response.kind !== "login.fillRelease")
-        return { version: 1, kind: "login.fillFromPopupResult", status: "failed" };
+      if (response.kind !== "login.fillRelease") return answerLater("failed");
       if (response.signInWith !== undefined) {
         const button = findProviderButton(options.document, response.signInWith);
-        if (button === null)
-          return { version: 1, kind: "login.fillFromPopupResult", status: "no-form" };
+        if (button === null) return answerLater("no-form");
         button.focus({ preventScroll: true });
         button.click();
         await sendConfirm(itemId, response.releaseId);
@@ -1068,7 +1073,7 @@ export function createLoginFillController(
       }
       if (!fieldsReady(fieldSet)) {
         sendCancel(itemId);
-        return { version: 1, kind: "login.fillFromPopupResult", status: "no-form" };
+        return answerLater("no-form");
       }
       fillLoginFields(fieldSet, response.username, response.password);
       invalidate(false);
@@ -1085,7 +1090,7 @@ export function createLoginFillController(
       // frame that can fill answers the popup, or nobody does and it reads "no form".
       if (errorCode(error) === "LOGIN_FILL_NOT_FOUND") return new Promise<never>(() => undefined);
       sendCancel(itemId);
-      return { version: 1, kind: "login.fillFromPopupResult", status: "failed" };
+      return answerLater("failed");
     }
   };
 

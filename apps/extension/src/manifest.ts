@@ -4,7 +4,7 @@ export default defineManifest({
   manifest_version: 3,
   name: "ShardPass",
   short_name: "ShardPass",
-  version: "2.8.0",
+  version: "2.8.1",
   // 111: content scripts may run in the page's main world, which passkey support needs.
   minimum_chrome_version: "111",
   // What the store listing and the extensions page show. Store descriptions are capped at 132

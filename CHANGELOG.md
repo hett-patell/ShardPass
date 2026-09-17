@@ -4,6 +4,14 @@ What changed in each release of the ShardPass extension. Versions are plain `2.x
 for features, a patch for fixes. The manifest version in `apps/extension/src/manifest.ts` is
 the number the browser reports on the About page.
 
+## 2.8.1
+
+- A fill from the popup is handed to every frame of the tab, and the first frame to answer is
+  the answer the popup keeps. A frame that could not fill answered at once on three of its four
+  paths, so it could beat the frame that was filling and the popup would say "no form on this
+  page" over a fill that had happened. Every answer but "filled" now waits the same moment that
+  one of those paths already did.
+
 ## 2.8.0
 
 - **The gates run on their own.** A GitHub Actions workflow runs `pnpm verify`, the Playwright

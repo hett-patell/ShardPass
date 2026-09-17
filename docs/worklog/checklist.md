@@ -98,7 +98,7 @@ Baseline at 2.3.0: typecheck clean, lint clean after one test fix, full suite gr
 - [x] E6 medium · the whole background chunk is exempt from the network-destination rule in `scan-build.mjs`.
 - [x] E7 low · context-menu fill drops `frameId`; `chrome.action.openPopup` needs Chrome 127 (min is 111) and its failure is swallowed.
 - [x] E8 low · `LiveCode.tsx` puts the live TOTP code in an `aria-label`.
-- [ ] E9 low (still open, narrow) · `login.fillFromPopup` first-answer race across frames (narrow).
+- [x] E9 · `login.fillFromPopup` first-answer race across frames, closed in 2.8.1. The tab hands the request to every frame and keeps the first answer; one of the four negative paths already waited a moment so a filling frame could answer first, and the other three did not. All of them wait now, with a test.
 - [x] E10 low · dead `useOtpList.ts`; stale scan-build/manifest-test comments; GeneratorScreen's deferred settings fetch overwrites what was typed and requests a username per keystroke.
 
 ## 2026-09-17 · Closing the gaps named in "what's lacking" (2.8.0)
