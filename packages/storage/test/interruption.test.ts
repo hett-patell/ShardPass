@@ -180,13 +180,22 @@ describe("generation interruption safety", () => {
       (current) => ({ ...current, issuer: "New" }),
       probe.crypto,
     );
-    expect(probe.storage.writeCount).toBe(6);
-    expect(probe.storage.writes.slice(-6).map((write) => write.keys[0]?.split(":").at(-1))).toEqual(
-      [itemId, "0000000000000001", "0000000000000002", "manifest", "verified", "root"],
-    );
+    // The shape of a commit: the record, the journal entries in one batched write, the
+    // manifest, the verified marker, and the root last -- activation is still a single write,
+    // which is what makes an interrupted commit leave the old generation whole.
+    expect(probe.storage.writeCount).toBe(5);
+    expect(
+      probe.storage.writes.slice(-5).map((write) => write.keys.map((key) => key.split(":").at(-1))),
+    ).toEqual([
+      [itemId],
+      ["0000000000000001", "0000000000000002"],
+      ["manifest"],
+      ["verified"],
+      ["root"],
+    ]);
 
     for (const phase of ["before", "after", "partial"] as const) {
-      for (let failAt = 1; failAt <= 6; failAt += 1) {
+      for (let failAt = 1; failAt <= 5; failAt += 1) {
         const { before } = await preparedMutation();
         const storage = new FakeStoragePort(before);
         const crypto = context(20);
@@ -210,7 +219,7 @@ describe("generation interruption safety", () => {
         const root = (await storage.get([ACTIVE_ROOT_KEY]))[ACTIVE_ROOT_KEY] as {
           activeGenerationId: string;
         };
-        if (failAt === 6 && phase !== "before") {
+        if (failAt === 5 && phase !== "before") {
           expect([
             active?.issuer,
             active?.revision,

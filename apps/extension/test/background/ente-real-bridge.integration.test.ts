@@ -930,7 +930,21 @@ describe("Task12 Phase2 real SessionService operational bridge", () => {
   it.each(["before", "after"] as const)(
     "faults %s every actual bridge stage write without exposing a partial active generation",
     async (phase) => {
-      for (let writeAt = 1; writeAt <= 7; writeAt += 1) {
+      // How many writes a commit performs, measured rather than assumed: the store batches
+      // sibling writes, and a hard-coded count silently stops faulting the write it names.
+      const probe = fixture();
+      await setup(probe.session);
+      await seed(probe, state());
+      const probeSnapshot = await probe.repository.read();
+      probe.local.resetOperationCount();
+      await probe.repository.commit(probeSnapshot.sessionEpoch, {
+        state: { ...probeSnapshot.state, cursor: 9 },
+        items: [{ localId: ids.local, projection: projection("probe") }],
+      });
+      const writesPerCommit = probe.local.writeCount;
+      expect(writesPerCommit).toBeGreaterThan(1);
+
+      for (let writeAt = 1; writeAt <= writesPerCommit; writeAt += 1) {
         const f = fixture();
         await setup(f.session);
         await seed(f, state());
@@ -952,7 +966,8 @@ describe("Task12 Phase2 real SessionService operational bridge", () => {
           f.local.writes.filter((write) => write.keys.includes(ACTIVE_ROOT_KEY)).length -
           transitions;
         expect(rootWrites).toBeLessThanOrEqual(1);
-        if (writeAt < 7 || phase === "before") expect(visible).toEqual(before);
+        // The last write is the root: it is what makes the new generation the active one.
+        if (writeAt < writesPerCommit || phase === "before") expect(visible).toEqual(before);
         else expect(visible).not.toEqual(before);
         await assertAuthenticated(f.local, visible);
       }

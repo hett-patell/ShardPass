@@ -96,7 +96,8 @@ describe("repository HOTP committer", () => {
   it("reconciles an applied-root-then-throw as committed without incrementing twice", async () => {
     const { storage, repository, crypto, service, created } = await setup();
     const reservation = await service.reserveHotp(created, binding);
-    storage.failWriteAt(storage.writeCount + 7, "after", new Error("response lost"));
+    // The root write is what activates the generation: it landed, and the answer was lost.
+    storage.failWriteToKeyEnding("root", "after", new Error("response lost"));
     await expect(
       service.commitHotpReservation(reservation.reservationId, binding),
     ).resolves.toEqual({ revision: 2, counter: 1 });
@@ -106,7 +107,8 @@ describe("repository HOTP committer", () => {
   it("maps a before-root failure with unchanged item to not-committed and retries same ID", async () => {
     const { storage, repository, crypto, service, created } = await setup();
     const reservation = await service.reserveHotp(created, binding);
-    storage.failWriteAt(storage.writeCount + 7, "before", new Error("not activated"));
+    // Failing before the root write means the generation was never activated.
+    storage.failWriteToKeyEnding("root", "before", new Error("not activated"));
     await expect(
       service.commitHotpReservation(reservation.reservationId, binding),
     ).rejects.toMatchObject({ code: "OTP_RESERVATION_STALE" });
@@ -129,7 +131,7 @@ describe("repository HOTP committer", () => {
       }
     });
     const commit = vi.spyOn(committer, "commit");
-    storage.failWriteAt(storage.writeCount + 7, "before", new Error("not activated"));
+    storage.failWriteToKeyEnding("root", "before", new Error("not activated"));
     await expect(
       service.commitHotpReservation(reservation.reservationId, binding),
     ).rejects.toMatchObject({ code: "OTP_RESERVATION_UNCERTAIN" });

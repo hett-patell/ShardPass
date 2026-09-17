@@ -201,16 +201,31 @@ export class GenerationStore {
         batch[keys.record(record.itemId)] = record;
       await storageSet(this.storage, batch);
     }
-    for (const entry of journal) {
-      await decryptAndValidateJournalRecord(entry, input.context.dek);
-      await storageSet(this.storage, { [keys.journal(entry.sequence)]: entry });
+    // Batched like the records above, and for the same reason: a vault carries up to 4,096
+    // journal entries, and a write for each meant a storage round trip for each. In a browser
+    // those are messages to another process -- a thousand of them turned a commit that costs
+    // under a second of work into three seconds of waiting.
+    for (const entry of journal) await decryptAndValidateJournalRecord(entry, input.context.dek);
+    for (let offset = 0; offset < journal.length; offset += STORAGE_BATCH_KEYS) {
+      const batch: Record<string, StorageValue> = {};
+      for (const entry of journal.slice(offset, offset + STORAGE_BATCH_KEYS))
+        batch[keys.journal(entry.sequence)] = entry;
+      await storageSet(this.storage, batch);
     }
-    for (const entry of metadata)
-      await storageSet(this.storage, { [keys.metadata(entry.name)]: entry });
+    for (let offset = 0; offset < metadata.length; offset += STORAGE_BATCH_KEYS) {
+      const batch: Record<string, StorageValue> = {};
+      for (const entry of metadata.slice(offset, offset + STORAGE_BATCH_KEYS))
+        batch[keys.metadata(entry.name)] = entry;
+      await storageSet(this.storage, batch);
+    }
     const receiptPayloads = [];
-    for (const receipt of receipts) {
+    for (const receipt of receipts)
       receiptPayloads.push(await decryptHotpReceipt(receipt, input.context.dek));
-      await storageSet(this.storage, { [keys.receipt(receipt.receiptHash)]: receipt });
+    for (let offset = 0; offset < receipts.length; offset += STORAGE_BATCH_KEYS) {
+      const batch: Record<string, StorageValue> = {};
+      for (const receipt of receipts.slice(offset, offset + STORAGE_BATCH_KEYS))
+        batch[keys.receipt(receipt.receiptHash)] = receipt;
+      await storageSet(this.storage, batch);
     }
 
     const orderedReceiptSequences = receiptPayloads

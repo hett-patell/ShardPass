@@ -4,6 +4,17 @@ What changed in each release of the ShardPass extension. Versions are plain `2.x
 for features, a patch for fixes. The manifest version in `apps/extension/src/manifest.ts` is
 the number the browser reports on the About page.
 
+## 2.8.2
+
+- Saving an item wrote to storage once per journal entry. Records were already batched; the
+  journal, which a vault keeps up to 4,096 entries of, was not -- so a commit on a 1,000-item
+  vault made 1,011 writes where 11 would do. In a browser each of those is a message to another
+  process. Saving one field went from 3.2 s to 1.45 s, and importing 1,000 logins from 19.5 s
+  to 9.9 s.
+- Two safety tests counted writes to decide where to inject a fault, so batching silently
+  stopped them faulting anything. They now name the write they mean ("the one that activates
+  the generation") or measure the commit first.
+
 ## 2.8.1
 
 - A fill from the popup is handed to every frame of the tab, and the first frame to answer is

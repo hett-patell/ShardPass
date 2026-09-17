@@ -33,6 +33,7 @@ export class FakeStoragePort implements StoragePort {
     partialCount?: number;
     writeAt?: number;
     removeAt?: number;
+    keySuffix?: string;
   } | null = null;
 
   constructor(
@@ -73,7 +74,7 @@ export class FakeStoragePort implements StoragePort {
     this.operationCount += 1;
     this.writeCount += 1;
     await this.pauseAt("set:before");
-    const failure = this.match("set");
+    const failure = this.match("set", Object.keys(values));
     if (failure?.phase === "before") throw failure.error;
     const entries = Object.entries(values);
     const applied =
@@ -103,6 +104,16 @@ export class FakeStoragePort implements StoragePort {
   failNext(operation: Operation, error: Error): void {
     this.failure = { operation, error, phase: "before" };
   }
+  /**
+   * Fails the write that touches a key ending in `suffix` -- "root", "manifest", "verified".
+   * A test that wants "the write that activates the generation" says so, instead of counting
+   * writes: the count changes whenever the store batches differently, and a stale count
+   * silently stops injecting the failure the test was written to inject.
+   */
+  failWriteToKeyEnding(suffix: string, phase: FailurePhase, error: Error): void {
+    this.failure = { keySuffix: suffix, phase, error };
+  }
+
   failWriteAt(writeAt: number, phase: FailurePhase, error: Error, partialCount?: number): void {
     this.failure = {
       writeAt,
@@ -149,13 +160,15 @@ export class FakeStoragePort implements StoragePort {
     this.pause = null;
     await pause.callback();
   }
-  private match(operation: Operation) {
+  private match(operation: Operation, keys: readonly string[] = []) {
     const failure = this.failure;
+    const suffix = failure?.keySuffix;
     if (
       failure !== null &&
       (failure.at === this.operationCount ||
         failure.operation === operation ||
         (operation === "set" && failure.writeAt === this.writeCount) ||
+        (operation === "set" && suffix !== undefined && keys.some((key) => key.endsWith(suffix))) ||
         (operation === "remove" && failure.removeAt === this.removeCount))
     ) {
       this.failure = null;

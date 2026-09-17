@@ -101,6 +101,13 @@ Baseline at 2.3.0: typecheck clean, lint clean after one test fix, full suite gr
 - [x] E9 · `login.fillFromPopup` first-answer race across frames, closed in 2.8.1. The tab hands the request to every frame and keeps the first answer; one of the four negative paths already waited a moment so a filling frame could answer first, and the other three did not. All of them wait now, with a test.
 - [x] E10 low · dead `useOtpList.ts`; stale scan-build/manifest-test comments; GeneratorScreen's deferred settings fetch overwrites what was typed and requests a username per keystroke.
 
+## 2026-09-17 · A commit wrote once per journal entry (2.8.2)
+
+- [x] Measured the mutation path in Node, where the storage port is in memory: one update on a 1,000-item vault costs 831 ms of our own work but **1,067 storage operations, 1,011 of them writes**. Records were batched 256 to a call; the journal was not, and a vault carries up to 4,096 entries. In a browser every one of those writes is a message to another process, which is where the browser's 3.2 s against Node's 0.83 s went.
+- [x] Journal, metadata and receipt writes are batched like the records. Storage operations per commit: 1,067 -> 67, writes 1,011 -> 11. In a real browser on a 1,000-item vault: `item.update` 3,224 ms -> 1,452 ms, import of 1,000 logins 19.5 s -> 9.9 s. `item.query` is unchanged at ~227 ms, as expected.
+- [x] The interruption-safety tests had to change, and the reason matters: they fault at every write in a commit, and two of them addressed writes by index. Batching moved the indices, so the fault stopped being injected and the tests passed while testing nothing. They now name the write they mean -- `failWriteToKeyEnding("root", ...)`, added to the fake storage port -- or measure how many writes a commit makes before looping. The property is unchanged: the root write is still last and still alone, which is what makes an interrupted commit leave the old generation whole.
+- [x] Still open and named rather than changed: staging re-verifies every record and decrypts every journal entry before writing them, which is most of the ~1.45 ms per item that remains. Whether that belt-and-braces pass is worth keeping on the write path is a decision about the format's guarantees, not a tidy-up.
+
 ## 2026-09-17 · Closing the gaps named in "what's lacking" (2.8.0)
 
 - [x] **CI exists.** `.github/workflows/verify.yml`: the gates, the browser specs and the store package, on every push, with the Playwright report kept when a spec fails. The weakest link was that every gate ran only when I remembered to run it.
