@@ -44,6 +44,8 @@ Use this checklist for the implemented current Project 1 candidate. `pnpm verify
 - [ ] The listing's permission justifications match the reasons recorded in `manifest.ts`; a
       permission with no user-visible feature behind it is removed rather than justified.
 - [ ] `CHANGELOG.md` names this version and what changed in it.
+- [ ] `pnpm package` writes `release/shardpass-<version>.zip` from the build that passed the
+      gates, with `manifest.json` at the root, and the same build packages to the same bytes.
 
 ## Automated checks
 

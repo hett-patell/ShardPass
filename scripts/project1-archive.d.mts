@@ -12,9 +12,12 @@ export type ArchiveIdentity = Readonly<{
 export function createDeterministicArchive(
   candidate: FrozenCandidate,
   output: string,
+  /** `flat` writes the files at the archive root, as a store upload requires. */
+  options?: Readonly<{ flat?: boolean }>,
 ): Promise<ArchiveIdentity>;
 export function verifyArchiveRoundTrip(
   candidate: FrozenCandidate,
   archive: ArchiveIdentity | string,
   limits?: Readonly<{ maxEntries: number; maxBytes: number }>,
+  options?: Readonly<{ flat?: boolean }>,
 ): Promise<void>;

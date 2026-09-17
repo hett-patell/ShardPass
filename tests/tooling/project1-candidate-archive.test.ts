@@ -155,6 +155,29 @@ describe("Project 1 frozen candidate and deterministic archive", () => {
       "ARCHIVE_OUTPUT_EXISTS",
     );
   });
+  it("packages a flat archive a store can take, and refuses one nested under a directory", async () => {
+    const base = await root();
+    const { value } = await candidate(base);
+    const flat = await createDeterministicArchive(value, path.join(base, "flat.zip"), {
+      flat: true,
+    });
+    const again = await createDeterministicArchive(value, path.join(base, "flat-again.zip"), {
+      flat: true,
+    });
+    // The same build packages to the same bytes, whatever writes it and whenever.
+    expect(flat.sha256).toBe(again.sha256);
+    // Chrome reads the manifest at the root of the upload: a `ShardPass-<version>/` directory
+    // in front of it, as the evidence archive has, makes the zip unusable as a listing.
+    const nested = await createDeterministicArchive(value, path.join(base, "nested.zip"));
+    expect(flat.sha256).not.toBe(nested.sha256);
+    expect(flat.size).toBeLessThan(nested.size);
+    await verifyArchiveRoundTrip(value, flat, undefined, { flat: true });
+    // The two layouts are not interchangeable, and each verifier says so.
+    await expect(verifyArchiveRoundTrip(value, flat)).rejects.toThrow("ARCHIVE_NONCANONICAL");
+    await expect(verifyArchiveRoundTrip(value, nested, undefined, { flat: true })).rejects.toThrow(
+      "ARCHIVE_NONCANONICAL",
+    );
+  });
   it("rejects non-canonical and structurally mutated archives", async () => {
     const base = await root();
     const { value } = await candidate(base);

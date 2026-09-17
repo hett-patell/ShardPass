@@ -11,3 +11,6 @@ blob-report/
 
 # Playwright MCP session output
 .playwright-mcp/
+
+# Store uploads written by `pnpm package`; rebuildable from any tagged commit.
+release/

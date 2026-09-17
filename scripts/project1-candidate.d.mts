@@ -33,3 +33,6 @@ export function buildAndFreezeCandidate(
   }>,
 ): Promise<FrozenCandidate>;
 export function assertCandidateUnchanged(candidate: FrozenCandidate): Promise<void>;
+export function snapshotCandidate(
+  distPath: string,
+): Promise<Pick<FrozenCandidate, "root" | "identity" | "files" | "snapshotSha256">>;

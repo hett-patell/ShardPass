@@ -114,6 +114,7 @@ Baseline at 2.3.0: typecheck clean, lint clean after one test fix, full suite gr
 - [x] `CHANGELOG.md` written from the version history.
 - [x] The release checklist demanded a permission set from three releases ago (`storage`, `alarms`, `idle` only). Corrected to the seven that ship, with the superseded Task 5 line marked as such, and a store-listing section added.
 - [x] Re-pinned the Ente SRP evidence and regenerated the sodium vectors after the scanner change, as that gate requires. All gates green.
+- [x] `pnpm package` produces the store upload. The release gate's own archive nests everything under `ShardPass-<version>/`, which Chrome rejects, so the archiver gained a flat mode and the round-trip verifier learned both layouts. The packager snapshots `dist` without freezing it, writes `release/shardpass-<version>.zip`, unpacks it again to prove the identity matches, and prints the sha256. Two runs of the same build give the same bytes.
 
 ## 2026-09-16 · The dashboard, health and the generator, redesigned (2.7.0)
 

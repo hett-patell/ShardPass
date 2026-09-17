@@ -4,6 +4,13 @@ What changed in each release of the ShardPass extension. Versions are plain `2.x
 for features, a patch for fixes. The manifest version in `apps/extension/src/manifest.ts` is
 the number the browser reports on the About page.
 
+## 2.7.3
+
+- `pnpm package` writes the store upload: a flat, deterministic zip of the build that passed
+  the security gate, with `manifest.json` at the root, verified by unpacking it again. The
+  release gate's own archive nests everything under `ShardPass-<version>/`, which Chrome
+  rejects.
+
 ## 2.7.2
 
 - Store readiness: the extension has icons. The toolbar button, the extensions page and a

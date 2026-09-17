@@ -101,6 +101,22 @@ export async function buildAndFreezeCandidate({ workspaceRoot, distPath, buildEv
   });
 }
 
+/**
+ * The same shape the release gate freezes, taken from a build without freezing it or asking
+ * for build evidence: enough for `createDeterministicArchive` and `assertCandidateUnchanged`,
+ * which is what packaging a store upload needs. The release gate keeps its stricter path.
+ */
+export async function snapshotCandidate(distPath) {
+  const root = path.resolve(distPath);
+  const [identity, files] = await Promise.all([computeProject1Candidate(root), treeSnapshot(root)]);
+  return Object.freeze({
+    root,
+    identity,
+    files,
+    snapshotSha256: sha256(JSON.stringify(files)),
+  });
+}
+
 export async function assertCandidateUnchanged(candidate) {
   const [identity, files] = await Promise.all([
     computeProject1Candidate(candidate.root),

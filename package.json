@@ -14,6 +14,7 @@
     }
   },
   "scripts": {
+    "package": "pnpm build:security && node scripts/package-extension.mjs",
     "build": "vite build && node scripts/inventory-ente-production-graph.mjs",
     "build:security": "pnpm scan:secrets:source && node scripts/clean-dist.mjs && vite build && node scripts/inventory-ente-production-graph.mjs && vitest run --config tests/security/vitest-output.config.ts && node --experimental-strip-types scripts/scan-build.mjs",
     "dependencies": "depcruise --config dependency-cruiser.config.cjs apps packages",

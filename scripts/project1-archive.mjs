@@ -76,20 +76,26 @@ function eocd(count, centralSize, centralOffset) {
   value.writeUInt32LE(centralOffset, 16);
   return value;
 }
-async function entries(candidate) {
-  const top = `ShardPass-${candidate.identity.version}`;
+/**
+ * `flat` drops the `ShardPass-<version>/` directory and writes the candidate's files at the
+ * root of the archive. The evidence archive keeps the directory; a store upload cannot have
+ * one, since Chrome requires `manifest.json` at the root of the zip.
+ */
+async function entries(candidate, flat) {
+  const top = flat ? "" : `ShardPass-${candidate.identity.version}`;
   if (!/^[A-Za-z0-9._-]+$/u.test(candidate.identity.version))
     throw new Error("ARCHIVE_VERSION_INVALID");
-  const directories = new Set([`${top}/`]);
+  const prefix = top === "" ? "" : `${top}/`;
+  const directories = new Set(top === "" ? [] : [`${top}/`]);
   const result = [];
   for (const file of candidate.files) {
     if (!safeArchivePath(file.path)) throw new Error("ARCHIVE_PATH_INVALID");
     const parts = file.path.split("/");
     for (let index = 1; index < parts.length; index++)
-      directories.add(`${top}/${parts.slice(0, index).join("/")}/`);
+      directories.add(`${prefix}${parts.slice(0, index).join("/")}/`);
     const bytes = await readFile(path.join(candidate.root, ...parts));
     result.push({
-      name: `${top}/${file.path}`,
+      name: `${prefix}${file.path}`,
       directory: false,
       bytes,
       compressed: deflateRawSync(bytes, { level: 9 }),
@@ -126,12 +132,12 @@ function archiveBytes(archiveEntries) {
     eocd(archiveEntries.length, centralBytes.length, offset),
   ]);
 }
-export async function createDeterministicArchive(candidate, output) {
+export async function createDeterministicArchive(candidate, output, options = {}) {
   await assertCandidateUnchanged(candidate);
   const absolute = path.resolve(output);
   if (absolute === candidate.root || absolute.startsWith(`${candidate.root}${path.sep}`))
     throw new Error("ARCHIVE_INSIDE_CANDIDATE");
-  const archiveEntries = await entries(candidate);
+  const archiveEntries = await entries(candidate, options.flat === true);
   const bytes = archiveBytes(archiveEntries);
   await mkdir(path.dirname(absolute), { recursive: true });
   const temporary = `${absolute}.tmp-${process.pid}-${sha256(bytes).slice(0, 12)}`;
@@ -225,26 +231,31 @@ export async function verifyArchiveRoundTrip(
   candidate,
   archive,
   limits = { maxEntries: 10000, maxBytes: 256 * 1024 * 1024 },
+  options = {},
 ) {
+  const flat = options.flat === true;
   await assertCandidateUnchanged(candidate);
   const bytes = await readFile(archive.path ?? archive);
   if (archive.sha256 && sha256(bytes) !== archive.sha256) throw new Error("ARCHIVE_HASH_MISMATCH");
-  const canonicalBytes = archiveBytes(await entries(candidate));
+  const canonicalBytes = archiveBytes(await entries(candidate, flat));
   if (!bytes.equals(canonicalBytes)) throw new Error("ARCHIVE_NONCANONICAL");
   const parsed = parseZip(bytes, limits);
-  const expectedRoot = `ShardPass-${candidate.identity.version}/`;
+  // A flat archive has no root directory to strip; its entries unpack straight into the
+  // scratch directory, which is what a browser does with a store upload.
+  const expectedRoot = flat ? "" : `ShardPass-${candidate.identity.version}/`;
   const names = parsed.map((entry) => entry.name);
-  const expectedNames = (await entries(candidate)).map((entry) => entry.name);
+  const expectedNames = (await entries(candidate, flat)).map((entry) => entry.name);
   if (
     JSON.stringify(names) !== JSON.stringify(expectedNames) ||
     names.some((name) => !name.startsWith(expectedRoot))
   )
     throw new Error("ARCHIVE_INVENTORY_MISMATCH");
   const temporary = await mkdtemp(path.join(tmpdir(), "shardpass-archive-roundtrip-"));
-  const root = path.join(temporary, expectedRoot);
+  const root = flat ? path.join(temporary, "candidate") : path.join(temporary, expectedRoot);
   try {
     for (const entry of parsed) {
       const relative = entry.name.slice(expectedRoot.length);
+      if (flat) await mkdir(root, { recursive: true });
       if (!relative) {
         await mkdir(root, { recursive: true });
         continue;
