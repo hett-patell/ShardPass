@@ -305,9 +305,11 @@ describe("Task 4 round 1 format corrections", () => {
     await storage.set({
       [receiptKey]: { ...receipt, ciphertext: Buffer.alloc(32, 9).toString("base64") },
     });
-    await expect(
-      new VaultRepository(storage, wrappedKey).get(itemId, crypto),
-    ).rejects.toMatchObject({
+    // The read that returns the generation's receipts is the read that authenticates them.
+    // `get` deliberately does not: it verifies the root, the manifest and the one record it
+    // returns, so that showing a password or a one-time code costs no pass over the whole
+    // vault. Every read that returns receipts still checks all of them.
+    await expect(new VaultRepository(storage, wrappedKey).listItems(crypto)).rejects.toMatchObject({
       code: "STORAGE_CORRUPT",
     });
   });

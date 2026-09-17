@@ -29,6 +29,7 @@ import {
 } from "../src";
 
 const itemId = "018f47a6-7d11-7c2f-8bd9-a1d37f147a20";
+const otherItemId = "018f47a6-7d11-7c2f-8bd9-a1d37f1470ff";
 const generations = [
   "018f47a6-7d11-7c2f-8bd9-a1d37f147a21",
   "018f47a6-7d11-7c2f-8bd9-a1d37f147a22",
@@ -685,6 +686,44 @@ describe("VaultRepository", () => {
     await storage.set({ [recordKey]: { ...stored, revision: 2 } });
 
     await expect(repository.get(itemId, crypto)).rejects.toMatchObject({ code: "STORAGE_CORRUPT" });
+  });
+
+  it("verifies the record it returns, and the manifest over it, without reading the rest", async () => {
+    const storage = new FakeStoragePort();
+    const repository = new VaultRepository(storage, wrappedKey);
+    const crypto = cryptoContext();
+    await repository.create(item(), crypto);
+    await repository.create({ ...item(), id: otherItemId }, crypto);
+
+    const root = (await storage.get([ACTIVE_ROOT_KEY]))[ACTIVE_ROOT_KEY] as {
+      activeGenerationId: string;
+    };
+    const keys = generationKeys(root.activeGenerationId);
+
+    // The manifest is authenticated before any record is trusted.
+    const manifest = (await storage.get([keys.manifest]))[keys.manifest] as Record<string, unknown>;
+    await storage.set({ [keys.manifest]: { ...manifest, manifestHash: "0".repeat(64) } });
+    await expect(repository.get(itemId, crypto)).rejects.toMatchObject({
+      code: "STORAGE_CORRUPT",
+    });
+    await storage.set({ [keys.manifest]: manifest as never });
+
+    // The record asked for is checked against the hash the manifest pins.
+    const recordKey = keys.record(itemId);
+    const stored = (await storage.get([recordKey]))[recordKey] as Record<string, unknown>;
+    await storage.set({ [recordKey]: { ...stored, revision: 2 } });
+    await expect(repository.get(itemId, crypto)).rejects.toMatchObject({
+      code: "STORAGE_CORRUPT",
+    });
+    await storage.set({ [recordKey]: stored as never });
+
+    // A different record's bytes are not read by this call, so they cannot fail it. They are
+    // still checked by every read that returns them.
+    const otherKey = keys.record(otherItemId);
+    const other = (await storage.get([otherKey]))[otherKey] as Record<string, unknown>;
+    await storage.set({ [otherKey]: { ...other, revision: 2 } });
+    expect((await repository.get(itemId, crypto))?.id).toBe(itemId);
+    await expect(repository.listItems(crypto)).rejects.toMatchObject({ code: "STORAGE_CORRUPT" });
   });
 
   it.each([

@@ -270,9 +270,10 @@ export class VaultRepository {
   }
 
   async get(itemId: string, context: VaultCryptoContext): Promise<VaultItem | null> {
-    const loaded = await this.load(context);
-    const record = loaded.records.find((candidate) => candidate.itemId === itemId);
-    return record === undefined ? null : decryptVaultRecord(record, context.dek);
+    // One record, verified in full, without a pass over the rest of the vault: this is the
+    // read behind every password revealed and every one-time code shown.
+    const record = await this.generations.readActiveRecord(itemId, context);
+    return record === null ? null : decryptVaultRecord(record, context.dek);
   }
 
   async readGenerationMetadata(

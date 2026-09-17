@@ -101,6 +101,13 @@ Baseline at 2.3.0: typecheck clean, lint clean after one test fix, full suite gr
 - [ ] E9 low (still open, narrow) · `login.fillFromPopup` first-answer race across frames (narrow).
 - [x] E10 low · dead `useOtpList.ts`; stale scan-build/manifest-test comments; GeneratorScreen's deferred settings fetch overwrites what was typed and requests a username per keystroke.
 
+## 2026-09-17 · Showing a password read the whole vault (2.7.5)
+
+- [x] The user reported that passwords and one-time codes take a long time to appear. It was the read path found in the audit, in its most visible form: `VaultRepository.get` loaded the active generation, and loading it authenticates every record in the vault -- hash, schema parse and AEAD per record -- before the one record asked for is decrypted. On a 1,000-item vault that is 235-297 ms per password revealed, and `otp.getCode` pays it twice (once for the item, once for the revision re-check after generating).
+- [x] `GenerationStore.readActiveRecord` reads one record with the same rigour applied to it: root read, manifest invariants, manifest hash, manifest authenticated under the data key, the verified marker, then the record's stored bytes checked against the hash the manifest pins, bound to their key, and authenticated. What it no longer does is verify the other 999 records, which this read does not return. Measured on a 1,000-item vault: 35-59 ms, about five times faster.
+- [x] The narrowing is deliberate and is pinned by a test: `get` still rejects a tampered manifest and a tampered copy of the record it returns, and still succeeds when a different record is tampered with -- which `listItems` then rejects. One existing test used `get` as its vehicle for proving receipt tampering is caught; it now uses `listItems`, the read that returns receipts, with a comment saying why.
+- [x] Correction to the audit: the benchmarks that created items by sending `item.createMany` directly were writing nothing (the payloads failed validation), so the "writes are flat at 6-12 ms whatever the vault holds" line from that run proves nothing. The numbers that stand are the ones taken against vaults built through the real importer.
+
 ## 2026-09-17 · Speed audit, measured rather than guessed (2.7.4)
 
 - [x] Measured first. Three hypotheses died on contact: the 2.27 MB service-worker graph costs 6-17 ms to wake, not hundreds of ms; `new Worker()` does not exist in an MV3 service worker, so the plan recorded in 2.6.6 for moving Ente's crypto out of the wake path cannot work as written; and writes are 6-12 ms whatever the vault holds.

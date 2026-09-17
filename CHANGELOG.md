@@ -4,6 +4,15 @@ What changed in each release of the ShardPass extension. Versions are plain `2.x
 for features, a patch for fixes. The manifest version in `apps/extension/src/manifest.ts` is
 the number the browser reports on the About page.
 
+## 2.7.5
+
+- Showing a password or a one-time code no longer reads the whole vault. Every single-item
+  read verified every record in the vault first: on a 1,000-item vault that was 235-297 ms to
+  fetch one login, and a one-time code paid it twice. A single read now verifies the root, the
+  manifest and the one record it returns, which takes 35-59 ms. Tampering with a record is
+  still caught the moment that record is read, and every read that returns the whole vault
+  still checks all of it.
+
 ## 2.7.4
 
 - The dashboard and the health page judged every password again on every visit, each with its

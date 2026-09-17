@@ -760,6 +760,49 @@ export class GenerationStore {
     return { root: manifest.root, records, journal, receipts, metadata, manifest, marker };
   }
 
+  /**
+   * One record of the active generation, verified as thoroughly as a full read verifies it:
+   * the root and the manifest are authenticated first, then the record's stored bytes are
+   * checked against the hash the manifest pins, bound to their key, and authenticated under
+   * the data key before anything is returned.
+   *
+   * What it does not do is verify the other records. A full read has to -- it returns them --
+   * but reading one login should not cost a pass over the whole vault. On a vault of a
+   * thousand items that pass was about 250 ms, paid again for every password revealed and
+   * twice for every one-time code shown. Tampering with a record is still caught the moment
+   * that record is read, and every read that returns the whole vault still checks all of it.
+   */
+  async readActiveRecord(
+    itemId: string,
+    context: { readonly dek: Uint8Array },
+  ): Promise<EncryptedRecord | null> {
+    const root = await this.readRoot();
+    if (root === null) return null;
+    const generationId = root.activeGenerationId;
+    const manifest = await this.readManifest(generationId);
+    if (manifest === null) corrupt();
+    const unsigned = unsignedManifest(manifest);
+    validateManifestInvariants(unsigned);
+    if (
+      manifest.generation.id !== generationId ||
+      manifest.root.activeGenerationId !== generationId ||
+      canonicalJson(manifest.root) !== canonicalJson(root) ||
+      hashCanonical(unsigned) !== manifest.manifestHash
+    )
+      corrupt();
+    await authenticateManifest(manifest, context.dek);
+    await this.authenticateMarker(manifest, context.dek);
+    const key = generationKeys(generationId).record(itemId);
+    const entry = manifest.recordEntries.find((candidate) => candidate.key === key);
+    if (entry === undefined) return null;
+    const value = (await storageGet(this.storage, [entry.key]))[entry.key];
+    if (value === undefined || hashCanonical(value) !== entry.hash) corrupt();
+    const record = parseRecord(value);
+    if (entry.key !== generationKeys(generationId).record(record.itemId)) corrupt();
+    await validateVaultRecord(record, context.dek);
+    return record;
+  }
+
   private async authenticateMarker(manifest: GenerationManifest, key: Uint8Array) {
     const markerKey = generationKeys(manifest.generation.id).verified;
     const candidate = (await storageGet(this.storage, [markerKey]))[markerKey];
