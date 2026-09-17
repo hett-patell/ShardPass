@@ -30,12 +30,30 @@ jobs:
           node-version: 22.14.0
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # `pnpm verify` is not environment-free, and pretending otherwise makes the gate a
+      # liar: `tests/browser/startup-process-harness.test.ts` spawns a real Chromium, and
+      # `tests/tooling/project1-network-runner.test.ts` asks for actual network isolation
+      # rather than a stub. Both are given what they need instead of being skipped.
+      - run: pnpm exec playwright install --with-deps chromium
+      - name: Install the sandbox the network-isolation test measures
+        run: sudo apt-get update && sudo apt-get install -y bubblewrap
+      - name: Prove the sandbox actually isolates on this runner
+        # Some images restrict unprivileged user namespaces, which would leave the isolation
+        # test failing several minutes later with nothing naming the cause. One line here says
+        # it plainly, and a network that is reachable inside the sandbox fails the job.
+        run: |
+          bwrap --unshare-net --dev-bind / / -- node -e "
+            require('dns').promises.lookup('example.com').then(
+              () => { console.error('the sandbox did not block the network'); process.exit(1); },
+              () => console.log('network isolation enforced'),
+            );
+          "
       - run: pnpm verify
 
   browser:
     name: Browser specs
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
