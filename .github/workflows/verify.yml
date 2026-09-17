@@ -37,6 +37,13 @@ jobs:
       - run: pnpm exec playwright install --with-deps chromium
       - name: Install the sandbox the network-isolation test measures
         run: sudo apt-get update && sudo apt-get install -y bubblewrap
+      - name: Let an unprivileged sandbox configure its own network namespace
+        # Ubuntu 24.04 restricts what an unprivileged user namespace may do, and bubblewrap
+        # cannot so much as bring up loopback inside one: "bwrap: loopback: Failed RTM_NEWADDR:
+        # Operation not permitted". The machine this project is developed on has this switch
+        # at 0, which is why the isolation test passes there. It is a property of the runner,
+        # not of the code under test.
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       - name: Prove the sandbox actually isolates on this runner
         # Some images restrict unprivileged user namespaces, which would leave the isolation
         # test failing several minutes later with nothing naming the cause. One line here says
