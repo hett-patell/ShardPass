@@ -242,8 +242,9 @@ export class VaultRepository {
   }
 
   async listItems(context: VaultCryptoContext): Promise<readonly VaultItem[]> {
-    const loaded = await this.load(context);
-    return Promise.all(loaded.records.map((record) => decryptVaultRecord(record, context.dek)));
+    // Loading the generation authenticates every record, which decrypts it. Decrypting them
+    // again here doubled the cost of every read that returns the vault.
+    return (await this.load(context)).items;
   }
 
   /** Lists every vault item of the given kind, decrypted. */
@@ -271,9 +272,9 @@ export class VaultRepository {
 
   async get(itemId: string, context: VaultCryptoContext): Promise<VaultItem | null> {
     // One record, verified in full, without a pass over the rest of the vault: this is the
-    // read behind every password revealed and every one-time code shown.
-    const record = await this.generations.readActiveRecord(itemId, context);
-    return record === null ? null : decryptVaultRecord(record, context.dek);
+    // read behind every password revealed and every one-time code shown. Verifying it is
+    // what decrypts it, so the item comes back from that and is not decrypted twice.
+    return this.generations.readActiveRecord(itemId, context);
   }
 
   async readGenerationMetadata(
@@ -1575,12 +1576,16 @@ export class VaultRepository {
   private async load(context: VaultCryptoContext): Promise<{
     root: VaultRoot | null;
     records: readonly EncryptedRecord[];
+    /** The items inside `records`, produced by authenticating them. */
+    items: readonly VaultItem[];
     journal: readonly EncryptedJournalRecord[];
     receipts: readonly EncryptedHotpReceipt[];
     metadata: readonly EncryptedGenerationMetadata[];
   }> {
     const contents: GenerationContents | null = await this.generations.readActive(context);
-    return contents ?? { root: null, records: [], journal: [], receipts: [], metadata: [] };
+    return (
+      contents ?? { root: null, records: [], items: [], journal: [], receipts: [], metadata: [] }
+    );
   }
 
   private async commitWithPendingReservations(

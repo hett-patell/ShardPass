@@ -4,6 +4,19 @@ What changed in each release of the ShardPass extension. Versions are plain `2.x
 for features, a patch for fixes. The manifest version in `apps/extension/src/manifest.ts` is
 the number the browser reports on the About page.
 
+## 2.7.6
+
+- Every read of the vault decrypted each record twice: authenticating a record does the whole
+  of the work of reading it -- decrypt, decode, check the plaintext is canonical, parse, check
+  it matches the record -- and then threw the item away, so the repository decrypted the same
+  bytes again. The item now comes back from the check that produced it.
+- A read no longer decrypts the change journal, which a vault keeps up to 4,096 entries of.
+  The stored bytes are pinned by a hash in the manifest and the manifest is authenticated, so
+  a tampered entry is still rejected; the change log decrypts what it returns, when it is
+  asked for it.
+- On a 1,000-item vault: listing the whole vault went from 540-760 ms to 236-259 ms, and
+  importing 1,000 logins from 24.5 s to 19.5 s.
+
 ## 2.7.5
 
 - Showing a password or a one-time code no longer reads the whole vault. Every single-item

@@ -101,6 +101,14 @@ Baseline at 2.3.0: typecheck clean, lint clean after one test fix, full suite gr
 - [ ] E9 low (still open, narrow) · `login.fillFromPopup` first-answer race across frames (narrow).
 - [x] E10 low · dead `useOtpList.ts`; stale scan-build/manifest-test comments; GeneratorScreen's deferred settings fetch overwrites what was typed and requests a username per keystroke.
 
+## 2026-09-17 · The read path did everything twice (2.7.6)
+
+- [x] Measured the parts first, per 1,000 records: AEAD 43 ms, zod parse 25 ms, canonical hash 20 ms, JSON.parse plus canonical re-check 6 ms.
+- [x] `validateVaultRecord` decrypted, decoded, canonical-checked, parsed and match-checked each record -- and returned `void`. `listItems` then called `decryptVaultRecord`, which did all of it again. Every read of the vault paid for every record twice. The verification now returns the item it produced and the repository uses it.
+- [x] A read also decrypted every change-journal entry, and a vault keeps up to 4,096 of them, for a payload only `ChangeJournal.listAfter` ever reads. Reads keep the hash, key-binding, sequence and nonce checks and leave the decryption to the caller that wants the plaintext. A test pins that a tampered journal entry is still rejected on read -- by the manifest's hash, which was always the check that caught it.
+- [x] On a 1,000-item vault: `item.query` 540-760 ms -> 236-259 ms, `item.get` 235-297 ms -> 25-45 ms across both passes, import of 1,000 logins 24.5 s -> 19.5 s.
+- [x] Not done, and now the only lever left of its size: a cache that serves repeat reads from memory. A `VaultRepository` is constructed per operation, so it would have to live across requests, and every version of it trades away some part of "tampering is caught on every read". That is the user's decision, not a detail to slip into a speed pass.
+
 ## 2026-09-17 · Showing a password read the whole vault (2.7.5)
 
 - [x] The user reported that passwords and one-time codes take a long time to appear. It was the read path found in the audit, in its most visible form: `VaultRepository.get` loaded the active generation, and loading it authenticates every record in the vault -- hash, schema parse and AEAD per record -- before the one record asked for is decrypted. On a 1,000-item vault that is 235-297 ms per password revealed, and `otp.getCode` pays it twice (once for the item, once for the revision re-check after generating).

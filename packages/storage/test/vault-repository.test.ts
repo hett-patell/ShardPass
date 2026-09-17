@@ -688,6 +688,29 @@ describe("VaultRepository", () => {
     await expect(repository.get(itemId, crypto)).rejects.toMatchObject({ code: "STORAGE_CORRUPT" });
   });
 
+  it("still rejects a tampered journal entry, which the manifest's hash pins", async () => {
+    const storage = new FakeStoragePort();
+    const repository = new VaultRepository(storage, wrappedKey);
+    const crypto = cryptoContext();
+    await repository.create(item(), crypto);
+
+    const root = (await storage.get([ACTIVE_ROOT_KEY]))[ACTIVE_ROOT_KEY] as {
+      activeGenerationId: string;
+    };
+    const keys = generationKeys(root.activeGenerationId);
+    const manifest = (await storage.get([keys.manifest]))[keys.manifest] as {
+      journalEntries: { key: string }[];
+    };
+    const journalKey = manifest.journalEntries[0]!.key;
+    const entry = (await storage.get([journalKey]))[journalKey] as Record<string, unknown>;
+    await storage.set({
+      [journalKey]: { ...entry, ciphertext: Buffer.alloc(32, 9).toString("base64") },
+    });
+
+    // A read no longer decrypts every journal entry, so this is the check that catches it.
+    await expect(repository.listItems(crypto)).rejects.toMatchObject({ code: "STORAGE_CORRUPT" });
+  });
+
   it("verifies the record it returns, and the manifest over it, without reading the rest", async () => {
     const storage = new FakeStoragePort();
     const repository = new VaultRepository(storage, wrappedKey);

@@ -1,3 +1,4 @@
+import type { VaultItem } from "@shardpass/domain";
 import { decryptEnvelope, encryptEnvelope } from "@shardpass/crypto/aead";
 import type { RandomSource } from "@shardpass/crypto/random";
 import { sha256 } from "@noble/hashes/sha2.js";
@@ -88,6 +89,8 @@ export interface VerifiedStagedGeneration extends StagedGeneration {
 export interface GenerationContents {
   readonly root: VaultRoot;
   readonly records: readonly EncryptedRecord[];
+  /** The items inside `records`, in the same order: verifying a record decrypts it. */
+  readonly items: readonly VaultItem[];
   readonly journal: readonly EncryptedJournalRecord[];
   readonly receipts: readonly EncryptedHotpReceipt[];
   readonly metadata: readonly EncryptedGenerationMetadata[];
@@ -703,6 +706,7 @@ export class GenerationStore {
       );
     }
     const records: EncryptedRecord[] = [];
+    const items: VaultItem[] = [];
     const journal: EncryptedJournalRecord[] = [];
     const receipts: EncryptedHotpReceipt[] = [];
     const metadata: EncryptedGenerationMetadata[] = [];
@@ -711,15 +715,19 @@ export class GenerationStore {
       if (value === undefined || hashCanonical(value) !== entry.hash) corrupt();
       const record = parseRecord(value);
       if (entry.key !== generationKeys(generationId).record(record.itemId)) corrupt();
-      await validateVaultRecord(record, context.dek);
+      items.push(await validateVaultRecord(record, context.dek));
       records.push(record);
     }
     for (const entry of manifest.journalEntries) {
       const value = values[entry.key];
+      // The stored bytes are pinned by a hash in the manifest, and the manifest is
+      // authenticated under the data key: any byte changed here fails this check. Decrypting
+      // the entry as well would authenticate the same bytes a second way, and a vault keeps
+      // up to 4,096 journal entries -- paid on every read of the vault, for a payload only
+      // the change log ever looks at. `ChangeJournal.listAfter` decrypts what it returns.
       if (value === undefined || hashCanonical(value) !== entry.hash) corrupt();
       const record = parseJournal(value);
       if (entry.key !== generationKeys(generationId).journal(record.sequence)) corrupt();
-      await decryptAndValidateJournalRecord(record, context.dek);
       journal.push(record);
     }
     const receiptSequences: number[] = [];
@@ -757,7 +765,7 @@ export class GenerationStore {
       manifest.authentication,
       ...(marker === null ? [] : [marker]),
     ]);
-    return { root: manifest.root, records, journal, receipts, metadata, manifest, marker };
+    return { root: manifest.root, records, items, journal, receipts, metadata, manifest, marker };
   }
 
   /**
@@ -775,7 +783,7 @@ export class GenerationStore {
   async readActiveRecord(
     itemId: string,
     context: { readonly dek: Uint8Array },
-  ): Promise<EncryptedRecord | null> {
+  ): Promise<VaultItem | null> {
     const root = await this.readRoot();
     if (root === null) return null;
     const generationId = root.activeGenerationId;
@@ -799,8 +807,7 @@ export class GenerationStore {
     if (value === undefined || hashCanonical(value) !== entry.hash) corrupt();
     const record = parseRecord(value);
     if (entry.key !== generationKeys(generationId).record(record.itemId)) corrupt();
-    await validateVaultRecord(record, context.dek);
-    return record;
+    return validateVaultRecord(record, context.dek);
   }
 
   private async authenticateMarker(manifest: GenerationManifest, key: Uint8Array) {
@@ -882,7 +889,13 @@ async function authenticateManifest(manifest: GenerationManifest, key: Uint8Arra
     corrupt();
   }
 }
-async function validateVaultRecord(record: EncryptedRecord, key: Uint8Array): Promise<void> {
+/**
+ * Authenticates a record and returns the item inside it. Verifying and reading are the same
+ * work -- decrypt, decode, check the plaintext is canonical, parse, check it matches the
+ * record -- so it is done once and the result handed back. A read that verified here and then
+ * decrypted again in the repository paid all of it twice for every record in the vault.
+ */
+async function validateVaultRecord(record: EncryptedRecord, key: Uint8Array): Promise<VaultItem> {
   try {
     const plaintext = await decryptEnvelope(
       key,
@@ -895,8 +908,9 @@ async function validateVaultRecord(record: EncryptedRecord, key: Uint8Array): Pr
     const { item, upgradedFromLegacySchemaVersion } = parseVaultItemPlaintext(raw);
     if (!vaultItemMatchesRecord(item, record, upgradedFromLegacySchemaVersion))
       throw new Error("mismatch");
+    return item;
   } catch {
-    corrupt();
+    return corrupt();
   }
 }
 function validateManifestInvariants(
