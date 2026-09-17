@@ -63,9 +63,11 @@ function otpItem(overrides: Partial<OtpItem> = {}): OtpItem {
 
 class FakeRepository implements Pick<
   SessionVaultRepository,
-  "listAllItems" | "getItem" | "createItem" | "updateItem" | "touchItem"
+  "listAllItems" | "getItem" | "createItem" | "updateItem" | "touchItem" | "updateItems"
 > {
   readonly items = new Map<string, VaultItem>();
+  /** One entry per call, holding the ids written together: usage stamps travel in batches. */
+  readonly usageWrites: string[][] = [];
   listError: unknown;
   createError: unknown;
 
@@ -109,6 +111,15 @@ class FakeRepository implements Pick<
     };
     this.items.set(candidate.id, next);
     return Promise.resolve(structuredClone(next));
+  }
+
+  updateItems(
+    changes: readonly Readonly<{ candidate: VaultItem; expectedRevision: number }>[],
+  ): Promise<readonly VaultItem[]> {
+    this.usageWrites.push(changes.map((change) => change.candidate.id));
+    return Promise.all(
+      changes.map((change) => this.touchItem(change.candidate, change.expectedRevision)),
+    );
   }
 }
 
@@ -256,6 +267,9 @@ describe("LoginFillService", () => {
       request("login.fillConfirm", { itemId: stored.id, releaseId: again.releaseId }),
       sender,
     );
+    // Stamps are written a few seconds after the fill, in one batch; the background flushes
+    // them on a timer and before a lock. A test asks for them now.
+    await service.flushUsage();
     const stamped = await repository.getItem(stored.id);
     expect(stamped?.kind === "login" ? stamped.lastUsedAt : undefined).toBeDefined();
     await expect(
@@ -344,6 +358,7 @@ describe("LoginFillService", () => {
       request("login.fillConfirm", { itemId: ids.login, releaseId: release.releaseId }),
       sender,
     );
+    await service.flushUsage();
     const touched = await repository.getItem(ids.login);
     expect(touched).toMatchObject({ lastUsedAt: "2026-08-10T12:00:00.000Z" });
     const after = await service.handle(
@@ -962,5 +977,33 @@ describe("LoginFillService forwarding addresses", () => {
       await service.handle({ version: 1, kind: "login.suggestUsername", source: "duck" }, sender),
     ).toMatchObject({ username: "abc@duck.com" });
     expect(calls).toEqual(["settings:example.test", "duck:example.test"]);
+  });
+  it("writes the stamps for several fills under one commit", async () => {
+    const stored = [loginItem(), loginItem({ id: ids.otherLogin, name: "Second" })];
+    const { repository, service } = fixture(stored);
+
+    for (const item of stored) {
+      const release = await service.handle(
+        request("login.fillSelect", { itemId: item.id, expectedRevision: 1 }),
+        sender,
+      );
+      if (release.kind !== "login.fillRelease") throw new Error("expected release");
+      await service.handle(
+        request("login.fillConfirm", { itemId: item.id, releaseId: release.releaseId }),
+        sender,
+      );
+    }
+    // Nothing written yet: a commit rewrites the whole generation, and a stamp is not worth
+    // one of those on its own.
+    expect(repository.usageWrites).toHaveLength(0);
+
+    await service.flushUsage();
+
+    expect(repository.usageWrites).toHaveLength(1);
+    expect(repository.usageWrites[0]).toHaveLength(stored.length);
+    for (const item of stored) {
+      const written = await repository.getItem(item.id);
+      expect(written?.kind === "login" ? written.lastUsedAt : undefined).toBeDefined();
+    }
   });
 });

@@ -801,7 +801,9 @@ describe("closed production source roots", () => {
     expect(clean.status).toBe("PASS");
     expect(clean.reports).toHaveLength(manifest.roots.length);
     expect(clean.eligibleFileCount).toBe(manifest.files.length);
-  }, 15_000);
+    // Scanning every production root is slow by nature, and slower again when the rest of the
+    // suite is running beside it. The budget is for the contention, not the work.
+  }, 60_000);
 
   it("refuses an eligible file the manifest does not list, in every eligible location", async () => {
     for (const sourcePath of [

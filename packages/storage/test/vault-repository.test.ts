@@ -688,6 +688,39 @@ describe("VaultRepository", () => {
     await expect(repository.get(itemId, crypto)).rejects.toMatchObject({ code: "STORAGE_CORRUPT" });
   });
 
+  it("reads one record's bytes for one item, and hands back what it decrypted for a list", async () => {
+    const storage = new FakeStoragePort();
+    const repository = new VaultRepository(storage, wrappedKey);
+    const crypto = cryptoContext();
+    const ids = [itemId, otherItemId, "018f47a6-7d11-7c2f-8bd9-a1d37f1470fe"];
+    for (const id of ids) await repository.create({ ...item(), id }, crypto);
+
+    // Count the record keys each read asks storage for. This is the shape of the cost, and
+    // it is what stops a single-item read from drifting back into a pass over the vault:
+    // showing one password fetched every record's bytes before this was pinned.
+    const fetched: string[] = [];
+    const counting = new Proxy(storage, {
+      get(target, property, receiver) {
+        if (property !== "get") return Reflect.get(target, property, receiver) as unknown;
+        return async (keys: readonly string[]) => {
+          for (const key of keys) if (key.includes(":record:")) fetched.push(key);
+          return storage.get(keys);
+        };
+      },
+    });
+    const counted = new VaultRepository(counting, wrappedKey);
+
+    const one = await counted.get(itemId, crypto);
+    expect(one?.id).toBe(itemId);
+    expect(fetched).toHaveLength(1);
+
+    fetched.length = 0;
+    const all = await counted.listItems(crypto);
+    expect(all.map((entry) => entry.id).sort()).toEqual([...ids].sort());
+    // A list returns every record, so it reads every record -- once.
+    expect(fetched).toHaveLength(ids.length);
+  });
+
   it("still rejects a tampered journal entry, which the manifest's hash pins", async () => {
     const storage = new FakeStoragePort();
     const repository = new VaultRepository(storage, wrappedKey);

@@ -16,8 +16,18 @@ import type { SessionVaultRepository } from "../vault/session-vault-repository";
 
 type LoginFillRepository = Pick<
   SessionVaultRepository,
-  "listAllItems" | "getItem" | "createItem" | "updateItem" | "touchItem"
+  "listAllItems" | "getItem" | "createItem" | "updateItem" | "touchItem" | "updateItems"
 >;
+
+/**
+ * How long usage stamps wait before they are written. Every commit rewrites the whole
+ * generation -- about three milliseconds per item, so three seconds on a vault of a thousand
+ * -- and a stamp is not worth that on its own, let alone once per fill. Filling three fields
+ * on a sign-in page, or moving through a few sites, now costs one commit instead of one each.
+ * Short enough that the service worker is unlikely to be evicted first; a stamp lost that way
+ * costs nothing, which is why this was always best-effort.
+ */
+const USAGE_FLUSH_DELAY_MS = 3_000;
 
 const OFFER_TTL_MS = 5 * 60_000;
 const MAX_OFFERS = 16;
@@ -269,7 +279,7 @@ export class LoginFillService {
           // A fill happened: remember when, so this login leads next time. Only the page
           // that was handed the release, once, and only for that login.
           this.consumeRelease(command.releaseId, command.itemId, tabOf(sender));
-          await this.touch(command.itemId);
+          this.touch(command.itemId);
           return validated({ version: 1, kind: "login.fillAck", ok: true });
         case "login.fillCancel":
           // A fire-and-forget acknowledgement: reveals nothing, changes nothing.
@@ -280,18 +290,42 @@ export class LoginFillService {
     }
   }
 
-  private async touch(itemId: string): Promise<void> {
+  /** Item ids whose "last used" stamp is waiting to be written, with the moment of use. */
+  private readonly pendingUsage = new Map<string, string>();
+  private usageTimer: ReturnType<typeof setTimeout> | undefined;
+
+  private touch(itemId: string): void {
+    this.pendingUsage.set(itemId, new Date(this.dependencies.now()).toISOString());
+    if (this.usageTimer !== undefined) return;
+    this.usageTimer = setTimeout(() => {
+      this.usageTimer = undefined;
+      void this.flushUsage();
+    }, USAGE_FLUSH_DELAY_MS);
+  }
+
+  /**
+   * Writes every waiting stamp under one commit. A stamp is not an edit: revision and
+   * updatedAt stay as they were, so an editor open on the item elsewhere still saves without
+   * a conflict.
+   */
+  async flushUsage(): Promise<void> {
+    if (this.usageTimer !== undefined) {
+      clearTimeout(this.usageTimer);
+      this.usageTimer = undefined;
+    }
+    const pending = [...this.pendingUsage];
+    this.pendingUsage.clear();
+    if (pending.length === 0) return;
     try {
-      const item = await this.dependencies.repository.getItem(itemId);
-      if (item === null || !isLiveLogin(item)) return;
-      // A usage stamp, not an edit: revision and updatedAt stay, so an editor open on this
-      // item elsewhere still saves without a conflict.
-      await this.dependencies.repository.touchItem(
-        { ...item, lastUsedAt: new Date(this.dependencies.now()).toISOString() },
-        item.revision,
-      );
+      const changes = [];
+      for (const [itemId, lastUsedAt] of pending) {
+        const item = await this.dependencies.repository.getItem(itemId);
+        if (item === null || !isLiveLogin(item)) continue;
+        changes.push({ candidate: { ...item, lastUsedAt }, expectedRevision: item.revision });
+      }
+      if (changes.length > 0) await this.dependencies.repository.updateItems(changes);
     } catch {
-      // A missed timestamp costs nothing; the fill already happened.
+      // A missed timestamp costs nothing; the fills already happened.
     }
   }
 

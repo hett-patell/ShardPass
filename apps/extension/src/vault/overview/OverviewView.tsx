@@ -403,6 +403,24 @@ export function OverviewView({
               </p>
             ) : null}
           </section>
+
+          {/* The one loss this design cannot undo. Nothing here knows when the last backup was
+              made -- that would take a record of its own -- so it says the standing truth
+              rather than nagging on a timer it cannot honestly keep. */}
+          <section className={styles.backup} aria-labelledby="overview-backup">
+            <h4 id="overview-backup" className={styles.cardTitle}>
+              Keep a backup
+            </h4>
+            <p className={styles.quiet}>
+              A forgotten master password cannot be recovered, by you or by anyone. An encrypted
+              backup file is the only way back into this vault.
+            </p>
+            <div className={styles.actions}>
+              <Button variant="secondary" onClick={onOpenImport}>
+                Make a backup
+              </Button>
+            </div>
+          </section>
         </div>
       </div>
 

@@ -598,7 +598,8 @@ describe("ShardPass portable backup v2", () => {
         executor(),
       ),
     ).rejects.toThrow();
-  });
+    // Slow by nature under a full-suite run: the default five seconds is what fails it.
+  }, 60_000);
 
   it("authenticates the exact canonical header and ciphertext and rejects a wrong password", async () => {
     const exported = await exportFixture();

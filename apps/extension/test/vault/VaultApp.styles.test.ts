@@ -70,7 +70,7 @@ describe("emitted vault CSS contracts", () => {
     expect(css).toMatch(
       /\.[\w-]*vault[\w-]*\s*\{[^}]*grid-template-columns:\s*[^;]+\s+[^;]+\s+minmax\([^;]+\)/s,
     );
-  }, 20_000);
+  }, 120_000);
 
   it("collapses the three-panel grid to a single column at a compact breakpoint", async () => {
     const css = await buildVaultCss();
@@ -78,13 +78,13 @@ describe("emitted vault CSS contracts", () => {
     expect(css).toMatch(
       /@media\s*\(max-width:\s*760px\)[\s\S]*\.[\w-]*vault[\w-]*\s*\{[^}]*grid-template-columns:\s*1fr/,
     );
-  }, 20_000);
+  }, 120_000);
 
   it("respects prefers-reduced-motion in the emitted bundle", async () => {
     const css = await buildVaultCss();
 
     expect(css).toMatch(/@media\s*\(prefers-reduced-motion:\s*reduce\)/);
-  }, 20_000);
+  }, 120_000);
 
   it("keeps a full-viewport document per the VaultApp.module.css source", async () => {
     const extensionRoot = path.resolve(process.cwd(), "apps/extension");

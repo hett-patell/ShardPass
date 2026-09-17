@@ -101,6 +101,16 @@ Baseline at 2.3.0: typecheck clean, lint clean after one test fix, full suite gr
 - [ ] E9 low (still open, narrow) · `login.fillFromPopup` first-answer race across frames (narrow).
 - [x] E10 low · dead `useOtpList.ts`; stale scan-build/manifest-test comments; GeneratorScreen's deferred settings fetch overwrites what was typed and requests a username per keystroke.
 
+## 2026-09-17 · Closing the gaps named in "what's lacking" (2.8.0)
+
+- [x] **CI exists.** `.github/workflows/verify.yml`: the gates, the browser specs and the store package, on every push, with the Playwright report kept when a spec fails. The weakest link was that every gate ran only when I remembered to run it.
+- [x] **The flaky four are budgeted, not papered over.** Each does work that is slow by nature -- a Vite build, an Argon2 derivation, a scan of every production root -- and the default five seconds is what failed them under contention. Three consecutive full-suite runs now pass clean. Regenerating the secret allowlist afterwards changed only `fileSha256` values for the one file edited: 46 allowances before and after, same paths, lines and value hashes.
+- [x] **Autofill no longer rewrites the vault for a timestamp.** Stamps are collected and written together after a few seconds, or before a lock, in one commit rather than one per fill. A test pins that two fills produce one write.
+- [x] The dashboard carries the standing truth about backups. A timed "you have not backed up in 90 days" nudge would need a new message kind, new storage and new gate pins for a reminder that cannot be honest about history; the standing line and a button cost nothing and say the true thing.
+- [x] The read shape is pinned by a test: one item reads one record's bytes, a list reads each record once. Today's 9x on single reads cannot silently regress.
+- [x] `docs/store/` holds listing copy, single-purpose statement, permission justifications, data disclosures, and five 1280x800 screenshots from a real build, plus the recipe for retaking them.
+- [x] Reverted my own change: skipping the live re-query when the archive opens. A test documents that the sidebar counts refresh there deliberately, and trading freshness for 230 ms is the wrong way round. The cost belongs to the read path, not to that call.
+
 ## 2026-09-17 · Audit of the day's own changes (2.7.7)
 
 - [x] **Found while auditing, not introduced by it: the vault could not be opened at all on a machine Chrome reports as screen-locked.** `chrome.idle.queryState` returns "locked" on this very machine. With the default "lock when the screen locks", that event calls the full lock, and a lock clears every outstanding challenge and bumps the epoch -- which is precisely what the unlock in flight was relying on. Setup and unlock both died with "That secure request expired. Try again.", reproducibly, 3 times out of 3. The automatic triggers (alarm, screen lock, last page closed) now call `lockIfUnlocked`, which passes over a vault holding no key; the shortcut and the button still take the full lock. Both sides are pinned by tests. Verified: creating a vault and unlocking it both work on this machine now.

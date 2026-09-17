@@ -4,6 +4,24 @@ What changed in each release of the ShardPass extension. Versions are plain `2.x
 for features, a patch for fixes. The manifest version in `apps/extension/src/manifest.ts` is
 the number the browser reports on the About page.
 
+## 2.8.0
+
+- **The gates run on their own.** A GitHub Actions workflow runs `pnpm verify`, the Playwright
+  browser specs (which `pnpm test` leaves out because they need a real build and a browser),
+  and `pnpm package`, on every push. Until now every gate depended on someone remembering.
+- The four tests that timed out only under a full-suite run have budgets that match the work
+  they do; three consecutive whole-suite runs pass clean.
+- Usage stamps are written together. Every commit rewrites the whole generation -- about three
+  milliseconds per item -- and the "last used" stamp after each fill was paying for one of
+  those on its own. Fills within a few seconds of each other now share one write, and the
+  stamps are flushed before the vault locks.
+- The dashboard says the thing that cannot be undone: a forgotten master password cannot be
+  recovered, and an encrypted backup is the only way back in.
+- A test pins the shape of a read: one item fetches one record's bytes, a list fetches each
+  record once.
+- `docs/store/` holds the Chrome Web Store listing copy, the permission justifications, the
+  data disclosures and five screenshots taken from a real build.
+
 ## 2.7.7
 
 - **A vault that could not be opened.** Chrome reports some machines as screen-locked the

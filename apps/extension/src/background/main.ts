@@ -364,6 +364,9 @@ export function installBackground(
     await ready;
     if (disposed || readyFailed) return;
     enteUnlocked = false;
+    // Usage stamps wait a few seconds to travel together; a lock is the deadline for them,
+    // since the vault they are written to is about to close.
+    await loginFill.flushUsage();
     await enteScheduler?.setUnlocked(false);
     enteService.lock();
     repromptGrants.clear();
