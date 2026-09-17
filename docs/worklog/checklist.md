@@ -101,6 +101,15 @@ Baseline at 2.3.0: typecheck clean, lint clean after one test fix, full suite gr
 - [ ] E9 low (still open, narrow) · `login.fillFromPopup` first-answer race across frames (narrow).
 - [x] E10 low · dead `useOtpList.ts`; stale scan-build/manifest-test comments; GeneratorScreen's deferred settings fetch overwrites what was typed and requests a username per keystroke.
 
+## 2026-09-17 · Speed audit, measured rather than guessed (2.7.4)
+
+- [x] Measured first. Three hypotheses died on contact: the 2.27 MB service-worker graph costs 6-17 ms to wake, not hundreds of ms; `new Worker()` does not exist in an MV3 service worker, so the plan recorded in 2.6.6 for moving Ente's crypto out of the wake path cannot work as written; and writes are 6-12 ms whatever the vault holds.
+- [x] Unlock is ~1.0 s of key derivation: ~880 ms of Argon2id at 64 MiB and two passes, plus ~120 ms to start a worker that loads libsodium. Both are decisions, not defects, and are written up for the user.
+- [x] **Every item operation re-reads the whole vault.** On a 1,000-login vault built through the importer, `item.get` for a single item costs 235-297 ms and `item.query` 360-446 ms, while `vault.getState` stays at 3 ms. This is the cost the deferred read cache was meant to remove (see the entry at the foot of this file): a decrypted cache breaks the pinned property that tampering under an unchanged root is caught on every read, and doing it properly means re-verifying the stored bytes by hash on each cached read.
+- [x] Fixed: the dashboard and health page each mounted their own strength estimator, unmounted it on the way out, and threw the results away. A shared judgement cache, cleared on lock, takes a second dashboard visit on 1,000 logins from 2,850 ms to 111 ms.
+- [x] Fixed: the import preview built a row per line and kept rebuilding it while importing. Capped at 200 rows and hidden during the import; previewing a 1,000-row file went from 482 ms to ~170 ms.
+- [x] Left as a finding: opening the archive issues two full queries (the archived list, then the live list for the counts), which on a large vault is twice the wait.
+
 ## 2026-09-17 · The item record, the popup's categories, and the store blockers (2.7.2)
 
 - [x] The item detail stacked five all-caps labels over five short values, so a login took twice the height it needed and the name of a thing was set louder than the thing. Label sits beside value now, one row per fact, with a hairline between rows and the folder control on the same grid. One CSS change covers every item kind, since the markup was already uniform.

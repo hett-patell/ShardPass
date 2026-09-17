@@ -14,7 +14,11 @@ import {
 import { Button, PasswordInput } from "@shardpass/ui";
 
 import { passwordStrength } from "./password-strength";
-import { createStrengthEstimator, type StrengthEstimate } from "./strength-estimator";
+import {
+  clearStrengthCache,
+  createStrengthEstimator,
+  type StrengthEstimate,
+} from "./strength-estimator";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { ExtensionPlatform } from "../platform/extension-platform";
@@ -324,6 +328,7 @@ export function VaultAccess({
       if (isCommittedLocked(response)) {
         onUnlockedChange?.(false);
         setState("locked");
+        clearStrengthCache();
         setPinAvailable(false);
         setError(
           "The password was changed, but the vault is locked. Unlock with the new password.",
@@ -488,6 +493,7 @@ export function VaultAccess({
           setPassword("");
           setConfirmation("");
           setState("locked");
+          clearStrengthCache();
           setError("The vault change was saved, but the vault is locked. Unlock again.");
         } else {
           setError(safeError(response));
@@ -539,6 +545,7 @@ export function VaultAccess({
               if (candidate?.kind === "vault.ok" && candidate.state === "locked") {
                 onUnlockedChange?.(false);
                 setState("locked");
+                clearStrengthCache();
               } else setError("Could not lock the vault. Try again.");
             },
             () => setError("Could not lock the vault. Try again."),

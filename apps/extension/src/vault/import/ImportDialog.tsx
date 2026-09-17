@@ -42,6 +42,12 @@ const MAX_BINARY_IMPORT_BYTES = 64 * 1024 * 1024;
 /** KeePass accepts any file as a key file; a photo is common, a video is not. */
 const MAX_KEY_FILE_BYTES = 8 * 1024 * 1024;
 const MAX_VISIBLE_WARNINGS = 20;
+/**
+ * Rows the preview table draws. The file's own count is still what gets imported; this only
+ * bounds the DOM. A 1,000-row table costs about 40 ms to build and rebuilds on every tick of
+ * the progress bar and every click of a checkbox, which made a large import feel broken.
+ */
+const MAX_PREVIEW_ROWS = 200;
 /** Rows per item.createMany call: bounds message size and gives the progress bar steps. */
 const IMPORT_BATCH_SIZE = 100;
 
@@ -931,46 +937,55 @@ export function ImportDialog({ platform, active, onImported, onDone }: ImportDia
                 </details>
               ) : null}
 
-              <div className={styles.tableScroll}>
-                <table className={styles.table}>
-                  <thead>
-                    <tr>
-                      <th scope="col" aria-label="Selected" />
-                      <th scope="col">Name</th>
-                      <th scope="col">Details</th>
-                      <th scope="col">Kind</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {state.rows.map((row) => (
-                      <tr key={row.id}>
-                        <td>
-                          <input
-                            type="checkbox"
-                            checked={row.selected}
-                            disabled={importing}
-                            onChange={() => toggleRow(row.id)}
-                            aria-label={`Import ${itemDisplayName(row.item)}`}
-                          />
-                        </td>
-                        <td>{itemDisplayName(row.item)}</td>
-                        <td>
-                          {itemDisplaySubtitle(row.item) ?? "—"}
-                          {state.duplicateRowIds.has(row.id) ? (
-                            <span
-                              className={styles.hint}
-                              title="Another row in this file has the same name and account."
-                            >
-                              Duplicate?
-                            </span>
-                          ) : null}
-                        </td>
-                        <td className={styles.kind}>{row.item.kind.toUpperCase()}</td>
+              {importing ? null : (
+                <div className={styles.tableScroll}>
+                  <table className={styles.table}>
+                    <thead>
+                      <tr>
+                        <th scope="col" aria-label="Selected" />
+                        <th scope="col">Name</th>
+                        <th scope="col">Details</th>
+                        <th scope="col">Kind</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody>
+                      {state.rows.slice(0, MAX_PREVIEW_ROWS).map((row) => (
+                        <tr key={row.id}>
+                          <td>
+                            <input
+                              type="checkbox"
+                              checked={row.selected}
+                              disabled={importing}
+                              onChange={() => toggleRow(row.id)}
+                              aria-label={`Import ${itemDisplayName(row.item)}`}
+                            />
+                          </td>
+                          <td>{itemDisplayName(row.item)}</td>
+                          <td>
+                            {itemDisplaySubtitle(row.item) ?? "—"}
+                            {state.duplicateRowIds.has(row.id) ? (
+                              <span
+                                className={styles.hint}
+                                title="Another row in this file has the same name and account."
+                              >
+                                Duplicate?
+                              </span>
+                            ) : null}
+                          </td>
+                          <td className={styles.kind}>{row.item.kind.toUpperCase()}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {state.rows.length > MAX_PREVIEW_ROWS ? (
+                    <p className={styles.previewNote}>
+                      Showing the first {MAX_PREVIEW_ROWS.toLocaleString("en-US")} of{" "}
+                      {state.rows.length.toLocaleString("en-US")} rows. Select all and none still
+                      cover every row.
+                    </p>
+                  ) : null}
+                </div>
+              )}
 
               <Button
                 onClick={() => void confirmImport()}

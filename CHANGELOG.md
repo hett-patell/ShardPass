@@ -4,6 +4,15 @@ What changed in each release of the ShardPass extension. Versions are plain `2.x
 for features, a patch for fixes. The manifest version in `apps/extension/src/manifest.ts` is
 the number the browser reports on the About page.
 
+## 2.7.4
+
+- The dashboard and the health page judged every password again on every visit, each with its
+  own 1.6 MB worker. Judgements are now shared across the page and kept until the vault locks:
+  with 1,000 logins a second visit to the dashboard went from 2.8 s to 0.1 s.
+- The import preview drew a row per line in the file and kept redrawing it while the import
+  ran. It shows the first 200 rows and steps aside for the progress bar: previewing a
+  1,000-row file went from 482 ms to about 170 ms.
+
 ## 2.7.3
 
 - `pnpm package` writes the store upload: a flat, deterministic zip of the build that passed

@@ -26,6 +26,25 @@ const LABELS = ["Too weak", "Weak", "Fair", "Strong"] as const;
  * once per page and reused. Where workers are not available (tests), the quick estimate
  * stands in, so a meter is never blank.
  */
+/**
+ * Judgements already made, shared by every estimator on the page and keyed by the password
+ * that produced them. The health page and the dashboard each mount their own estimator and
+ * each unmounts on the way out, so without this a vault of a thousand logins is judged again
+ * from scratch on every visit -- about ten seconds of worker time for an answer that has not
+ * changed. The passwords are already in this page's memory as vault items, so holding them
+ * here adds no secret the page did not have; `clearStrengthCache` drops them on lock.
+ */
+const judged = new Map<string, StrengthEstimate>();
+
+function cacheKey(password: string, userInputs: readonly string[]): string {
+  return `${password}\u0000${userInputs.join("\u0001")}`;
+}
+
+/** Forgets every judgement. Called when the vault locks. */
+export function clearStrengthCache(): void {
+  judged.clear();
+}
+
 export function createStrengthEstimator(
   startWorker: () => Worker | null = () =>
     typeof Worker === "undefined"
@@ -64,7 +83,12 @@ export function createStrengthEstimator(
       const quick: StrengthEstimate = { ...passwordStrength(password), source: "quick" };
       if (password === "") return Promise.resolve(quick);
       const target = ensure();
+      // The cache stands in for the worker, never in front of the fallback: without a worker
+      // the answer is the quick estimate, as it has always been.
       if (target === null) return Promise.resolve(quick);
+      const key = cacheKey(password, userInputs);
+      const remembered = judged.get(key);
+      if (remembered !== undefined) return Promise.resolve(remembered);
       return new Promise<StrengthEstimate>((resolve) => {
         const id = nextId++;
         pending.set(id, (response) => {
@@ -76,14 +100,16 @@ export function createStrengthEstimator(
           const advice = [response.warning, ...response.suggestions]
             .filter((part) => part !== "")
             .join(" ");
-          resolve({
+          const estimate: StrengthEstimate = {
             bits: Math.round(response.guessesLog10 * Math.log2(10)),
             level,
             label: LABELS[level],
             ...(advice === "" ? {} : { advice }),
             crackTime: response.crackTime,
             source: "full",
-          });
+          };
+          judged.set(key, estimate);
+          resolve(estimate);
         });
         const request: StrengthWorkerRequest = {
           version: 1,
