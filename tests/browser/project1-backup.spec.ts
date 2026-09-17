@@ -6,6 +6,8 @@ import path from "node:path";
 import {
   expect,
   expectNoSeriousAxeViolations,
+  expectVaultUnlocked,
+  lockVault,
   setChromiumZoom,
   stabilizePage,
   test,
@@ -199,7 +201,7 @@ test("requires reconfirmation after a changed preview and redacts synchronously 
 
   await vault.getByRole("button", { name: "Cancel import" }).click();
   await vault.getByLabel("Backup file password").fill("synchronous redaction value");
-  await vault.getByRole("button", { name: "Lock vault" }).click();
+  await lockVault(vault);
   await expect(vault.getByRole("heading", { name: "Unlock ShardPass" })).toBeVisible();
   await expect(vault.getByLabel("Backup file password")).toHaveCount(0);
   expect(await activeGenerationId(extensionWorker)).toBe(changedRoot);
@@ -262,9 +264,7 @@ async function setupVault(page: Page): Promise<void> {
   await page.getByLabel("Master password", { exact: true }).fill(vaultPassword);
   await page.getByLabel("Confirm master password").fill(vaultPassword);
   await page.getByRole("button", { name: "Create vault" }).click();
-  await expect(page.getByRole("heading", { name: "Vault unlocked" })).toBeVisible({
-    timeout: 120_000,
-  });
+  await expectVaultUnlocked(page);
   await expect(page.getByRole("heading", { name: "Encrypted backups" })).toBeVisible();
 }
 

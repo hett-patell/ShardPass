@@ -3,7 +3,7 @@ import path from "node:path";
 
 import type { BrowserContext, Page } from "@playwright/test";
 
-import { expect, test } from "./fixtures";
+import { expect, expectVaultReady, expectVaultUnlocked, test } from "./fixtures";
 
 const fixtureDirectory = path.resolve(import.meta.dirname, "../fixtures/legacy");
 const vaultPassword = "correct horse battery";
@@ -160,7 +160,7 @@ async function readJson<T>(name: string): Promise<T> {
 async function expectBackgroundReady(context: BrowserContext, extensionId: string): Promise<void> {
   const page = await context.newPage();
   await page.goto(`chrome-extension://${extensionId}/vault/index.html`);
-  await expect(page.getByText("Foundation ready", { exact: true }).first()).toBeVisible();
+  await expectVaultReady(page);
   await page.close();
 }
 
@@ -203,9 +203,7 @@ async function configureVault(page: Page): Promise<void> {
     await page.getByLabel("Master password", { exact: true }).fill(vaultPassword);
     await page.getByLabel("Confirm master password").fill(vaultPassword);
     await page.getByRole("button", { name: "Create vault" }).click();
-    await expect(page.getByRole("heading", { name: "Vault unlocked" })).toBeVisible({
-      timeout: 135_000,
-    });
+    await expectVaultUnlocked(page);
   }
 }
 
@@ -213,15 +211,13 @@ async function unlockVault(page: Page): Promise<void> {
   await expect(page.getByRole("heading", { name: "Unlock ShardPass" })).toBeVisible();
   await page.getByLabel("Master password", { exact: true }).fill(vaultPassword);
   await page.getByRole("button", { name: "Unlock vault" }).click();
-  await expect(page.getByRole("heading", { name: "Vault unlocked" })).toBeVisible({
-    timeout: 120_000,
-  });
+  await expectVaultUnlocked(page);
 }
 
 async function ensureVaultUnlocked(page: Page): Promise<void> {
   const unlockHeading = page.getByRole("heading", { name: "Unlock ShardPass" });
   if (await unlockHeading.isVisible()) await unlockVault(page);
-  else await expect(page.getByRole("heading", { name: "Vault unlocked" })).toBeVisible();
+  else await expectVaultUnlocked(page);
 }
 
 function isPackagedLegacyKdfWorker(url: string, extensionId: string): boolean {

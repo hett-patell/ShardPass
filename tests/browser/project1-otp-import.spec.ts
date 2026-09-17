@@ -8,6 +8,8 @@ import { promisify } from "node:util";
 import {
   expect,
   expectNoSeriousAxeViolations,
+  expectVaultUnlocked,
+  lockVault,
   setChromiumZoom,
   stabilizePage,
   test,
@@ -433,7 +435,7 @@ test("recognizes canonical Aegis and fixed unsupported Ente wrappers and synchro
   await vault.getByLabel("Sensitive import input").fill(otpUri(marker, "lock", secretA));
   await vault.getByRole("button", { name: "Preview import" }).click();
   await expect(vault.getByRole("list", { name: "Safe import preview rows" })).toBeVisible();
-  await vault.getByRole("button", { name: "Lock vault" }).click();
+  await lockVault(vault);
   await expect(vault.getByRole("heading", { name: "Unlock ShardPass" })).toBeVisible();
   expect(await vault.locator("body").textContent()).not.toContain(marker);
   expect(await vault.locator("body").textContent()).not.toContain(secretA);
@@ -446,7 +448,7 @@ test("recognizes canonical Aegis and fixed unsupported Ente wrappers and synchro
   await expect(vault.getByText("Malformed entry", { exact: true })).toBeVisible();
   await expect(vault.getByRole("button", { name: "Confirm import" })).toBeDisabled();
   await expectNoSeriousAxeViolations(vault);
-  await expect(vault.getByRole("heading", { name: "Vault unlocked" })).toBeVisible();
+  await expectVaultUnlocked(vault);
   await openImport(vault);
   await stabilizePage(vault);
   await vault.setViewportSize({ width: 390, height: 844 });
@@ -528,17 +530,13 @@ async function setupVault(page: Page): Promise<void> {
   await page.getByLabel("Master password", { exact: true }).fill(vaultPassword);
   await page.getByLabel("Confirm master password").fill(vaultPassword);
   await page.getByRole("button", { name: "Create vault" }).click();
-  await expect(page.getByRole("heading", { name: "Vault unlocked" })).toBeVisible({
-    timeout: 120_000,
-  });
+  await expectVaultUnlocked(page);
 }
 
 async function unlockVault(page: Page): Promise<void> {
   await page.getByLabel("Master password", { exact: true }).fill(vaultPassword);
   await page.getByRole("button", { name: "Unlock vault" }).click();
-  await expect(page.getByRole("heading", { name: "Vault unlocked" })).toBeVisible({
-    timeout: 120_000,
-  });
+  await expectVaultUnlocked(page);
 }
 
 async function openImport(page: Page): Promise<void> {

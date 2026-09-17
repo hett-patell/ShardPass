@@ -5,7 +5,14 @@ import { canonicalJson } from "../../packages/storage/src/index";
 import sodium from "../../apps/extension/node_modules/libsodium-wrappers-sumo/dist/modules-sumo/libsodium-wrappers.js";
 import srp from "../../apps/extension/node_modules/fast-srp-hap/lib/srp.js";
 
-import { expect, expectNoSeriousAxeViolations, stabilizePage, test } from "./fixtures";
+import {
+  expect,
+  expectNoSeriousAxeViolations,
+  expectVaultUnlocked,
+  openEnteSync,
+  stabilizePage,
+  test,
+} from "./fixtures";
 
 test.use({ screenLockStabilized: true });
 
@@ -311,9 +318,8 @@ test("packaged Ente TOTP 2FA uses the exact verify route before key recovery and
   await page.getByLabel("Master password", { exact: true }).fill(vaultPassword);
   await page.getByLabel("Confirm master password").fill(vaultPassword);
   await page.getByRole("button", { name: "Create vault" }).click();
-  await expect(page.getByRole("heading", { name: "Vault unlocked" })).toBeVisible({
-    timeout: 120_000,
-  });
+  await expectVaultUnlocked(page);
+  await openEnteSync(page);
   await page.getByRole("button", { name: "Connect Ente" }).click();
   await page.getByLabel("Ente email").fill(email);
   await page.getByLabel("Ente password").fill(password);
@@ -349,9 +355,8 @@ test("packaged Ente SRP login, key recovery, pull, lock and encrypted persistenc
   await page.getByLabel("Master password", { exact: true }).fill(vaultPassword);
   await page.getByLabel("Confirm master password").fill(vaultPassword);
   await page.getByRole("button", { name: "Create vault" }).click();
-  await expect(page.getByRole("heading", { name: "Vault unlocked" })).toBeVisible({
-    timeout: 120_000,
-  });
+  await expectVaultUnlocked(page);
+  await openEnteSync(page);
 
   await page.getByRole("button", { name: "Connect Ente" }).click();
   await page.getByLabel("Ente email").fill(email);
@@ -486,7 +491,8 @@ test("packaged Ente SRP login, key recovery, pull, lock and encrypted persistenc
   await expect.poll(() => mock.mutations()).toBe(4);
   await expect(page.getByRole("alert")).toContainText("could not complete");
   await page.reload();
-  await expect(page.getByRole("heading", { name: "Vault unlocked" })).toBeVisible();
+  await expectVaultUnlocked(page);
+  await openEnteSync(page);
   await page.getByRole("button", { name: "Sync now" }).click();
   await expect
     .poll(
@@ -614,9 +620,9 @@ for (const scenario of conflictScenarios) {
     await page.getByLabel("Master password", { exact: true }).fill(vaultPassword);
     await page.getByLabel("Confirm master password").fill(vaultPassword);
     await page.getByRole("button", { name: "Create vault" }).click();
-    await expect(page.getByRole("heading", { name: "Vault unlocked" })).toBeVisible({
-      timeout: 120_000,
-    });
+    await expectVaultUnlocked(page);
+    await openEnteSync(page);
+    await openEnteSync(page);
     await page.getByRole("button", { name: "Connect Ente" }).click();
     await page.getByLabel("Ente email").fill(email);
     await page.getByLabel("Ente password").fill(password);
@@ -663,7 +669,9 @@ for (const scenario of conflictScenarios) {
     if ((refreshResponse as { kind?: string }).kind === "error")
       throw new Error(`manual conflict refresh: ${JSON.stringify(refreshResponse)}`);
     await page.reload();
-    await expect(page.getByRole("heading", { name: "Vault unlocked" })).toBeVisible();
+    await expectVaultUnlocked(page);
+    await openEnteSync(page);
+    await openEnteSync(page);
     await expect(page.getByRole("heading", { name: "Conflicts require review" }))
       .toBeVisible()
       .catch(async () => {
@@ -688,7 +696,9 @@ for (const scenario of conflictScenarios) {
     await expect(page.getByRole("heading", { name: "Connected" })).toBeVisible();
     expect(mock.mutationLog().map(({ method }) => method)).toEqual(["POST"]);
     await page.reload();
-    await expect(page.getByRole("heading", { name: "Vault unlocked" })).toBeVisible();
+    await expectVaultUnlocked(page);
+    await openEnteSync(page);
+    await openEnteSync(page);
 
     for (const label of ["B", "L", "R"])
       await expect(

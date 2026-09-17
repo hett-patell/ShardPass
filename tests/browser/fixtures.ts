@@ -211,6 +211,45 @@ export const test = base.extend<ExtensionFixtures>({
 
 export { expect };
 
+/**
+ * The vault page has a background behind it. The badge in its header is the one signal that
+ * survives the layout changing underneath these specs -- and it is what a person looks at.
+ */
+export async function expectVaultReady(page: Page): Promise<void> {
+  await expect(page.getByRole("status").filter({ hasText: "Ready" }).first()).toBeVisible({
+    timeout: 30_000,
+  });
+}
+
+/**
+ * The vault is open: the shell with the sidebar is on screen. Specs used to wait for the
+ * "Vault unlocked" heading, which lives in the security card and is therefore only visible
+ * once Settings is open -- it stopped being a signal that unlocking had finished.
+ */
+export async function expectVaultUnlocked(page: Page): Promise<void> {
+  await expect(page.getByRole("button", { name: /^Settings/ })).toBeVisible({ timeout: 120_000 });
+}
+
+/**
+ * Opens the Ente sync view. It is one of the sidebar's views and is hidden until chosen;
+ * specs written when the panel stood on its own clicked straight into it.
+ */
+export async function openEnteSync(page: Page): Promise<void> {
+  await page.getByRole("button", { name: /^Ente sync/ }).click();
+  await expect(page.getByRole("heading", { name: /Ente/ }).first()).toBeVisible({
+    timeout: 30_000,
+  });
+}
+
+/** Opens Settings, where the vault's own controls live, and locks it. */
+export async function lockVault(page: Page): Promise<void> {
+  await page.getByRole("button", { name: /^Settings/ }).click();
+  await expect(page.getByRole("heading", { name: "Vault unlocked" })).toBeVisible({
+    timeout: 30_000,
+  });
+  await page.getByRole("button", { name: "Lock vault" }).click();
+}
+
 export async function stabilizePage(page: Page): Promise<void> {
   await page.emulateMedia({ colorScheme: "dark", reducedMotion: "reduce" });
   await page.evaluate(async () => document.fonts.ready);

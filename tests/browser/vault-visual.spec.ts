@@ -3,6 +3,7 @@ import type { Page } from "@playwright/test";
 import {
   expect,
   expectNoSeriousAxeViolations,
+  expectVaultReady,
   setChromiumZoom,
   stabilizePage,
   test,
@@ -181,7 +182,7 @@ test("vault desktop and compact layouts match reviewed visuals and pass axe", as
   const page = await context.newPage();
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto(`chrome-extension://${extensionId}/vault/index.html`);
-  await expect(page.getByText("Foundation ready", { exact: true }).first()).toBeVisible();
+  await expectVaultReady(page);
   await stabilizePage(page);
   await expectNoSeriousAxeViolations(page);
   await expect(page).toHaveScreenshot("vault-desktop.png", {
@@ -206,7 +207,7 @@ test("vault command groups remain readable around responsive bounds and at 200% 
 }) => {
   const page = await context.newPage();
   await page.goto(`chrome-extension://${extensionId}/vault/index.html`);
-  await expect(page.getByText("Foundation ready", { exact: true }).first()).toBeVisible();
+  await expectVaultReady(page);
 
   for (const width of [981, 979, 761, 759] as const)
     await assertResponsiveCommandLayout(page, width, 100);

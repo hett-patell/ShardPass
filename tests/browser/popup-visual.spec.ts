@@ -1,6 +1,7 @@
 import {
   expect,
   expectNoSeriousAxeViolations,
+  expectVaultReady,
   setChromiumZoom,
   stabilizePage,
   test,
@@ -16,7 +17,7 @@ test("popup matches its native 360px visual and has no serious accessibility vio
   const page = await context.newPage();
   await page.setViewportSize({ width: 360, height: 520 });
   await page.goto(`chrome-extension://${extensionId}/popup/index.html`);
-  await expect(page.getByText("Foundation ready", { exact: true })).toBeVisible();
+  await expectVaultReady(page);
   await stabilizePage(page);
   await expectNoSeriousAxeViolations(page);
   await expect(page).toHaveScreenshot("popup-foundation.png", {
@@ -32,7 +33,7 @@ test("popup reflows at actual 200% Chromium zoom with long localized content", a
   const page = await context.newPage();
   await page.setViewportSize({ width: 720, height: 720 });
   await page.goto(`chrome-extension://${extensionId}/popup/index.html`);
-  await expect(page.getByText("Foundation ready", { exact: true })).toBeVisible();
+  await expectVaultReady(page);
   await setChromiumZoom(page, 200);
   await page.evaluate((copy) => {
     const heading = document.querySelector("main h2");

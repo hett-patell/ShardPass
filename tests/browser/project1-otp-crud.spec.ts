@@ -2,7 +2,14 @@ import type { BrowserContext, Locator, Page, Worker } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
-import { expect, expectNoSeriousAxeViolations, stabilizePage, test } from "./fixtures";
+import {
+  expect,
+  expectNoSeriousAxeViolations,
+  expectVaultUnlocked,
+  lockVault,
+  stabilizePage,
+  test,
+} from "./fixtures";
 
 const vaultPassword = "correct horse battery";
 
@@ -68,7 +75,7 @@ test("covers packaged OTP CRUD, popup, session redaction, and encrypted persiste
   await selectItem(vault, itemNames.totp.issuer);
   const staleRevision = await revisionText(vault);
   const secondVault = await openVault(context, extensionId);
-  await expect(secondVault.getByRole("heading", { name: "Vault unlocked" })).toBeVisible();
+  await expectVaultUnlocked(secondVault);
   await selectItem(secondVault, itemNames.totp.issuer);
   await secondVault.getByLabel("Label").fill("synthetic-second-page");
   await secondVault.getByRole("button", { name: "Save changes" }).click();
@@ -242,7 +249,7 @@ test("covers packaged OTP CRUD, popup, session redaction, and encrypted persiste
 
   await seedSyntheticLegacySource(extensionWorker);
   await vault.reload();
-  await expect(vault.getByRole("heading", { name: "Vault unlocked" })).toBeVisible();
+  await expectVaultUnlocked(vault);
   await expect(vault.getByRole("heading", { name: "Migrate legacy vault" })).toBeVisible();
   await vault.getByRole("heading", { name: "Migrate legacy vault" }).scrollIntoViewIfNeeded();
   await expect(vault).toHaveScreenshot("vault-otp-migration-coexistence.png", { fullPage: true });
@@ -258,7 +265,7 @@ test("covers packaged OTP CRUD, popup, session redaction, and encrypted persiste
   await dialog.getByRole("button", { name: "Confirm delete" }).click();
   await expect(vault.getByText(attemptedLabel, { exact: true })).toHaveCount(0);
 
-  await vault.getByRole("button", { name: "Lock vault" }).click();
+  await lockVault(vault);
   await expect(vault.getByRole("heading", { name: "Unlock ShardPass" })).toBeVisible();
   await expect(vault.getByText(itemNames.hotp.issuer, { exact: true })).toHaveCount(0);
   await expect(vault.getByText(itemNames.steam.label, { exact: true })).toHaveCount(0);
@@ -323,18 +330,14 @@ async function setupVault(page: Page): Promise<void> {
   await page.getByLabel("Master password", { exact: true }).fill(vaultPassword);
   await page.getByLabel("Confirm master password").fill(vaultPassword);
   await page.getByRole("button", { name: "Create vault" }).click();
-  await expect(page.getByRole("heading", { name: "Vault unlocked" })).toBeVisible({
-    timeout: 120_000,
-  });
+  await expectVaultUnlocked(page);
 }
 
 async function unlockVault(page: Page): Promise<void> {
   await expect(page.getByRole("heading", { name: "Unlock ShardPass" })).toBeVisible();
   await page.getByLabel("Master password", { exact: true }).fill(vaultPassword);
   await page.getByRole("button", { name: "Unlock vault" }).click();
-  await expect(page.getByRole("heading", { name: "Vault unlocked" })).toBeVisible({
-    timeout: 120_000,
-  });
+  await expectVaultUnlocked(page);
 }
 
 async function createOtp(

@@ -2,7 +2,7 @@ import type { BrowserContext, CDPSession, Locator, Page } from "@playwright/test
 
 import axe from "axe-core";
 
-import { expect, stabilizePage, test } from "./fixtures";
+import { expect, expectVaultUnlocked, lockVault, stabilizePage, test } from "./fixtures";
 
 const vaultPassword = "synthetic local passphrase";
 const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
@@ -77,18 +77,14 @@ async function setupVault(page: Page): Promise<void> {
   await page.getByLabel("Master password", { exact: true }).fill(vaultPassword);
   await page.getByLabel("Confirm master password").fill(vaultPassword);
   await page.getByRole("button", { name: "Create vault" }).click();
-  await expect(page.getByRole("heading", { name: "Vault unlocked" })).toBeVisible({
-    timeout: 120_000,
-  });
+  await expectVaultUnlocked(page);
 }
 
 async function unlockVault(page: Page): Promise<void> {
   await expect(page.getByRole("heading", { name: "Unlock ShardPass" })).toBeVisible();
   await page.getByLabel("Master password", { exact: true }).fill(vaultPassword);
   await page.getByRole("button", { name: "Unlock vault" }).click();
-  await expect(page.getByRole("heading", { name: "Vault unlocked" })).toBeVisible({
-    timeout: 120_000,
-  });
+  await expectVaultUnlocked(page);
 }
 
 async function createOtp(
@@ -302,7 +298,7 @@ async function assertLockCancellation(
   await page.locator("#explicit-otp").fill("");
   await page.locator("#explicit-otp").focus();
   const session = await openPicker(context, page);
-  await vault.getByRole("button", { name: "Lock vault" }).click();
+  await lockVault(vault);
   await expect(vault.getByRole("heading", { name: "Unlock ShardPass" })).toBeVisible();
   await selectAccount(session, accounts.favorite.issuer);
   await expect(page.locator("#explicit-otp")).toHaveValue("");
@@ -365,7 +361,7 @@ async function assertEncryptedPersistence(
   issuer: string,
   expectedCounter: number,
 ): Promise<void> {
-  await vault.getByRole("button", { name: "Lock vault" }).click();
+  await lockVault(vault);
   const local = await context
     .serviceWorkers()[0]!
     .evaluate(async () => chrome.storage.local.get(null));
