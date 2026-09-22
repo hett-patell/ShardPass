@@ -429,11 +429,11 @@ test("packaged Ente SRP login, key recovery, pull, lock and encrypted persistenc
 
   // Update is queued by the real editor, then dispatched and observed by a full pull.
   await page.getByRole("option", { name: /Synthetic matrix Queued create/u }).click();
-  await expect(page.getByRole("heading", { name: "Edit OTP" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Edit one-time code" })).toBeVisible();
   await expect(page.getByLabel("Label")).toHaveValue("Queued create");
   await page.waitForTimeout(250);
   await page.getByLabel("Label").fill("Queued update");
-  await page.getByRole("button", { name: "Save changes" }).click();
+  await page.getByRole("button", { name: "Save", exact: true }).click();
   await expect(page.getByRole("option", { name: /Synthetic matrix Queued update/u })).toBeVisible();
   await expect.poll(() => mock.mutations()).toBe(1);
   await page.getByRole("button", { name: "Sync now" }).click();
@@ -637,7 +637,7 @@ for (const scenario of conflictScenarios) {
 
     if (scenario.local === "edit") {
       await page.getByLabel("Label").fill("L");
-      await page.getByRole("button", { name: "Save changes" }).click();
+      await page.getByRole("button", { name: "Save", exact: true }).click();
       await expect(page.getByRole("option", { name: /Synthetic matrix L/u })).toBeVisible();
     } else {
       await page.getByRole("button", { name: "Delete OTP" }).click();
@@ -724,17 +724,15 @@ for (const scenario of conflictScenarios) {
 }
 
 async function createSyntheticOtp(page: Page, label: string): Promise<void> {
-  await page.getByRole("button", { name: "Create OTP" }).click();
+  await page.getByRole("button", { name: /^New item/ }).click();
+  await page.getByRole("menuitem", { name: "One-time code" }).click();
   await page.getByLabel("Issuer").fill("Synthetic matrix");
   await page.getByLabel("Label").fill(label);
-  await page.getByRole("button", { name: "Reveal secret" }).click();
-  try {
-    await page.locator("#otp-secret").fill("JBSWY3DPEHPK3PXP");
-  } finally {
-    await page.getByRole("button", { name: "Conceal secret" }).click();
-  }
-  await page.getByRole("button", { name: "Save OTP" }).click();
-  await expect(page.getByRole("heading", { name: "Edit OTP" })).toBeVisible();
+  // Creating a code shows the secret field outright; only editing starts concealed.
+  await page.locator("#otp-secret").fill("JBSWY3DPEHPK3PXP");
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  // Saving selects the new code and shows its detail, titled by the issuer.
+  await expect(page.getByRole("heading", { name: "Synthetic matrix", level: 2 })).toBeVisible();
 }
 
 function masterKeyCanary(): Uint8Array {

@@ -10,10 +10,17 @@ import { defineConfig } from "@playwright/test";
  * - The visual specs compare pixels, and this project ships no fonts: it renders with
  *   whatever the machine has. Two Linux machines disagree about a baseline the snapshot path
  *   calls simply "linux", so these belong to local review, and the release checklist says so.
- * - The rest reach screens the current interface arranges differently, or drive flows whose
- *   mocks have drifted. The Ente matrix gets as far as connecting and is answered
- *   "disconnected" by its own mock, which may be the mock or may be real: it needs a session
- *   of its own rather than a locator nudged until it goes green.
+ * - The four OTP specs were written against a standalone one-time-code view -- its own
+ *   "Create OTP" button, "Search OTP items" searchbox and "OTP items" listbox -- which
+ *   932754d (2026-09-03) replaced with the unified item list and the New item menu. Their
+ *   shared create helper now drives the current flow and creation passes; what remains is the
+ *   searching, selecting and editing built on the removed view, which needs rewriting against
+ *   the unified list rather than patching.
+ * - project1-migration drives the legacy migration worker and hits its fixed 120 s
+ *   fail-closed timeout under browser contention; the retry path then fails too.
+ * - The Ente matrix gets as far as connecting and is answered "disconnected" by its own mock,
+ *   which may be the mock or may be real: it needs a session of its own rather than a locator
+ *   nudged until it goes green.
  */
 const ciSkipped = [
   "**/*-visual.spec.ts",

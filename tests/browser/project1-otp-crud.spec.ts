@@ -70,7 +70,7 @@ test("covers packaged OTP CRUD, popup, session redaction, and encrypted persiste
   const listbox = vault.getByRole("listbox", { name: "OTP items" });
   await listbox.focus();
   await listbox.press("End");
-  await expect(vault.getByRole("heading", { name: "Edit OTP" })).toBeVisible();
+  await expect(vault.getByRole("heading", { name: "Edit one-time code" })).toBeVisible();
 
   await selectItem(vault, itemNames.totp.issuer);
   const staleRevision = await revisionText(vault);
@@ -78,16 +78,16 @@ test("covers packaged OTP CRUD, popup, session redaction, and encrypted persiste
   await expectVaultUnlocked(secondVault);
   await selectItem(secondVault, itemNames.totp.issuer);
   await secondVault.getByLabel("Label").fill("synthetic-second-page");
-  await secondVault.getByRole("button", { name: "Save changes" }).click();
+  await secondVault.getByRole("button", { name: "Save", exact: true }).click();
   await expect.poll(() => revisionText(secondVault)).not.toBe(staleRevision);
 
   const attemptedLabel = "synthetic-conflicted-attempt";
   await vault.getByLabel("Label").fill(attemptedLabel);
-  await vault.getByRole("button", { name: "Save changes" }).click();
+  await vault.getByRole("button", { name: "Save", exact: true }).click();
   await expect(vault.getByRole("alert")).toContainText("attempted values are retained");
   await expect(vault.getByLabel("Label")).toHaveValue(attemptedLabel);
   await expect.poll(() => revisionText(vault)).not.toBe(staleRevision);
-  await vault.getByRole("button", { name: "Save changes" }).click();
+  await vault.getByRole("button", { name: "Save", exact: true }).click();
   await expect(vault.getByLabel("Label")).toHaveValue(attemptedLabel);
   await secondVault.close();
 
@@ -351,7 +351,8 @@ async function createOtp(
     tags?: string;
   }>,
 ): Promise<void> {
-  await page.getByRole("button", { name: "Create OTP" }).click();
+  await page.getByRole("button", { name: /^New item/ }).click();
+  await page.getByRole("menuitem", { name: "One-time code" }).click();
   await page.getByLabel("Issuer").fill(input.issuer);
   await page.getByLabel("Label").fill(input.label);
   await page.getByLabel("OTP type").selectOption({ label: input.type });
@@ -359,15 +360,11 @@ async function createOtp(
     await page.getByLabel("Period (seconds)").fill(String(input.period));
   if (input.counter !== undefined) await page.getByLabel("Counter").fill(String(input.counter));
   if (input.tags !== undefined) await page.getByLabel("Tags").fill(input.tags);
-  await page.getByRole("button", { name: "Reveal secret" }).click();
-  try {
-    const secret = page.locator("#otp-secret");
-    await secret.fill(syntheticSecret);
-  } finally {
-    await page.getByRole("button", { name: "Conceal secret" }).click();
-  }
-  await page.getByRole("button", { name: "Save OTP" }).click();
-  await expect(page.getByRole("heading", { name: "Edit OTP" })).toBeVisible();
+  // Creating a code shows the secret field outright; only editing starts concealed.
+  await page.locator("#otp-secret").fill(syntheticSecret);
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  // Saving selects the new code and shows its detail, titled by the issuer.
+  await expect(page.getByRole("heading", { name: input.issuer, level: 2 })).toBeVisible();
 }
 
 async function assertSecretControl(page: Page): Promise<void> {
@@ -394,7 +391,7 @@ async function assertSecretControl(page: Page): Promise<void> {
 
 async function selectItem(page: Page, issuer: string): Promise<void> {
   await page.getByRole("option", { name: new RegExp(issuer, "u") }).click();
-  await expect(page.getByRole("heading", { name: "Edit OTP" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Edit one-time code" })).toBeVisible();
 }
 
 async function revisionText(page: Page): Promise<string> {

@@ -98,21 +98,19 @@ async function createOtp(
     tags?: string;
   }>,
 ): Promise<void> {
-  await page.getByRole("button", { name: "Create OTP" }).click();
+  await page.getByRole("button", { name: /^New item/ }).click();
+  await page.getByRole("menuitem", { name: "One-time code" }).click();
   await page.getByLabel("Issuer").fill(input.issuer);
   await page.getByLabel("Label").fill(input.label);
   await page.getByLabel("OTP type").selectOption({ label: input.type });
   if (input.counter !== undefined) await page.getByLabel("Counter").fill(String(input.counter));
   if (input.favorite === true) await page.getByLabel("Favorite").check();
   if (input.tags !== undefined) await page.getByLabel("Tags").fill(input.tags);
-  await page.getByRole("button", { name: "Reveal secret" }).click();
-  try {
-    await page.locator("#otp-secret").fill(syntheticSecret);
-  } finally {
-    await page.getByRole("button", { name: "Conceal secret" }).click();
-  }
-  await page.getByRole("button", { name: "Save OTP" }).click();
-  await expect(page.getByRole("heading", { name: "Edit OTP" })).toBeVisible();
+  // Creating a code shows the secret field outright; only editing starts concealed.
+  await page.locator("#otp-secret").fill(syntheticSecret);
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  // Saving selects the new code and shows its detail, titled by the issuer.
+  await expect(page.getByRole("heading", { name: input.issuer, level: 2 })).toBeVisible();
 }
 
 async function assertEligibilityMatrix(page: Page): Promise<void> {

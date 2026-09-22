@@ -128,7 +128,7 @@ export function AboutView() {
             <li>Cards, identities, notes, API credentials and SSH keys.</li>
             <li>Generators for passwords, usernames and email aliases.</li>
             <li>Folders, favourites, archive, and a health report over the whole vault.</li>
-            <li>Imports from Chrome, 1Password, Bitwarden, LastPass and eight more.</li>
+            <li>Imports from Chrome, 1Password, Bitwarden, LastPass and nine more.</li>
             <li>Encrypted backups you can restore into a new browser profile.</li>
           </ul>
         </section>

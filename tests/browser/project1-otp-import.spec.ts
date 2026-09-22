@@ -221,7 +221,7 @@ test("packages token-bound text preview, changed confirmation, encrypted persist
   await expect(vault.getByRole("option", { name: new RegExp(marker, "u") })).toHaveCount(4);
   await vault.getByRole("option", { name: new RegExp(`${marker} secondary`, "u") }).click();
   await vault.getByLabel("Label").fill("secondary-edited");
-  await vault.getByRole("button", { name: "Save changes" }).click();
+  await vault.getByRole("button", { name: "Save", exact: true }).click();
   await vault.reload();
   const edited = vault.getByRole("option", {
     name: new RegExp(`${marker} secondary-edited`, "u"),
@@ -348,7 +348,7 @@ test("captures reviewed safe import previews without clipping at compact and 200
   await vault.setViewportSize({ width: 780, height: 1_688 });
   await setChromiumZoom(vault, 200);
   await expect(vault.getByRole("button", { name: "Import", exact: true })).toBeVisible();
-  await expect(vault.getByRole("button", { name: "Create OTP" })).toBeVisible();
+  await expect(vault.getByRole("button", { name: "New one-time code" })).toBeVisible();
   await vault.getByRole("button", { name: "Confirm import" }).scrollIntoViewIfNeeded();
   await expect(vault.getByRole("button", { name: "Confirm import" })).toBeInViewport();
   await expectNoSeriousAxeViolations(vault);
@@ -560,14 +560,15 @@ async function confirmImport(page: Page, count: number): Promise<void> {
 }
 
 async function createOtp(page: Page, issuer: string, label: string, secret: string): Promise<void> {
-  await page.getByRole("button", { name: "Create OTP" }).click();
+  await page.getByRole("button", { name: /^New item/ }).click();
+  await page.getByRole("menuitem", { name: "One-time code" }).click();
   await page.getByLabel("Issuer").fill(issuer);
   await page.getByLabel("Label").fill(label);
-  await page.getByRole("button", { name: "Reveal secret" }).click();
+  // Creating a code shows the secret field outright; only editing starts concealed.
   await page.locator("#otp-secret").fill(secret);
-  await page.getByRole("button", { name: "Conceal secret" }).click();
-  await page.getByRole("button", { name: "Save OTP" }).click();
-  await expect(page.getByRole("heading", { name: "Edit OTP" })).toBeVisible();
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  // Saving selects the new code and shows its detail, titled by the issuer.
+  await expect(page.getByRole("heading", { name: issuer, level: 2 })).toBeVisible();
 }
 
 async function installRuntimeInstrumentation(page: Page): Promise<void> {

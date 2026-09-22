@@ -127,7 +127,7 @@ export function OtpEditor({
     >
       <header className={styles.editorHeader}>
         <div>
-          <h3>{mode === "create" ? "Create OTP" : "Edit OTP"}</h3>
+          <h3>{mode === "create" ? "New one-time code" : "Edit one-time code"}</h3>
         </div>
         {mode === "edit" && onDelete ? (
           <Button
@@ -343,7 +343,7 @@ export function OtpEditor({
           Cancel
         </Button>
         <Button type="submit" loading={submitting}>
-          {mode === "create" ? "Save OTP" : "Save changes"}
+          Save
         </Button>
       </footer>
     </form>

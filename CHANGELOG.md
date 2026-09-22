@@ -4,6 +4,20 @@ What changed in each release of the ShardPass extension. Versions are plain `2.x
 for features, a patch for fixes. The manifest version in `apps/extension/src/manifest.ts` is
 the number the browser reports on the About page.
 
+## 2.8.3
+
+- One-time codes were called three different things. The sidebar, the popup and the shared
+  label map say "One-time code"; the New item menu said "OTP" and the editor said "Create OTP"
+  and "Save OTP". A user who reads one name in the list and hunts for it under another is
+  doing the interface's work. The menu entry, both headings and the save button now match
+  every other item kind: "One-time code", "New one-time code", "Edit one-time code", "Save".
+- The About page said imports come from "Chrome, 1Password, Bitwarden, LastPass and eight
+  more". There are thirteen formats besides restoring your own backup, so it now says nine.
+- The four quarantined one-time-code browser specs were written against a standalone OTP view
+  that 932754d replaced on 2026-09-03. Their shared create helper now drives the current flow
+  and creation passes again; the quarantine comment names what is still stale in each, instead
+  of "the current interface arranges differently".
+
 ## 2.8.2
 
 - Saving an item wrote to storage once per journal entry. Records were already batched; the

@@ -282,7 +282,8 @@ async function createOtp(
     favorite: boolean;
   }>,
 ): Promise<void> {
-  await page.getByRole("button", { name: "Create OTP" }).click();
+  await page.getByRole("button", { name: /^New item/ }).click();
+  await page.getByRole("menuitem", { name: "One-time code" }).click();
   await page.getByLabel("Issuer").fill(item.issuer);
   await page.getByLabel("Label").fill(item.label);
   await page.getByLabel("OTP type").selectOption({ label: item.type });
@@ -292,11 +293,11 @@ async function createOtp(
   await page.getByLabel("Tags").fill(item.tags);
   await page.getByLabel("Note").fill(item.note);
   if (item.favorite) await page.getByLabel("Favorite").check();
-  await page.getByRole("button", { name: "Reveal secret" }).click();
+  // Creating a code shows the secret field outright; only editing starts concealed.
   await page.locator("#otp-secret").fill(syntheticSecret);
-  await page.getByRole("button", { name: "Conceal secret" }).click();
-  await page.getByRole("button", { name: "Save OTP" }).click();
-  await expect(page.getByRole("heading", { name: "Edit OTP" })).toBeVisible();
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  // Saving selects the new code and shows its detail, titled by the issuer.
+  await expect(page.getByRole("heading", { name: item.issuer, level: 2 })).toBeVisible();
 }
 
 async function downloadVerifiedBackup(page: Page): Promise<Download> {

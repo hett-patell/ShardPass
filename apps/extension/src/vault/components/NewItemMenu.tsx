@@ -22,7 +22,7 @@ interface NewItemOption {
 
 const OPTIONS: readonly NewItemOption[] = [
   { kind: "login", label: "Login", icon: Globe },
-  { kind: "otp", label: "OTP", icon: KeyRound },
+  { kind: "otp", label: "One-time code", icon: KeyRound },
   { kind: "note", label: "Note", icon: StickyNote },
   { kind: "card", label: "Card", icon: CreditCard },
   { kind: "identity", label: "Identity", icon: User },
