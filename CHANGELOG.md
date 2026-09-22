@@ -13,6 +13,11 @@ the number the browser reports on the About page.
   every other item kind: "One-time code", "New one-time code", "Edit one-time code", "Save".
 - The About page said imports come from "Chrome, 1Password, Bitwarden, LastPass and eight
   more". There are thirteen formats besides restoring your own backup, so it now says nine.
+- The README still described a rebuild in progress against the 1.2.1 reference, said the
+  browser suite was "nine tests" when it is sixteen spec files, and claimed this machine only
+  had Node 24 when it runs the approved Node 22.14.0. It now opens with what ShardPass is,
+  points at the changelog, privacy policy, store copy and architecture notes, and says how to
+  load a build.
 - The four quarantined one-time-code browser specs were written against a standalone OTP view
   that 932754d replaced on 2026-09-03. Their shared create helper now drives the current flow
   and creation passes again; the quarantine comment names what is still stale in each, instead

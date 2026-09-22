@@ -1,6 +1,31 @@
 # ShardPass
 
-ShardPass is being rebuilt as a maintainable, local-first password manager extension. This workspace contains a clean-room TypeScript implementation alongside the untouched ShardPass 1.2.1 packaged extension used as a behavioral reference.
+ShardPass is a local-first password manager for Chrome and Brave. There is no account and no
+server: the vault is encrypted on the machine it lives on with a key derived from the master
+password, and it stays there.
+
+It keeps logins, passkeys, one-time codes, cards, identities, notes, API credentials and SSH
+keys, fills them into the page you are on, and reports on weak, reused and breached passwords.
+Imports come from thirteen formats; backups are an encrypted file you hold. Three features
+reach the network, each off until switched on: breach checks (a password hash prefix), Ente
+sync for one-time codes, and DuckDuckGo email aliases.
+
+- What each release changed: [CHANGELOG.md](CHANGELOG.md)
+- What leaves the device, and when: [docs/privacy-policy.md](docs/privacy-policy.md)
+- Store submission copy and screenshots: [docs/store/](docs/store/)
+- Architecture, threat model and invariants: [docs/architecture/](docs/architecture/)
+
+This workspace holds the clean-room TypeScript implementation alongside the untouched ShardPass
+1.2.1 packaged extension kept as a behavioral reference.
+
+## Installing the build
+
+```sh
+pnpm build:security
+```
+
+Then load `dist/` unpacked: `chrome://extensions` -> Developer mode -> Load unpacked.
+`pnpm package` writes `release/shardpass-<version>.zip` for the store.
 
 ## Prerequisites
 
@@ -23,9 +48,11 @@ The frozen install is a release prerequisite, not a hidden step inside verificat
 - `pnpm lint` — run ESLint with zero warnings allowed
 - `pnpm format:check` — verify Prettier formatting
 - `pnpm test` — run Vitest tests
-- `pnpm test:browser` — clean/build/scan and run the nine Playwright browser tests; install the pinned browser first with `pnpm exec playwright install chromium` if Playwright reports a missing executable
+- `pnpm build:security` — clean, build, and run the output tests and semantic build scanner over `dist/`
+- `pnpm package` — build and write the store ZIP to `release/`
+- `pnpm test:browser` — clean/build/scan and run the Playwright specs; install the pinned browser first with `pnpm exec playwright install chromium` if Playwright reports a missing executable. Not every spec passes: `playwright.config.ts` lists the quarantined files and says why each one is there, and CI runs the rest
 - `pnpm verify` — run the baseline source checks, dependency boundaries, fresh build-output tests, and semantic build scanner
-- `pnpm verify:project0` — official Project 0 gate; fails immediately unless Node `>=22.14.0 <23` and pnpm `10.14.0` are active, then runs all source, dependency, fresh output, nine-browser-test, reproducibility, and production-audit evidence
+- `pnpm verify:project0` — official Project 0 gate; fails immediately unless Node `>=22.14.0 <23` and pnpm `10.14.0` are active, then runs all source, dependency, fresh output, browser-suite, reproducibility, and production-audit evidence
 - `pnpm verify:project0:local-node24` — development-only Node 24 bypass that runs the same evidence; it never clears the Node 22 release blocker
 
 ## Project 0 verification
@@ -39,7 +66,7 @@ corepack pnpm@10.14.0 verify:project0
 
 `verify:project0` cleans and builds `dist/`, applies source-output manifest/CSP tests, recursively scans production files, runs the browser suite against that preserved candidate, builds twice into temporary directories and compares sorted paths plus exact SHA-256 bytes, and finishes with `pnpm audit --prod`. The scanner rejects remote executable resources, maps/source-map references, prohibited console transports, `.env` leakage, inline executable scripts, legacy bundles, test harnesses, dynamic code, broken local references, and unexpected web-accessible exposure. Harmless manifest metadata URLs are not rejected merely for containing HTTPS.
 
-On this development machine only Node 24 is available. Equivalent local evidence can be collected explicitly with:
+This machine now runs Node 22.14.0, the approved runtime, so the Node 24 bypass below is no longer the only route. Equivalent local evidence can still be collected explicitly with:
 
 ```sh
 COREPACK_ENABLE_PROJECT_SPEC=0 corepack pnpm@10.14.0 --config.engine-strict=false verify:project0:local-node24

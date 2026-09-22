@@ -57,7 +57,7 @@ Use this checklist for the implemented current Project 1 candidate. `pnpm verify
 - [ ] `pnpm build:security`
 - [ ] `pnpm audit --prod` (record registry availability and findings)
 - [ ] `pnpm test:browser` against the fresh candidate build, not a development server substitute
-- [ ] `pnpm verify:project0` under the declared Node 22/pnpm runtime; this official gate checks the engine first, then source/static/dependency checks, a clean build and semantic output scan, all nine browser tests against that candidate, byte-for-byte reproducibility, and `pnpm audit --prod`
+- [ ] `pnpm verify:project0` under the declared Node 22/pnpm runtime; this official gate checks the engine first, then source/static/dependency checks, a clean build and semantic output scan, the whole browser suite against that candidate, byte-for-byte reproducibility, and `pnpm audit --prod`
 - [ ] If `pnpm verify:project0:local-node24` is recorded as development evidence, label it explicitly as a bypass that does not clear the Node 22 blocker
 
 ## Browser and human review
