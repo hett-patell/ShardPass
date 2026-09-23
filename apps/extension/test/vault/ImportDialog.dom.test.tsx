@@ -342,6 +342,32 @@ describe("ImportDialog", () => {
     expect(screen.getAllByText("Duplicate?")).toHaveLength(1);
   });
 
+  it("reaches rows past the first two hundred, and unticks duplicates it has not drawn", async () => {
+    const rows = Array.from(
+      { length: 250 },
+      (_, index) => `Site ${index},https://site-${index}.test,user${index},pw${index},`,
+    );
+    // Row 240 repeats row 0: a duplicate beyond the rows drawn at first.
+    rows.push("Site 0,https://site-0.test,user0,again,");
+    const csv = ["name,url,username,password,note", ...rows].join("\n");
+    const { platform } = createPlatform();
+    render(<ImportDialog platform={platform} active onImported={() => undefined} />);
+    fireEvent.change(screen.getByLabelText("Choose a local Chrome CSV file"), {
+      target: { files: [new File([csv], "many.csv", { type: "text/csv" })] },
+    });
+    await waitFor(() => expect(screen.getByText("Site 199")).toBeVisible());
+    expect(screen.queryByText("Site 249")).not.toBeInTheDocument();
+    expect(screen.getByText("251 of 251 selected")).toBeVisible();
+
+    fireEvent.click(screen.getByRole("button", { name: "Deselect 1 duplicate" }));
+    expect(screen.getByText("250 of 251 selected")).toBeVisible();
+
+    fireEvent.click(screen.getByRole("button", { name: "Show 51 more" }));
+    expect(screen.getByText("Site 249")).toBeVisible();
+    expect(screen.getByRole("checkbox", { name: "Import Site 249" })).toBeChecked();
+    expect(screen.queryByRole("button", { name: /more$/ })).not.toBeInTheDocument();
+  });
+
   it("keeps the sources locked while an import runs, then shows the summary", async () => {
     let release: (() => void) | undefined;
     const gate = new Promise<void>((resolve) => {

@@ -170,6 +170,48 @@ describe("SessionService", () => {
     await expect(setup(service)).rejects.toMatchObject({ code: "VAULT_ALREADY_CONFIGURED" });
   });
 
+  it("remembers that the active generation was authenticated, but none of its decrypted items", async () => {
+    const { service } = fixture();
+    await setup(service);
+    await service.vaultRepository.create(hotpItem);
+    await service.lock();
+    await unlock(service);
+    await service.vaultRepository.get(hotpItemId);
+
+    // The cache outlives every operation until the vault locks, so it must hold nothing
+    // secret: the proof that a root was authenticated, not the items inside it.
+    const cached = (service as unknown as { authenticatedActive: object | null })
+      .authenticatedActive;
+    expect(cached).not.toBeNull();
+    expect(Object.keys(cached ?? {}).sort()).toEqual(["epoch", "revision", "root"]);
+    expect(JSON.stringify(cached)).not.toContain(hotpItem.secret);
+  });
+
+  it("does not wipe an unlock that finishes while an automatic lock waits for the mutex", async () => {
+    const { service } = fixture();
+    await setup(service);
+    await service.vaultRepository.create(hotpItem);
+    await service.lock();
+
+    // Something else holds the mutation mutex -- a commit, an orphan sweep.
+    let release: () => void = () => undefined;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    const mutex = (
+      service as unknown as { mutationMutex: { run(task: () => Promise<void>): Promise<void> } }
+    ).mutationMutex;
+    const holder = mutex.run(() => held);
+
+    // The screen-lock event fires while the vault holds no key, then the person unlocks.
+    const automatic = service.lockIfUnlocked();
+    await unlock(service);
+    release();
+    await holder;
+    await automatic;
+
+    expect(await service.getState()).toMatchObject({ state: "unlocked" });
+    expect(await service.vaultRepository.get(hotpItemId)).toMatchObject({ id: hotpItemId });
+  });
+
   it("reopens the session a previous worker instance left behind, but not after a lock or a root change", async () => {
     const values = fixture();
     await setup(values.service);

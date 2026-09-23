@@ -370,6 +370,9 @@ export interface ImportDialogProps {
 export function ImportDialog({ platform, active, onImported, onDone }: ImportDialogProps) {
   const [source, setSource] = useState<SourceId>("chrome");
   const [state, setState] = useState<ThirdPartyState>(INITIAL_THIRD_PARTY_STATE);
+  // Drawing thousands of rows at once is what made a large import slow to open; the rest are
+  // drawn on request, and every control above the table still covers every row.
+  const [shownRows, setShownRows] = useState(MAX_PREVIEW_ROWS);
   const fileRef = useRef<HTMLInputElement | null>(null);
   const ownerRef = useRef(0);
   const mountedRef = useRef(true);
@@ -386,6 +389,7 @@ export function ImportDialog({ platform, active, onImported, onDone }: ImportDia
     ownerRef.current += 1;
     if (fileRef.current !== null) fileRef.current.value = "";
     pendingFileRef.current = null;
+    setShownRows(MAX_PREVIEW_ROWS);
     pendingTextRef.current = null;
     setPassword("");
     setKeyFile(null);
@@ -554,6 +558,16 @@ export function ImportDialog({ platform, active, onImported, onDone }: ImportDia
     setState((current) => ({
       ...current,
       rows: current.rows.map((row) => ({ ...row, selected })),
+    }));
+  };
+
+  /** Unticks every row the file repeats, drawn or not. */
+  const deselectDuplicates = () => {
+    setState((current) => ({
+      ...current,
+      rows: current.rows.map((row) =>
+        current.duplicateRowIds.has(row.id) ? { ...row, selected: false } : row,
+      ),
     }));
   };
 
@@ -897,6 +911,17 @@ export function ImportDialog({ platform, active, onImported, onDone }: ImportDia
                   >
                     Select none
                   </button>
+                  {state.duplicateRowIds.size > 0 ? (
+                    <button
+                      type="button"
+                      className={styles.previewActionButton}
+                      disabled={importing}
+                      onClick={deselectDuplicates}
+                    >
+                      Deselect {state.duplicateRowIds.size.toLocaleString("en-US")} duplicate
+                      {state.duplicateRowIds.size === 1 ? "" : "s"}
+                    </button>
+                  ) : null}
                   <Button variant="secondary" onClick={resetThirdParty} disabled={importing}>
                     Cancel
                   </Button>
@@ -949,7 +974,7 @@ export function ImportDialog({ platform, active, onImported, onDone }: ImportDia
                       </tr>
                     </thead>
                     <tbody>
-                      {state.rows.slice(0, MAX_PREVIEW_ROWS).map((row) => (
+                      {state.rows.slice(0, shownRows).map((row) => (
                         <tr key={row.id}>
                           <td>
                             <input
@@ -977,11 +1002,22 @@ export function ImportDialog({ platform, active, onImported, onDone }: ImportDia
                       ))}
                     </tbody>
                   </table>
-                  {state.rows.length > MAX_PREVIEW_ROWS ? (
+                  {state.rows.length > shownRows ? (
                     <p className={styles.previewNote}>
-                      Showing the first {MAX_PREVIEW_ROWS.toLocaleString("en-US")} of{" "}
-                      {state.rows.length.toLocaleString("en-US")} rows. Select all and none still
-                      cover every row.
+                      Showing {shownRows.toLocaleString("en-US")} of{" "}
+                      {state.rows.length.toLocaleString("en-US")} rows; the buttons above cover
+                      every row.{" "}
+                      <button
+                        type="button"
+                        className={styles.previewActionButton}
+                        onClick={() => setShownRows((shown) => shown + MAX_PREVIEW_ROWS)}
+                      >
+                        Show{" "}
+                        {Math.min(MAX_PREVIEW_ROWS, state.rows.length - shownRows).toLocaleString(
+                          "en-US",
+                        )}{" "}
+                        more
+                      </button>
                     </p>
                   ) : null}
                 </div>

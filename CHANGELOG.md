@@ -4,6 +4,35 @@ What changed in each release of the ShardPass extension. Versions are plain `2.x
 for features, a patch for fixes. The manifest version in `apps/extension/src/manifest.ts` is
 the number the browser reports on the About page.
 
+## 2.8.4
+
+A review of everything since 2.6.7 found ten problems, eight of them in my own speed and lock
+changes. All ten are fixed, each with a test that fails on the old code.
+
+- **The master password stayed in the vault page's memory.** The strength cache added in
+  2.7.x also kept what the setup form judged -- the master password, and prefixes of it --
+  and it was only cleared on lock, which setup never reaches. Caching is now opt-in and only
+  the Health and Dashboard views, which judge stored logins, use it. The cache is bounded.
+- **Every item stayed decrypted in the background until lock.** Reads started returning
+  decrypted items in 2.7.6, and the session's "this root is authenticated" cache held the
+  whole result. It now holds only what it compares: epoch, revision, root.
+- **A fill counted as an edit again.** Batched "last used" stamps went through the normal
+  update path, so each one bumped the login's revision: an editor open on that login got a
+  conflict on save, and the login jumped to the top of Recently changed. Stamps now have their
+  own operation that writes each login as it stands, with no revision, journal entry or
+  conflict, so one login edited in the meantime no longer drops the others' stamps.
+- **Locking waited on those stamps,** by up to a commit on a large vault, and the Lock button
+  skipped them entirely. Every lock now just drops stamps not yet written: a missed "last
+  used" costs nothing, and a lock must not wait on bookkeeping.
+- **Change-password errors appeared on the wrong card.** They now show under the form.
+- **Import rows after the first 200 could not be seen or unticked.** The preview now shows
+  more on request, and in-file duplicates can be unticked in one click wherever they are.
+- **An automatic lock could wipe an unlock that had just finished,** if the mutation lock was
+  busy when the screen-lock event fired. It now decides inside that lock.
+- **The popup could say "No login form" over a fill that happened,** when one frame's forms
+  were all hidden and another frame was filling slowly. A frame with only hidden forms now
+  stays silent, as a frame with no form always has; the popup's own timeout covers the rest.
+
 ## 2.8.3
 
 - One-time codes were called three different things. The sidebar, the popup and the shared

@@ -96,6 +96,8 @@ export function VaultAccess({
   // The PIN card and the locking card each show their own failure: one message shared by both
   // would appear under whichever card the reader was not looking at.
   const [pinError, setPinError] = useState("");
+  // The change-password card shows its own failures, beside the form that caused them.
+  const [changeError, setChangeError] = useState("");
   const [changeNotice, setChangeNotice] = useState("");
   // The full estimate (zxcvbn, in its worker) arrives a moment after typing pauses; until
   // then, and wherever workers are missing, the quick arithmetic stands in.
@@ -298,22 +300,22 @@ export function VaultAccess({
   }
 
   async function rotatePassword(): Promise<void> {
-    setError("");
+    setChangeError("");
     setChangeNotice("");
     if (Array.from(newPassword).length < MIN_SETUP_PASSWORD_CODE_POINTS) {
-      setError(`Use at least ${MIN_SETUP_PASSWORD_CODE_POINTS} characters.`);
+      setChangeError(`Use at least ${MIN_SETUP_PASSWORD_CODE_POINTS} characters.`);
       return;
     }
     if (newPassword !== newConfirmation) {
-      setError("Passwords do not match.");
+      setChangeError("Passwords do not match.");
       return;
     }
     if (newPassword === currentPassword) {
-      setError("Choose a password different from your current one.");
+      setChangeError("Choose a password different from your current one.");
       return;
     }
     if (new TextEncoder().encode(newPassword).byteLength > MAX_PASSWORD_UTF8_BYTES) {
-      setError("The password is too long.");
+      setChangeError("The password is too long.");
       return;
     }
     let currentKey: Uint8Array | undefined;
@@ -339,7 +341,7 @@ export function VaultAccess({
         setError(
           "The password was changed, but the vault is locked. Unlock with the new password.",
         );
-      } else if (!isUnlocked(response)) setError(safeError(response));
+      } else if (!isUnlocked(response)) setChangeError(safeError(response));
       else {
         // The background removed the PIN with the old password; say so where the PIN lives.
         setPinAvailable(false);
@@ -349,7 +351,7 @@ export function VaultAccess({
         );
       }
     } catch {
-      setError("The password could not be changed. Try again.");
+      setChangeError("The password could not be changed. Try again.");
     } finally {
       currentKey?.fill(0);
       nextKey?.fill(0);
@@ -695,6 +697,11 @@ export function VaultAccess({
             The new password re-encrypts the vault on this device. Any PIN is removed with the old
             password, and other signed-in browsers ask for the new one.
           </p>
+          {changeError !== "" ? (
+            <p className={styles.loadingError} role="alert">
+              {changeError}
+            </p>
+          ) : null}
           {changeNotice !== "" ? (
             <p className={styles.working} role="status">
               {changeNotice}

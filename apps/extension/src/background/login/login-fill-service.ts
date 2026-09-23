@@ -16,7 +16,7 @@ import type { SessionVaultRepository } from "../vault/session-vault-repository";
 
 type LoginFillRepository = Pick<
   SessionVaultRepository,
-  "listAllItems" | "getItem" | "createItem" | "updateItem" | "touchItem" | "updateItems"
+  "listAllItems" | "getItem" | "createItem" | "updateItem" | "touchItem" | "stampUsage"
 >;
 
 /**
@@ -305,28 +305,37 @@ export class LoginFillService {
 
   /**
    * Writes every waiting stamp under one commit. A stamp is not an edit: revision and
-   * updatedAt stay as they were, so an editor open on the item elsewhere still saves without
-   * a conflict.
+   * updatedAt stay as they were and nothing is journaled, so an editor open on the item
+   * elsewhere still saves without a conflict. Each login is stamped as it stands at the
+   * commit, so one edited meanwhile does not cost the others theirs.
    */
   async flushUsage(): Promise<void> {
+    const stamps = this.takeUsage();
+    if (stamps.length === 0) return;
+    try {
+      await this.dependencies.repository.stampUsage(stamps);
+    } catch {
+      // A missed timestamp costs nothing; the fills already happened.
+    }
+  }
+
+  /**
+   * Drops stamps that have not been written. Every lock calls this: the key is gone by then,
+   * so they could not be written, and a lock must not wait for bookkeeping to finish first.
+   * Dropping them also keeps one session's stamps out of the next.
+   */
+  discardUsage(): void {
+    this.takeUsage();
+  }
+
+  private takeUsage(): { itemId: string; lastUsedAt: string }[] {
     if (this.usageTimer !== undefined) {
       clearTimeout(this.usageTimer);
       this.usageTimer = undefined;
     }
-    const pending = [...this.pendingUsage];
+    const stamps = [...this.pendingUsage].map(([itemId, lastUsedAt]) => ({ itemId, lastUsedAt }));
     this.pendingUsage.clear();
-    if (pending.length === 0) return;
-    try {
-      const changes = [];
-      for (const [itemId, lastUsedAt] of pending) {
-        const item = await this.dependencies.repository.getItem(itemId);
-        if (item === null || !isLiveLogin(item)) continue;
-        changes.push({ candidate: { ...item, lastUsedAt }, expectedRevision: item.revision });
-      }
-      if (changes.length > 0) await this.dependencies.repository.updateItems(changes);
-    } catch {
-      // A missed timestamp costs nothing; the fills already happened.
-    }
+    return stamps;
   }
 
   /** The logins saved for a page, for the worker's own fill command; no sender involved. */

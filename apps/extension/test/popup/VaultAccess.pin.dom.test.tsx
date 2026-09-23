@@ -164,4 +164,36 @@ describe("VaultAccess PIN unlock", () => {
     expect(await screen.findByRole("status")).toHaveTextContent("PIN removed");
     expect(screen.getByLabelText("New PIN")).toBeVisible();
   });
+
+  it("shows a change-password failure on the change-password card, not the locking card", async () => {
+    const sendMessage = vi.fn((request: { kind: string }) => {
+      if (request.kind === "vault.getState")
+        return Promise.resolve({ ...lockedState(false), state: "unlocked" });
+      return Promise.resolve({ version: 1, kind: "vault.ok", state: "unlocked" });
+    });
+    render(
+      <VaultAccess
+        platform={{ sendMessage }}
+        deriveKey={() => Promise.resolve(new Uint8Array(32))}
+        securityControls
+      />,
+    );
+    const card = (await screen.findByRole("heading", { name: "Change master password" }))
+      .parentElement as HTMLElement;
+
+    fireEvent.change(screen.getByLabelText("Current password"), {
+      target: { value: "synthetic current password" },
+    });
+    fireEvent.change(screen.getByLabelText("New password"), {
+      target: { value: "synthetic new password one" },
+    });
+    fireEvent.change(screen.getByLabelText("Confirm new password"), {
+      target: { value: "synthetic new password two" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Change password" }));
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("Passwords do not match.");
+    expect(card).toContainElement(alert);
+  });
 });

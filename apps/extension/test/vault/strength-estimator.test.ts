@@ -99,7 +99,9 @@ describe("judgements already made", () => {
       },
       terminate() {},
     };
-    const estimator = createStrengthEstimator(() => worker as unknown as Worker);
+    const estimator = createStrengthEstimator(() => worker as unknown as Worker, {
+      remember: true,
+    });
     const first = await estimator.estimate("repeated-password", ["alice"]);
     const second = await estimator.estimate("repeated-password", ["alice"]);
     expect(second).toEqual(first);
@@ -141,7 +143,9 @@ describe("judgements and the lock", () => {
       },
       terminate() {},
     };
-    const estimator = createStrengthEstimator(() => worker as unknown as Worker);
+    const estimator = createStrengthEstimator(() => worker as unknown as Worker, {
+      remember: true,
+    });
     await estimator.estimate("held-password", []);
     await estimator.estimate("held-password", []);
     expect(asked).toBe(1);
@@ -151,5 +155,44 @@ describe("judgements and the lock", () => {
     clearStrengthCache();
     await estimator.estimate("held-password", []);
     expect(asked).toBe(2);
+  });
+});
+
+describe("an estimator that does not remember", () => {
+  it("keeps nothing it was asked, so a master password never outlives its form", async () => {
+    let asked = 0;
+    const worker = {
+      onmessage: null as ((event: MessageEvent<unknown>) => void) | null,
+      onerror: null,
+      postMessage(message: unknown) {
+        asked += 1;
+        const { id } = message as { id: number };
+        queueMicrotask(() =>
+          this.onmessage?.({
+            data: {
+              version: 1,
+              kind: "estimate",
+              id,
+              score: 4,
+              guessesLog10: 14,
+              crackTime: "centuries",
+              warning: "",
+              suggestions: [],
+            },
+          } as MessageEvent<unknown>),
+        );
+      },
+      terminate() {},
+    };
+    clearStrengthCache();
+    const setupForm = createStrengthEstimator(() => worker as unknown as Worker);
+    await setupForm.estimate("synthetic master password", []);
+    await setupForm.estimate("synthetic master password", []);
+    expect(asked).toBe(2);
+
+    // Nor did it leave anything for a remembering estimator to find.
+    const health = createStrengthEstimator(() => worker as unknown as Worker, { remember: true });
+    await health.estimate("synthetic master password", []);
+    expect(asked).toBe(3);
   });
 });

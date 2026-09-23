@@ -66,6 +66,11 @@ export interface SessionVaultRepository {
   updateItem(candidate: VaultItem, expectedRevision: number): Promise<VaultItem>;
   /** A usage stamp (lastUsedAt): written, but revision and updatedAt stay, and nothing is journaled. */
   touchItem(candidate: VaultItem, expectedRevision: number): Promise<VaultItem>;
+  /**
+   * Usage stamps for several logins under one commit, applied to each as it stands then: no
+   * revision check, no revision bump, no journal. Returns how many were written.
+   */
+  stampUsage(stamps: readonly Readonly<{ itemId: string; lastUsedAt: string }>[]): Promise<number>;
   /** Several updates under one commit: all revision-checked and applied, or none. */
   updateItems(
     changes: readonly Readonly<{ candidate: VaultItem; expectedRevision: number }>[],
@@ -127,6 +132,7 @@ type SessionVaultRepositoryOperations = Readonly<{
   replaceFolders(folders: readonly Folder[]): Promise<void>;
   updateItem(candidate: VaultItem, expectedRevision: number): Promise<VaultItem>;
   touchItem(candidate: VaultItem, expectedRevision: number): Promise<VaultItem>;
+  stampUsage(stamps: readonly Readonly<{ itemId: string; lastUsedAt: string }>[]): Promise<number>;
   updateItems(
     changes: readonly Readonly<{ candidate: VaultItem; expectedRevision: number }>[],
   ): Promise<readonly VaultItem[]>;
@@ -204,6 +210,7 @@ export function createSessionVaultRepository(
     replaceFolders: (folders) => operations.replaceFolders(folders),
     updateItem: (candidate, expectedRevision) => operations.updateItem(candidate, expectedRevision),
     touchItem: (candidate, expectedRevision) => operations.touchItem(candidate, expectedRevision),
+    stampUsage: (stamps) => operations.stampUsage(stamps),
     updateItems: (changes) => operations.updateItems(changes),
     readGenerationMetadata: (name) => operations.readGenerationMetadata(name),
     readOtpItemsAndMetadata: (name) => operations.readOtpItemsAndMetadata(name),

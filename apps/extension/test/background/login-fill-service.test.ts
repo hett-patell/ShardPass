@@ -2,7 +2,7 @@ import type { LoginItem, OtpItem, VaultItem } from "@shardpass/domain";
 import type { LoginFillRequest, SenderContext } from "@shardpass/messaging";
 import { LoginFillResponseSchema } from "@shardpass/messaging";
 import { FakeStoragePort } from "@shardpass/testing/fake-storage-port";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   LoginFillService,
@@ -63,7 +63,7 @@ function otpItem(overrides: Partial<OtpItem> = {}): OtpItem {
 
 class FakeRepository implements Pick<
   SessionVaultRepository,
-  "listAllItems" | "getItem" | "createItem" | "updateItem" | "touchItem" | "updateItems"
+  "listAllItems" | "getItem" | "createItem" | "updateItem" | "touchItem" | "stampUsage"
 > {
   readonly items = new Map<string, VaultItem>();
   /** One entry per call, holding the ids written together: usage stamps travel in batches. */
@@ -113,13 +113,17 @@ class FakeRepository implements Pick<
     return Promise.resolve(structuredClone(next));
   }
 
-  updateItems(
-    changes: readonly Readonly<{ candidate: VaultItem; expectedRevision: number }>[],
-  ): Promise<readonly VaultItem[]> {
-    this.usageWrites.push(changes.map((change) => change.candidate.id));
-    return Promise.all(
-      changes.map((change) => this.touchItem(change.candidate, change.expectedRevision)),
-    );
+  /** Mirrors the repository: stamps each live login as it stands, never bumping a revision. */
+  stampUsage(stamps: readonly Readonly<{ itemId: string; lastUsedAt: string }>[]): Promise<number> {
+    this.usageWrites.push(stamps.map((stamp) => stamp.itemId));
+    let stamped = 0;
+    for (const { itemId, lastUsedAt } of stamps) {
+      const current = this.items.get(itemId);
+      if (current?.kind !== "login" || current.deletedAt !== undefined) continue;
+      this.items.set(itemId, { ...current, lastUsedAt });
+      stamped += 1;
+    }
+    return Promise.resolve(stamped);
   }
 }
 
@@ -267,8 +271,8 @@ describe("LoginFillService", () => {
       request("login.fillConfirm", { itemId: stored.id, releaseId: again.releaseId }),
       sender,
     );
-    // Stamps are written a few seconds after the fill, in one batch; the background flushes
-    // them on a timer and before a lock. A test asks for them now.
+    // Stamps are written a few seconds after the fill, in one batch, on a timer; a lock drops
+    // any still waiting. A test asks for them now.
     await service.flushUsage();
     const stamped = await repository.getItem(stored.id);
     expect(stamped?.kind === "login" ? stamped.lastUsedAt : undefined).toBeDefined();
@@ -1004,6 +1008,55 @@ describe("LoginFillService forwarding addresses", () => {
     for (const item of stored) {
       const written = await repository.getItem(item.id);
       expect(written?.kind === "login" ? written.lastUsedAt : undefined).toBeDefined();
+    }
+  });
+});
+
+describe("usage stamps and edits made meanwhile", () => {
+  it("stamps a login edited since it was filled, and leaves its revision alone", async () => {
+    const { repository, service } = fixture([loginItem()]);
+    const release = await service.handle(
+      request("login.fillSelect", { itemId: ids.login, expectedRevision: 1 }),
+      sender,
+    );
+    if (release.kind !== "login.fillRelease") throw new Error("expected release");
+    await service.handle(
+      request("login.fillConfirm", { itemId: ids.login, releaseId: release.releaseId }),
+      sender,
+    );
+    // Someone saves the login in the vault page before the stamp is written.
+    const edited = await repository.getItem(ids.login);
+    if (edited === null) throw new Error("missing");
+    await repository.updateItem({ ...edited, name: "Edited meanwhile" } as VaultItem, 1);
+
+    await service.flushUsage();
+
+    const after = await repository.getItem(ids.login);
+    expect(after).toMatchObject({ revision: 2, name: "Edited meanwhile" });
+    expect(after?.kind === "login" ? after.lastUsedAt : undefined).toBeDefined();
+  });
+
+  it("drops stamps still waiting when the vault locks, and writes nothing later", async () => {
+    vi.useFakeTimers();
+    try {
+      const { repository, service } = fixture([loginItem()]);
+      const release = await service.handle(
+        request("login.fillSelect", { itemId: ids.login, expectedRevision: 1 }),
+        sender,
+      );
+      if (release.kind !== "login.fillRelease") throw new Error("expected release");
+      await service.handle(
+        request("login.fillConfirm", { itemId: ids.login, releaseId: release.releaseId }),
+        sender,
+      );
+
+      service.discardUsage();
+      await vi.advanceTimersByTimeAsync(10_000);
+      await service.flushUsage();
+
+      expect(repository.usageWrites).toHaveLength(0);
+    } finally {
+      vi.useRealTimers();
     }
   });
 });

@@ -101,6 +101,20 @@ Baseline at 2.3.0: typecheck clean, lint clean after one test fix, full suite gr
 - [x] E9 · `login.fillFromPopup` first-answer race across frames, closed in 2.8.1. The tab hands the request to every frame and keeps the first answer; one of the four negative paths already waited a moment so a filling frame could answer first, and the other three did not. All of them wait now, with a test.
 - [x] E10 low · dead `useOtpList.ts`; stale scan-build/manifest-test comments; GeneratorScreen's deferred settings fetch overwrites what was typed and requests a username per keystroke.
 
+## 2026-09-23 · Reviewing my own work since 2.6.7 (2.8.4)
+
+`/code-review high 66be5e6..HEAD`: 29 commits, 92 files. Ten findings; every one checked against the code before acting, eight confirmed outright and two reproduced first.
+
+- [x] Security: the strength cache kept the master password typed at setup for the whole session. Caching is opt-in (Health, Dashboard) and bounded; a test proves a non-remembering estimator keeps nothing.
+- [x] Security: the session's authenticated-root cache held every item decrypted. `contents` was never even read -- only epoch, revision and root are compared -- so it is gone. Test fails on the old code.
+- [x] Stamps went through `updateItems` without `usageOnly`, so each fill bumped the revision. The test fake's `updateItems` quietly behaved as usage-only, which is how this passed. New `stampUsage` repository operation stamps each login as it stands inside one commit -- no revision, no journal, no conflict -- tested against the real repository, and the fake now mirrors it.
+- [x] Locks: every lock path drops unwritten stamps through `onLockOrDispose`; none waits on a commit.
+- [x] Change-password errors render on their own card. Test fails on the old code.
+- [x] Import preview: "Show N more", and "Deselect N duplicates" reaches rows not drawn.
+- [x] `lockIfUnlocked` race reproduced in a test (unlock finishing while the mutation mutex is held), then fixed by deciding inside the mutex.
+- [x] Popup "No login form" race: confirmed every repository call, `getItem` included, runs under the mutation mutex, so a stamp commit can outlast the 1 s delay. The finding overstated it -- a frame with no fields was already silent; only hidden-only frames answered. Those are now silent too.
+- [x] Gates: typecheck, lint, format, `build:security`, 2,486 tests in 230 files.
+
 ## 2026-09-22 · Last pass: is every feature current? (2.8.3)
 
 Version 2.8.2, clean tree, in sync with origin, all three CI jobs green.

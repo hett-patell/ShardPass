@@ -588,6 +588,52 @@ describe("VaultRepository", () => {
     expect(JSON.stringify(await storage.snapshot())).not.toContain('"operation":"delete"');
   });
 
+  it("stamps usage against each login as it stands, without a revision, journal entry or conflict", async () => {
+    const storage = new FakeStoragePort();
+    const repository = new VaultRepository(storage, wrappedKey);
+    const crypto = cryptoContext();
+    const first = await repository.create(loginItem(), crypto);
+    const second = await repository.create(
+      loginItem({ id: "018f47a6-7d11-7c2f-8bd9-a1d37f147b09", name: "Second" }),
+      crypto,
+    );
+    // The first login is edited after it was filled: its revision moves on to 2.
+    await repository.update(first, 1, (current) => ({ ...current, name: "Edited" }), crypto);
+    const journalBefore = await repository.changes.listAfter(0, 100, crypto);
+
+    const stamped = await repository.stampUsage(
+      [
+        { itemId: first.id, lastUsedAt: "2026-08-10T12:00:00.000Z" },
+        { itemId: second.id, lastUsedAt: "2026-08-10T12:00:01.000Z" },
+        { itemId: "018f47a6-7d11-7c2f-8bd9-a1d37f147bff", lastUsedAt: "2026-08-10T12:00:02.000Z" },
+      ],
+      crypto,
+    );
+
+    expect(stamped).toBe(2);
+    expect(await repository.get(first.id, crypto)).toMatchObject({
+      name: "Edited",
+      revision: 2,
+      lastUsedAt: "2026-08-10T12:00:00.000Z",
+    });
+    expect(await repository.get(second.id, crypto)).toMatchObject({
+      revision: 1,
+      updatedAt: second.updatedAt,
+      lastUsedAt: "2026-08-10T12:00:01.000Z",
+    });
+    expect(await repository.changes.listAfter(0, 100, crypto)).toEqual(journalBefore);
+
+    // An older stamp never replaces a newer one, and nothing left to stamp writes nothing.
+    const writes = storage.writeCount;
+    expect(
+      await repository.stampUsage(
+        [{ itemId: second.id, lastUsedAt: "2026-08-10T11:00:00.000Z" }],
+        crypto,
+      ),
+    ).toBe(0);
+    expect(storage.writeCount).toBe(writes);
+  });
+
   it("keeps a usage-only update's revision and timestamp, and applies a batch entirely or not at all", async () => {
     const storage = new FakeStoragePort();
     const repository = new VaultRepository(storage, wrappedKey);

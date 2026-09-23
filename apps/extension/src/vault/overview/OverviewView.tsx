@@ -107,7 +107,7 @@ export function OverviewView({
 }: OverviewViewProps) {
   const report = useMemo(() => computeHealth(items, redactedIds), [items, redactedIds]);
   // Strength on the same worker the health view uses, so both pages agree on "weak".
-  const [ownEstimator] = useState(() => createStrengthEstimator());
+  const [ownEstimator] = useState(() => createStrengthEstimator(undefined, { remember: true }));
   useEffect(() => () => ownEstimator.dispose(), [ownEstimator]);
   const [weakness, setWeakness] = useState<ReadonlyMap<string, number>>(new Map());
   useEffect(() => {

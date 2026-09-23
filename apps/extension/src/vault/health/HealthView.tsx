@@ -98,7 +98,9 @@ export function HealthView({
       live = false;
     };
   }, [active, platform, verdictsLoaded]);
-  const [ownEstimator] = useState(() => estimator ?? createStrengthEstimator());
+  const [ownEstimator] = useState(
+    () => estimator ?? createStrengthEstimator(undefined, { remember: true }),
+  );
   useEffect(() => () => ownEstimator.dispose(), [ownEstimator]);
 
   // Strength, on the worker, for logins not yet judged; a password judged once stays judged.

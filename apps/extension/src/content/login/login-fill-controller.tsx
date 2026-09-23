@@ -1033,7 +1033,11 @@ export function createLoginFillController(
       fieldSets.find((candidate) => candidate.passwordField !== null && isRendered(candidate)) ??
       fieldSets.find(isRendered) ??
       null;
-    if (fieldSet === null) return answerLater("no-form");
+    // Only hidden forms is the same as none: say nothing. The popup hears the frame that
+    // fills, or reads silence as "no form" once its own timeout passes. Answering "no-form"
+    // after a delay lost the race whenever the filling frame waited longer than the delay --
+    // behind a commit on a large vault, say -- and the popup contradicted a fill that happened.
+    if (fieldSet === null) return new Promise(() => undefined);
     return fillFromPopup(fieldSet, request.itemId, request.expectedRevision);
   };
 

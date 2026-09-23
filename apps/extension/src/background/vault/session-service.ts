@@ -259,7 +259,8 @@ export class SessionService {
     readonly epoch: number;
     readonly revision: number;
     readonly root: string;
-    readonly contents: GenerationContents;
+    // Deliberately not the generation's contents: those carry every item decrypted, and a
+    // cache that lives as long as the session must hold nothing a lock would need to wipe.
   } | null = null;
   /** Generations this instance is staging outside the mutation mutex (migrations). */
   private readonly stagingGenerationIds = new Set<string>();
@@ -283,6 +284,10 @@ export class SessionService {
         this.repositoryUpdateItem(candidate, expectedRevision),
       touchItem: (candidate, expectedRevision) =>
         this.repositoryTouchItem(candidate, expectedRevision),
+      stampUsage: (stamps) =>
+        this.#runRepositoryOperation((repository, context) =>
+          repository.stampUsage(stamps, context),
+        ),
       updateItems: (changes) => this.repositoryUpdateItems(changes),
       readGenerationMetadata: (name) =>
         this.#runRepositoryOperation((repository, context) =>
@@ -1079,9 +1084,13 @@ export class SessionService {
    * "That secure request expired".
    */
   lockIfUnlocked(): Promise<void> {
-    if (this.dek === null && !this.lockPending)
-      return this.mutationMutex.run(() => this.clearLockedState());
-    return this.lock();
+    if (this.dek !== null || this.lockPending) return this.lock();
+    // Decided again inside the mutex: an unlock runs under the credential mutex, not this one,
+    // so it can finish while this waits. The event fired against a vault with no key; a key
+    // that has arrived since is a later, deliberate unlock, and it is not this event's to wipe.
+    return this.mutationMutex.run(() =>
+      this.dek === null && !this.lockPending ? this.clearLockedState() : Promise.resolve(),
+    );
   }
 
   /** Set the moment a lock begins, cleared once the key is gone: the gap in between refuses. */
@@ -1771,7 +1780,6 @@ export class SessionService {
       epoch: this.epoch,
       revision: this.repositoryRevision,
       root,
-      contents: active,
     };
   }
 

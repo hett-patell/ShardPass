@@ -216,11 +216,12 @@ export function installBackground(
     notePrivilegedActivity: () => settings.notePrivilegedActivity(),
     repromptGranted: (itemId) => repromptGrants.granted(itemId),
   });
-  // Every lock path, not only the auto-lock: an answered re-prompt and a pending card fill
-  // are worth nothing once the key is gone.
+  // Every lock path, not only the auto-lock: an answered re-prompt, a pending card fill and
+  // an unwritten "last used" stamp are worth nothing once the key is gone.
   sessions.onLockOrDispose(() => {
     repromptGrants.clear();
     dataFill.clear();
+    loginFill.discardUsage();
   });
   // Have I Been Pwned's range endpoint, padded: the reply's size says nothing about the
   // prefix asked for. Only the first five characters of the password's SHA-1 are sent.
@@ -364,9 +365,6 @@ export function installBackground(
     await ready;
     if (disposed || readyFailed) return;
     enteUnlocked = false;
-    // Usage stamps wait a few seconds to travel together; a lock is the deadline for them,
-    // since the vault they are written to is about to close.
-    await loginFill.flushUsage();
     await enteScheduler?.setUnlocked(false);
     enteService.lock();
     repromptGrants.clear();

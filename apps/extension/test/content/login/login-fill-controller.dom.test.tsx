@@ -934,7 +934,7 @@ describe("Login fill controller", () => {
     await expect(answer).resolves.toMatchObject({ status: "failed" });
   });
 
-  it("fills from the popup into a rendered form only, and says no-form after a moment when every form is hidden", async () => {
+  it("fills from the popup into a rendered form only, and stays silent when every form is hidden", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     captureClosedRoots();
     const hidden = loginForm();
@@ -958,13 +958,17 @@ describe("Login fill controller", () => {
     expect(shown.username.value).toBe("user@example.test");
     expect(hidden.password.value).toBe("");
 
+    // A frame with only hidden forms has nothing to fill, and must not answer before a frame
+    // that is filling, however long that one waits on the background.
     shownRects = [];
-    const none = ask();
+    let answered = false;
+    void ask()?.then(() => (answered = true));
     await flush();
     act(() => {
-      vi.advanceTimersByTime(1_000);
+      vi.advanceTimersByTime(60_000);
     });
-    await expect(none).resolves.toMatchObject({ status: "no-form" });
+    await flush();
+    expect(answered).toBe(false);
     // The popup path never asks for suggestions; the one request is the sign-in banner's,
     // made once for the shown form when the page loaded.
     expect(suggestionRequests(candidate)).toBe(1);

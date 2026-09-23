@@ -140,6 +140,10 @@ class Repository implements Omit<
   touchItem(candidate: VaultItem, expectedRevision: number): Promise<VaultItem> {
     return this.updateItem(candidate, expectedRevision);
   }
+  /** One-time-code tests never fill a login, so there is nothing to stamp. */
+  stampUsage(): Promise<number> {
+    return Promise.resolve(0);
+  }
   updateItems(
     changes: readonly Readonly<{ candidate: VaultItem; expectedRevision: number }>[],
   ): Promise<readonly VaultItem[]> {

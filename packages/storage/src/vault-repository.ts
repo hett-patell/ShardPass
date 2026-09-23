@@ -1150,6 +1150,55 @@ export class VaultRepository {
     });
   }
 
+  /**
+   * Stamps "last used" on logins under one commit, against each login as it stands at the
+   * commit rather than a revision read earlier, so an edit made meanwhile costs nothing and
+   * one changed login cannot lose the others' stamps. Revision and updatedAt stay as they
+   * were and nothing is journaled: a stamp is not an edit. Logins that are gone, archived,
+   * deleted or already stamped later are skipped; when none is left, nothing is written.
+   */
+  async stampUsage(
+    stamps: readonly Readonly<{ itemId: string; lastUsedAt: string }>[],
+    context: VaultCryptoContext,
+  ): Promise<number> {
+    return this.serialize(async () => {
+      const loaded = await this.load(context);
+      const records = [...loaded.records];
+      const newNonces = new Set<string>();
+      let stamped = 0;
+      for (const { itemId, lastUsedAt } of stamps) {
+        const index = records.findIndex((record) => record.itemId === itemId);
+        if (index < 0) continue;
+        const current = loaded.items[index]!;
+        if (
+          current.kind !== "login" ||
+          current.deletedAt !== undefined ||
+          current.archivedAt !== undefined ||
+          (current.lastUsedAt !== undefined && current.lastUsedAt >= lastUsedAt)
+        )
+          continue;
+        const record = await encryptVaultRecord(
+          parseCandidate({ ...current, lastUsedAt }),
+          context,
+        );
+        records[index] = record;
+        newNonces.add(record.nonce);
+        stamped += 1;
+      }
+      if (stamped === 0) return 0;
+      await this.commit(
+        loaded.root,
+        records,
+        loaded.journal,
+        newNonces,
+        loaded.receipts,
+        loaded.metadata,
+        context,
+      );
+      return stamped;
+    });
+  }
+
   async lookupHotpReservationReceipt(
     request: HotpReservationCommitRequest,
     context: VaultCryptoContext,

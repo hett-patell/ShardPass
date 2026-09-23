@@ -31,10 +31,25 @@ const LABELS = ["Too weak", "Weak", "Fair", "Strong"] as const;
  * that produced them. The health page and the dashboard each mount their own estimator and
  * each unmounts on the way out, so without this a vault of a thousand logins is judged again
  * from scratch on every visit -- about ten seconds of worker time for an answer that has not
- * changed. The passwords are already in this page's memory as vault items, so holding them
- * here adds no secret the page did not have; `clearStrengthCache` drops them on lock.
+ * changed. Only estimators created with `remember: true` read or write it, and only the views
+ * judging stored vault passwords ask for that: those passwords are already in this page's
+ * memory as vault items, so holding them here adds no secret. The setup and change-password
+ * forms never remember -- a master password, and every prefix typed on the way to it, must not
+ * outlive the form. `clearStrengthCache` drops everything on lock.
  */
 const judged = new Map<string, StrengthEstimate>();
+/** Enough for a large vault; past it the oldest judgement goes first. */
+const MAX_JUDGED = 5_000;
+
+function remember(key: string, estimate: StrengthEstimate): void {
+  judged.delete(key);
+  judged.set(key, estimate);
+  while (judged.size > MAX_JUDGED) {
+    const oldest = judged.keys().next();
+    if (oldest.done === true) break;
+    judged.delete(oldest.value);
+  }
+}
 
 function cacheKey(password: string, userInputs: readonly string[]): string {
   return `${password}\u0000${userInputs.join("\u0001")}`;
@@ -45,12 +60,19 @@ export function clearStrengthCache(): void {
   judged.clear();
 }
 
+export interface StrengthEstimatorOptions {
+  /** Share judgements through the page-wide cache. For stored vault passwords only. */
+  readonly remember?: boolean;
+}
+
 export function createStrengthEstimator(
   startWorker: () => Worker | null = () =>
     typeof Worker === "undefined"
       ? null
       : new Worker("/assets/strength-worker-entry.js", { type: "module" }),
+  options: StrengthEstimatorOptions = {},
 ): StrengthEstimator {
+  const remembers = options.remember === true;
   let worker: Worker | null | undefined;
   let nextId = 1;
   const pending = new Map<number, (response: StrengthWorkerResponse) => void>();
@@ -87,7 +109,7 @@ export function createStrengthEstimator(
       // the answer is the quick estimate, as it has always been.
       if (target === null) return Promise.resolve(quick);
       const key = cacheKey(password, userInputs);
-      const remembered = judged.get(key);
+      const remembered = remembers ? judged.get(key) : undefined;
       if (remembered !== undefined) return Promise.resolve(remembered);
       return new Promise<StrengthEstimate>((resolve) => {
         const id = nextId++;
@@ -108,7 +130,7 @@ export function createStrengthEstimator(
             crackTime: response.crackTime,
             source: "full",
           };
-          judged.set(key, estimate);
+          if (remembers) remember(key, estimate);
           resolve(estimate);
         });
         const request: StrengthWorkerRequest = {
