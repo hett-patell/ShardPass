@@ -40,6 +40,7 @@ import { updateItem } from "./components/forms/submit-item";
 import { ItemDetailPanel } from "./components/ItemDetailPanel";
 import { ItemListPanel } from "./components/ItemListPanel";
 import { DeletedItemDetail } from "./components/detail/DeletedItemDetail";
+import { RecoveryOfferDialog } from "./components/RecoveryOfferDialog";
 import { SelectionBar, type SelectionScope } from "./components/SelectionBar";
 import { NewItemMenu } from "./components/NewItemMenu";
 import { VaultSidebar, type GeneratorTool, type VaultSidebarView } from "./components/VaultSidebar";
@@ -110,6 +111,10 @@ export function VaultApp({ platform }: VaultAppProps) {
   const [selection, setSelection] = useState<ReadonlySet<string> | null>(null);
   const [bulkBusy, setBulkBusy] = useState(false);
   const [bulkMessage, setBulkMessage] = useState("");
+  // A vault created moments ago: offer a recovery code once it is open.
+  const [offerRecovery, setOfferRecovery] = useState(false);
+  // Bumped by "Back up now" so Settings opens at the backup export.
+  const [backupRequest, setBackupRequest] = useState(0);
   const lastToggled = useRef<string | null>(null);
 
   const folderState = useFolders(platform, vaultUnlocked);
@@ -518,7 +523,12 @@ export function VaultApp({ platform }: VaultAppProps) {
           <EmptyVaultState foundation={foundation} />
         ) : !vaultUnlocked ? (
           <div className={styles.accessRegion}>
-            <VaultAccess platform={platform} securityControls onUnlockedChange={setVaultUnlocked} />
+            <VaultAccess
+              platform={platform}
+              securityControls
+              onUnlockedChange={setVaultUnlocked}
+              onCreated={() => setOfferRecovery(true)}
+            />
           </div>
         ) : (
           <div className={styles.vault}>
@@ -768,6 +778,7 @@ export function VaultApp({ platform }: VaultAppProps) {
                 active={view === "settings"}
                 onImported={handleImported}
                 onDone={goToVaultView}
+                backupRequest={backupRequest}
               />
             </div>
             {view === "health" ? (
@@ -800,6 +811,10 @@ export function VaultApp({ platform }: VaultAppProps) {
                     setView("generator");
                   }}
                   onOpenImport={() => setView("settings")}
+                  onOpenBackup={() => {
+                    setView("settings");
+                    setBackupRequest((count) => count + 1);
+                  }}
                   onNewLogin={() => {
                     goToVaultView();
                     startCreate("login");
@@ -832,6 +847,9 @@ export function VaultApp({ platform }: VaultAppProps) {
           </div>
         )}
       </main>
+      {offerRecovery && vaultUnlocked ? (
+        <RecoveryOfferDialog platform={platform} onClose={() => setOfferRecovery(false)} />
+      ) : null}
       {pendingLeave !== null ? (
         <DeleteItemDialog
           itemName="this new item"

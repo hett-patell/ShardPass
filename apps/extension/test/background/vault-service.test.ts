@@ -61,6 +61,7 @@ describe("VaultService", () => {
       autoLockMinutes: 15,
       lockOnScreenLock: true,
       pinAvailable: false,
+      recoveryAvailable: false,
       retryAfterMs: 0,
     });
     const challenge = await service.handle(

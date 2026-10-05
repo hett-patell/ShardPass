@@ -261,6 +261,7 @@ describe("Project 1 content and popup authority", () => {
       "data.fillGrant",
       "ente.status",
       "item.get",
+      "item.healthSummary",
       "item.list",
       "login.reveal",
       "otp.copyCode",
@@ -327,8 +328,13 @@ describe("Project 1 content and popup authority", () => {
       "security.checkItem",
       "security.setBreachChecks",
       "vault.changePassword",
+      "vault.getRecoveryChallenge",
       "vault.removePin",
+      "vault.removeRecovery",
+      "vault.resetPassword",
       "vault.setPin",
+      "vault.setRecovery",
+      "vault.unlockWithRecovery",
     ]);
     // Low-level HOTP lifecycle: no context at all, so no sender can reach it over the router.
     expect(byAudience.get("(none)|tab:false|frame:false|doc:true")).toEqual([

@@ -84,7 +84,14 @@ const loginItem = {
 };
 
 function createTestPlatform(
-  options: { tab?: { id: number; url: string } | null; fill?: unknown } = {},
+  options: {
+    tab?: { id: number; url: string } | null;
+    fill?: unknown;
+    /** What the background reports for Health; no answer when absent. */
+    health?: { reused: number; unsecured: number; breachedIds?: string[] };
+    /** Whether a DuckDuckGo token is connected. */
+    duck?: boolean;
+  } = {},
 ) {
   let onState: (state: unknown) => void = () => undefined;
   const items = [loginProjection, otpProjection, noteProjection];
@@ -101,6 +108,38 @@ function createTestPlatform(
         releaseId: "0123456789abcdef0123456789abcdef",
         username: "alice@example.test",
         password: "hunter2",
+      });
+    if (request.kind === "item.healthSummary" && options.health !== undefined)
+      return Promise.resolve({
+        version: 1,
+        kind: "item.healthSummaryResult",
+        reused: options.health.reused,
+        unsecured: options.health.unsecured,
+        skipped: 0,
+      });
+    if (request.kind === "security.listResults" && options.health !== undefined)
+      return Promise.resolve({
+        version: 1,
+        kind: "security.results",
+        results: (options.health.breachedIds ?? []).map((itemId) => ({
+          itemId,
+          count: 3,
+          checkedAt: 1,
+          stale: false,
+        })),
+      });
+    if (request.kind === "alias.getStatus")
+      return Promise.resolve({
+        version: 1,
+        kind: "alias.status",
+        duckduckgo: options.duck === true,
+      });
+    if (request.kind === "alias.generateDuck")
+      return Promise.resolve({
+        version: 1,
+        kind: "alias.generated",
+        provider: "duckduckgo",
+        address: "quiet-otter-91@duck.com",
       });
     if (request.kind === "vault.lock")
       return Promise.resolve({ version: 1, kind: "vault.ok", state: "locked", committed: true });
@@ -508,6 +547,61 @@ describe("PopupApp screens", () => {
       "The vault could not be opened. Try again.",
     );
     expect(screen.queryByText(rawFailureText)).not.toBeInTheDocument();
+  });
+});
+
+describe("PopupApp vault health and email aliases", () => {
+  it("names what needs a look on the home screen and opens Health in the vault", async () => {
+    const { openVaultPage } = await renderUnlocked({
+      health: {
+        reused: 2,
+        unsecured: 0,
+        breachedIds: [LOGIN_ID, "10000000-0000-4000-8000-000000000099"],
+      },
+    });
+    const row = await screen.findByRole("button", { name: /Vault health/ });
+    // The breach result for an item no longer in the vault is not counted.
+    expect(row).toHaveTextContent("1 breached");
+    expect(row).toHaveTextContent("2 reused");
+    expect(row).not.toHaveTextContent("on http");
+    fireEvent.click(row);
+    await waitFor(() => expect(openVaultPage).toHaveBeenCalledWith({ view: "health" }));
+  });
+
+  it("says when nothing needs fixing, and shows no row when the counts are unknown", async () => {
+    await renderUnlocked({ health: { reused: 0, unsecured: 0 } });
+    expect(await screen.findByRole("button", { name: /Vault health/ })).toHaveTextContent(
+      "Nothing to fix",
+    );
+    cleanup();
+    await renderUnlocked();
+    await screen.findByRole("button", { name: /Logins/ });
+    expect(screen.queryByRole("button", { name: /Vault health/ })).toBeNull();
+  });
+
+  it("makes a @duck.com address for the open site and copies it", async () => {
+    const { sendMessage, writeAuthoritativeClipboardText } = await renderUnlocked({
+      duck: true,
+      tab: { id: 7, url: "https://shop.example.test/signup" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Generate" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Username" }));
+    fireEvent.click(await screen.findByRole("button", { name: "New @duck.com address" }));
+    expect(await screen.findByLabelText("New email alias")).toHaveTextContent(
+      "quiet-otter-91@duck.com",
+    );
+    expect(sendMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: "alias.generateDuck", site: "shop.example.test" }),
+    );
+    await waitFor(() => expect(writeAuthoritativeClipboardText).toHaveBeenCalled());
+  });
+
+  it("points to the vault to connect DuckDuckGo when it is not connected", async () => {
+    const { openVaultPage } = await renderUnlocked({ duck: false });
+    fireEvent.click(screen.getByRole("button", { name: "Generate" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Username" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Connect DuckDuckGo in the vault" }));
+    await waitFor(() => expect(openVaultPage).toHaveBeenCalledWith({ view: "aliases" }));
   });
 });
 

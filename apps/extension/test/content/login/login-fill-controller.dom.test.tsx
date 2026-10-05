@@ -974,6 +974,70 @@ describe("Login fill controller", () => {
     expect(suggestionRequests(candidate)).toBe(1);
   });
 
+  it("signs in after a popup fill when the login asks for it, and not otherwise", async () => {
+    captureClosedRoots();
+    const { form, password } = loginForm();
+    Object.defineProperty(password, "getClientRects", { value: () => [{}] });
+    const submitted: string[] = [];
+    form.requestSubmit = () => {
+      submitted.push("submit");
+    };
+    let answer: LoginFillResponse = { ...release, autoSubmit: true };
+    const candidate = platform((request) =>
+      request.kind === "login.fillSelect" ? answer : undefined,
+    );
+    start(candidate);
+    const ask = () =>
+      candidate.runtime.handler?.(
+        { version: 1, kind: "login.fillFromPopup", itemId: account.itemId, expectedRevision: 1 },
+        { extensionId: "extension-test" },
+      );
+
+    const first = ask();
+    await flush();
+    await expect(first).resolves.toMatchObject({ status: "filled" });
+    expect(password.value).toBe("s3cret!");
+    expect(submitted).toEqual(["submit"]);
+
+    answer = release;
+    const second = ask();
+    await flush();
+    await expect(second).resolves.toMatchObject({ status: "filled" });
+    expect(submitted).toEqual(["submit"]);
+  });
+
+  it("never auto-submits a form with no password field", async () => {
+    const roots = captureClosedRoots();
+    const form = document.createElement("form");
+    const email = document.createElement("input");
+    email.type = "email";
+    email.name = "email";
+    const next = document.createElement("button");
+    next.textContent = "Next";
+    form.append(email, next);
+    document.body.append(form);
+    let submitted = false;
+    form.requestSubmit = () => {
+      submitted = true;
+    };
+    const candidate = platform((request) => {
+      if (request.kind === "login.fillSuggestions")
+        return { version: 1, kind: "login.fillSuggestionsResult", suggestions: [account] };
+      if (request.kind === "login.fillSelect") return { ...release, autoSubmit: true };
+      return undefined;
+    });
+    start(candidate);
+    focusField(email);
+    await flush();
+    await clickAndFlush(chipIn(roots.at(-1)));
+    await clickAndFlush(
+      within(roots.at(-1) as unknown as HTMLElement).getByRole("button", { name: /Account/u }),
+    );
+
+    expect(email.value).toBe("user@example.test");
+    expect(submitted).toBe(false);
+  });
+
   it("fills only the username of a username-only first step", async () => {
     const roots = captureClosedRoots();
     const form = document.createElement("form");

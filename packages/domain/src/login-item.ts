@@ -152,6 +152,11 @@ export const LoginItemSchema = z.extend(ItemMetadataSchema, {
    * password of its own. The page-side flow then presses that provider's button.
    */
   signInWith: z.optional(z.enum(SIGN_IN_PROVIDERS)),
+  /**
+   * Press the form's sign-in button once a fill the person asked for has put both the
+   * username and the password in. Off unless chosen, per login.
+   */
+  autoSubmit: z.optional(z.boolean()),
   notes: boundedString(MAX_LOGIN_NOTES_LENGTH),
 });
 

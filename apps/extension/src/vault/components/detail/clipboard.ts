@@ -1,5 +1,34 @@
-/** How long a copied secret stays on the clipboard before it is cleared. */
+/** How long a copied secret stays on the clipboard before it is cleared, unless chosen otherwise. */
 export const CLIPBOARD_CLEAR_MS = 30_000;
+/** The delays a person can choose between, in seconds; the default is among them. */
+export const CLIPBOARD_CLEAR_CHOICES = [10, 30, 60, 120, 300] as const;
+export type ClipboardClearSeconds = (typeof CLIPBOARD_CLEAR_CHOICES)[number];
+/**
+ * The chosen delay. A preference, not a secret, kept where both the popup and the vault page
+ * can read it: they are documents of one extension origin, and they schedule the clears.
+ */
+const DELAY_KEY = "shardpass:clipboard:clearAfterSeconds";
+
+/** The chosen delay in seconds; the default when nothing valid is stored. */
+export function clipboardClearSeconds(): ClipboardClearSeconds {
+  try {
+    const stored = Number(globalThis.localStorage?.getItem(DELAY_KEY));
+    if ((CLIPBOARD_CLEAR_CHOICES as readonly number[]).includes(stored))
+      return stored as ClipboardClearSeconds;
+  } catch {
+    // Unreadable storage: the default stands.
+  }
+  return (CLIPBOARD_CLEAR_MS / 1000) as ClipboardClearSeconds;
+}
+
+/** Saves the delay for every later copy, here and in the popup. */
+export function setClipboardClearSeconds(seconds: ClipboardClearSeconds): void {
+  try {
+    globalThis.localStorage?.setItem(DELAY_KEY, String(seconds));
+  } catch {
+    // A refused write keeps the default; nothing secret depends on it.
+  }
+}
 /**
  * How long after the due time a clear is still carried out. The extension cannot read the
  * clipboard (no permission, deliberately), so a very late clear would blindly wipe whatever
@@ -40,7 +69,7 @@ function dueAt(): number | null {
  * through `clearClipboardIfDue`. A write is only permitted while the document is focused, and
  * the extension holds no clipboard-read permission, so it can never check what is there.
  */
-export function scheduleClipboardClear(delayMs: number = CLIPBOARD_CLEAR_MS): void {
+export function scheduleClipboardClear(delayMs: number = clipboardClearSeconds() * 1000): void {
   if (pendingClear !== undefined) clearTimeout(pendingClear);
   rememberDue(Date.now() + delayMs);
   pendingClear = setTimeout(() => {

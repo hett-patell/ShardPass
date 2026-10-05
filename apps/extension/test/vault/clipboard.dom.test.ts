@@ -4,7 +4,9 @@ import {
   CLIPBOARD_CLEAR_GRACE_MS,
   CLIPBOARD_CLEAR_MS,
   clearClipboardIfDue,
+  clipboardClearSeconds,
   scheduleClipboardClear,
+  setClipboardClearSeconds,
 } from "../../src/vault/components/detail/clipboard";
 
 const PENDING_KEY = "shardpass:clipboard:clearAt";
@@ -27,6 +29,7 @@ afterEach(() => {
   vi.useRealTimers();
   vi.restoreAllMocks();
   localStorage.removeItem(PENDING_KEY);
+  localStorage.removeItem("shardpass:clipboard:clearAfterSeconds");
 });
 
 describe("clipboard auto-clear", () => {
@@ -74,5 +77,26 @@ describe("clipboard auto-clear", () => {
     localStorage.setItem(PENDING_KEY, String(Date.now() - 1_000));
     await clearClipboardIfDue();
     expect(writeText).not.toHaveBeenCalled();
+  });
+});
+
+describe("the chosen clear delay", () => {
+  it("waits as long as the person chose, and no longer", async () => {
+    const { writeText } = stubClipboard();
+    vi.useFakeTimers();
+    setClipboardClearSeconds(10);
+    scheduleClipboardClear();
+    await vi.advanceTimersByTimeAsync(9_000);
+    expect(writeText).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1_100);
+    expect(writeText).toHaveBeenCalledWith("");
+  });
+
+  it("falls back to the default for anything it does not offer", () => {
+    expect(clipboardClearSeconds()).toBe(CLIPBOARD_CLEAR_MS / 1000);
+    localStorage.setItem("shardpass:clipboard:clearAfterSeconds", "7");
+    expect(clipboardClearSeconds()).toBe(CLIPBOARD_CLEAR_MS / 1000);
+    setClipboardClearSeconds(120);
+    expect(clipboardClearSeconds()).toBe(120);
   });
 });

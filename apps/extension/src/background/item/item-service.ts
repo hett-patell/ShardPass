@@ -23,6 +23,7 @@ import {
 } from "@shardpass/messaging";
 
 import type { SessionVaultRepository } from "../vault/session-vault-repository";
+import { computeHealth } from "../../vault/health/health-report";
 import { diagnostics } from "../../platform/diagnostics";
 
 const MAX_ITEM_LIST_PREVIEW_LENGTH = 120;
@@ -113,6 +114,10 @@ export class ItemService {
         case "item.bulk":
           this.assertVaultSender(sender);
           result = await this.bulk(command);
+          break;
+        case "item.healthSummary":
+          if (sender.contextKind === "content") invalid();
+          result = await this.healthSummary();
           break;
       }
       // Only a change the user made counts as activity for the inactivity lock. Reads are
@@ -328,6 +333,28 @@ export class ItemService {
       kind: "item.deleteResult",
       itemId: moved.id,
       revision: moved.revision,
+    });
+  }
+
+  /**
+   * The vault page's own count of what Health would flag, computed by the same function so
+   * the popup and the page never disagree. Items behind a re-prompt are left out and counted,
+   * exactly as the page leaves them out until the master password is given.
+   */
+  private async healthSummary(): Promise<ItemCrudResponse> {
+    const items = await this.dependencies.repository.listAllItems();
+    const withheld = new Set(
+      items
+        .filter((item) => item.reprompt === true && !this.granted(item.id))
+        .map((item) => item.id),
+    );
+    const report = computeHealth(items, withheld);
+    return response({
+      version: 1,
+      kind: "item.healthSummaryResult",
+      reused: report.reused.reduce((sum, group) => sum + group.logins.length, 0),
+      unsecured: report.unsecured.length,
+      skipped: report.skipped,
     });
   }
 

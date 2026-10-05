@@ -71,6 +71,34 @@ export class VaultService {
       case "vault.removePin":
         await this.sessions.removePin();
         return { version: 1, kind: "vault.ok", state: "unlocked" };
+      case "vault.setRecovery":
+        await this.sessions.setRecovery(decodeKey(request.recoveryKey), request.kdf);
+        await this.settings.notePrivilegedActivity();
+        return { version: 1, kind: "vault.ok", state: "unlocked" };
+      case "vault.removeRecovery":
+        await this.sessions.removeRecovery();
+        return { version: 1, kind: "vault.ok", state: "unlocked" };
+      case "vault.getRecoveryChallenge": {
+        const challenge = await this.sessions.createRecoveryChallenge(sender);
+        return { version: 1, kind: "vault.recoveryChallenge", ...challenge };
+      }
+      case "vault.unlockWithRecovery":
+        await this.sessions.unlockWithRecovery(
+          request.challengeId,
+          decodeKey(request.recoveryKey),
+          sender,
+        );
+        return this.afterUnlock();
+      case "vault.resetPassword": {
+        const outcome = await this.sessions.resetPassword(
+          request.newChallengeId,
+          decodeKey(request.newKeyEncryptionKey),
+          sender,
+        );
+        if (outcome.state === "unlocked") await this.settings.notePrivilegedActivity();
+        else await this.settings.cancelAutoLock();
+        return { version: 1, kind: "vault.ok", ...outcome };
+      }
       case "vault.lock":
         await this.sessions.lock();
         await this.settings.cancelAutoLock();

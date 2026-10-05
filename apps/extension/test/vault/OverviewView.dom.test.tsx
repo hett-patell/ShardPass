@@ -164,3 +164,68 @@ describe("OverviewView", () => {
     expect(screen.queryByRole("meter")).not.toBeInTheDocument();
   });
 });
+
+describe("OverviewView backup reminder", () => {
+  const items = [
+    login("01", "Mail", "correct-horse-battery-staple-9", "2026-09-02T00:00:00.000Z"),
+    login("02", "Bank", "another-long-password-8", "2026-09-20T00:00:00.000Z"),
+  ];
+  function show(onOpenBackup = vi.fn()) {
+    render(
+      <OverviewView
+        platform={{
+          sendMessage: vi.fn(() =>
+            Promise.resolve({ version: 1, kind: "security.results", results: [] }),
+          ),
+        }}
+        items={items}
+        folderCount={0}
+        redactedIds={new Set()}
+        active
+        onOpenItem={() => undefined}
+        onOpenHealth={() => undefined}
+        onOpenGenerator={() => undefined}
+        onOpenImport={() => undefined}
+        onOpenBackup={onOpenBackup}
+        onNewLogin={() => undefined}
+      />,
+    );
+    return screen.getByRole("region", { name: /backup|Backed up/iu });
+  }
+  afterEach(() => {
+    localStorage.removeItem("shardpass:backup:lastEncryptedAt");
+    vi.useRealTimers();
+  });
+
+  it("says there is no backup yet and opens the export", () => {
+    const onOpenBackup = vi.fn();
+    const card = show(onOpenBackup);
+    expect(card).toHaveTextContent("No backup yet");
+    fireEvent.click(within(card).getByRole("button", { name: "Make a backup" }));
+    expect(onOpenBackup).toHaveBeenCalled();
+  });
+
+  it("counts what changed since the last backup and calls an old one overdue", () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-01T00:00:00.000Z"));
+    localStorage.setItem(
+      "shardpass:backup:lastEncryptedAt",
+      String(Date.parse("2026-09-10T00:00:00.000Z")),
+    );
+    const card = show();
+    expect(card).toHaveTextContent("Backup overdue");
+    expect(card).toHaveTextContent("Last encrypted backup 52 days ago. 1 item has changed since.");
+  });
+
+  it("is quiet about a recent backup with nothing changed", () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-09-25T00:00:00.000Z"));
+    localStorage.setItem(
+      "shardpass:backup:lastEncryptedAt",
+      String(Date.parse("2026-09-24T00:00:00.000Z")),
+    );
+    const card = show();
+    expect(card).toHaveTextContent("Backed up");
+    expect(card).toHaveTextContent("Last encrypted backup yesterday. Nothing has changed since.");
+  });
+});

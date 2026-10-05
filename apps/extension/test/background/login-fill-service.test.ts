@@ -1060,3 +1060,25 @@ describe("usage stamps and edits made meanwhile", () => {
     }
   });
 });
+
+describe("auto-submit", () => {
+  it("tells the page to sign in only for a login that asks, and never for a provider login", async () => {
+    const plain = loginItem();
+    const eager = loginItem({ id: ids.otherLogin, name: "Eager", autoSubmit: true });
+    const { service } = fixture([plain, eager]);
+    const select = (itemId: string) =>
+      service.handle(request("login.fillSelect", { itemId, expectedRevision: 1 }), sender);
+
+    expect(await select(plain.id)).not.toHaveProperty("autoSubmit");
+    expect(await select(eager.id)).toMatchObject({ autoSubmit: true });
+
+    const provider = loginItem({ autoSubmit: true, signInWith: "google" });
+    const { service: providerService } = fixture([provider]);
+    expect(
+      await providerService.handle(
+        request("login.fillSelect", { itemId: provider.id, expectedRevision: 1 }),
+        sender,
+      ),
+    ).not.toHaveProperty("autoSubmit");
+  });
+});

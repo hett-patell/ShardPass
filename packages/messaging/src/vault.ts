@@ -114,6 +114,47 @@ export const VaultRemovePinRequestSchema = request(
   z.strictObject({ version: z.literal(MESSAGE_VERSION), kind: z.literal("vault.removePin") }),
 );
 
+/**
+ * Recovery code: the data key wrapped once more, under a key derived from a long random code
+ * the person keeps outside the browser. Made and checked like the PIN -- the page derives
+ * the key, the background wraps and unwraps -- but it stands in for a forgotten master
+ * password: a vault opened with it may set a new one without the old.
+ */
+export const VaultSetRecoveryRequestSchema = request(
+  z.strictObject({
+    version: z.literal(MESSAGE_VERSION),
+    kind: z.literal("vault.setRecovery"),
+    recoveryKey: canonicalKek,
+    kdf: kdfParameters,
+  }),
+);
+export const VaultRemoveRecoveryRequestSchema = request(
+  z.strictObject({ version: z.literal(MESSAGE_VERSION), kind: z.literal("vault.removeRecovery") }),
+);
+export const VaultGetRecoveryChallengeRequestSchema = request(
+  z.strictObject({
+    version: z.literal(MESSAGE_VERSION),
+    kind: z.literal("vault.getRecoveryChallenge"),
+  }),
+);
+export const VaultUnlockWithRecoveryRequestSchema = request(
+  z.strictObject({
+    version: z.literal(MESSAGE_VERSION),
+    kind: z.literal("vault.unlockWithRecovery"),
+    challengeId,
+    recoveryKey: canonicalKek,
+  }),
+);
+/** A new master password for a vault opened with the recovery code; the old one is not asked. */
+export const VaultResetPasswordRequestSchema = request(
+  z.strictObject({
+    version: z.literal(MESSAGE_VERSION),
+    kind: z.literal("vault.resetPassword"),
+    newChallengeId: challengeId,
+    newKeyEncryptionKey: canonicalKek,
+  }),
+);
+
 export const VaultRequestSchema = z.discriminatedUnion("kind", [
   VaultGetStateRequestSchema,
   VaultGetKdfChallengeRequestSchema,
@@ -127,6 +168,11 @@ export const VaultRequestSchema = z.discriminatedUnion("kind", [
   VaultUnlockWithPinRequestSchema,
   VaultSetPinRequestSchema,
   VaultRemovePinRequestSchema,
+  VaultSetRecoveryRequestSchema,
+  VaultRemoveRecoveryRequestSchema,
+  VaultGetRecoveryChallengeRequestSchema,
+  VaultUnlockWithRecoveryRequestSchema,
+  VaultResetPasswordRequestSchema,
 ]);
 
 const state = z.enum(["unconfigured", "locked", "unlocked"]);
@@ -139,6 +185,10 @@ export const VaultStateResponseSchema = z.strictObject({
   lockWhenClosed: z.optional(z.boolean()),
   /** A PIN is set, so the lock screen may offer it. */
   pinAvailable: z.optional(z.boolean()),
+  /** A recovery code is set, so the lock screen may offer it for a forgotten password. */
+  recoveryAvailable: z.optional(z.boolean()),
+  /** This session was opened with the recovery code and still needs a new master password. */
+  recovering: z.optional(z.boolean()),
   retryAfterMs: z.int().check(z.nonnegative()),
   streamId: z.string().check(z.regex(/^[0-9a-f]{32}$/)),
   sequence: z.int().check(z.positive()),
@@ -176,10 +226,18 @@ export const VaultPinChallengeResponseSchema = z.strictObject({
   kdf: kdfParameters,
   expiresAt: z.number().check(z.nonnegative()),
 });
+export const VaultRecoveryChallengeResponseSchema = z.strictObject({
+  version: z.literal(MESSAGE_VERSION),
+  kind: z.literal("vault.recoveryChallenge"),
+  challengeId,
+  kdf: kdfParameters,
+  expiresAt: z.number().check(z.nonnegative()),
+});
 export const VaultResponseSchema = z.discriminatedUnion("kind", [
   VaultStateResponseSchema,
   VaultKdfChallengeResponseSchema,
   VaultPinChallengeResponseSchema,
+  VaultRecoveryChallengeResponseSchema,
   VaultOkResponseSchema,
 ]);
 
@@ -210,4 +268,10 @@ export const vaultSenderPolicy = {
   "vault.unlockWithPin": documentBound,
   "vault.setPin": vaultDocumentOnly,
   "vault.removePin": vaultDocumentOnly,
+  // Only the vault page: it holds the recovery form and the new-password form after it.
+  "vault.setRecovery": vaultDocumentOnly,
+  "vault.removeRecovery": vaultDocumentOnly,
+  "vault.getRecoveryChallenge": vaultDocumentOnly,
+  "vault.unlockWithRecovery": vaultDocumentOnly,
+  "vault.resetPassword": vaultDocumentOnly,
 } satisfies Record<VaultCommandKind, CommandSenderPolicy>;

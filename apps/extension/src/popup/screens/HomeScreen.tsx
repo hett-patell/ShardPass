@@ -5,6 +5,7 @@ import { Button, SearchBar, SectionLabel } from "@shardpass/ui";
 import {
   ChevronRight,
   ExternalLink,
+  HeartPulse,
   KeyRound,
   LayoutGrid,
   Plus,
@@ -20,6 +21,7 @@ import { PopupRow } from "../components/PopupRow";
 import { RowActions } from "../components/RowActions";
 import { QuickAction } from "../components/QuickAction";
 import type { ActiveTab } from "../hooks/useActiveTab";
+import type { HealthSummary } from "../hooks/useHealthSummary";
 import { itemsInCategory, projectionMatches, type CategoryId } from "../hooks/useVaultItems";
 import styles from "./HomeScreen.module.css";
 
@@ -85,6 +87,10 @@ export interface HomeScreenProps {
   pinnedIdentityId: string | null;
   onChooseIdentity: () => void;
   platform: Pick<ExtensionPlatform, "sendOtpMessage">;
+  /** What the vault's Health page would flag; null while unknown. */
+  health?: HealthSummary | null;
+  /** Opens the vault page at Health. */
+  onOpenHealth?: () => void;
 }
 
 /** Suggestions for the open tab, then the categories: the popup's first screen. */
@@ -108,6 +114,8 @@ export function HomeScreen({
   onGenerate,
   pinnedIdentityId,
   onChooseIdentity,
+  health = null,
+  onOpenHealth,
 }: HomeScreenProps) {
   const query = search.trim();
   const suggestions =
@@ -289,6 +297,10 @@ export function HomeScreen({
               </section>
             ) : null}
 
+            {health !== null && onOpenHealth !== undefined && items.length > 0 ? (
+              <HealthRow health={health} onOpen={onOpenHealth} />
+            ) : null}
+
             <section aria-labelledby="categories-label">
               <SectionLabel id="categories-label" className={styles.sectionLabel}>
                 Categories
@@ -338,5 +350,37 @@ export function HomeScreen({
         </button>
       </footer>
     </div>
+  );
+}
+
+/**
+ * One row that says whether anything needs a look, and what: each kind of finding as its own
+ * count, never added together, since one login can be both reused and breached.
+ */
+function HealthRow({ health, onOpen }: Readonly<{ health: HealthSummary; onOpen: () => void }>) {
+  const findings = [
+    { count: health.breached, label: "breached", tone: styles.findingDanger },
+    { count: health.reused, label: "reused", tone: styles.findingWarning },
+    { count: health.unsecured, label: "on http", tone: styles.findingWarning },
+  ].filter((finding) => finding.count > 0);
+  return (
+    <button type="button" className={`${styles.category} ${styles.health}`} onClick={onOpen}>
+      <span className={styles.categoryIcon} aria-hidden="true">
+        <HeartPulse size={16} strokeWidth={1.75} />
+      </span>
+      <span className={styles.categoryLabel}>Vault health</span>
+      <span className={styles.findings}>
+        {findings.length === 0 ? (
+          <span className={styles.findingClear}>Nothing to fix</span>
+        ) : (
+          findings.map((finding) => (
+            <span key={finding.label} className={`${styles.finding} ${finding.tone}`}>
+              {finding.count} {finding.label}
+            </span>
+          ))
+        )}
+      </span>
+      <ChevronRight size={16} className={styles.chevron} aria-hidden="true" />
+    </button>
   );
 }

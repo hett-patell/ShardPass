@@ -30,6 +30,7 @@ import { formatTags, newItemMetadata, parseTags, schemaErrors } from "../../item
 import { PasswordGeneratorDialog } from "../PasswordGeneratorDialog";
 import styles from "./Form.module.css";
 import { SensitiveField } from "./SensitiveField";
+import { siteOf, UsernameField } from "./UsernameField";
 import { createItem, updateItem } from "./submit-item";
 
 export interface LoginFormProps {
@@ -60,6 +61,7 @@ interface FormValue {
   notes: string;
   favorite: boolean;
   reprompt: boolean;
+  autoSubmit: boolean;
   tags: string;
 }
 
@@ -114,6 +116,7 @@ function initialValue(item?: LoginItem): FormValue {
     notes: item?.notes ?? "",
     favorite: item?.favorite ?? false,
     reprompt: item?.reprompt ?? false,
+    autoSubmit: item?.autoSubmit ?? false,
     tags: formatTags(item?.tags ?? []),
   };
 }
@@ -225,6 +228,7 @@ export function LoginForm({ item, platform, otpItems, onSaved, onCancel }: Login
       notes: value.notes,
       favorite: value.favorite,
       reprompt: value.reprompt ? true : undefined,
+      autoSubmit: value.autoSubmit ? true : undefined,
       tags,
     };
     const candidate = item
@@ -288,15 +292,13 @@ export function LoginForm({ item, platform, otpItems, onSaved, onCancel }: Login
         }}
       />
 
-      <Field
-        label="Username"
+      <UsernameField
+        value={value.username}
         error={errors.username}
-        inputProps={{
-          value: value.username,
-          maxLength: MAX_LOGIN_USERNAME_LENGTH,
-          autoComplete: "username",
-          onChange: (event) => setValue({ ...value, username: event.target.value }),
-        }}
+        maxLength={MAX_LOGIN_USERNAME_LENGTH}
+        onChange={(username) => setValue((current) => ({ ...current, username }))}
+        site={siteOf(value.urls.find((url) => url.trim() !== ""))}
+        platform={platform}
       />
 
       <SensitiveField
@@ -536,6 +538,16 @@ export function LoginForm({ item, platform, otpItems, onSaved, onCancel }: Login
         />
         Ask for the master password before use
       </label>
+      {value.signInWith === "" ? (
+        <label className={styles.checkboxField}>
+          <input
+            type="checkbox"
+            checked={value.autoSubmit}
+            onChange={(event) => setValue({ ...value, autoSubmit: event.target.checked })}
+          />
+          Sign in automatically after filling
+        </label>
+      ) : null}
 
       <div className={styles.actions}>
         <Button type="button" variant="ghost" onClick={onCancel} disabled={submitting}>

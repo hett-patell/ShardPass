@@ -68,6 +68,7 @@ export type SafeErrorCode =
   | "PIN_INVALID"
   | "PIN_REMOVED"
   | "PIN_UNAVAILABLE"
+  | "RECOVERY_UNAVAILABLE"
   | "REPROMPT_REQUIRED"
   | "BREACH_CHECK_DISABLED"
   | "BREACH_CHECK_UNAVAILABLE"
@@ -151,6 +152,7 @@ const messages: Readonly<Record<SafeErrorCode, string>> = {
   PIN_INVALID: "That is not the PIN.",
   PIN_REMOVED: "Too many wrong PINs. The PIN was removed; use your master password.",
   PIN_UNAVAILABLE: "No PIN is set for this vault.",
+  RECOVERY_UNAVAILABLE: "No recovery code is set for this vault.",
   REPROMPT_REQUIRED: "Enter your master password to use this item.",
   BREACH_CHECK_DISABLED: "Breach checks are off. Turn them on in Settings.",
   BREACH_CHECK_UNAVAILABLE: "The breach check could not run. Try again later.",

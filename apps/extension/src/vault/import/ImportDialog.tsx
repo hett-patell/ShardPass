@@ -356,6 +356,11 @@ export interface ImportDialogProps {
   onImported: () => void;
   /** Called from "View vault" once an import is complete. */
   onDone?: () => void;
+  /**
+   * Bumped to open the ShardPass backup source at its export form: the dashboard's "Back up
+   * now" lands on the thing it names rather than on the importer list.
+   */
+  backupRequest?: number;
 }
 
 /**
@@ -367,7 +372,13 @@ export interface ImportDialogProps {
  * sources are parsed locally, previewed with per-row checkboxes, and imported in batches of
  * `item.createMany`.
  */
-export function ImportDialog({ platform, active, onImported, onDone }: ImportDialogProps) {
+export function ImportDialog({
+  platform,
+  active,
+  onImported,
+  onDone,
+  backupRequest = 0,
+}: ImportDialogProps) {
   const [source, setSource] = useState<SourceId>("chrome");
   const [state, setState] = useState<ThirdPartyState>(INITIAL_THIRD_PARTY_STATE);
   // Drawing thousands of rows at once is what made a large import slow to open; the rest are
@@ -403,6 +414,23 @@ export function ImportDialog({ platform, active, onImported, onDone }: ImportDia
     },
     [resetThirdParty],
   );
+
+  useEffect(() => {
+    if (backupRequest === 0 || importingRef.current) return;
+    setSource((current) => {
+      if (current !== "backup") resetThirdParty();
+      return "backup";
+    });
+    // The export form exists once the backup source has drawn; then it is shown and focused.
+    let frame = requestAnimationFrame(() => {
+      frame = requestAnimationFrame(() => {
+        const target = document.getElementById("backup-export");
+        target?.scrollIntoView({ block: "start", behavior: "smooth" });
+        target?.focus({ preventScroll: true });
+      });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [backupRequest, resetThirdParty]);
 
   useEffect(() => {
     // Leaving mid-import must not lose the summary: the import finishes and reports

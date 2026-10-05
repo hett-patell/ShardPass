@@ -263,3 +263,38 @@
 .identityAdd:hover {
   color: var(--text-primary);
 }
+
+/* Vault health: a category-shaped row that ends in what needs a look. */
+.health {
+  border-top: 1px solid var(--border-soft);
+}
+.findings {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-1);
+  margin-left: auto;
+}
+.finding,
+.findingClear {
+  padding: 1px var(--space-2);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  border-radius: 999px;
+}
+/* Severity rides on the text; the chip itself stays a neutral ground in both themes. */
+.finding,
+.findingClear {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-soft);
+}
+.findingDanger {
+  color: var(--danger);
+}
+.findingWarning {
+  color: var(--warning);
+}
+.findingClear {
+  color: var(--success);
+}

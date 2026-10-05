@@ -4,6 +4,35 @@ What changed in each release of the ShardPass extension. Versions are plain `2.x
 for features, a patch for fixes. The manifest version in `apps/extension/src/manifest.ts` is
 the number the browser reports on the About page.
 
+## 2.10.0
+
+- **Recovery code.** A forgotten master password no longer has to mean a lost vault. Right
+  after a vault is created, and any time from Settings, ShardPass makes a 24-letter code and
+  shows it once, to copy, save as a file or print. On the lock screen, "Forgot your master
+  password?" takes the code and a new master password and opens the vault under it. The code
+  is generated and turned into a key on the page; the background only ever sees that key,
+  which wraps a second copy of the vault key, as the PIN does. Wrong codes count against the
+  same lockout as wrong passwords. Changing the master password keeps the code; making a new
+  one retires the old.
+- **The popup knows the vault's health.** A row on its home screen counts reused, breached and
+  plain-http logins, each on its own, and opens Health in the vault. Only counts reach the
+  popup; the background works them out with the same function as the vault page.
+- **Email aliases from the popup.** The generator's Username tab makes a private @duck.com
+  address for the open site and copies it, once DuckDuckGo is connected; until then it says
+  where to connect it.
+- **Suggest a username on the login form.** A button beside Username suggests one in the style
+  set up in the username generator (a plus-address, a catch-all address, or two words), made
+  for the login's site, and a second makes a @duck.com address when that is connected.
+- **Sign in automatically, per login.** A login can ask for its form to be submitted once a
+  fill has put the password in. Never on a form without a password field, where the next step
+  is the person's to see, and never past a captcha.
+- **Choose how long copied passwords stay on the clipboard:** 10 seconds to 5 minutes, in
+  the locking card in Settings. The popup and the vault page follow the same choice.
+- **The backup reminder knows when you last backed up.** Saving an encrypted backup file
+  records the date. The dashboard says how long ago that was and how many items have changed
+  since, calls it overdue after 30 days of changes, and "Back up now" opens Settings at the
+  export itself.
+
 ## 2.9.0
 
 - **Recently deleted.** Deleting an item used to remove it on the spot. It now moves to

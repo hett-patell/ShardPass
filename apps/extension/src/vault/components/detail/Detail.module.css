@@ -402,3 +402,8 @@
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-md);
 }
+
+/* A dialog that holds a form or a code rather than a one-line question. */
+.dialogWide {
+  width: min(520px, calc(100vw - 2 * var(--space-4)));
+}

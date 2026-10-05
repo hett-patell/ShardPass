@@ -22,6 +22,7 @@ import { useActiveTab } from "./hooks/useActiveTab";
 import { useCopy } from "./hooks/useClipboard";
 import { useFillDataIntoTab } from "./hooks/useFillDataIntoTab";
 import { useFillIntoTab } from "./hooks/useFillIntoTab";
+import { useHealthSummary } from "./hooks/useHealthSummary";
 import { itemsInCategory, useVaultItems, type CategoryId } from "./hooks/useVaultItems";
 import { DetailScreen } from "./screens/DetailScreen";
 import { GeneratorScreen } from "./screens/GeneratorScreen";
@@ -185,6 +186,7 @@ export function PopupApp({ platform }: PopupAppProps) {
   }, []);
   const [direction, setDirection] = useState<"push" | "pop">("push");
   const vaultItems = useVaultItems(platform, vaultUnlocked);
+  const health = useHealthSummary(platform, vaultUnlocked, vaultItems.items);
   const tab = useActiveTab(platform);
   const { actionError, openVault } = useOpenVaultAction(platform);
   const copy = useCopy(platform, notify);
@@ -431,6 +433,8 @@ export function PopupApp({ platform }: PopupAppProps) {
                 pinnedIdentityId={pinnedIdentityId}
                 onChooseIdentity={() => push({ kind: "identity" })}
                 platform={platform}
+                health={health}
+                onOpenHealth={() => void openVault({ view: "health" })}
               />
             ) : screen.kind === "list" ? (
               <ListScreen
@@ -445,6 +449,8 @@ export function PopupApp({ platform }: PopupAppProps) {
               <GeneratorScreen
                 platform={platform}
                 onCopy={(value, label) => void copy(value, label)}
+                site={tab?.host}
+                onOpenAliases={() => void openVault({ view: "aliases" })}
               />
             ) : screen.kind === "identity" ? (
               <IdentityScreen

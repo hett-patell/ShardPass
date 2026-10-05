@@ -169,6 +169,15 @@ export const ItemBulkRequestSchema = z.strictObject({
   folderId: z.optional(z.nullable(z.uuid())),
 });
 
+/**
+ * How many logins the vault would flag, as counts only: no names, no ids, nothing secret.
+ * The popup shows them; the vault page's Health view has the detail.
+ */
+export const ItemHealthSummaryRequestSchema = z.strictObject({
+  version: z.literal(MESSAGE_VERSION),
+  kind: z.literal("item.healthSummary"),
+});
+
 export const ItemCrudRequestSchema = z.discriminatedUnion("kind", [
   ItemQueryRequestSchema,
   ItemGetRequestSchema,
@@ -178,6 +187,7 @@ export const ItemCrudRequestSchema = z.discriminatedUnion("kind", [
   ItemDeleteRequestSchema,
   ItemListRequestSchema,
   ItemBulkRequestSchema,
+  ItemHealthSummaryRequestSchema,
 ]);
 
 export const ItemQueryResultSchema = z.strictObject({
@@ -229,6 +239,18 @@ export const ItemBulkResultSchema = z.strictObject({
   skippedReprompt: bulkCount,
 });
 
+const loginCount = z.int().check(z.nonnegative(), z.maximum(MAX_ITEM_QUERY_RESULTS));
+export const ItemHealthSummaryResultSchema = z.strictObject({
+  version: z.literal(MESSAGE_VERSION),
+  kind: z.literal("item.healthSummaryResult"),
+  /** Logins whose password another login also uses. */
+  reused: loginCount,
+  /** Logins saved for a plain http:// site. */
+  unsecured: loginCount,
+  /** Logins not counted because they ask for the master password again first. */
+  skipped: loginCount,
+});
+
 export const ItemCrudResponseSchema = z.discriminatedUnion("kind", [
   ItemQueryResultSchema,
   ItemGetResultSchema,
@@ -237,6 +259,7 @@ export const ItemCrudResponseSchema = z.discriminatedUnion("kind", [
   ItemDeleteResultSchema,
   ItemListResultSchema,
   ItemBulkResultSchema,
+  ItemHealthSummaryResultSchema,
 ]);
 
 export type ItemCrudRequest = z.infer<typeof ItemCrudRequestSchema>;
@@ -255,6 +278,7 @@ export const itemCrudResponseKindByRequest = {
   "item.delete": "item.deleteResult",
   "item.list": "item.listResult",
   "item.bulk": "item.bulkResult",
+  "item.healthSummary": "item.healthSummaryResult",
 } as const satisfies Record<ItemCrudCommandKind, ItemCrudResponseKind>;
 
 export function parseItemCrudResponseForRequest(request: ItemCrudRequest, candidate: unknown) {
@@ -287,4 +311,5 @@ export const itemCrudSenderPolicy = {
   "item.delete": vaultOnly,
   "item.list": popupAndVault,
   "item.bulk": vaultOnly,
+  "item.healthSummary": popupAndVault,
 } satisfies Record<ItemCrudCommandKind, CommandSenderPolicy>;

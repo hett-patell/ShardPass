@@ -93,13 +93,21 @@ describe("vault messaging", () => {
     ).toBe(false);
   });
 
-  it("allows summary, setup, unlock, lock, and settings in popup/vault but password and PIN changes only in vault", () => {
-    for (const [kind, policy] of Object.entries(vaultSenderPolicy)) {
+  it("allows summary, setup, unlock, lock, and settings in popup/vault but password, PIN and recovery changes only in vault", () => {
+    const vaultPageOnly = new Set([
+      "vault.changePassword",
+      "vault.setPin",
+      "vault.removePin",
+      // A forgotten password is recovered on the vault page alone, where the new one is set.
+      "vault.setRecovery",
+      "vault.removeRecovery",
+      "vault.getRecoveryChallenge",
+      "vault.unlockWithRecovery",
+      "vault.resetPassword",
+    ]);
+    for (const [kind, policy] of Object.entries(vaultSenderPolicy))
       expect(policy.allowedContexts).toEqual(
-        kind === "vault.changePassword" || kind === "vault.setPin" || kind === "vault.removePin"
-          ? ["vault"]
-          : ["popup", "vault"],
+        vaultPageOnly.has(kind) ? ["vault"] : ["popup", "vault"],
       );
-    }
   });
 });

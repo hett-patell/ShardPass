@@ -70,6 +70,23 @@ function wipe(bytes: Uint8Array | null): void {
   bytes?.fill(0);
 }
 const MAX_PIN_FAILURES = 5;
+/**
+ * The data key wrapped under a key derived from the recovery code. Unlike the PIN it is not
+ * removed by failures: the code is 128 random bits, out of reach of guessing, and wrong
+ * attempts count against the same lockout as wrong master passwords.
+ */
+const RECOVERY_KEY = "shardpass:v1:recovery";
+type RecoveryRecord = Readonly<{ version: 1; wrapped: WrappedVaultKey; createdAt: number }>;
+function isRecoveryRecord(value: unknown): value is RecoveryRecord {
+  if (typeof value !== "object" || value === null) return false;
+  const candidate = value as { version?: unknown; wrapped?: unknown; createdAt?: unknown };
+  return (
+    candidate.version === 1 &&
+    WrappedVaultKeySchema.safeParse(candidate.wrapped).success &&
+    Number.isSafeInteger(candidate.createdAt) &&
+    (candidate.createdAt as number) >= 0
+  );
+}
 type PinKdf = Readonly<{
   algorithm: "argon2id";
   salt: string;
@@ -117,7 +134,8 @@ export type VaultSessionErrorCode =
   | "VAULT_UNAVAILABLE"
   | "PIN_INVALID"
   | "PIN_REMOVED"
-  | "PIN_UNAVAILABLE";
+  | "PIN_UNAVAILABLE"
+  | "RECOVERY_UNAVAILABLE";
 
 export class VaultSessionError extends Error {
   constructor(
@@ -130,7 +148,7 @@ export class VaultSessionError extends Error {
 }
 
 type KdfChallengePurpose = "setup" | "unlock" | "change-current" | "change-new" | "reprompt";
-type ChallengePurpose = KdfChallengePurpose | "pin";
+type ChallengePurpose = KdfChallengePurpose | "pin" | "recovery";
 export type SenderBinding = Readonly<{
   extensionId: string;
   contextKind: "popup" | "vault";
@@ -429,15 +447,187 @@ export class SessionService {
     });
   }
 
-  async getState(): Promise<{ state: VaultState; retryAfterMs: number; pinAvailable: boolean }> {
+  async getState(): Promise<{
+    state: VaultState;
+    retryAfterMs: number;
+    pinAvailable: boolean;
+    recoveryAvailable: boolean;
+    recovering?: true;
+  }> {
     if (this.dek !== null) await this.assertActiveRoot();
     const root = await this.readRoot();
     const retryAfterMs = await this.retryAfter();
+    const state = root === null ? "unconfigured" : this.dek === null ? "locked" : "unlocked";
     return {
-      state: root === null ? "unconfigured" : this.dek === null ? "locked" : "unlocked",
+      state,
       retryAfterMs,
       pinAvailable: root !== null && (await this.readPin()) !== null,
+      recoveryAvailable: root !== null && (await this.readRecovery()) !== null,
+      ...(state === "unlocked" && this.recoveredEpoch === this.epoch
+        ? { recovering: true as const }
+        : {}),
     };
+  }
+
+  // --- Recovery code: the data key wrapped once more, for a forgotten master password ---
+
+  /** The epoch of a session opened with the recovery code that has not set a new password yet. */
+  private recoveredEpoch: number | null = null;
+
+  private async readRecovery(): Promise<RecoveryRecord | null> {
+    try {
+      const stored = (await this.dependencies.local.get([RECOVERY_KEY]))[RECOVERY_KEY];
+      return isRecoveryRecord(stored) ? stored : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Wraps the open vault's data key under the recovery key; the page derived it from a code
+   * it generated and showed once. Replaces any earlier code, which stops working.
+   */
+  async setRecovery(recoveryKey: Uint8Array, kdf: PinKdf): Promise<void> {
+    try {
+      if (this.dek === null) throw new VaultSessionError("VAULT_LOCKED");
+      const { salt, ...parameters } = kdf;
+      const wrapped = await wrapVaultDataKeyWithKeyEncryptionKey(
+        recoveryKey,
+        decodeBase64(salt),
+        parameters,
+        this.dek,
+        this.dependencies.random,
+      );
+      const record: RecoveryRecord = { version: 1, wrapped, createdAt: this.now() };
+      await this.dependencies.local.set({ [RECOVERY_KEY]: record });
+    } finally {
+      recoveryKey.fill(0);
+    }
+  }
+
+  async removeRecovery(): Promise<void> {
+    if (this.dek === null) throw new VaultSessionError("VAULT_LOCKED");
+    await this.dependencies.local.remove([RECOVERY_KEY]);
+  }
+
+  /** The stored recovery key parameters, bound to this document and root like every challenge. */
+  async createRecoveryChallenge(sender: SenderBinding) {
+    if (!sender.documentId) throw new VaultSessionError("CHALLENGE_INVALID");
+    const retryAfterMs = await this.credentialMutex.run(() => this.retryAfter());
+    if (retryAfterMs > 0) throw new VaultSessionError("THROTTLED", retryAfterMs);
+    const root = await this.readRoot();
+    if (root === null) throw new VaultSessionError("VAULT_NOT_CONFIGURED");
+    const record = await this.readRecovery();
+    if (record === null) throw new VaultSessionError("RECOVERY_UNAVAILABLE");
+    const challenge: Challenge = {
+      challengeId: hex(this.dependencies.random.randomBytes(16)),
+      purpose: "recovery",
+      salt: decodeBase64(record.wrapped.kdf.salt),
+      rootBinding: canonicalJson(root),
+      senderBinding: sender,
+      expiresAt: safeAdd(this.now(), CHALLENGE_LIFETIME_MS),
+    };
+    this.challenges.set(challenge.challengeId, challenge);
+    return {
+      challengeId: challenge.challengeId,
+      kdf: record.wrapped.kdf,
+      expiresAt: challenge.expiresAt,
+    };
+  }
+
+  /**
+   * Opens the vault with the recovery key. A wrong key is a failed credential like a wrong
+   * master password, under the same lockout. The session it opens may set a new master
+   * password without the old one, until it does or until the vault locks.
+   */
+  async unlockWithRecovery(
+    challengeId: string,
+    recoveryKey: Uint8Array,
+    sender: SenderBinding,
+  ): Promise<void> {
+    await this.credentialMutex.run(async () => {
+      const operationEpoch = this.epoch;
+      let candidateDek: Uint8Array | null = null;
+      try {
+        const challenge = this.consume(challengeId, "recovery", sender);
+        const retryAfterMs = await this.retryAfter();
+        if (retryAfterMs > 0) throw new VaultSessionError("THROTTLED", retryAfterMs);
+        const root = await this.readRoot();
+        this.assertEpoch(operationEpoch);
+        if (root === null || canonicalJson(root) !== challenge.rootBinding)
+          throw new VaultSessionError("CHALLENGE_INVALID");
+        const record = await this.readRecovery();
+        if (record === null) throw new VaultSessionError("RECOVERY_UNAVAILABLE");
+        try {
+          candidateDek = await unwrapVaultDataKeyWithKeyEncryptionKey(recoveryKey, record.wrapped);
+        } catch {
+          await this.recordFailure();
+          throw new VaultSessionError("INVALID_CREDENTIALS");
+        }
+        try {
+          this.assertEpoch(operationEpoch);
+          const active = await this.generations.readActive({ dek: candidateDek });
+          this.assertEpoch(operationEpoch);
+          wipe(this.dek);
+          this.dek = candidateDek;
+          candidateDek = null;
+          this.expectedRoot = root;
+          this.rememberAuthenticatedActive(active);
+          this.recoveredEpoch = this.epoch;
+          await this.clearAttempts();
+          await this.rememberSession();
+        } catch (error) {
+          if (error instanceof VaultSessionError) throw error;
+          throw new VaultSessionError("VAULT_UNAVAILABLE");
+        }
+      } finally {
+        wipe(candidateDek);
+        recoveryKey.fill(0);
+      }
+    });
+    this.scheduleOrphanCollection();
+  }
+
+  /**
+   * Sets a new master password in a session opened with the recovery code, without asking for
+   * the old one: proving the recovery code was the proof. Refused in any other session.
+   */
+  resetPassword(
+    newChallengeId: string,
+    newKeyEncryptionKey: Uint8Array,
+    sender: SenderBinding,
+  ): Promise<MutationOutcome> {
+    return this.credentialMutex.run(() =>
+      this.mutationMutex.run(async () => {
+        const operationEpoch = this.epoch;
+        try {
+          const next = this.consume(newChallengeId, "change-new", sender);
+          if (this.dek === null) throw new VaultSessionError("VAULT_LOCKED");
+          if (this.recoveredEpoch !== operationEpoch)
+            throw new VaultSessionError("INVALID_CREDENTIALS");
+          await this.assertActiveRoot();
+          this.assertEpoch(operationEpoch);
+          const root = await this.readRoot();
+          this.assertEpoch(operationEpoch);
+          if (root === null || next.rootBinding !== canonicalJson(root))
+            throw new VaultSessionError("CHALLENGE_INVALID");
+          const outcome = await this.rewrapUnderNewPassword(
+            next,
+            root,
+            newKeyEncryptionKey,
+            operationEpoch,
+          );
+          this.recoveredEpoch = null;
+          return outcome;
+        } catch (error) {
+          if (error instanceof VaultSessionError) throw error;
+          if (error instanceof StorageError) this.lockWhileMutationHeld();
+          throw new VaultSessionError(this.dek === null ? "VAULT_LOCKED" : "VAULT_UNAVAILABLE");
+        } finally {
+          newKeyEncryptionKey.fill(0);
+        }
+      }),
+    );
   }
 
   // --- PIN unlock: the data key wrapped a second time, under a key derived from a short PIN ---
@@ -1035,58 +1225,12 @@ export class SessionService {
       if (!equalBytes(verifiedDek, this.dek)) throw new Error("credential mismatch");
       verifiedDek.fill(0);
       verifiedDek = null;
-      const replacement = await wrapVaultDataKeyWithKeyEncryptionKey(
+      const outcome = await this.rewrapUnderNewPassword(
+        next,
+        root,
         newKeyEncryptionKey,
-        next.salt,
-        DEFAULT_ARGON2ID_PARAMETERS,
-        this.dek,
-        this.dependencies.random,
+        operationEpoch,
       );
-      this.assertEpoch(operationEpoch);
-      const active = await this.generations.readActive({ dek: this.dek });
-      this.assertEpoch(operationEpoch);
-      if (active === null) throw new StorageError("STORAGE_CORRUPT");
-      const context = this.context(this.dek);
-      const retained = await this.generations.readRetained(context);
-      this.assertEpoch(operationEpoch);
-      const retainedNonces = new Set<string>();
-      for (const generation of retained) {
-        for (const envelope of [
-          ...generation.records,
-          ...generation.journal,
-          ...generation.receipts,
-          ...generation.metadata,
-        ])
-          retainedNonces.add(envelope.nonce);
-        retainedNonces.add(generation.manifest.authentication.nonce);
-        if (generation.marker !== null) retainedNonces.add(generation.marker.nonce);
-      }
-      const metadata = await Promise.all(
-        active.metadata.map(async (entry) => ({
-          name: entry.name,
-          schemaVersion: entry.schemaVersion,
-          plaintext: await this.generations.decryptMetadata(entry, context),
-        })),
-      );
-      this.assertEpoch(operationEpoch);
-      const staged = await this.generations.stage({
-        expectedRoot: root,
-        wrappedKey: replacement,
-        records: active.records,
-        journal: active.journal,
-        receipts: active.receipts,
-        metadata,
-        retainedNonces,
-        newEnvelopeNonces: new Set(),
-        context,
-      });
-      this.assertEpoch(operationEpoch);
-      const verified = await this.generations.verify(staged, context);
-      this.assertEpoch(operationEpoch);
-      const outcome = await this.commitRoot(verified, context, operationEpoch, this.dek);
-      // The PIN wrapped the same data key; a person changing the password after a scare
-      // expects the old PIN to stop working too. Setting it again is one form away.
-      await this.dependencies.local.remove([PIN_KEY]).catch(() => undefined);
       if (outcome.state === "locked") return outcome;
       await this.clearAttempts();
       this.assertEpoch(operationEpoch);
@@ -1102,6 +1246,74 @@ export class SessionService {
       currentKeyEncryptionKey.fill(0);
       newKeyEncryptionKey.fill(0);
     }
+  }
+
+  /**
+   * Wraps the open vault's data key under a new master-password key and commits a generation
+   * carrying it: the shared second half of changing the password and of resetting it after a
+   * recovery. Runs inside both mutexes. The PIN goes with the old password; the recovery
+   * code, which wraps the same data key independently, stays valid.
+   */
+  private async rewrapUnderNewPassword(
+    next: Challenge,
+    root: VaultRoot,
+    newKeyEncryptionKey: Uint8Array,
+    operationEpoch: number,
+  ): Promise<MutationOutcome> {
+    if (this.dek === null) throw new VaultSessionError("VAULT_LOCKED");
+    const replacement = await wrapVaultDataKeyWithKeyEncryptionKey(
+      newKeyEncryptionKey,
+      next.salt,
+      DEFAULT_ARGON2ID_PARAMETERS,
+      this.dek,
+      this.dependencies.random,
+    );
+    this.assertEpoch(operationEpoch);
+    const active = await this.generations.readActive({ dek: this.dek });
+    this.assertEpoch(operationEpoch);
+    if (active === null) throw new StorageError("STORAGE_CORRUPT");
+    const context = this.context(this.dek);
+    const retained = await this.generations.readRetained(context);
+    this.assertEpoch(operationEpoch);
+    const retainedNonces = new Set<string>();
+    for (const generation of retained) {
+      for (const envelope of [
+        ...generation.records,
+        ...generation.journal,
+        ...generation.receipts,
+        ...generation.metadata,
+      ])
+        retainedNonces.add(envelope.nonce);
+      retainedNonces.add(generation.manifest.authentication.nonce);
+      if (generation.marker !== null) retainedNonces.add(generation.marker.nonce);
+    }
+    const metadata = await Promise.all(
+      active.metadata.map(async (entry) => ({
+        name: entry.name,
+        schemaVersion: entry.schemaVersion,
+        plaintext: await this.generations.decryptMetadata(entry, context),
+      })),
+    );
+    this.assertEpoch(operationEpoch);
+    const staged = await this.generations.stage({
+      expectedRoot: root,
+      wrappedKey: replacement,
+      records: active.records,
+      journal: active.journal,
+      receipts: active.receipts,
+      metadata,
+      retainedNonces,
+      newEnvelopeNonces: new Set(),
+      context,
+    });
+    this.assertEpoch(operationEpoch);
+    const verified = await this.generations.verify(staged, context);
+    this.assertEpoch(operationEpoch);
+    const outcome = await this.commitRoot(verified, context, operationEpoch, this.dek);
+    // The PIN wrapped the same data key; a person changing the password after a scare
+    // expects the old PIN to stop working too. Setting it again is one form away.
+    await this.dependencies.local.remove([PIN_KEY]).catch(() => undefined);
+    return outcome;
   }
 
   lock(): Promise<void> {
@@ -1906,6 +2118,7 @@ export class SessionService {
   private clearLockedState(): Promise<void> {
     this.dek?.fill(0);
     this.dek = null;
+    this.recoveredEpoch = null;
     this.expectedRoot = null;
     this.authenticatedActive = null;
     this.commitCandidate = null;

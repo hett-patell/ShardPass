@@ -1192,3 +1192,29 @@ describe("item.bulk", () => {
     ).rejects.toMatchObject({ code: "ITEM_INVALID" });
   });
 });
+
+describe("item.healthSummary", () => {
+  it("counts reused and http logins for the popup, and nothing else", async () => {
+    const shared = "same-password-1A!";
+    const { service } = fixture([
+      loginItem({ password: shared }),
+      loginItem({ id: ids.created, name: "Twin", password: shared }),
+      loginItem({
+        id: ids.card,
+        name: "Plain",
+        password: "other-2B!",
+        urls: ["http://router.test"],
+      }),
+      loginItem({ id: ids.secret, name: "Guarded", password: shared, reprompt: true }),
+    ]);
+    const summary = await service.handle(request("item.healthSummary"), popupSender);
+    expect(summary).toEqual({
+      version: 1,
+      kind: "item.healthSummaryResult",
+      reused: 2,
+      unsecured: 1,
+      skipped: 1,
+    });
+    expect(JSON.stringify(summary)).not.toContain(shared);
+  });
+});

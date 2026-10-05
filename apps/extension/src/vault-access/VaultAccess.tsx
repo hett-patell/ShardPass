@@ -22,7 +22,16 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { ExtensionPlatform } from "../platform/extension-platform";
+import {
+  CLIPBOARD_CLEAR_CHOICES,
+  clipboardClearSeconds,
+  setClipboardClearSeconds,
+  type ClipboardClearSeconds,
+} from "../vault/components/detail/clipboard";
 import { createPageKdfExecutor } from "../platform/kdf-executor";
+import { decodeBase64, encodeBase64 } from "./key-transport";
+import { RecoverVaultForm } from "./RecoverVaultForm";
+import { RecoveryCodeMaker } from "./RecoveryCodeMaker";
 import styles from "./VaultAccess.module.css";
 
 const MIN_PIN_CODE_POINTS = 4;
@@ -34,7 +43,8 @@ export type DerivePageKey = (
   salt: Uint8Array,
 ) => Promise<Uint8Array>;
 
-const defaultDerive: DerivePageKey = async (password, parameters, salt) => {
+/** Argon2id on this page, off the main thread where the browser allows. */
+export const derivePageKey: DerivePageKey = async (password, parameters, salt) => {
   const executor = createPageKdfExecutor();
   return executor.derive({
     password: new TextEncoder().encode(password),
@@ -58,14 +68,17 @@ function errorText(error: unknown): string {
 
 export function VaultAccess({
   platform,
-  deriveKey = defaultDerive,
+  deriveKey = derivePageKey,
   securityControls = false,
   onUnlockedChange,
+  onCreated,
 }: {
   platform: Pick<ExtensionPlatform, "sendMessage" | "connectVaultState">;
   deriveKey?: DerivePageKey;
   securityControls?: boolean;
   onUnlockedChange?: (unlocked: boolean) => void;
+  /** A vault was just created here: the moment to offer a recovery code. */
+  onCreated?: () => void;
 }) {
   const [state, setState] = useState<"loading" | "unconfigured" | "locked" | "unlocked">("loading");
   const [password, setPassword] = useState("");
@@ -96,6 +109,14 @@ export function VaultAccess({
   // The PIN card and the locking card each show their own failure: one message shared by both
   // would appear under whichever card the reader was not looking at.
   const [pinError, setPinError] = useState("");
+  const [recoveryAvailable, setRecoveryAvailable] = useState(false);
+  // Opened with the recovery code and still without a new master password. On the vault page
+  // that session is not handed over as unlocked until the new password is set.
+  const [recovering, setRecovering] = useState(false);
+  const [recoverMode, setRecoverMode] = useState(false);
+  const [recoveryNotice, setRecoveryNotice] = useState("");
+  const [recoveryError, setRecoveryError] = useState("");
+  const [clipboardSeconds, setClipboardSeconds] = useState(clipboardClearSeconds);
   // The change-password card shows its own failures, beside the form that caused them.
   const [changeError, setChangeError] = useState("");
   const [changeNotice, setChangeNotice] = useState("");
@@ -218,10 +239,14 @@ export function VaultAccess({
       // someone is still typing.
       if (lastKnownState.current === "unlocked" && parsed.data.state !== "unlocked") clearFields();
       lastKnownState.current = parsed.data.state;
-      onUnlockedChange?.(parsed.data.state === "unlocked");
+      const stillRecovering = securityControls && parsed.data.recovering === true;
+      onUnlockedChange?.(parsed.data.state === "unlocked" && !stillRecovering);
       setState(parsed.data.state);
       setRetryAfterMs(parsed.data.retryAfterMs);
       setPinAvailable(parsed.data.pinAvailable === true);
+      setRecoveryAvailable(parsed.data.recoveryAvailable === true);
+      setRecovering(stillRecovering);
+      if (parsed.data.state !== "locked") setRecoverMode(false);
       setSettings({
         autoLockMinutes: parsed.data.autoLockMinutes,
         lockOnScreenLock: parsed.data.lockOnScreenLock,
@@ -290,7 +315,7 @@ export function VaultAccess({
       if (queryTimer !== undefined) clearTimeout(queryTimer);
       disconnect?.();
     };
-  }, [onUnlockedChange, platform]);
+  }, [onUnlockedChange, platform, securityControls]);
 
   async function deriveChallenge(passwordValue: string, purpose: "change-current" | "change-new") {
     const raw = await platform.sendMessage({ version: 1, kind: "vault.getKdfChallenge", purpose });
@@ -492,6 +517,7 @@ export function VaultAccess({
           keyEncryptionKey: encodeBase64(key),
         });
         if (isUnlocked(response)) {
+          if (state === "unconfigured") onCreated?.();
           onUnlockedChange?.(true);
           setPassword("");
           setConfirmation("");
@@ -541,6 +567,36 @@ export function VaultAccess({
         )}
       </div>
     );
+  if (state === "unlocked" && recovering)
+    return (
+      <RecoverVaultForm
+        platform={platform}
+        deriveKey={deriveKey}
+        mode="reset"
+        onRecovered={() => {
+          setRecovering(false);
+          onUnlockedChange?.(true);
+        }}
+      />
+    );
+
+  if (state === "locked" && recoverMode && securityControls)
+    return (
+      <RecoverVaultForm
+        platform={platform}
+        deriveKey={deriveKey}
+        mode="recover"
+        onCancel={() => setRecoverMode(false)}
+        onRecovered={() => {
+          setRecoverMode(false);
+          setRecovering(false);
+          setPinAvailable(false);
+          onUnlockedChange?.(true);
+          setState("unlocked");
+        }}
+      />
+    );
+
   if (state === "unlocked") {
     const lockButton = (
       <Button
@@ -628,6 +684,25 @@ export function VaultAccess({
               }}
             />
             Lock when the screen locks
+          </label>
+          <label>
+            Clear copied passwords
+            <select
+              value={String(clipboardSeconds)}
+              onChange={(event) => {
+                const seconds = Number(event.target.value) as ClipboardClearSeconds;
+                setClipboardClearSeconds(seconds);
+                setClipboardSeconds(seconds);
+              }}
+            >
+              {CLIPBOARD_CLEAR_CHOICES.map((seconds) => (
+                <option key={seconds} value={seconds}>
+                  {seconds < 60
+                    ? `After ${seconds} seconds`
+                    : `After ${seconds / 60} minute${seconds === 60 ? "" : "s"}`}
+                </option>
+              ))}
+            </select>
           </label>
           {lockButton}
         </section>
@@ -743,6 +818,55 @@ export function VaultAccess({
             </Button>
           </form>
         </section>
+        <section className={styles.panel} aria-labelledby="vault-recovery-heading">
+          <h2 id="vault-recovery-heading">Recovery code</h2>
+          <p>
+            {recoveryAvailable
+              ? "A recovery code is set. With it, this vault can be opened and given a new master password if you forget yours."
+              : "Without a recovery code, a forgotten master password cannot be undone. A code opens this vault in this browser profile and lets you choose a new master password."}
+          </p>
+          {recoveryNotice !== "" ? (
+            <p className={styles.working} role="status">
+              {recoveryNotice}
+            </p>
+          ) : null}
+          {recoveryError !== "" ? (
+            <p className={styles.loadingError} role="alert">
+              {recoveryError}
+            </p>
+          ) : null}
+          <RecoveryCodeMaker
+            platform={platform}
+            deriveKey={deriveKey}
+            replacing={recoveryAvailable}
+            onDone={() => {
+              setRecoveryAvailable(true);
+              setRecoveryError("");
+              setRecoveryNotice("Recovery code saved. Keep it outside this browser.");
+            }}
+          />
+          {recoveryAvailable ? (
+            <Button
+              variant="ghost"
+              disabled={working}
+              onClick={() => {
+                setRecoveryNotice("");
+                setRecoveryError("");
+                platform.sendMessage({ version: 1, kind: "vault.removeRecovery" }).then(
+                  (response) => {
+                    if (isUnlocked(response)) {
+                      setRecoveryAvailable(false);
+                      setRecoveryNotice("Recovery code removed. It no longer opens this vault.");
+                    } else setRecoveryError(safeError(response));
+                  },
+                  () => setRecoveryError("The recovery code could not be removed. Try again."),
+                );
+              }}
+            >
+              Remove recovery code
+            </Button>
+          ) : null}
+        </section>
       </>
     );
   }
@@ -800,7 +924,7 @@ export function VaultAccess({
       <h2>{setup ? "Create your vault" : "Unlock ShardPass"}</h2>
       <p>
         {setup
-          ? "One password protects everything in ShardPass. It never leaves this device and cannot be recovered, so pick something long that you will remember."
+          ? "One password protects everything in ShardPass. It never leaves this device, and without the recovery code you can make next, a forgotten one cannot be undone. Pick something long that you will remember."
           : "Enter your master password."}
       </p>
       <form
@@ -904,6 +1028,20 @@ export function VaultAccess({
             Use PIN instead
           </Button>
         ) : null}
+        {!setup && recoveryAvailable && securityControls ? (
+          <Button
+            type="button"
+            variant="ghost"
+            disabled={working}
+            onClick={() => {
+              setError("");
+              setPassword("");
+              setRecoverMode(true);
+            }}
+          >
+            Forgot your master password?
+          </Button>
+        ) : null}
         {working ? (
           <p className={styles.working} role="status">
             Deriving your key on this device. It is never sent anywhere.
@@ -949,10 +1087,4 @@ function safeError(value: unknown): string {
   )
     return (value as { error: { message: string } }).error.message;
   return "The vault could not be unlocked. Try again.";
-}
-function decodeBase64(value: string): Uint8Array {
-  return Uint8Array.from(atob(value), (character) => character.charCodeAt(0));
-}
-function encodeBase64(value: Uint8Array): string {
-  return btoa(String.fromCharCode(...value));
 }

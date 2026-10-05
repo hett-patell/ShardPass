@@ -426,6 +426,7 @@ export class LoginFillService {
       password: item.password,
       ...(item.signInWith === undefined ? {} : { signInWith: item.signInWith }),
       ...(linkedOtpCode === undefined ? {} : { linkedOtpCode }),
+      ...(item.autoSubmit === true && item.signInWith === undefined ? { autoSubmit: true } : {}),
     };
   }
 

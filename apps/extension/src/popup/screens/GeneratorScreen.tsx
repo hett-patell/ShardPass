@@ -5,6 +5,7 @@ import { Copy, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { ExtensionPlatform } from "../../platform/extension-platform";
+import { AliasPanel } from "../components/AliasPanel";
 import styles from "./GeneratorScreen.module.css";
 
 export interface GeneratorScreenProps {
@@ -12,6 +13,10 @@ export interface GeneratorScreenProps {
   onCopy: (value: string, label: string) => void;
   /** Which tab opens first; "random" when not given. */
   initialMode?: GeneratorMode;
+  /** The open tab's site, for an email alias made here. */
+  site?: string | undefined;
+  /** Opens the vault where an email alias service is connected; no alias section without it. */
+  onOpenAliases?: () => void;
 }
 
 export type GeneratorMode = "random" | "passphrase" | "username";
@@ -49,6 +54,8 @@ export function GeneratorScreen({
   platform,
   onCopy,
   initialMode = "random",
+  site,
+  onOpenAliases,
 }: GeneratorScreenProps) {
   const [mode, setMode] = useState<Mode>(initialMode);
   const [length, setLength] = useState(20);
@@ -331,6 +338,9 @@ export function GeneratorScreen({
                   ? "Needs a domain whose mail all reaches you. Each site gets a fresh address."
                   : "Sign-up forms offer one of these when you pick the username field."}
             </p>
+            {onOpenAliases !== undefined ? (
+              <AliasPanel platform={platform} site={site} onCopy={onCopy} onSetUp={onOpenAliases} />
+            ) : null}
           </>
         ) : mode === "random" ? (
           <>

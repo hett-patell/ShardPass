@@ -7,6 +7,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { ExtensionPlatform } from "../../platform/extension-platform";
 import { faviconUrl } from "../../platform/favicon";
 import { createStrengthEstimator } from "../../vault-access/strength-estimator";
+import { BACKUP_STALE_DAYS, lastBackupAt } from "../settings/backup-record";
 import { computeHealth } from "../health/health-report";
 import { computeHealthScore } from "../health/health-score";
 // The health page owns the finding ids; a second copy here would drift from the cards.
@@ -25,6 +26,8 @@ export interface OverviewViewProps {
   onOpenHealth: (focus?: HealthFocus) => void;
   onOpenGenerator: () => void;
   onOpenImport: () => void;
+  /** Opens Settings at the backup export, ready to make the file. */
+  onOpenBackup?: () => void;
   onNewLogin: () => void;
 }
 
@@ -103,6 +106,7 @@ export function OverviewView({
   onOpenHealth,
   onOpenGenerator,
   onOpenImport,
+  onOpenBackup,
   onNewLogin,
 }: OverviewViewProps) {
   const report = useMemo(() => computeHealth(items, redactedIds), [items, redactedIds]);
@@ -404,23 +408,9 @@ export function OverviewView({
             ) : null}
           </section>
 
-          {/* The one loss this design cannot undo. Nothing here knows when the last backup was
-              made -- that would take a record of its own -- so it says the standing truth
-              rather than nagging on a timer it cannot honestly keep. */}
-          <section className={styles.backup} aria-labelledby="overview-backup">
-            <h4 id="overview-backup" className={styles.cardTitle}>
-              Keep a backup
-            </h4>
-            <p className={styles.quiet}>
-              A forgotten master password cannot be recovered, by you or by anyone. An encrypted
-              backup file is the only way back into this vault.
-            </p>
-            <div className={styles.actions}>
-              <Button variant="secondary" onClick={onOpenImport}>
-                Make a backup
-              </Button>
-            </div>
-          </section>
+          {/* The one loss this design cannot undo, counted from the last encrypted file saved
+              here: how long ago, and how much has changed since, which is what is at stake. */}
+          <BackupReminder items={items} onOpen={onOpenBackup ?? onOpenImport} />
         </div>
       </div>
 
@@ -459,5 +449,49 @@ export function OverviewView({
         </ul>
       </section>
     </div>
+  );
+}
+
+/** How long ago, in the words a person uses: "today", "yesterday", "12 days ago". */
+function ago(at: number, now: number): string {
+  const days = Math.floor((now - at) / 86_400_000);
+  if (days <= 0) return "today";
+  if (days === 1) return "yesterday";
+  return `${days} days ago`;
+}
+
+function BackupReminder({
+  items,
+  onOpen,
+}: Readonly<{ items: readonly VaultItem[]; onOpen: () => void }>) {
+  const at = lastBackupAt();
+  const now = Date.now();
+  const changed =
+    at === null ? items.length : items.filter((item) => Date.parse(item.updatedAt) > at).length;
+  const stale = at === null || now - at > BACKUP_STALE_DAYS * 86_400_000;
+  const due = stale && changed > 0;
+  return (
+    <section
+      className={`${styles.backup} ${due ? styles.backupDue : ""}`}
+      aria-labelledby="overview-backup"
+    >
+      <h4 id="overview-backup" className={styles.cardTitle}>
+        {at === null ? "No backup yet" : due ? "Backup overdue" : "Backed up"}
+      </h4>
+      <p className={styles.quiet}>
+        {at === null
+          ? "An encrypted backup file is the only way to bring this vault back if this browser profile is lost."
+          : `Last encrypted backup ${ago(at, now)}. ${
+              changed === 0
+                ? "Nothing has changed since."
+                : `${changed} item${changed === 1 ? " has" : "s have"} changed since.`
+            }`}
+      </p>
+      <div className={styles.actions}>
+        <Button variant={due ? "primary" : "secondary"} onClick={onOpen}>
+          {at === null ? "Make a backup" : "Back up now"}
+        </Button>
+      </div>
+    </section>
   );
 }

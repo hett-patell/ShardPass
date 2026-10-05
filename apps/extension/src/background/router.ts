@@ -339,6 +339,11 @@ const vaultResponseKindByRequest = {
   "vault.unlockWithPin": "vault.ok",
   "vault.setPin": "vault.ok",
   "vault.removePin": "vault.ok",
+  "vault.setRecovery": "vault.ok",
+  "vault.removeRecovery": "vault.ok",
+  "vault.getRecoveryChallenge": "vault.recoveryChallenge",
+  "vault.unlockWithRecovery": "vault.ok",
+  "vault.resetPassword": "vault.ok",
 } as const;
 
 export function routeMessage(

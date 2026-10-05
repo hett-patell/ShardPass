@@ -6,6 +6,7 @@ import { Button, PasswordInput, SectionLabel } from "@shardpass/ui";
 import type { BackupUiExtensionPlatform } from "../../platform/extension-platform";
 import { createPageKdfExecutor } from "../../platform/kdf-executor";
 import styles from "./BackupView.module.css";
+import { recordBackup } from "./backup-record";
 import {
   defaultBackupCrypto,
   EXPORT_FILES,
@@ -158,6 +159,8 @@ export function BackupView({
 
       <div className={styles.columns}>
         <form
+          id="backup-export"
+          tabIndex={-1}
           className={styles.panel}
           onSubmit={(event) => {
             event.preventDefault();
@@ -258,7 +261,10 @@ export function BackupView({
               data-tone={state.download.kind === "encrypted" ? "good" : "warn"}
               href={state.download.url}
               download={EXPORT_FILES[state.download.kind].fileName}
-              onClick={backup.downloadConsumed}
+              onClick={() => {
+                if (state.download?.kind === "encrypted") recordBackup();
+                backup.downloadConsumed();
+              }}
             >
               {DOWNLOAD_LABELS[state.download.kind]}
             </a>

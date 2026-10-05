@@ -646,6 +646,20 @@ export function createLoginFillController(
   };
 
   /**
+   * A login set to sign in by itself: submit once a fill has put a password in. Never on a
+   * form without a password field -- that is a first step whose next page the person should
+   * see -- and never past a captcha, which `submitForm` already refuses.
+   */
+  const submitIfAsked = (
+    fieldSet: LoginFieldSet,
+    response: Readonly<{ autoSubmit?: true | undefined; password: string }>,
+  ): void => {
+    if (response.autoSubmit !== true || fieldSet.passwordField === null || response.password === "")
+      return;
+    submitForm(fieldSet);
+  };
+
+  /**
    * A provider account has nothing to fill: the page's own "Continue with Google" button is
    * pressed instead. When the page has no such button, the person is told where to look.
    */
@@ -727,6 +741,7 @@ export function createLoginFillController(
       closeBanner();
       await sendConfirm(suggestion.itemId, response.releaseId);
       if (mode.submit) submitForm(candidate.fieldSet);
+      else submitIfAsked(candidate.fieldSet, response);
       if (response.linkedOtpCode !== undefined)
         await offerOtpCode(candidate.input, response.linkedOtpCode);
     } catch (error) {
@@ -1084,6 +1099,7 @@ export function createLoginFillController(
       if (bannerDismissedBy === null) bannerDismissedBy = "fill";
       closeBanner();
       await sendConfirm(itemId, response.releaseId);
+      submitIfAsked(fieldSet, response);
       // Answer first so the popup can close; the code offer waits for focus on its own.
       const anchor = fieldSet.passwordField ?? fieldSet.usernameField;
       if (response.linkedOtpCode !== undefined && anchor !== null)

@@ -101,6 +101,19 @@ Baseline at 2.3.0: typecheck clean, lint clean after one test fix, full suite gr
 - [x] E9 · `login.fillFromPopup` first-answer race across frames, closed in 2.8.1. The tab hands the request to every frame and keeps the first answer; one of the four negative paths already waited a moment so a filling frame could answer first, and the other three did not. All of them wait now, with a test.
 - [x] E10 low · dead `useOtpList.ts`; stale scan-build/manifest-test comments; GeneratorScreen's deferred settings fetch overwrites what was typed and requests a username per keystroke.
 
+## 2026-10-05 · Eight features from "what else could be included" (2.9.0, 2.10.0)
+
+- [x] 1 Recently deleted: soft delete through `deletedAt`, which every background read already skipped; `setDeleted` and `tombstoneMany` storage operations, one commit each; 30-day purge after unlock and on opening the view; Ente keeps `deletedAt` local like `archivedAt`. (2.9.0)
+- [x] 2 Choosing several items: `item.bulk` (favourite, move, archive, unarchive, delete, restore, purge), Ctrl/Cmd-click and Shift-click, re-prompted items skipped and counted. (2.9.0)
+- [x] 3 Popup: vault health row from `item.healthSummary` (counts only, same `computeHealth`) plus remembered breach results; @duck.com alias panel in the generator's Username tab.
+- [x] 4 Login form: Suggest a username (the person's own generator style, for the login's site) and a @duck.com button when connected.
+- [x] 5 Per-login "Sign in automatically after filling": `autoSubmit` on the login, carried by the fill release, submitted only with a password field and no captcha.
+- [x] 6 Clipboard clear delay, 10 s to 5 min, read by every copy path in the popup and the vault page.
+- [x] 7 Recovery code: 120-bit code made on the page, Argon2id-derived key wraps the data key beside the PIN record; recover-and-reset in one form, `recovering` sessions held on the vault page until the new password is set; the change-password re-wrap is now shared. Offered right after setup and in Settings.
+- [x] 8 Backup reminder: date of the last encrypted backup file, items changed since, overdue after 30 days, "Back up now" opens the export form.
+- [x] Verified in a real browser, every feature: 7 checks for 1-2, 14 for 3-8, no page errors. Two harness traps worth remembering: the extension has no `tabs` permission so it cannot read other tabs' URLs, and `requestSubmit()` runs form validation, so an `type="email"` field holding a plain username blocks the submit, as it would on a real site.
+- [x] Gates: typecheck, lint, format, `build:security`, 2,525 tests in 234 files.
+
 ## 2026-09-23 · Reviewing my own work since 2.6.7 (2.8.4)
 
 `/code-review high 66be5e6..HEAD`: 29 commits, 92 files. Ten findings; every one checked against the code before acting, eight confirmed outright and two reproduced first.

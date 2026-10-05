@@ -330,6 +330,10 @@
   padding-top: var(--space-5);
   border-top: 1px solid var(--border);
 }
+/* Overdue: the heading takes the warning colour; the card stays where it is. */
+.backupDue h4 {
+  color: var(--warning);
+}
 
 .recent {
   display: flex;

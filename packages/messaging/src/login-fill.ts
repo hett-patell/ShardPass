@@ -58,6 +58,8 @@ export const LoginFillReleaseResponseSchema = z.strictObject({
   password: z.string(),
   signInWith: z.optional(z.enum(SIGN_IN_PROVIDERS)),
   linkedOtpCode: z.optional(z.string()),
+  /** The login asks for its form to be submitted once filled. */
+  autoSubmit: z.optional(z.literal(true)),
 });
 
 /**
