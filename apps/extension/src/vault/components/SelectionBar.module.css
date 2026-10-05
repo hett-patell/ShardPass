@@ -1,0 +1,77 @@
+/* Sits where the list header's controls were: the selection is what the list is about now. */
+.bar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--border-soft);
+  background: var(--accent-subtle);
+}
+
+.summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-3);
+}
+
+.count {
+  margin-right: auto;
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.link {
+  padding: 0;
+  color: var(--accent);
+  font: inherit;
+  font-size: var(--text-sm);
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+.link:hover:not(:disabled) {
+  text-decoration: underline;
+}
+.link:disabled {
+  color: var(--text-tertiary);
+  cursor: default;
+}
+.link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-xs);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.move {
+  min-height: 32px;
+  padding: 0 var(--space-2);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: var(--text-sm);
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.move:disabled {
+  opacity: 0.5;
+}
+
+.danger {
+  margin-left: auto;
+  color: var(--danger);
+}
+
+.message {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+}

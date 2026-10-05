@@ -27,6 +27,9 @@ export interface UseVaultStateResult {
   status: VaultStateStatus;
   archived: boolean;
   setArchived: (archived: boolean) => void;
+  /** True while the list shows Recently deleted. Never at the same time as `archived`. */
+  deleted: boolean;
+  setDeleted: (deleted: boolean) => void;
   category: CategoryKey;
   setCategory: (category: CategoryKey) => void;
   folderId: string | null;
@@ -42,6 +45,8 @@ export interface UseVaultStateResult {
   /** Re-fetches the full item list, e.g. after a create/update/delete. */
   refresh: () => void;
 }
+
+type VaultScope = "live" | "archived" | "deleted";
 
 const emptyItems: readonly VaultItem[] = [];
 const noFolders: readonly Folder[] = Object.freeze([]);
@@ -63,13 +68,26 @@ export function useVaultState(
   // The live (non-archived) vault, kept while the Archive view runs its own query, so
   // sidebar counts never turn into archived-only numbers.
   const [liveItems, setLiveItems] = useState<readonly VaultItem[]>(emptyItems);
-  const loadedArchived = useRef<boolean | null>(null);
+  const loadedScope = useRef<VaultScope | null>(null);
   const [status, setStatus] = useState<VaultStateStatus>(active ? "loading" : "idle");
   const [category, setCategory] = useState<CategoryKey>("all");
   const [folderId, setFolderId] = useState<string | null>(null);
-  // The Archive view is a separate query, not a client-side filter: the background keeps
-  // archived items out of every ordinary listing and only hands them over when asked.
-  const [archived, setArchived] = useState(false);
+  // The Archive and Recently deleted views are separate queries, not client-side filters:
+  // the background keeps those items out of every ordinary listing and only hands them over
+  // when asked. One scope at a time.
+  const [scope, setScope] = useState<VaultScope>("live");
+  const archived = scope === "archived";
+  const deleted = scope === "deleted";
+  const setArchived = useCallback(
+    (next: boolean) =>
+      setScope((current) => (next ? "archived" : current === "archived" ? "live" : current)),
+    [],
+  );
+  const setDeleted = useCallback(
+    (next: boolean) =>
+      setScope((current) => (next ? "deleted" : current === "deleted" ? "live" : current)),
+    [],
+  );
   // Selecting a folder shows everything filed beneath it too, the way a file browser's
   // scope works; a bare id match would hide items sitting in sub-folders.
   const folderScope = useMemo(
@@ -103,14 +121,15 @@ export function useVaultState(
     const token = ++generation.current;
     // A refresh keeps the current list on screen; switching between live and archive shows
     // the loading state instead of the other view's rows under the new heading.
-    if (loadedArchived.current !== archived) setAllItems(emptyItems);
+    if (loadedScope.current !== scope) setAllItems(emptyItems);
     setStatus((current) =>
-      current === "ready" && loadedArchived.current === archived ? current : "loading",
+      current === "ready" && loadedScope.current === scope ? current : "loading",
     );
     const queryRequest = {
       version: 1 as const,
       kind: "item.query" as const,
-      ...(archived ? { archived: true } : {}),
+      ...(scope === "archived" ? { archived: true } : {}),
+      ...(scope === "deleted" ? { deleted: true } : {}),
     };
     platform.sendMessage(queryRequest).then(
       (candidate) => {
@@ -119,9 +138,9 @@ export function useVaultState(
         if (parsed.success && parsed.data.kind === "item.queryResult") {
           setAllItems(parsed.data.items);
           setRedactedIds(new Set(parsed.data.redacted ?? []));
-          if (!archived) setLiveItems(parsed.data.items);
+          if (scope === "live") setLiveItems(parsed.data.items);
           else refreshLive(token);
-          loadedArchived.current = archived;
+          loadedScope.current = scope;
           setStatus("ready");
         } else {
           setAllItems(emptyItems);
@@ -134,19 +153,19 @@ export function useVaultState(
         setStatus("error");
       },
     );
-  }, [platform, archived, refreshLive]);
+  }, [platform, scope, refreshLive]);
 
   useEffect(() => {
     if (!active) {
       generation.current += 1;
       setAllItems(emptyItems);
       setLiveItems(emptyItems);
-      loadedArchived.current = null;
+      loadedScope.current = null;
       setStatus("idle");
       setSelectedId(null);
       setCategory("all");
       setFolderId(null);
-      setArchived(false);
+      setScope("live");
       setSearch("");
       return;
     }
@@ -203,6 +222,8 @@ export function useVaultState(
       refresh,
       archived,
       setArchived,
+      deleted,
+      setDeleted,
     }),
     [
       allItems,
@@ -218,6 +239,9 @@ export function useVaultState(
       selectedId,
       refresh,
       archived,
+      setArchived,
+      deleted,
+      setDeleted,
     ],
   );
 }

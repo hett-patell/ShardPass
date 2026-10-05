@@ -73,3 +73,25 @@
   justify-content: center;
   margin-top: var(--space-3);
 }
+
+/* A row and, while choosing several, its checkbox: one line, the box first. */
+.rowShell {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+.rowShell > :last-child {
+  flex: 1;
+  min-width: 0;
+}
+.selectable {
+  padding-left: var(--space-2);
+}
+.check {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}

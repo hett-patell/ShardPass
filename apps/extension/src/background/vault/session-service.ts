@@ -284,6 +284,41 @@ export class SessionService {
         this.repositoryUpdateItem(candidate, expectedRevision),
       touchItem: (candidate, expectedRevision) =>
         this.repositoryTouchItem(candidate, expectedRevision),
+      listDeletedItems: () =>
+        this.#runRepositoryOperation(async (repository, context) =>
+          Object.freeze(
+            (await repository.listItems(context))
+              .filter((item) => item.deletedAt !== undefined)
+              .map((item) => freezeVaultItem(item)),
+          ),
+        ),
+      moveToDeleted: (changes) =>
+        this.#runRepositoryOperation((repository, context) =>
+          repository.setDeleted(changes, context.clock.now(), context),
+        ),
+      restoreDeleted: (itemIds) =>
+        this.#runRepositoryOperation((repository, context) =>
+          repository.setDeleted(
+            itemIds.map((itemId) => ({ itemId })),
+            undefined,
+            context,
+          ),
+        ),
+      purgeDeleted: (selector) =>
+        this.#runRepositoryOperation(async (repository, context) => {
+          const deleted = (await repository.listItems(context)).filter(
+            (item) => item.deletedAt !== undefined,
+          );
+          const named = "itemIds" in selector ? new Set(selector.itemIds) : null;
+          const doomed = deleted
+            .filter((item) =>
+              named === null
+                ? item.deletedAt! < (selector as { deletedBefore: string }).deletedBefore
+                : named.has(item.id),
+            )
+            .map((item) => item.id);
+          return doomed.length === 0 ? [] : repository.tombstoneMany(doomed, context);
+        }),
       stampUsage: (stamps) =>
         this.#runRepositoryOperation((repository, context) =>
           repository.stampUsage(stamps, context),

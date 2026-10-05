@@ -212,6 +212,29 @@ describe("SessionService", () => {
     expect(await service.vaultRepository.get(hotpItemId)).toMatchObject({ id: hotpItemId });
   });
 
+  it("keeps Recently deleted out of every ordinary read and purges only from there", async () => {
+    const { service } = fixture();
+    await setup(service);
+    const repository = service.vaultRepository;
+    await repository.create(hotpItem);
+
+    await repository.moveToDeleted([{ itemId: hotpItemId, expectedRevision: 1 }]);
+    expect(await repository.getItem(hotpItemId)).toBeNull();
+    expect(await repository.listAllItems()).toEqual([]);
+    expect(await repository.listItems()).toEqual([]);
+    expect((await repository.listDeletedItems()).map((item) => item.id)).toEqual([hotpItemId]);
+
+    // Not old enough yet, then named: only the second removes it.
+    expect(await repository.purgeDeleted({ deletedBefore: "1970-01-01T00:00:00.000Z" })).toEqual(
+      [],
+    );
+    await repository.restoreDeleted([hotpItemId]);
+    expect(await repository.getItem(hotpItemId)).toMatchObject({ id: hotpItemId, revision: 3 });
+    // A live item named for purging is left alone.
+    expect(await repository.purgeDeleted({ itemIds: [hotpItemId] })).toEqual([]);
+    expect(await repository.getItem(hotpItemId)).not.toBeNull();
+  });
+
   it("reopens the session a previous worker instance left behind, but not after a lock or a root change", async () => {
     const values = fixture();
     await setup(values.service);

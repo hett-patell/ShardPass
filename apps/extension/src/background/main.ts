@@ -110,7 +110,11 @@ export function installBackground(
   // turn or Chrome will not wake the worker to lock on screen lock.
   settings.listen();
   const repromptGrants = new RepromptGrants(() => Date.now());
-  const vault = new VaultService(sessions, settings, repromptGrants);
+  // Items deleted more than thirty days ago go for good once the key is back; `item` is
+  // declared below and only called at an unlock, long after this scope has run.
+  const vault = new VaultService(sessions, settings, repromptGrants, () => {
+    void item.purgeExpired();
+  });
   const backup = new BackupService({
     sessions,
     readSettings: () => settings.snapshot(),
@@ -158,6 +162,7 @@ export function installBackground(
   const unregisterImportCleanup = sessions.onLockOrDispose(() => otpImport.clearForSession());
   const item = new ItemService({
     repository: sessions.vaultRepository,
+    now: () => Date.now(),
     notePrivilegedActivity: () => settings.notePrivilegedActivity(),
     repromptGranted: (itemId) => repromptGrants.granted(itemId),
   });

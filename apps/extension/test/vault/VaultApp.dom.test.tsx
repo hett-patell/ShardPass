@@ -455,6 +455,127 @@ describe("VaultApp foundation shell", () => {
   });
 });
 
+/**
+ * A background that keeps a live list and Recently deleted in memory and answers the vault's
+ * reads and bulk actions from them, so a test can follow items from one to the other.
+ */
+function vaultWithBin(platform: FakeExtensionPlatform) {
+  const live = new Map<string, Record<string, unknown>>(
+    [loginItem, noteItem].map((item) => [item.id, { ...item }]),
+  );
+  const bin = new Map<string, Record<string, unknown>>();
+  const original = platform.sendMessage.bind(platform);
+  vi.spyOn(platform, "sendMessage").mockImplementation((payload: unknown) => {
+    const request = payload as {
+      kind?: string;
+      deleted?: boolean;
+      archived?: boolean;
+      action?: string;
+      itemIds?: string[];
+    };
+    if (request.kind === "item.query") {
+      platform.sentMessages.push(payload);
+      const items =
+        request.deleted === true
+          ? [...bin.values()]
+          : request.archived === true
+            ? []
+            : [...live.values()];
+      return Promise.resolve({ version: 1, kind: "item.queryResult", items });
+    }
+    if (request.kind === "item.bulk") {
+      platform.sentMessages.push(payload);
+      let changed = 0;
+      for (const id of request.itemIds ?? []) {
+        if (request.action === "delete" && live.has(id)) {
+          bin.set(id, { ...live.get(id), revision: 2, deletedAt: "2026-09-30T10:00:00.000Z" });
+          live.delete(id);
+          changed += 1;
+        } else if (request.action === "restore" && bin.has(id)) {
+          const { deletedAt: _deletedAt, ...rest } = bin.get(id)!;
+          void _deletedAt;
+          live.set(id, { ...rest, revision: 3 });
+          bin.delete(id);
+          changed += 1;
+        } else if (request.action === "purge" && bin.delete(id)) changed += 1;
+      }
+      return Promise.resolve({ version: 1, kind: "item.bulkResult", changed, skippedReprompt: 0 });
+    }
+    return original(payload);
+  });
+  return { live, bin };
+}
+
+describe("choosing several items, and Recently deleted", () => {
+  it("deletes two items at once into Recently deleted, then restores one from there", async () => {
+    const platform = readyUnlockedPlatform();
+    const { live, bin } = vaultWithBin(platform);
+    render(<VaultApp platform={platform} />);
+    await screen.findByText("Example Login");
+
+    fireEvent.click(screen.getByRole("button", { name: "Select items" }));
+    const bar = screen.getByRole("toolbar", { name: "Selected items" });
+    fireEvent.click(within(bar).getByRole("button", { name: "Select all 2" }));
+    expect(within(bar).getByText("2 items selected")).toBeVisible();
+    fireEvent.click(within(bar).getByRole("button", { name: "Delete" }));
+    const dialog = await screen.findByRole("dialog", { name: "Delete these items?" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Delete" }));
+
+    expect(await within(bar).findByText("2 items moved to Recently deleted.")).toBeVisible();
+    expect(live.size).toBe(0);
+    expect(bin.size).toBe(2);
+
+    fireEvent.click(screen.getByRole("button", { name: "Recently deleted" }));
+    fireEvent.click(await screen.findByText("Example Note"));
+    expect(await screen.findByText(/It stays here until/)).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Restore" }));
+
+    await waitFor(() => expect(live.has(noteItem.id)).toBe(true));
+    expect(bin.has(noteItem.id)).toBe(false);
+    await waitFor(() => expect(screen.queryByText("Example Note")).toBeNull());
+    expect(screen.getByText("Example Login")).toBeVisible();
+  });
+
+  it("ticks the run between two rows on Shift-click, and Escape stops choosing", async () => {
+    const platform = readyUnlockedPlatform();
+    vaultWithBin(platform);
+    render(<VaultApp platform={platform} />);
+    await screen.findByText("Example Login");
+
+    fireEvent.click(screen.getByRole("button", { name: "Select items" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Select Example Login" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Select Example Note" }), {
+      shiftKey: true,
+    });
+    expect(screen.getByText("2 items selected")).toBeVisible();
+
+    fireEvent.keyDown(screen.getByRole("checkbox", { name: "Select Example Note" }), {
+      key: "Escape",
+    });
+    expect(screen.queryByRole("toolbar", { name: "Selected items" })).toBeNull();
+    // Out of choosing, a click opens the item again.
+    fireEvent.click(screen.getByText("Example Note"));
+    expect(await screen.findByRole("heading", { name: "Example Note" })).toBeVisible();
+  });
+
+  it("removes an item for good only after asking", async () => {
+    const platform = readyUnlockedPlatform();
+    const { bin } = vaultWithBin(platform);
+    bin.set(noteItem.id, { ...noteItem, revision: 2, deletedAt: "2026-09-30T10:00:00.000Z" });
+    render(<VaultApp platform={platform} />);
+    await screen.findByText("Example Login");
+
+    fireEvent.click(screen.getByRole("button", { name: "Recently deleted" }));
+    fireEvent.click(await screen.findByText("Example Note"));
+    fireEvent.click(await screen.findByRole("button", { name: "Delete now" }));
+    expect(bin.has(noteItem.id)).toBe(true);
+    fireEvent.click(await screen.findByRole("button", { name: "Delete for good" }));
+
+    await waitFor(() => expect(bin.size).toBe(0));
+    expect(await screen.findByText("Nothing recently deleted")).toBeVisible();
+  });
+});
+
 describe("vault source and responsive style contracts", () => {
   it("keeps styles external and avoids unsupported Chrome 110-only syntax", async () => {
     const { readFile } = await import("node:fs/promises");

@@ -32,10 +32,10 @@ export function DeleteOtpDialog({
       aria-describedby="delete-otp-description"
       {...({ closedby: "closerequest" } as Record<string, string>)}
     >
-      <h3 id="delete-otp-heading">Delete authenticator entry</h3>
+      <h3 id="delete-otp-heading">Delete one-time code</h3>
       <p id="delete-otp-description">
-        Delete <strong>{label}</strong>? Codes for this account will no longer be generated here. If
-        it syncs with Ente, it is removed there too.
+        Delete <strong>{label}</strong>? It moves to Recently deleted, where you can restore it for
+        30 days. If it syncs with Ente, it is removed there when it leaves Recently deleted.
       </p>
       <div className={styles.dialogActions}>
         <Button ref={cancelRef} variant="ghost" onClick={onCancel} disabled={submitting}>

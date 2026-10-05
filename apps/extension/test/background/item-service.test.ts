@@ -150,10 +150,23 @@ function secretItem(overrides: Partial<SecretItem> = {}): SecretItem {
 
 class FakeRepository implements Pick<
   SessionVaultRepository,
-  "listAllItems" | "getItem" | "createItem" | "createItems" | "updateItem" | "tombstone"
+  | "listAllItems"
+  | "getItem"
+  | "createItem"
+  | "createItems"
+  | "updateItem"
+  | "updateItems"
+  | "listDeletedItems"
+  | "moveToDeleted"
+  | "restoreDeleted"
+  | "purgeDeleted"
 > {
   readonly items = new Map<string, VaultItem>();
-  tombstoneCalls = 0;
+  /** Recently deleted: out of every ordinary read, as the session keeps it. */
+  readonly deleted = new Map<string, VaultItem>();
+  moveToDeletedCalls = 0;
+  /** One entry per updateItems call: a bulk action is one commit. */
+  readonly updateBatches: string[][] = [];
   listError: unknown;
 
   constructor(values: readonly VaultItem[] = []) {
@@ -206,13 +219,68 @@ class FakeRepository implements Pick<
     return Promise.resolve(structuredClone(updated));
   }
 
-  tombstone(itemId: string, expectedRevision: number): Promise<TombstoneResult> {
-    this.tombstoneCalls += 1;
-    const current = this.items.get(itemId);
-    if (current === undefined || current.revision !== expectedRevision)
-      return Promise.reject(new StorageError("REVISION_CONFLICT"));
-    this.items.delete(itemId);
-    return Promise.resolve({ id: itemId, revision: current.revision + 1, deletedAt: nowIso });
+  updateItems(
+    changes: readonly Readonly<{ candidate: VaultItem; expectedRevision: number }>[],
+  ): Promise<readonly VaultItem[]> {
+    this.updateBatches.push(changes.map((change) => change.candidate.id));
+    return Promise.all(
+      changes.map((change) => this.updateItem(change.candidate, change.expectedRevision)),
+    );
+  }
+
+  moveToDeleted(
+    changes: readonly Readonly<{ itemId: string; expectedRevision?: number }>[],
+  ): Promise<readonly VaultItem[]> {
+    this.moveToDeletedCalls += 1;
+    const moved: VaultItem[] = [];
+    for (const { itemId, expectedRevision } of changes) {
+      const current = this.items.get(itemId);
+      if (
+        current === undefined ||
+        (expectedRevision !== undefined && current.revision !== expectedRevision)
+      )
+        return Promise.reject(new StorageError("REVISION_CONFLICT"));
+      const next = { ...current, revision: current.revision + 1, deletedAt: nowIso } as VaultItem;
+      this.items.delete(itemId);
+      this.deleted.set(itemId, next);
+      moved.push(structuredClone(next));
+    }
+    return Promise.resolve(moved);
+  }
+
+  listDeletedItems(): Promise<readonly VaultItem[]> {
+    return Promise.resolve([...this.deleted.values()].map((value) => structuredClone(value)));
+  }
+
+  restoreDeleted(itemIds: readonly string[]): Promise<readonly VaultItem[]> {
+    const restored: VaultItem[] = [];
+    for (const itemId of itemIds) {
+      const current = this.deleted.get(itemId);
+      if (current === undefined) continue;
+      const { deletedAt: _deletedAt, ...rest } = current;
+      void _deletedAt;
+      const next = { ...rest, revision: current.revision + 1 } as VaultItem;
+      this.deleted.delete(itemId);
+      this.items.set(itemId, next);
+      restored.push(structuredClone(next));
+    }
+    return Promise.resolve(restored);
+  }
+
+  purgeDeleted(
+    selector: Readonly<{ itemIds: readonly string[] }> | Readonly<{ deletedBefore: string }>,
+  ): Promise<readonly TombstoneResult[]> {
+    const removed: TombstoneResult[] = [];
+    for (const [itemId, current] of this.deleted) {
+      const doomed =
+        "itemIds" in selector
+          ? selector.itemIds.includes(itemId)
+          : current.deletedAt! < selector.deletedBefore;
+      if (!doomed) continue;
+      this.deleted.delete(itemId);
+      removed.push({ id: itemId, revision: current.revision + 1, deletedAt: nowIso });
+    }
+    return Promise.resolve(removed);
   }
 }
 
@@ -560,7 +628,7 @@ describe("ItemService", () => {
     ).rejects.toMatchObject({ code: "ITEM_NOT_FOUND" });
   });
 
-  it("tombstones with the current revision and returns no secret material", async () => {
+  it("moves to Recently deleted with the current revision and returns no secret material", async () => {
     const stored = loginItem();
     const { activity, repository, service } = fixture([stored]);
     const result = await service.handle(request("item.delete", { itemId: stored.id }), vaultSender);
@@ -571,6 +639,7 @@ describe("ItemService", () => {
       revision: 2,
     });
     expect(repository.items.has(stored.id)).toBe(false);
+    expect(repository.deleted.get(stored.id)).toMatchObject({ revision: 2, deletedAt: nowIso });
     expect(JSON.stringify(result)).not.toContain(stored.password);
     expect(activity).toEqual(["noted"]);
   });
@@ -601,7 +670,7 @@ describe("ItemService", () => {
     );
     const result = await service.handle(request("item.delete", { itemId: stored.id }), vaultSender);
     expect(result.kind).toBe("item.deleteResult");
-    expect(repository.tombstoneCalls).toBe(1);
+    expect(repository.moveToDeletedCalls).toBe(1);
   });
 
   it("returns responses accepted by the strict item CRUD messaging schema, deeply frozen", async () => {
@@ -1010,5 +1079,116 @@ describe("search", () => {
       items: { id: string }[];
     };
     expect(byHost.items.map((item) => item.id)).toEqual([ids.created]);
+  });
+});
+
+describe("Recently deleted", () => {
+  const second = () => loginItem({ id: ids.created, name: "Second" });
+
+  it("lists deleted items only when asked, and brings them back on restore", async () => {
+    const { service } = fixture([loginItem(), second()]);
+    await service.handle(request("item.delete", { itemId: ids.login }), vaultSender);
+
+    const live = await service.handle(request("item.query"), vaultSender);
+    expect(live.kind === "item.queryResult" ? live.items.map((item) => item.id) : []).toEqual([
+      ids.created,
+    ]);
+    const deleted = await service.handle(request("item.query", { deleted: true }), vaultSender);
+    expect(deleted.kind === "item.queryResult" ? deleted.items.map((item) => item.id) : []).toEqual(
+      [ids.login],
+    );
+
+    const restored = await service.handle(
+      request("item.bulk", { action: "restore", itemIds: [ids.login] }),
+      vaultSender,
+    );
+    expect(restored).toMatchObject({ kind: "item.bulkResult", changed: 1 });
+    const after = await service.handle(request("item.query"), vaultSender);
+    expect(after.kind === "item.queryResult" ? after.items.length : 0).toBe(2);
+  });
+
+  it("purges only what is in Recently deleted, never a live item named alongside", async () => {
+    const { repository, service } = fixture([loginItem(), second()]);
+    await service.handle(request("item.delete", { itemId: ids.login }), vaultSender);
+    const purged = await service.handle(
+      request("item.bulk", { action: "purge", itemIds: [ids.login, ids.created] }),
+      vaultSender,
+    );
+    expect(purged).toMatchObject({ changed: 1 });
+    expect(repository.deleted.size).toBe(0);
+    expect(repository.items.has(ids.created)).toBe(true);
+  });
+
+  it("lets go of items deleted more than thirty days ago when the list is opened", async () => {
+    const { repository, service } = fixture([]);
+    const old = { ...loginItem(), revision: 2, deletedAt: "2026-07-01T00:00:00.000Z" };
+    const recent = { ...second(), revision: 2, deletedAt: "2026-08-01T00:00:00.000Z" };
+    repository.deleted.set(old.id, old);
+    repository.deleted.set(recent.id, recent);
+
+    const listed = await service.handle(request("item.query", { deleted: true }), vaultSender);
+
+    expect(listed.kind === "item.queryResult" ? listed.items.map((item) => item.id) : []).toEqual([
+      ids.created,
+    ]);
+  });
+});
+
+describe("item.bulk", () => {
+  const second = () => loginItem({ id: ids.created, name: "Second" });
+
+  it("archives, files and favourites a selection under one commit each", async () => {
+    const { repository, service } = fixture([loginItem(), second()]);
+    const both = [ids.login, ids.created];
+
+    expect(
+      await service.handle(request("item.bulk", { action: "archive", itemIds: both }), vaultSender),
+    ).toMatchObject({ changed: 2, skippedReprompt: 0 });
+    expect(repository.items.get(ids.login)?.archivedAt).toBeDefined();
+
+    await service.handle(
+      request("item.bulk", { action: "move", itemIds: both, folderId }),
+      vaultSender,
+    );
+    expect(repository.items.get(ids.created)?.folderId).toBe(folderId);
+    await service.handle(
+      request("item.bulk", { action: "move", itemIds: both, folderId: null }),
+      vaultSender,
+    );
+    expect(repository.items.get(ids.created)?.folderId).toBeUndefined();
+
+    // Already favourited items are not rewritten.
+    await service.handle(
+      request("item.bulk", { action: "favorite", itemIds: [ids.login] }),
+      vaultSender,
+    );
+    const outcome = await service.handle(
+      request("item.bulk", { action: "favorite", itemIds: both }),
+      vaultSender,
+    );
+    expect(outcome).toMatchObject({ changed: 1 });
+    expect(repository.updateBatches.at(-1)).toEqual([ids.created]);
+  });
+
+  it("deletes a selection, leaving items that ask for the master password alone", async () => {
+    const guarded = second();
+    const { repository, service } = fixture([loginItem(), { ...guarded, reprompt: true }]);
+    const outcome = await service.handle(
+      request("item.bulk", { action: "delete", itemIds: [ids.login, ids.created] }),
+      vaultSender,
+    );
+    expect(outcome).toMatchObject({ changed: 1, skippedReprompt: 1 });
+    expect(repository.items.has(ids.created)).toBe(true);
+    expect(repository.deleted.has(ids.login)).toBe(true);
+  });
+
+  it("refuses a move with no destination, and anything from the popup", async () => {
+    const { service } = fixture([loginItem()]);
+    await expect(
+      service.handle(request("item.bulk", { action: "move", itemIds: [ids.login] }), vaultSender),
+    ).rejects.toMatchObject({ code: "ITEM_INVALID" });
+    await expect(
+      service.handle(request("item.bulk", { action: "delete", itemIds: [ids.login] }), popupSender),
+    ).rejects.toMatchObject({ code: "ITEM_INVALID" });
   });
 });

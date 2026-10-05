@@ -72,6 +72,9 @@ class FakeRepository implements Omit<
   createCalls = 0;
   updateCalls = 0;
   tombstoneCalls = 0;
+  moveToDeletedCalls = 0;
+  /** Recently deleted: out of every ordinary read, as the session keeps it. */
+  readonly deleted = new Map<string, OtpItem>();
   beforeGet: ((itemId: string, call: number) => void | Promise<void>) | undefined;
   listError: unknown;
 
@@ -181,6 +184,61 @@ class FakeRepository implements Omit<
       return Promise.reject(new StorageError("REVISION_CONFLICT"));
     this.items.delete(itemId);
     return Promise.resolve({ id: itemId, revision: current.revision + 1, deletedAt: nowIso });
+  }
+
+  moveToDeleted(
+    changes: readonly Readonly<{ itemId: string; expectedRevision?: number }>[],
+  ): Promise<readonly VaultItem[]> {
+    this.moveToDeletedCalls += 1;
+    const moved: OtpItem[] = [];
+    for (const { itemId, expectedRevision } of changes) {
+      const current = this.items.get(itemId);
+      if (
+        current === undefined ||
+        (expectedRevision !== undefined && current.revision !== expectedRevision)
+      )
+        return Promise.reject(new StorageError("REVISION_CONFLICT"));
+      const next = { ...current, revision: current.revision + 1, deletedAt: nowIso };
+      this.items.delete(itemId);
+      this.deleted.set(itemId, next);
+      moved.push(structuredClone(next));
+    }
+    return Promise.resolve(moved);
+  }
+
+  listDeletedItems(): Promise<readonly VaultItem[]> {
+    return Promise.resolve([...this.deleted.values()].map((value) => structuredClone(value)));
+  }
+
+  restoreDeleted(itemIds: readonly string[]): Promise<readonly VaultItem[]> {
+    const restored: OtpItem[] = [];
+    for (const itemId of itemIds) {
+      const current = this.deleted.get(itemId);
+      if (current === undefined) continue;
+      const { deletedAt: _deletedAt, ...rest } = current;
+      void _deletedAt;
+      const next = { ...rest, revision: current.revision + 1 };
+      this.deleted.delete(itemId);
+      this.items.set(itemId, next);
+      restored.push(structuredClone(next));
+    }
+    return Promise.resolve(restored);
+  }
+
+  purgeDeleted(
+    selector: Readonly<{ itemIds: readonly string[] }> | Readonly<{ deletedBefore: string }>,
+  ): Promise<readonly TombstoneResult[]> {
+    const removed: TombstoneResult[] = [];
+    for (const [itemId, current] of this.deleted) {
+      const doomed =
+        "itemIds" in selector
+          ? selector.itemIds.includes(itemId)
+          : current.deletedAt! < selector.deletedBefore;
+      if (!doomed) continue;
+      this.deleted.delete(itemId);
+      removed.push({ id: itemId, revision: current.revision + 1, deletedAt: nowIso });
+    }
+    return Promise.resolve(removed);
   }
 
   commitHotpReservation(): Promise<never> {
@@ -525,7 +583,7 @@ describe("OtpService search and CRUD", () => {
     expect(activity).toEqual([]);
   });
 
-  it("tombstones with the expected revision and returns no record metadata", async () => {
+  it("moves to Recently deleted with the expected revision and returns no record metadata", async () => {
     const stored = item();
     const { activity, repository, service } = fixture([stored]);
     const result = await service.handle(
@@ -540,6 +598,9 @@ describe("OtpService search and CRUD", () => {
       revision: 2,
     });
     expect(repository.items.has(stored.id)).toBe(false);
+    // Restorable: the record is kept, marked deleted, and nothing was removed for good.
+    expect(repository.deleted.get(stored.id)).toMatchObject({ revision: 2, deletedAt: nowIso });
+    expect(repository.tombstoneCalls).toBe(0);
     expect(JSON.stringify(result)).not.toContain(stored.secret);
     expect(activity).toEqual(["noted"]);
   });
@@ -752,7 +813,7 @@ describe("OtpService search and CRUD", () => {
       expect(result.kind).toBe(operation === "delete" ? "otp.deleteResult" : "otp.mutationResult");
       expect(repository.createCalls).toBe(operation === "create" ? 1 : 0);
       expect(repository.updateCalls).toBe(operation === "update" ? 1 : 0);
-      expect(repository.tombstoneCalls).toBe(operation === "delete" ? 1 : 0);
+      expect(repository.moveToDeletedCalls).toBe(operation === "delete" ? 1 : 0);
     },
   );
 

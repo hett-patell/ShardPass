@@ -14,6 +14,7 @@ import {
   ItemCrudRequestSchema,
   ItemCrudResponseSchema,
   MAX_ITEM_QUERY_RESULTS,
+  RECENTLY_DELETED_DAYS,
   type ItemCreateManyEntry,
   type ItemCrudRequest,
   type ItemCrudResponse,
@@ -30,11 +31,21 @@ const MUTATING_COMMANDS: ReadonlySet<ItemCrudRequest["kind"]> = new Set([
   "item.createMany",
   "item.update",
   "item.delete",
+  "item.bulk",
 ]);
 
 type ItemRepository = Pick<
   SessionVaultRepository,
-  "listAllItems" | "getItem" | "createItem" | "createItems" | "updateItem" | "tombstone"
+  | "listAllItems"
+  | "getItem"
+  | "createItem"
+  | "createItems"
+  | "updateItem"
+  | "updateItems"
+  | "listDeletedItems"
+  | "moveToDeleted"
+  | "restoreDeleted"
+  | "purgeDeleted"
 >;
 
 export type ItemServiceErrorCode =
@@ -99,6 +110,10 @@ export class ItemService {
         case "item.list":
           result = await this.list(command);
           break;
+        case "item.bulk":
+          this.assertVaultSender(sender);
+          result = await this.bulk(command);
+          break;
       }
       // Only a change the user made counts as activity for the inactivity lock. Reads are
       // issued automatically -- the list refreshes, live codes poll -- so counting them would
@@ -119,11 +134,18 @@ export class ItemService {
   private async query(
     command: Extract<ItemCrudRequest, { kind: "item.query" }>,
   ): Promise<ItemCrudResponse> {
-    let items = await this.dependencies.repository.listAllItems();
-    // Archived items stay out of every ordinary view; the Archive view asks for them alone.
-    items = items.filter((item) =>
-      command.archived === true ? item.archivedAt !== undefined : item.archivedAt === undefined,
-    );
+    let items: readonly VaultItem[];
+    if (command.deleted === true) {
+      // Recently deleted is the one place deleted items are listed, archived or not, and the
+      // natural moment to let go of the ones whose time is up.
+      await this.purgeExpired();
+      items = await this.dependencies.repository.listDeletedItems();
+    } else {
+      // Archived items stay out of every ordinary view; the Archive view asks for them alone.
+      items = (await this.dependencies.repository.listAllItems()).filter((item) =>
+        command.archived === true ? item.archivedAt !== undefined : item.archivedAt === undefined,
+      );
+    }
     if (command.itemKind !== undefined)
       items = items.filter((item) => item.kind === command.itemKind);
     if (command.folderId !== undefined)
@@ -296,17 +318,106 @@ export class ItemService {
     const current = await this.dependencies.repository.getItem(itemId);
     if (current === null) throw new ItemServiceError("ITEM_NOT_FOUND");
     this.assertReprompt(current);
-    const deleted = await this.dependencies.repository.tombstone(itemId, current.revision);
+    // Into Recently deleted: restorable for RECENTLY_DELETED_DAYS, then purged.
+    const [moved] = await this.dependencies.repository.moveToDeleted([
+      { itemId, expectedRevision: current.revision },
+    ]);
+    if (moved === undefined) conflict();
     return response({
       version: 1,
       kind: "item.deleteResult",
-      itemId: deleted.id,
-      revision: deleted.revision,
+      itemId: moved.id,
+      revision: moved.revision,
     });
+  }
+
+  /**
+   * Removes items that have been in Recently deleted longer than {@link RECENTLY_DELETED_DAYS}.
+   * Best effort: the background runs it after every unlock and the Recently deleted view
+   * before it lists, and an item left a little longer has cost nothing.
+   */
+  async purgeExpired(): Promise<number> {
+    const now = (this.dependencies.now ?? Date.now)();
+    const deletedBefore = new Date(now - RECENTLY_DELETED_DAYS * 86_400_000).toISOString();
+    try {
+      return (await this.dependencies.repository.purgeDeleted({ deletedBefore })).length;
+    } catch {
+      return 0;
+    }
+  }
+
+  /**
+   * One action over a selection, under one commit. Items that ask for the master password
+   * again are left alone unless it has been given, as they are for a single edit; restoring
+   * and purging touch no secret and take every item named. Ids that are gone are skipped.
+   */
+  private async bulk(
+    command: Extract<ItemCrudRequest, { kind: "item.bulk" }>,
+  ): Promise<ItemCrudResponse> {
+    const repository = this.dependencies.repository;
+    const action = command.action;
+    const ids = [...new Set(command.itemIds)];
+    const result = (changed: number, skippedReprompt = 0) =>
+      response({ version: 1, kind: "item.bulkResult", changed, skippedReprompt });
+
+    if (action === "restore") return result((await repository.restoreDeleted(ids)).length);
+    if (action === "purge") return result((await repository.purgeDeleted({ itemIds: ids })).length);
+
+    const wanted = new Set(ids);
+    const live = (await repository.listAllItems()).filter((item) => wanted.has(item.id));
+    const allowed = live.filter((item) => item.reprompt !== true || this.granted(item.id));
+    const skippedReprompt = live.length - allowed.length;
+
+    if (action === "delete") {
+      const moved = await repository.moveToDeleted(
+        allowed.map((item) => ({ itemId: item.id, expectedRevision: item.revision })),
+      );
+      return result(moved.length, skippedReprompt);
+    }
+
+    if (action === "move" && command.folderId === undefined) invalid();
+    const archivedAt = new Date((this.dependencies.now ?? Date.now)()).toISOString();
+    const changes = allowed.flatMap((item) => {
+      const next = bulkChange(item, action, command.folderId ?? null, archivedAt);
+      return next === null ? [] : [{ candidate: next, expectedRevision: item.revision }];
+    });
+    if (changes.length === 0) return result(0, skippedReprompt);
+    const updated = await repository.updateItems(changes);
+    return result(updated.length, skippedReprompt);
   }
 
   private assertVaultSender(sender: SenderContext): void {
     if (sender.contextKind !== "vault") invalid();
+  }
+}
+
+/** The item after one organising action, or null when it is already that way. */
+function bulkChange(
+  item: VaultItem,
+  action: "archive" | "unarchive" | "favorite" | "unfavorite" | "move",
+  folderId: string | null,
+  archivedAt: string,
+): VaultItem | null {
+  switch (action) {
+    case "archive":
+      return item.archivedAt === undefined ? { ...item, archivedAt } : null;
+    case "unarchive": {
+      if (item.archivedAt === undefined) return null;
+      const { archivedAt: _archivedAt, ...rest } = item;
+      void _archivedAt;
+      return rest;
+    }
+    case "favorite":
+      return item.favorite ? null : { ...item, favorite: true };
+    case "unfavorite":
+      return item.favorite ? { ...item, favorite: false } : null;
+    case "move": {
+      if ((item.folderId ?? null) === folderId) return null;
+      if (folderId !== null) return { ...item, folderId };
+      const { folderId: _folderId, ...rest } = item;
+      void _folderId;
+      return rest;
+    }
   }
 }
 

@@ -151,6 +151,30 @@ class Repository implements Omit<
       changes.map((change) => this.updateItem(change.candidate, change.expectedRevision)),
     );
   }
+  /** A HOTP item moved into Recently deleted is out of every ordinary read, as tombstoned. */
+  moveToDeleted(
+    changes: readonly Readonly<{ itemId: string; expectedRevision?: number }>[],
+  ): Promise<readonly VaultItem[]> {
+    const [change] = changes;
+    if (
+      this.current === null ||
+      change === undefined ||
+      (change.expectedRevision !== undefined && this.current.revision !== change.expectedRevision)
+    )
+      return Promise.reject(new StorageError("REVISION_CONFLICT"));
+    const moved = { ...this.current, revision: this.current.revision + 1, deletedAt: nowIso };
+    this.current = null;
+    return Promise.resolve([moved]);
+  }
+  listDeletedItems(): Promise<readonly VaultItem[]> {
+    return Promise.resolve([]);
+  }
+  restoreDeleted(): Promise<readonly VaultItem[]> {
+    return Promise.resolve([]);
+  }
+  purgeDeleted(): Promise<readonly TombstoneResult[]> {
+    return Promise.resolve([]);
+  }
   tombstone(_itemId: string, expectedRevision: number): Promise<TombstoneResult> {
     if (this.current === null || this.current.revision !== expectedRevision)
       return Promise.reject(new StorageError("REVISION_CONFLICT"));

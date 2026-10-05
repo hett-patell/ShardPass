@@ -1,5 +1,10 @@
 import { VAULT_SORTS, type OtpItem, type VaultItemKind, type VaultSort } from "@shardpass/domain";
-import type { OtpEditableInput, OtpResponse } from "@shardpass/messaging";
+import {
+  parseItemCrudResponseForRequest,
+  type ItemBulkAction,
+  type OtpEditableInput,
+  type OtpResponse,
+} from "@shardpass/messaging";
 import {
   AppHeader,
   SearchBar,
@@ -8,6 +13,7 @@ import {
   type CategoryKey,
   type Status,
 } from "@shardpass/ui";
+import { ListChecks } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useFoundationStatus } from "../foundation/useFoundationStatus";
@@ -33,6 +39,8 @@ import { SecretForm } from "./components/forms/SecretForm";
 import { updateItem } from "./components/forms/submit-item";
 import { ItemDetailPanel } from "./components/ItemDetailPanel";
 import { ItemListPanel } from "./components/ItemListPanel";
+import { DeletedItemDetail } from "./components/detail/DeletedItemDetail";
+import { SelectionBar, type SelectionScope } from "./components/SelectionBar";
 import { NewItemMenu } from "./components/NewItemMenu";
 import { VaultSidebar, type GeneratorTool, type VaultSidebarView } from "./components/VaultSidebar";
 import { AboutView } from "./about/AboutView";
@@ -98,6 +106,11 @@ export function VaultApp({ platform }: VaultAppProps) {
   // A just-created item is selected before the list has re-fetched it; the detail pane
   // stays blank for that beat instead of flashing "Select an item".
   const [pendingId, setPendingId] = useState<string | null>(null);
+  // Choosing several items: null when not choosing, else the ticked ids.
+  const [selection, setSelection] = useState<ReadonlySet<string> | null>(null);
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkMessage, setBulkMessage] = useState("");
+  const lastToggled = useRef<string | null>(null);
 
   const folderState = useFolders(platform, vaultUnlocked);
   const vaultState = useVaultState(platform, vaultUnlocked, folderState.folders);
@@ -159,13 +172,21 @@ export function VaultApp({ platform }: VaultAppProps) {
     [createFormHasInput, creatingKind],
   );
 
+  const stopSelecting = useCallback(() => {
+    setSelection(null);
+    setBulkMessage("");
+    lastToggled.current = null;
+  }, []);
+
   const goToVaultView = useCallback(() => {
     leavingCreate(() => {
       setView("vault");
       setCreatingKind(null);
       vaultState.setArchived(false);
+      vaultState.setDeleted(false);
+      stopSelecting();
     });
-  }, [leavingCreate, vaultState]);
+  }, [leavingCreate, vaultState, stopSelecting]);
 
   const openArchive = useCallback(() => {
     leavingCreate(() => {
@@ -175,8 +196,110 @@ export function VaultApp({ platform }: VaultAppProps) {
       vaultState.setCategory("all");
       vaultState.setFolderId(null);
       vaultState.setArchived(true);
+      stopSelecting();
     });
-  }, [leavingCreate, vaultState]);
+  }, [leavingCreate, vaultState, stopSelecting]);
+
+  const openDeleted = useCallback(() => {
+    leavingCreate(() => {
+      setView("vault");
+      setCreatingKind(null);
+      vaultState.setSelectedId(null);
+      vaultState.setCategory("all");
+      vaultState.setFolderId(null);
+      vaultState.setDeleted(true);
+      stopSelecting();
+    });
+  }, [leavingCreate, vaultState, stopSelecting]);
+
+  const selectionScope: SelectionScope = vaultState.deleted
+    ? "deleted"
+    : vaultState.archived
+      ? "archived"
+      : "live";
+
+  /** Ticks or unticks one item; with Shift, the run of the list from the last one ticked. */
+  const toggleSelected = useCallback(
+    (id: string, range: boolean) => {
+      setBulkMessage("");
+      setSelection((current) => {
+        const next = new Set(current ?? []);
+        const order = vaultState.items.map((item) => item.id);
+        const anchor = lastToggled.current;
+        if (range && anchor !== null && order.includes(anchor) && order.includes(id)) {
+          const [from, to] = [order.indexOf(anchor), order.indexOf(id)].sort((a, b) => a - b);
+          for (const rangeId of order.slice(from, to! + 1)) next.add(rangeId);
+        } else if (next.has(id)) next.delete(id);
+        else next.add(id);
+        return next;
+      });
+      lastToggled.current = id;
+    },
+    [vaultState.items],
+  );
+
+  const startSelecting = useCallback(
+    (id?: string) => {
+      leavingCreate(() => {
+        setCreatingKind(null);
+        setBulkMessage("");
+        lastToggled.current = id ?? null;
+        setSelection(new Set(id === undefined ? [] : [id]));
+      });
+    },
+    [leavingCreate],
+  );
+
+  // Ticked items the list no longer shows (a search narrowed it, an action moved them)
+  // drop out, so an action only ever reaches what is on screen.
+  useEffect(() => {
+    setSelection((current) => {
+      if (current === null) return current;
+      const shown = new Set(vaultState.items.map((item) => item.id));
+      const kept = [...current].filter((id) => shown.has(id));
+      return kept.length === current.size ? current : new Set(kept);
+    });
+  }, [vaultState.items]);
+
+  const runBulk = useCallback(
+    (action: ItemBulkAction, folderId?: string | null) => {
+      if (selection === null || selection.size === 0) return;
+      const request = {
+        version: 1 as const,
+        kind: "item.bulk" as const,
+        action,
+        itemIds: [...selection],
+        ...(folderId === undefined ? {} : { folderId }),
+      };
+      setBulkBusy(true);
+      setBulkMessage("");
+      platform.sendMessage(request).then(
+        (candidate) => {
+          setBulkBusy(false);
+          const parsed = parseItemCrudResponseForRequest(request, candidate);
+          if (!parsed.success || parsed.data.kind !== "item.bulkResult") {
+            setBulkMessage("That did not work. Nothing was changed; try again.");
+            return;
+          }
+          const { changed, skippedReprompt } = parsed.data;
+          const skipped =
+            skippedReprompt === 0
+              ? ""
+              : ` ${skippedReprompt} that ask for the master password first ${skippedReprompt === 1 ? "was" : "were"} left as ${skippedReprompt === 1 ? "it was" : "they were"}.`;
+          setBulkMessage(bulkOutcome(action, changed) + skipped);
+          setSelection(new Set());
+          lastToggled.current = null;
+          if (action !== "favorite" && action !== "move") vaultState.setSelectedId(null);
+          vaultState.refresh();
+        },
+        () => {
+          setBulkBusy(false);
+          setBulkMessage("The background did not answer. Nothing was changed; try again.");
+        },
+      );
+    },
+    [platform, selection, vaultState],
+  );
 
   // Deleting a folder un-files its items in the background; the list must catch up.
   const deleteFolder = useCallback(
@@ -260,6 +383,8 @@ export function VaultApp({ platform }: VaultAppProps) {
     (kind: VaultItemKind) => {
       setView("vault");
       vaultState.setArchived(false);
+      vaultState.setDeleted(false);
+      setSelection(null);
       vaultState.setSelectedId(null);
       setOtpCreateError("");
       setCreatingKind(kind);
@@ -413,6 +538,8 @@ export function VaultApp({ platform }: VaultAppProps) {
                 onClearFolderError={folderState.clearError}
                 archived={vaultState.archived}
                 onOpenArchive={openArchive}
+                deleted={vaultState.deleted}
+                onOpenDeleted={openDeleted}
                 view={view}
                 onOpenSettings={() => leavingCreate(() => setView("settings"))}
                 onOpenEnte={() => leavingCreate(() => setView("ente"))}
@@ -443,7 +570,13 @@ export function VaultApp({ platform }: VaultAppProps) {
                     <SearchBar
                       value={vaultState.search}
                       onChange={vaultState.setSearch}
-                      placeholder={vaultState.archived ? "Search archive" : "Search vault"}
+                      placeholder={
+                        vaultState.deleted
+                          ? "Search recently deleted"
+                          : vaultState.archived
+                            ? "Search archive"
+                            : "Search vault"
+                      }
                       list="vault-tag-suggestions"
                     />
                     <datalist id="vault-tag-suggestions">
@@ -463,9 +596,44 @@ export function VaultApp({ platform }: VaultAppProps) {
                         </option>
                       ))}
                     </select>
-                    {vaultState.archived ? null : <NewItemMenu onSelect={startCreate} />}
+                    {selection === null && vaultState.items.length > 0 ? (
+                      <button
+                        type="button"
+                        className={styles.selectButton}
+                        onClick={() => startSelecting()}
+                        aria-label="Select items"
+                        title="Select items (or Ctrl-click a row)"
+                      >
+                        <ListChecks size={16} aria-hidden="true" />
+                      </button>
+                    ) : null}
+                    {vaultState.archived || vaultState.deleted ? null : (
+                      <NewItemMenu onSelect={startCreate} />
+                    )}
                   </div>
-                  <div className={styles.listBody}>
+                  {selection !== null ? (
+                    <SelectionBar
+                      scope={selectionScope}
+                      count={selection.size}
+                      total={vaultState.items.length}
+                      folders={folderState.folders}
+                      busy={bulkBusy}
+                      message={bulkMessage}
+                      onSelectAll={() =>
+                        setSelection(new Set(vaultState.items.map((item) => item.id)))
+                      }
+                      onSelectNone={() => setSelection(new Set())}
+                      onDone={stopSelecting}
+                      onAction={runBulk}
+                    />
+                  ) : null}
+                  <div
+                    className={styles.listBody}
+                    onKeyDown={(event) => {
+                      if (event.key === "Escape" && selection !== null && !bulkBusy)
+                        stopSelecting();
+                    }}
+                  >
                     <ItemListPanel
                       items={vaultState.items}
                       selectedId={creatingKind === null ? vaultState.selectedId : null}
@@ -474,11 +642,14 @@ export function VaultApp({ platform }: VaultAppProps) {
                       search={vaultState.search}
                       category={vaultState.category}
                       archived={vaultState.archived}
+                      deleted={vaultState.deleted}
                       onRetry={vaultState.refresh}
+                      onStartSelect={startSelecting}
+                      {...(selection === null ? {} : { selection, onToggleSelect: toggleSelected })}
                       {...(vaultState.folderId === null
                         ? {}
                         : { folderName: folderPath(folderState.folders, vaultState.folderId) })}
-                      {...(vaultState.archived
+                      {...(vaultState.archived || vaultState.deleted
                         ? {}
                         : {
                             onCreate: () => startCreate(kindForCategory(vaultState.category)),
@@ -527,6 +698,17 @@ export function VaultApp({ platform }: VaultAppProps) {
                       platform={platform}
                       onSaved={handleCreated}
                       onCancel={cancelCreate}
+                    />
+                  ) : selectedItem && vaultState.deleted ? (
+                    <DeletedItemDetail
+                      key={selectedItem.id}
+                      item={selectedItem}
+                      platform={platform}
+                      onChanged={() => {
+                        vaultState.setSelectedId(null);
+                        vaultState.refresh();
+                        document.getElementById("vault-content")?.focus();
+                      }}
                     />
                   ) : selectedItem && vaultState.redactedIds.has(selectedItem.id) ? (
                     <RepromptPrompt
@@ -667,4 +849,27 @@ export function VaultApp({ platform }: VaultAppProps) {
       ) : null}
     </div>
   );
+}
+
+/** What a finished action did, in the words of the action. */
+function bulkOutcome(action: ItemBulkAction, changed: number): string {
+  const items = `${changed.toLocaleString("en-US")} item${changed === 1 ? "" : "s"}`;
+  switch (action) {
+    case "delete":
+      return `${items} moved to Recently deleted.`;
+    case "restore":
+      return `${items} restored.`;
+    case "purge":
+      return `${items} deleted for good.`;
+    case "archive":
+      return `${items} archived.`;
+    case "unarchive":
+      return `${items} restored from the archive.`;
+    case "favorite":
+      return `${items} added to favourites.`;
+    case "unfavorite":
+      return `${items} removed from favourites.`;
+    case "move":
+      return `${items} moved.`;
+  }
 }

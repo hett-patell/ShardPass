@@ -44,6 +44,9 @@ export interface VaultSidebarProps {
   /** True while the list shows archived items instead of the everyday vault. */
   archived: boolean;
   onOpenArchive: () => void;
+  /** True while the list shows Recently deleted. */
+  deleted?: boolean;
+  onOpenDeleted?: () => void;
   view: VaultSidebarView;
   onOpenSettings: () => void;
   onOpenEnte: () => void;
@@ -81,6 +84,8 @@ export function VaultSidebar({
   onDeleteFolder,
   archived,
   onOpenArchive,
+  deleted = false,
+  onOpenDeleted,
   view,
   onOpenSettings,
   onOpenEnte,
@@ -96,7 +101,7 @@ export function VaultSidebar({
   const [pendingDelete, setPendingDelete] = useState<Folder | null>(null);
   const [busy, setBusy] = useState(false);
   const tree = folderTree(folders);
-  const browsing = view === "vault" && !archived;
+  const browsing = view === "vault" && !archived && !deleted;
 
   const newFolderRef = useRef<HTMLButtonElement>(null);
   const cancelEdit = () => {
@@ -338,6 +343,17 @@ export function VaultSidebar({
           <Archive size={16} aria-hidden="true" />
           <span>Archive</span>
         </button>
+        {onOpenDeleted ? (
+          <button
+            type="button"
+            className={`${styles.footerButton} ${view === "vault" && deleted ? styles.footerButtonActive : ""}`}
+            aria-current={view === "vault" && deleted ? "true" : undefined}
+            onClick={onOpenDeleted}
+          >
+            <Trash2 size={16} aria-hidden="true" />
+            <span>Recently deleted</span>
+          </button>
+        ) : null}
         <button
           type="button"
           className={`${styles.footerButton} ${view === "ente" ? styles.footerButtonActive : ""}`}

@@ -241,6 +241,11 @@ export type {
   PasswordGenResponse,
 } from "./password-gen";
 export {
+  ITEM_BULK_ACTIONS,
+  ItemBulkRequestSchema,
+  ItemBulkResultSchema,
+  MAX_ITEM_BULK,
+  RECENTLY_DELETED_DAYS,
   ItemCreateManyEntrySchema,
   ItemCreateManyRequestSchema,
   ItemCreateManyResultSchema,
@@ -268,6 +273,7 @@ export {
   parseItemCrudResponseForRequest,
 } from "./item-crud";
 export type {
+  ItemBulkAction,
   ItemCreateManyEntry,
   ItemCrudCommandKind,
   ItemCrudRequest,

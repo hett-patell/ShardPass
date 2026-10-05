@@ -52,7 +52,8 @@ export function DeleteItemDialog({
       <p id="delete-item-description">
         {description ?? (
           <>
-            Delete <strong>{itemName}</strong>? This removes it from the vault.
+            Delete <strong>{itemName}</strong>? It moves to Recently deleted, where you can restore
+            it for 30 days.
           </>
         )}
       </p>

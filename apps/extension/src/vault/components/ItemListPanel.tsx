@@ -17,6 +17,16 @@ export interface ItemListPanelProps {
   category?: string;
   /** True when listing the archive; changes the empty-state copy. */
   archived?: boolean;
+  /** True when listing Recently deleted; changes the empty-state copy. */
+  deleted?: boolean;
+  /**
+   * Ticked items while choosing several; undefined when not choosing. A row's click ticks
+   * it instead of opening it, and shift-click ticks the run from the last one.
+   */
+  selection?: ReadonlySet<string>;
+  onToggleSelect?: (id: string, range: boolean) => void;
+  /** Ctrl- or Cmd-click on a row: start choosing several, with that one ticked. */
+  onStartSelect?: (id: string) => void;
   /** The active folder's display path, when a folder filter is on; changes the empty-state copy. */
   folderName?: string;
   onRetry?: () => void;
@@ -32,7 +42,13 @@ function emptyCopy(
   category: string,
   archived: boolean,
   folderName: string | undefined,
+  deleted = false,
 ): { title: string; body: string } {
+  if (deleted && search === "")
+    return {
+      title: "Nothing recently deleted",
+      body: "Deleted items stay here for 30 days, so one deleted by mistake can be restored.",
+    };
   if (archived && search === "")
     return {
       title: "Nothing archived",
@@ -84,7 +100,11 @@ export function ItemListPanel({
   onCreate,
   onImport,
   archived = false,
+  deleted = false,
   folderName,
+  selection,
+  onToggleSelect,
+  onStartSelect,
 }: ItemListPanelProps) {
   if (status === "loading" && items.length === 0) {
     return (
@@ -117,7 +137,7 @@ export function ItemListPanel({
   }
 
   if (items.length === 0) {
-    const copy = emptyCopy(search, category, archived, folderName);
+    const copy = emptyCopy(search, category, archived, folderName, deleted);
     return (
       <div className={styles.stateBlock}>
         <strong>{copy.title}</strong>
@@ -132,6 +152,7 @@ export function ItemListPanel({
             {onImport &&
             (category === "all" || category === "") &&
             !archived &&
+            !deleted &&
             folderName === undefined ? (
               <Button variant="secondary" onClick={onImport}>
                 Import passwords
@@ -153,8 +174,13 @@ export function ItemListPanel({
             id={item.id}
             kind={item.kind}
             name={itemDisplayName(item)}
-            active={item.id === selectedId}
+            active={selection === undefined ? item.id === selectedId : selection.has(item.id)}
             onSelect={onSelect}
+            {...(selection !== undefined && onToggleSelect !== undefined
+              ? { checked: selection.has(item.id), onToggleSelect }
+              : onStartSelect === undefined
+                ? {}
+                : { onStartSelect })}
             {...(subtitle === undefined ? {} : { subtitle })}
             iconUrl={item.kind === "login" ? faviconUrl(item.urls[0]) : undefined}
             icon={
@@ -176,10 +202,17 @@ export function ItemListPanel({
 const ListRow = memo(function ListRow({
   id,
   onSelect,
+  checked,
+  onToggleSelect,
+  onStartSelect,
   ...rest
 }: Readonly<{
   id: string;
   onSelect: (id: string) => void;
+  /** Defined while choosing several. */
+  checked?: boolean;
+  onToggleSelect?: (id: string, range: boolean) => void;
+  onStartSelect?: (id: string) => void;
   kind: VaultItem["kind"];
   name: string;
   active: boolean;
@@ -187,5 +220,34 @@ const ListRow = memo(function ListRow({
   iconUrl?: string | undefined;
   icon?: ReactNode;
 }>) {
-  return <ItemRow {...rest} onClick={() => onSelect(id)} />;
+  if (checked === undefined || onToggleSelect === undefined)
+    return (
+      <div
+        className={styles.rowShell}
+        onClickCapture={(event) => {
+          if (onStartSelect === undefined || !(event.ctrlKey || event.metaKey)) return;
+          event.preventDefault();
+          event.stopPropagation();
+          onStartSelect(id);
+        }}
+      >
+        <ItemRow {...rest} onClick={() => onSelect(id)} />
+      </div>
+    );
+  // Both the box and the row land here, by mouse or keyboard alike, carrying the Shift key.
+  return (
+    <div
+      className={`${styles.rowShell} ${styles.selectable}`}
+      onClick={(event) => onToggleSelect(id, event.shiftKey)}
+    >
+      <input
+        type="checkbox"
+        className={styles.check}
+        checked={checked}
+        readOnly
+        aria-label={`Select ${rest.name}`}
+      />
+      <ItemRow {...rest} />
+    </div>
+  );
 });

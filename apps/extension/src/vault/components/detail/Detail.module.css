@@ -389,3 +389,16 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* An item on its way out: the one thing to read before choosing Restore or Delete now. */
+.deletedNotice {
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  max-width: 60ch;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-md);
+}

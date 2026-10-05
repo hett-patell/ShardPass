@@ -329,14 +329,16 @@ export class VaultRepository {
               : {
                   ...candidate,
                   // Local-only organisation is not part of what the sync carries; a remote
-                  // change must not un-favourite, un-file or un-archive the local copy.
+                  // change must not un-favourite, un-file, un-archive or un-delete the local
+                  // copy. Recently deleted is local until the item is removed for good, and
+                  // that removal is what the sync then carries.
                   favorite: previous.favorite,
                   ...(previous.folderId === undefined ? {} : { folderId: previous.folderId }),
                   ...(previous.archivedAt === undefined ? {} : { archivedAt: previous.archivedAt }),
                   revision: previous.revision + 1,
                   createdAt: previous.createdAt,
                   updatedAt: now,
-                  deletedAt: undefined,
+                  deletedAt: previous.deletedAt,
                 },
         );
         items.push(item);
@@ -1544,6 +1546,124 @@ export class VaultRepository {
         context,
       );
       return { id: itemId, revision, deletedAt };
+    });
+  }
+
+  /**
+   * Moves items into Recently deleted (`deletedAt` a timestamp) or back out of it (`deletedAt`
+   * undefined), all under one commit. The record stays, so a restore loses nothing; it is a
+   * change like any other, so the revision moves on and it is journaled, and an editor still
+   * open on the item gets a conflict instead of saving over the move. Items already where
+   * they are asked to go are skipped; a missing item or a stale revision fails the batch.
+   */
+  async setDeleted(
+    changes: readonly Readonly<{ itemId: string; expectedRevision?: number }>[],
+    deletedAt: string | undefined,
+    context: VaultCryptoContext,
+  ): Promise<VaultItem[]> {
+    return this.serialize(async () => {
+      const loaded = await this.load(context);
+      const records = [...loaded.records];
+      let journal = loaded.journal;
+      const newNonces = new Set<string>();
+      const items: VaultItem[] = [];
+      const seen = new Set<string>();
+      const now = context.clock.now();
+      for (const change of changes) {
+        if (seen.has(change.itemId)) conflict();
+        seen.add(change.itemId);
+        const index = records.findIndex((record) => record.itemId === change.itemId);
+        if (index < 0) conflict();
+        if (
+          change.expectedRevision !== undefined &&
+          records[index]!.revision !== change.expectedRevision
+        )
+          conflict();
+        const current = loaded.items[index]!;
+        if ((current.deletedAt === undefined) === (deletedAt === undefined)) continue;
+        const { deletedAt: _previous, ...rest } = current;
+        void _previous;
+        const item = parseCandidate({
+          ...rest,
+          revision: current.revision + 1,
+          ...(deletedAt === undefined ? {} : { deletedAt }),
+        });
+        const record = await encryptVaultRecord(item, context);
+        records[index] = record;
+        newNonces.add(record.nonce);
+        journal = await this.changes.append(
+          journal,
+          journalEntry(item, "update", now),
+          context.dek,
+          context.random,
+        );
+        newNonces.add(journal.at(-1)!.nonce);
+        items.push(item);
+      }
+      if (items.length === 0) return items;
+      await this.commit(
+        loaded.root,
+        records,
+        compact(journal, this.limits.maxJournalEntries),
+        newNonces,
+        loaded.receipts,
+        loaded.metadata,
+        context,
+      );
+      return items;
+    });
+  }
+
+  /**
+   * Removes items for good under one commit, each journaled as a delete -- the same record
+   * `tombstone` leaves, so sync and history read them alike. Ids no longer present are
+   * skipped. Returns what was removed.
+   */
+  async tombstoneMany(
+    itemIds: readonly string[],
+    context: VaultCryptoContext,
+  ): Promise<TombstoneResult[]> {
+    return this.serialize(async () => {
+      const loaded = await this.load(context);
+      const wanted = new Set(itemIds);
+      const deletedAt = context.clock.now();
+      let journal = loaded.journal;
+      const newNonces = new Set<string>();
+      const removed: TombstoneResult[] = [];
+      const records = loaded.records.filter((record, index) => {
+        if (!wanted.has(record.itemId)) return true;
+        const current = loaded.items[index]!;
+        removed.push({ id: current.id, revision: current.revision + 1, deletedAt });
+        return false;
+      });
+      if (removed.length === 0) return removed;
+      for (const entry of removed) {
+        const current = loaded.items.find((item) => item.id === entry.id)!;
+        journal = await this.changes.append(
+          journal,
+          {
+            itemId: entry.id,
+            kind: current.kind,
+            schemaVersion: current.schemaVersion,
+            revision: entry.revision,
+            operation: "delete",
+            changedAt: deletedAt,
+          },
+          context.dek,
+          context.random,
+        );
+        newNonces.add(journal.at(-1)!.nonce);
+      }
+      await this.commit(
+        loaded.root,
+        records,
+        compact(journal, this.limits.maxJournalEntries),
+        newNonces,
+        loaded.receipts,
+        loaded.metadata,
+        context,
+      );
+      return removed;
     });
   }
 

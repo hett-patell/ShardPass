@@ -4,6 +4,20 @@ What changed in each release of the ShardPass extension. Versions are plain `2.x
 for features, a patch for fixes. The manifest version in `apps/extension/src/manifest.ts` is
 the number the browser reports on the About page.
 
+## 2.9.0
+
+- **Recently deleted.** Deleting an item used to remove it on the spot. It now moves to
+  Recently deleted, in the sidebar under Archive, and stays there for 30 days: open it to see
+  when it goes, then Restore it or Delete now. Items older than 30 days are removed for good
+  at the next unlock. One-time codes work the same way; if they sync with Ente, the deletion
+  reaches Ente only when the code leaves Recently deleted, and a change arriving from Ente does
+  not pull a deleted code back out.
+- **Choose several items at once.** The new button beside the sort control (or Ctrl- or
+  Cmd-click on a row) ticks items; Shift-click ticks a run. In the vault the selection can be
+  favourited, moved to a folder, archived or deleted; in the archive, restored or deleted; in
+  Recently deleted, restored or deleted for good. Each action is one write to the vault, and
+  items that ask for the master password again are left alone and counted.
+
 ## 2.8.4
 
 A review of everything since 2.6.7 found ten problems, eight of them in my own speed and lock

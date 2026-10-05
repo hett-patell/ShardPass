@@ -15,6 +15,8 @@ export class VaultService {
     private readonly sessions: SessionService,
     private readonly settings: Settings,
     private readonly reprompt: Pick<RepromptGrants, "grant"> = { grant: () => undefined },
+    /** Housekeeping that may run once a session holds the key; never awaited, never fatal. */
+    private readonly onUnlocked: () => void = () => undefined,
   ) {}
 
   async getStateSnapshot() {
@@ -125,6 +127,7 @@ export class VaultService {
       throw new Error("settings projection failed");
     }
     await this.migrateIfNeeded();
+    this.onUnlocked();
     return { version: 1, kind: "vault.ok", state: "unlocked" };
   }
 

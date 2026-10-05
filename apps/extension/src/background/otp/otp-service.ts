@@ -19,7 +19,7 @@ type OtpRepository = Pick<
   | "get"
   | "create"
   | "update"
-  | "tombstone"
+  | "moveToDeleted"
   | "commitHotpReservation"
   | "cancelHotpReservation"
   | "savePendingHotpReservation"
@@ -203,12 +203,16 @@ export class OtpService {
   private async delete(itemId: string, expectedRevision: number): Promise<OtpResponse> {
     const current = await this.getValidItem(itemId);
     if (current.revision !== expectedRevision) conflict();
-    const deleted = await this.dependencies.repository.tombstone(itemId, expectedRevision);
+    // Into Recently deleted, like every other kind: restorable until it is purged.
+    const [moved] = await this.dependencies.repository.moveToDeleted([
+      { itemId, expectedRevision },
+    ]);
+    if (moved === undefined) conflict();
     return response({
       version: 1,
       kind: "otp.deleteResult",
-      itemId: deleted.id,
-      revision: deleted.revision,
+      itemId: moved.id,
+      revision: moved.revision,
     });
   }
 

@@ -33,6 +33,8 @@ export const ItemQueryRequestSchema = z.strictObject({
   favoritesOnly: z.optional(z.boolean()),
   /** true: only archived items. Omitted or false: only unarchived items. */
   archived: z.optional(z.boolean()),
+  /** true: only items in Recently deleted, archived or not. Takes precedence over `archived`. */
+  deleted: z.optional(z.boolean()),
 });
 
 // A read-only, secret-free projection of the vault item list, safe for the popup surface.
@@ -141,6 +143,32 @@ export const ItemDeleteRequestSchema = z.strictObject({
   itemId,
 });
 
+/** How long an item stays in Recently deleted before it is removed for good. */
+export const RECENTLY_DELETED_DAYS = 30;
+
+/** One selection, one action, one commit. */
+export const MAX_ITEM_BULK = 1_000;
+export const ITEM_BULK_ACTIONS = [
+  "delete",
+  "restore",
+  "purge",
+  "archive",
+  "unarchive",
+  "favorite",
+  "unfavorite",
+  "move",
+] as const;
+export type ItemBulkAction = (typeof ITEM_BULK_ACTIONS)[number];
+
+export const ItemBulkRequestSchema = z.strictObject({
+  version: z.literal(MESSAGE_VERSION),
+  kind: z.literal("item.bulk"),
+  action: z.enum(ITEM_BULK_ACTIONS),
+  itemIds: z.array(itemId).check(z.minLength(1), z.maxLength(MAX_ITEM_BULK)),
+  /** For "move": the folder to file into, or null to take the items out of every folder. */
+  folderId: z.optional(z.nullable(z.uuid())),
+});
+
 export const ItemCrudRequestSchema = z.discriminatedUnion("kind", [
   ItemQueryRequestSchema,
   ItemGetRequestSchema,
@@ -149,6 +177,7 @@ export const ItemCrudRequestSchema = z.discriminatedUnion("kind", [
   ItemUpdateRequestSchema,
   ItemDeleteRequestSchema,
   ItemListRequestSchema,
+  ItemBulkRequestSchema,
 ]);
 
 export const ItemQueryResultSchema = z.strictObject({
@@ -190,6 +219,16 @@ export const ItemDeleteResultSchema = z.strictObject({
   revision: positiveSafeInteger,
 });
 
+const bulkCount = z.int().check(z.nonnegative(), z.maximum(MAX_ITEM_BULK));
+export const ItemBulkResultSchema = z.strictObject({
+  version: z.literal(MESSAGE_VERSION),
+  kind: z.literal("item.bulkResult"),
+  /** How many items the action changed. */
+  changed: bulkCount,
+  /** Items it left alone because they ask for the master password again first. */
+  skippedReprompt: bulkCount,
+});
+
 export const ItemCrudResponseSchema = z.discriminatedUnion("kind", [
   ItemQueryResultSchema,
   ItemGetResultSchema,
@@ -197,6 +236,7 @@ export const ItemCrudResponseSchema = z.discriminatedUnion("kind", [
   ItemCreateManyResultSchema,
   ItemDeleteResultSchema,
   ItemListResultSchema,
+  ItemBulkResultSchema,
 ]);
 
 export type ItemCrudRequest = z.infer<typeof ItemCrudRequestSchema>;
@@ -214,6 +254,7 @@ export const itemCrudResponseKindByRequest = {
   "item.update": "item.mutationResult",
   "item.delete": "item.deleteResult",
   "item.list": "item.listResult",
+  "item.bulk": "item.bulkResult",
 } as const satisfies Record<ItemCrudCommandKind, ItemCrudResponseKind>;
 
 export function parseItemCrudResponseForRequest(request: ItemCrudRequest, candidate: unknown) {
@@ -245,4 +286,5 @@ export const itemCrudSenderPolicy = {
   "item.update": vaultOnly,
   "item.delete": vaultOnly,
   "item.list": popupAndVault,
+  "item.bulk": vaultOnly,
 } satisfies Record<ItemCrudCommandKind, CommandSenderPolicy>;

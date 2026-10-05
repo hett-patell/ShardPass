@@ -71,6 +71,24 @@ export interface SessionVaultRepository {
    * revision check, no revision bump, no journal. Returns how many were written.
    */
   stampUsage(stamps: readonly Readonly<{ itemId: string; lastUsedAt: string }>[]): Promise<number>;
+  /** Items in Recently deleted, every kind: what {@link listAllItems} leaves out. */
+  listDeletedItems(): Promise<readonly VaultItem[]>;
+  /**
+   * Moves items into Recently deleted under one commit. A given revision is checked; an
+   * item already there is left as it is.
+   */
+  moveToDeleted(
+    changes: readonly Readonly<{ itemId: string; expectedRevision?: number }>[],
+  ): Promise<readonly VaultItem[]>;
+  /** Brings items back out of Recently deleted under one commit. */
+  restoreDeleted(itemIds: readonly string[]): Promise<readonly VaultItem[]>;
+  /**
+   * Removes items for good, but only ones already in Recently deleted: named ones, or every
+   * one deleted before a moment. Anything else named is left alone.
+   */
+  purgeDeleted(
+    selector: Readonly<{ itemIds: readonly string[] }> | Readonly<{ deletedBefore: string }>,
+  ): Promise<readonly TombstoneResult[]>;
   /** Several updates under one commit: all revision-checked and applied, or none. */
   updateItems(
     changes: readonly Readonly<{ candidate: VaultItem; expectedRevision: number }>[],
@@ -133,6 +151,14 @@ type SessionVaultRepositoryOperations = Readonly<{
   updateItem(candidate: VaultItem, expectedRevision: number): Promise<VaultItem>;
   touchItem(candidate: VaultItem, expectedRevision: number): Promise<VaultItem>;
   stampUsage(stamps: readonly Readonly<{ itemId: string; lastUsedAt: string }>[]): Promise<number>;
+  listDeletedItems(): Promise<readonly VaultItem[]>;
+  moveToDeleted(
+    changes: readonly Readonly<{ itemId: string; expectedRevision?: number }>[],
+  ): Promise<readonly VaultItem[]>;
+  restoreDeleted(itemIds: readonly string[]): Promise<readonly VaultItem[]>;
+  purgeDeleted(
+    selector: Readonly<{ itemIds: readonly string[] }> | Readonly<{ deletedBefore: string }>,
+  ): Promise<readonly TombstoneResult[]>;
   updateItems(
     changes: readonly Readonly<{ candidate: VaultItem; expectedRevision: number }>[],
   ): Promise<readonly VaultItem[]>;
@@ -211,6 +237,10 @@ export function createSessionVaultRepository(
     updateItem: (candidate, expectedRevision) => operations.updateItem(candidate, expectedRevision),
     touchItem: (candidate, expectedRevision) => operations.touchItem(candidate, expectedRevision),
     stampUsage: (stamps) => operations.stampUsage(stamps),
+    listDeletedItems: () => operations.listDeletedItems(),
+    moveToDeleted: (changes) => operations.moveToDeleted(changes),
+    restoreDeleted: (itemIds) => operations.restoreDeleted(itemIds),
+    purgeDeleted: (selector) => operations.purgeDeleted(selector),
     updateItems: (changes) => operations.updateItems(changes),
     readGenerationMetadata: (name) => operations.readGenerationMetadata(name),
     readOtpItemsAndMetadata: (name) => operations.readOtpItemsAndMetadata(name),

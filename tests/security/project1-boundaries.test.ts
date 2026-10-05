@@ -304,6 +304,7 @@ describe("Project 1 content and popup authority", () => {
       "folder.delete",
       "folder.list",
       "folder.rename",
+      "item.bulk",
       "item.create",
       "item.createMany",
       "item.delete",

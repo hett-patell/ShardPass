@@ -1577,6 +1577,84 @@ describe("VaultRepository with non-OTP items", () => {
     expect(all.map((candidate) => candidate.kind).sort()).toEqual(["login", "note", "otp"]);
   });
 
+  it("moves items into Recently deleted and back without losing them, under one commit", async () => {
+    const storage = new FakeStoragePort();
+    const repository = new VaultRepository(storage, wrappedKey);
+    const context = cryptoContext();
+    const login = await repository.create(loginItem(), context);
+    const note = await repository.create(noteItem(), context);
+
+    const moved = await repository.setDeleted(
+      [{ itemId: login.id, expectedRevision: 1 }, { itemId: note.id }],
+      "2026-08-10T12:00:00.000Z",
+      context,
+    );
+    expect(moved.map((entry) => entry.revision)).toEqual([2, 2]);
+    expect(await repository.get(login.id, context)).toMatchObject({
+      deletedAt: "2026-08-10T12:00:00.000Z",
+      password: "hunter2",
+    });
+
+    // A stale revision fails the whole batch; an item already deleted is left as it is.
+    await expect(
+      repository.setDeleted([{ itemId: login.id, expectedRevision: 1 }], undefined, context),
+    ).rejects.toMatchObject({ code: "REVISION_CONFLICT" });
+    expect(
+      await repository.setDeleted([{ itemId: note.id }], "2026-08-11T00:00:00.000Z", context),
+    ).toEqual([]);
+
+    const restored = await repository.setDeleted([{ itemId: login.id }], undefined, context);
+    expect(restored[0]).toMatchObject({ revision: 3, password: "hunter2" });
+    expect((await repository.get(login.id, context))?.deletedAt).toBeUndefined();
+  });
+
+  it("removes several items for good under one commit, journaling each as a delete", async () => {
+    const storage = new FakeStoragePort();
+    const repository = new VaultRepository(storage, wrappedKey);
+    const context = cryptoContext();
+    const login = await repository.create(loginItem(), context);
+    const note = await repository.create(noteItem(), context);
+    await repository.create(item(), context);
+
+    const removed = await repository.tombstoneMany(
+      [login.id, note.id, "018f47a6-7d11-7c2f-8bd9-a1d37f147bff"],
+      context,
+    );
+
+    expect(removed.map((entry) => entry.id).sort()).toEqual([login.id, note.id].sort());
+    expect((await repository.listItems(context)).map((entry) => entry.kind)).toEqual(["otp"]);
+    const changes = await repository.changes.listAfter(0, 100, context);
+    expect(changes.filter((entry) => entry.operation === "delete")).toHaveLength(2);
+  });
+
+  it("keeps a one-time code in Recently deleted when a sync changes it remotely", async () => {
+    const storage = new FakeStoragePort();
+    const repository = new VaultRepository(storage, wrappedKey);
+    const context = cryptoContext();
+    const created = await repository.create(item(), context);
+    const [deleted] = await repository.setDeleted(
+      [{ itemId: created.id }],
+      "2026-08-10T12:00:00.000Z",
+      context,
+    );
+    if (deleted?.kind !== "otp") throw new Error("expected an OTP item");
+
+    await repository.replaceOtpItemsAndMetadata(
+      [{ ...deleted, deletedAt: undefined, label: "renamed remotely" }],
+      {
+        name: "migration-descriptor",
+        schemaVersion: 1,
+        plaintext: new TextEncoder().encode(canonicalJson({ source: "test" })),
+      },
+      context,
+    );
+
+    expect(await repository.get(created.id, context)).toMatchObject({
+      label: "renamed remotely",
+      deletedAt: "2026-08-10T12:00:00.000Z",
+    });
+  });
+
   it("keeps non-OTP items untouched when replacing the complete OTP set", async () => {
     const storage = new FakeStoragePort();
     const repository = new VaultRepository(storage, wrappedKey);
