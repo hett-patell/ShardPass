@@ -228,6 +228,24 @@ export async function expectVaultReady(page: Page): Promise<void> {
  */
 export async function expectVaultUnlocked(page: Page): Promise<void> {
   await expect(page.getByRole("button", { name: /^Settings/ })).toBeVisible({ timeout: 120_000 });
+  await declineRecoveryOffer(page);
+}
+
+/**
+ * A vault created on the vault page is greeted by a modal offer to make a recovery code, and
+ * the page behind a modal takes no clicks. Specs about something else answer "Not now"; the
+ * offer itself is covered by its own tests. Only a dialog that is already open is answered:
+ * an unlock never shows one, and nothing here waits for one to appear.
+ */
+export async function declineRecoveryOffer(page: Page): Promise<void> {
+  const offer = page.getByRole("dialog", { name: "Make a recovery code" });
+  // The offer opens in the same render as the vault: a short look covers it.
+  if (!(await offer.isVisible({ timeout: 1_000 }).catch(() => false))) {
+    await page.waitForTimeout(300);
+    if (!(await offer.isVisible().catch(() => false))) return;
+  }
+  await offer.getByRole("button", { name: "Not now" }).click();
+  await expect(offer).toBeHidden();
 }
 
 /**
